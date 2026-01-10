@@ -99,15 +99,14 @@ const jobSchema = new mongoose.Schema({
       ref: 'Campus'
     }], // empty means all campuses eligible
     
-    // Module hierarchy requirement (only for School of Programming)
+    // Module hierarchy requirement (school-specific)
     minModule: { 
       type: String, 
-      default: null,
-      enum: [null, 'Foundation', 'Basics of Programming', 'DSA', 'Backend', 'Full Stack', 'Interview Prep']
+      default: null
+      // No enum constraint - modules vary by school
     },
     
     // Other Requirements
-    minCgpa: { type: Number, default: null },
     certifications: { type: [String], default: [] }, // Required certifications
     
     // English Proficiency (CEFR levels)
@@ -118,6 +117,7 @@ const jobSchema = new mongoose.Schema({
     shortlistDeadline: { type: Date, default: null },
     
     // Legacy fields for backward compatibility
+    minCgpa: { type: Number, default: null }, // Deprecated - keeping for backward compatibility
     departments: { type: [String], default: [] },
     batches: { type: [String], default: [] }
   },

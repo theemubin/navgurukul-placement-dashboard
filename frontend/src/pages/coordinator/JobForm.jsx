@@ -39,9 +39,8 @@ const JobForm = () => {
       // Navgurukul specific
       schools: [],
       campuses: [],
-      minModule: '',
+      minModule: '', // Will store the minimum required module
       // Other requirements
-      minCgpa: '',
       certifications: [],
       // English proficiency (CEFR)
       englishWriting: '',
@@ -71,15 +70,53 @@ const JobForm = () => {
     { value: 'C2', label: 'C2 - Proficient' }
   ];
 
-  // Module hierarchy for School of Programming
-  const moduleHierarchy = [
-    'Foundation',
-    'Basics of Programming',
-    'DSA',
-    'Backend',
-    'Full Stack',
-    'Interview Prep'
-  ];
+  // Module hierarchy per school
+  const schoolModules = {
+    'School of Programming': [
+      'Foundation',
+      'Basics of Programming',
+      'DSA',
+      'Backend',
+      'Full Stack',
+      'Interview Prep'
+    ],
+    'School of Business': [
+      'Foundation',
+      'Communication',
+      'Sales & Marketing',
+      'Operations',
+      'Leadership'
+    ],
+    'School of Finance': [
+      'Foundation',
+      'Accounting Basics',
+      'Financial Analysis',
+      'Taxation',
+      'Advanced Finance'
+    ],
+    'School of Education': [
+      'Foundation',
+      'Pedagogy',
+      'Curriculum Design',
+      'Classroom Management',
+      'Assessment'
+    ],
+    'School of Second Chance': [
+      'Foundation',
+      'Basic Literacy',
+      'Digital Skills',
+      'Employability'
+    ]
+  };
+
+  // Get modules for selected school (only show if exactly one school selected)
+  const getAvailableModules = () => {
+    const selectedSchools = formData.eligibility.schools || [];
+    if (selectedSchools.length === 1) {
+      return schoolModules[selectedSchools[0]] || [];
+    }
+    return [];
+  };
 
   // Proficiency level labels
   const proficiencyLevels = [
@@ -473,7 +510,6 @@ const JobForm = () => {
     (formData.eligibility.schools && formData.eligibility.schools.length > 0) ||
     (formData.eligibility.campuses && formData.eligibility.campuses.length > 0) ||
     formData.eligibility.minModule ||
-    formData.eligibility.minCgpa ||
     (formData.eligibility.certifications && formData.eligibility.certifications.length > 0) ||
     formData.eligibility.englishWriting ||
     formData.eligibility.englishSpeaking;
@@ -1103,7 +1139,7 @@ const JobForm = () => {
               <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
               Navgurukul Specific
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {/* Schools */}
               <div className={`p-3 rounded-lg border-2 transition-all ${
                 (formData.eligibility.schools || []).length > 0 ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'
@@ -1116,32 +1152,34 @@ const JobForm = () => {
                     </span>
                   )}
                 </div>
-                <div className="space-y-1 max-h-24 overflow-y-auto">
+                <div className="flex flex-wrap gap-1">
                   {schools.map(school => (
-                    <label 
-                      key={school} 
-                      className={`flex items-center gap-2 text-xs p-1.5 rounded cursor-pointer transition-colors ${
+                    <button
+                      key={school}
+                      type="button"
+                      onClick={() => {
+                        const current = formData.eligibility.schools || [];
+                        const newSchools = current.includes(school)
+                          ? current.filter(s => s !== school)
+                          : [...current, school];
+                        // Clear minModule if school changes
+                        setFormData({
+                          ...formData,
+                          eligibility: { 
+                            ...formData.eligibility, 
+                            schools: newSchools,
+                            minModule: newSchools.length === 1 ? formData.eligibility.minModule : ''
+                          }
+                        });
+                      }}
+                      className={`px-2 py-1 rounded text-xs transition ${
                         (formData.eligibility.schools || []).includes(school)
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'hover:bg-gray-100'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={(formData.eligibility.schools || []).includes(school)}
-                        onChange={(e) => {
-                          const newSchools = e.target.checked
-                            ? [...(formData.eligibility.schools || []), school]
-                            : (formData.eligibility.schools || []).filter(s => s !== school);
-                          setFormData({
-                            ...formData,
-                            eligibility: { ...formData.eligibility, schools: newSchools }
-                          });
-                        }}
-                        className="rounded w-3 h-3"
-                      />
-                      {school}
-                    </label>
+                      {school.replace('School of ', '')}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1158,42 +1196,43 @@ const JobForm = () => {
                     </span>
                   )}
                 </div>
-                <div className="space-y-1 max-h-24 overflow-y-auto">
+                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
                   {campuses.map(campus => (
-                    <label 
-                      key={campus._id} 
-                      className={`flex items-center gap-2 text-xs p-1.5 rounded cursor-pointer transition-colors ${
+                    <button
+                      key={campus._id}
+                      type="button"
+                      onClick={() => {
+                        const current = formData.eligibility.campuses || [];
+                        const newCampuses = current.includes(campus._id)
+                          ? current.filter(c => c !== campus._id)
+                          : [...current, campus._id];
+                        setFormData({
+                          ...formData,
+                          eligibility: { ...formData.eligibility, campuses: newCampuses }
+                        });
+                      }}
+                      className={`px-2 py-1 rounded text-xs transition ${
                         (formData.eligibility.campuses || []).includes(campus._id)
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'hover:bg-gray-100'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={(formData.eligibility.campuses || []).includes(campus._id)}
-                        onChange={(e) => {
-                          const newCampuses = e.target.checked
-                            ? [...(formData.eligibility.campuses || []), campus._id]
-                            : (formData.eligibility.campuses || []).filter(c => c !== campus._id);
-                          setFormData({
-                            ...formData,
-                            eligibility: { ...formData.eligibility, campuses: newCampuses }
-                          });
-                        }}
-                        className="rounded w-3 h-3"
-                      />
                       {campus.name}
-                    </label>
+                    </button>
                   ))}
                 </div>
               </div>
+            </div>
 
-              {/* Module Requirement */}
-              <div className={`p-3 rounded-lg border-2 transition-all ${
+            {/* Module Requirement - Only show when exactly one school is selected */}
+            {(formData.eligibility.schools || []).length === 1 && (
+              <div className={`mt-3 p-3 rounded-lg border-2 transition-all ${
                 formData.eligibility.minModule ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'
               }`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-gray-900 text-sm">Min Module</span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-gray-900 text-sm">
+                    Minimum Module ({formData.eligibility.schools[0].replace('School of ', '')})
+                  </span>
                   {formData.eligibility.minModule && (
                     <button 
                       type="button"
@@ -1207,22 +1246,54 @@ const JobForm = () => {
                     </button>
                   )}
                 </div>
-                <select
-                  value={formData.eligibility.minModule || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    eligibility: { ...formData.eligibility, minModule: e.target.value }
+                <p className="text-xs text-gray-500 mb-2">Click a module to set minimum requirement. Students must have completed up to this module.</p>
+                <div className="flex flex-wrap gap-1">
+                  {getAvailableModules().map((module, index) => {
+                    const modules = getAvailableModules();
+                    const selectedIndex = modules.indexOf(formData.eligibility.minModule);
+                    const isSelected = formData.eligibility.minModule === module;
+                    const isIncluded = selectedIndex >= 0 && index <= selectedIndex;
+                    
+                    return (
+                      <button
+                        key={module}
+                        type="button"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            eligibility: { 
+                              ...formData.eligibility, 
+                              minModule: formData.eligibility.minModule === module ? '' : module 
+                            }
+                          });
+                        }}
+                        className={`px-2 py-1 rounded text-xs transition flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-purple-600 text-white ring-2 ring-purple-300'
+                            : isIncluded
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        <span className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[10px] font-bold">
+                          {index + 1}
+                        </span>
+                        {module}
+                        {isSelected && <CheckCircle className="w-3 h-3" />}
+                      </button>
+                    );
                   })}
-                  className="w-full text-sm"
-                >
-                  <option value="">All modules</option>
-                  {moduleHierarchy.map(module => (
-                    <option key={module} value={module}>{module}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-400 mt-1">School of Programming</p>
+                </div>
+                {formData.eligibility.minModule && (
+                  <p className="text-xs text-purple-600 mt-2">
+                    Students must have completed: {getAvailableModules().slice(0, getAvailableModules().indexOf(formData.eligibility.minModule) + 1).join(' → ')}
+                  </p>
+                )}
               </div>
-            </div>
+            )}
+            {(formData.eligibility.schools || []).length > 1 && (
+              <p className="text-xs text-amber-600 mt-2">Select only one school to set module requirements</p>
+            )}
           </div>
 
           {/* Other Requirements */}
@@ -1231,41 +1302,7 @@ const JobForm = () => {
               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
               Other Requirements
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Min CGPA */}
-              <div className={`p-3 rounded-lg border-2 transition-all ${
-                formData.eligibility.minCgpa ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'
-              }`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-gray-900 text-sm">Min CGPA</span>
-                  {formData.eligibility.minCgpa && (
-                    <button 
-                      type="button"
-                      onClick={() => setFormData({
-                        ...formData,
-                        eligibility: { ...formData.eligibility, minCgpa: '' }
-                      })}
-                      className="text-xs text-red-500 hover:text-red-700"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={formData.eligibility.minCgpa || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    eligibility: { ...formData.eligibility, minCgpa: e.target.value } 
-                  })}
-                  placeholder="e.g., 6.0"
-                  className="w-full text-sm"
-                />
-              </div>
-
+            <div className="grid grid-cols-1 gap-3">
               {/* Certifications */}
               <div className={`p-3 rounded-lg border-2 transition-all ${
                 (formData.eligibility.certifications || []).length > 0 ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'
@@ -1405,7 +1442,9 @@ const JobForm = () => {
               </p>
             </div>
           </div>
-        </div>        {/* Interview Rounds */}
+        </div>
+
+        {/* Interview Rounds */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Interview Rounds</h2>
