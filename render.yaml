@@ -32,6 +32,12 @@ services:
       - path: /*
         name: Cache-Control
         value: no-cache
+      - path: /assets/*.css
+        name: Content-Type
+        value: text/css
+      - path: /assets/*.js
+        name: Content-Type
+        value: application/javascript
     routes:
       - type: rewrite
         source: /*
