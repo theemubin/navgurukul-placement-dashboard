@@ -51,6 +51,11 @@ const applicationSchema = new mongoose.Schema({
   },
   resume: String, // Resume used for this application
   coverLetter: String,
+  customResponses: [{
+    requirement: String,
+    response: Boolean,
+    isMandatory: Boolean
+  }],
   feedback: String,
   feedbackBy: {
     type: mongoose.Schema.Types.ObjectId,

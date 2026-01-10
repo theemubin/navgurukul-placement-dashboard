@@ -123,7 +123,7 @@ export const jobAPI = {
 export const applicationAPI = {
   getApplications: (params) => api.get('/applications', { params }),
   getApplication: (id) => api.get(`/applications/${id}`),
-  apply: (jobId, coverLetter) => api.post('/applications', { jobId, coverLetter }),
+  apply: (jobId, coverLetter, customResponses) => api.post('/applications', { jobId, coverLetter, customResponses }),
   updateStatus: (id, status, feedback) => 
     api.put(`/applications/${id}/status`, { status, feedback }),
   updateRound: (id, roundData) => api.put(`/applications/${id}/rounds`, roundData),

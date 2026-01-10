@@ -71,7 +71,8 @@ const JobForm = () => {
   ];
 
   // Module hierarchy per school - MUST match Profile.jsx modules
-  // Note: Only Programming, Business, and Second Chance have predefined modules
+  // Note: Only Programming and Business have hierarchical modules
+  // Second Chance has separate tracks (not hierarchy)
   // Finance and Education use custom descriptions in student profiles
   const schoolModules = {
     'School of Programming': [
@@ -100,7 +101,13 @@ const JobForm = () => {
     // Note: School of Finance and School of Education don't have predefined modules
   };
 
-  // Schools that have predefined modules
+  // Schools that have hierarchical modules (where order matters)
+  const schoolsWithHierarchy = ['School of Programming', 'School of Business'];
+  
+  // Schools that have non-hierarchical tracks (can select any)
+  const schoolsWithTracks = ['School of Second Chance'];
+
+  // Schools that have any predefined modules
   const schoolsWithModules = ['School of Programming', 'School of Business', 'School of Second Chance'];
 
   // Get modules for selected school (only show if exactly one school with modules is selected)
@@ -110,6 +117,12 @@ const JobForm = () => {
       return schoolModules[selectedSchools[0]] || [];
     }
     return [];
+  };
+
+  // Check if selected school has hierarchical modules
+  const isHierarchical = () => {
+    const selectedSchools = formData.eligibility.schools || [];
+    return selectedSchools.length === 1 && schoolsWithHierarchy.includes(selectedSchools[0]);
   };
 
   // Proficiency level labels
@@ -1218,14 +1231,14 @@ const JobForm = () => {
               </div>
             </div>
 
-            {/* Module Requirement - Only show when exactly one school with predefined modules is selected */}
+            {/* Module Requirement - Different UI for hierarchical vs track-based schools */}
             {(formData.eligibility.schools || []).length === 1 && schoolsWithModules.includes(formData.eligibility.schools[0]) && (
               <div className={`mt-3 p-3 rounded-lg border-2 transition-all ${
                 formData.eligibility.minModule ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'
               }`}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium text-gray-900 text-sm">
-                    Minimum Module ({formData.eligibility.schools[0].replace('School of ', '')})
+                    {isHierarchical() ? 'Minimum Module' : 'Required Track'} ({formData.eligibility.schools[0].replace('School of ', '')})
                   </span>
                   {formData.eligibility.minModule && (
                     <button 
@@ -1240,13 +1253,19 @@ const JobForm = () => {
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mb-2">Click a module to set minimum requirement. Students must have completed up to this module.</p>
+                <p className="text-xs text-gray-500 mb-2">
+                  {isHierarchical() 
+                    ? 'Click a module to set minimum requirement. Students must have completed up to this module.'
+                    : 'Select the required track. These are independent programs, not a progression.'}
+                </p>
                 <div className="flex flex-wrap gap-1">
                   {getAvailableModules().map((module, index) => {
                     const modules = getAvailableModules();
                     const selectedIndex = modules.indexOf(formData.eligibility.minModule);
                     const isSelected = formData.eligibility.minModule === module;
-                    const isIncluded = selectedIndex >= 0 && index <= selectedIndex;
+                    // For hierarchical schools, highlight all modules up to selected
+                    // For track-based schools, only highlight the selected one
+                    const isIncluded = isHierarchical() && selectedIndex >= 0 && index <= selectedIndex;
                     
                     return (
                       <button
@@ -1269,18 +1288,25 @@ const JobForm = () => {
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
-                        <span className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[10px] font-bold">
-                          {index + 1}
-                        </span>
+                        {isHierarchical() && (
+                          <span className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[10px] font-bold">
+                            {index + 1}
+                          </span>
+                        )}
                         {module}
                         {isSelected && <CheckCircle className="w-3 h-3" />}
                       </button>
                     );
                   })}
                 </div>
-                {formData.eligibility.minModule && (
+                {formData.eligibility.minModule && isHierarchical() && (
                   <p className="text-xs text-purple-600 mt-2">
                     Students must have completed: {getAvailableModules().slice(0, getAvailableModules().indexOf(formData.eligibility.minModule) + 1).join(' → ')}
+                  </p>
+                )}
+                {formData.eligibility.minModule && !isHierarchical() && (
+                  <p className="text-xs text-purple-600 mt-2">
+                    Only students enrolled in "{formData.eligibility.minModule}" track are eligible
                   </p>
                 )}
               </div>

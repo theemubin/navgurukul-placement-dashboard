@@ -138,12 +138,33 @@ const JobDetails = () => {
   };
 
   const handleApply = async () => {
+    // Check mandatory custom requirements
+    if (job.customRequirements?.length > 0) {
+      const missingMandatory = job.customRequirements.some((req, index) => 
+        req.isMandatory && !customResponses[index]
+      );
+      if (missingMandatory) {
+        toast.error('Please confirm all required fields');
+        return;
+      }
+    }
+
     setApplying(true);
     try {
-      await applicationAPI.apply(id, coverLetter);
+      // Include custom responses in the application
+      const applicationData = {
+        coverLetter,
+        customResponses: job.customRequirements?.map((req, index) => ({
+          requirement: req.requirement,
+          response: customResponses[index] || false,
+          isMandatory: req.isMandatory
+        })) || []
+      };
+      await applicationAPI.apply(id, applicationData.coverLetter, applicationData.customResponses);
       toast.success('Application submitted successfully!');
       setHasApplied(true);
       setShowApplyModal(false);
+      setCustomResponses({});
     } catch (error) {
       toast.error(error.response?.data?.message || 'Error submitting application');
     } finally {
@@ -506,12 +527,43 @@ const JobDetails = () => {
 
       {/* Apply Modal */}
       {showApplyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 animate-fadeIn">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 my-8 animate-fadeIn max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Apply for {job.title}</h3>
             <p className="text-gray-600 mb-4">
               Your profile and resume will be shared with the recruiter.
             </p>
+
+            {/* Custom Requirements - Yes/No Questions */}
+            {job.customRequirements?.length > 0 && (
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-gray-800 mb-3">Please confirm the following:</h4>
+                <div className="space-y-3">
+                  {job.customRequirements.map((req, index) => (
+                    <div key={index} className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id={`req-${index}`}
+                        checked={customResponses[index] || false}
+                        onChange={(e) => setCustomResponses({
+                          ...customResponses,
+                          [index]: e.target.checked
+                        })}
+                        className="mt-1 rounded"
+                      />
+                      <label htmlFor={`req-${index}`} className="text-sm text-gray-700">
+                        {req.requirement}
+                        {req.isMandatory && <span className="text-red-500 ml-1">*</span>}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                {job.customRequirements.some(r => r.isMandatory) && (
+                  <p className="text-xs text-gray-500 mt-2">* Required fields must be checked to apply</p>
+                )}
+              </div>
+            )}
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Cover Letter (Optional)
@@ -534,7 +586,7 @@ const JobDetails = () => {
               <button 
                 onClick={handleApply} 
                 className="btn btn-primary"
-                disabled={applying}
+                disabled={applying || (job.customRequirements?.some(r => r.isMandatory && !customResponses[job.customRequirements.indexOf(r)]))}
               >
                 {applying ? 'Submitting...' : 'Submit Application'}
               </button>

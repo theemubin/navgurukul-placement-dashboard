@@ -105,7 +105,7 @@ router.post('/', auth, authorize('student'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { jobId, coverLetter } = req.body;
+    const { jobId, coverLetter, customResponses } = req.body;
 
     // Check if job exists and is active
     const job = await Job.findById(jobId);
@@ -119,6 +119,17 @@ router.post('/', auth, authorize('student'), [
 
     if (new Date() > job.applicationDeadline) {
       return res.status(400).json({ message: 'Application deadline has passed' });
+    }
+
+    // Validate mandatory custom requirements
+    if (job.customRequirements && job.customRequirements.length > 0) {
+      const mandatoryRequirements = job.customRequirements.filter(req => req.isMandatory);
+      for (const req of mandatoryRequirements) {
+        const response = customResponses?.find(r => r.requirement === req.question);
+        if (!response || !response.response) {
+          return res.status(400).json({ message: `You must agree to: "${req.question}"` });
+        }
+      }
     }
 
     // Check if already applied
@@ -138,7 +149,8 @@ router.post('/', auth, authorize('student'), [
       student: req.userId,
       job: jobId,
       resume: student.studentProfile.resume,
-      coverLetter
+      coverLetter,
+      customResponses: customResponses || []
     });
 
     await application.save();
