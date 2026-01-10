@@ -24,7 +24,6 @@ services:
   - type: web
     name: navgurukul-placement-frontend
     env: static
-    plan: free
     branch: main
     rootDir: frontend
     buildCommand: npm install && npm run build
