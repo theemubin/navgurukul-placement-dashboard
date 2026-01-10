@@ -13,9 +13,15 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
     
     let query = { role: 'student' };
     
-    // Campus POCs can only see students from their campus
+    // Campus POCs can see students from their managed campuses
     if (req.user.role === 'campus_poc') {
-      query.campus = req.user.campus;
+      const managedCampuses = req.user.managedCampuses?.length > 0 
+        ? req.user.managedCampuses 
+        : (req.user.campus ? [req.user.campus] : []);
+      
+      if (managedCampuses.length > 0) {
+        query.campus = { $in: managedCampuses };
+      }
     } else if (campus) {
       query.campus = campus;
     }
@@ -206,8 +212,14 @@ router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
     
     await user.save();
 
-    // Notify Campus POC
-    const campusPocs = await User.find({ role: 'campus_poc', campus: user.campus });
+    // Notify Campus POCs who manage this campus
+    const campusPocs = await User.find({ 
+      role: 'campus_poc',
+      $or: [
+        { campus: user.campus },
+        { managedCampuses: user.campus }
+      ]
+    });
     
     for (const poc of campusPocs) {
       await Notification.create({
@@ -223,6 +235,51 @@ router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
     res.json({ message: 'Profile submitted for approval' });
   } catch (error) {
     console.error('Submit profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update managed campuses (for Campus POCs)
+router.put('/managed-campuses', auth, authorize('campus_poc'), async (req, res) => {
+  try {
+    const { campusIds } = req.body;
+    
+    if (!Array.isArray(campusIds)) {
+      return res.status(400).json({ message: 'campusIds must be an array' });
+    }
+
+    const user = await User.findById(req.userId);
+    user.managedCampuses = campusIds;
+    await user.save();
+
+    const updatedUser = await User.findById(req.userId)
+      .select('-password')
+      .populate('managedCampuses', 'name code');
+
+    res.json({ 
+      message: 'Managed campuses updated successfully', 
+      managedCampuses: updatedUser.managedCampuses 
+    });
+  } catch (error) {
+    console.error('Update managed campuses error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get managed campuses (for Campus POCs)
+router.get('/managed-campuses', auth, authorize('campus_poc'), async (req, res) => {
+  try {
+    const user = await User.findById(req.userId)
+      .populate('managedCampuses', 'name code')
+      .populate('campus', 'name code');
+
+    const managedCampuses = user.managedCampuses?.length > 0 
+      ? user.managedCampuses 
+      : (user.campus ? [user.campus] : []);
+
+    res.json({ managedCampuses });
+  } catch (error) {
+    console.error('Get managed campuses error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -281,8 +338,15 @@ router.get('/pending-profiles', auth, authorize('campus_poc', 'coordinator', 'ma
       'studentProfile.profileStatus': 'pending_approval'
     };
 
+    // Campus POC can see students from their managed campuses
     if (req.user.role === 'campus_poc') {
-      query.campus = req.user.campus;
+      const managedCampuses = req.user.managedCampuses?.length > 0 
+        ? req.user.managedCampuses 
+        : (req.user.campus ? [req.user.campus] : []);
+      
+      if (managedCampuses.length > 0) {
+        query.campus = { $in: managedCampuses };
+      }
     }
 
     const students = await User.find(query)
@@ -290,7 +354,7 @@ router.get('/pending-profiles', auth, authorize('campus_poc', 'coordinator', 'ma
       .populate('campus', 'name')
       .sort({ 'studentProfile.lastSubmittedAt': -1 });
 
-    res.json(students);
+    res.json({ data: students, total: students.length });
   } catch (error) {
     console.error('Get pending profiles error:', error);
     res.status(500).json({ message: 'Server error' });

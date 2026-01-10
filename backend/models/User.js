@@ -52,6 +52,11 @@ const userSchema = new mongoose.Schema({
   lastLogin: {
     type: Date
   },
+  // Campuses managed by this user (for Campus POCs)
+  managedCampuses: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Campus'
+  }],
   // Placement cycle assignment (for students)
   placementCycle: {
     type: mongoose.Schema.Types.ObjectId,

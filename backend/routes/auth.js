@@ -135,6 +135,7 @@ router.get('/me', auth, async (req, res) => {
     const user = await User.findById(req.userId)
       .select('-password')
       .populate('campus')
+      .populate('managedCampuses', 'name code')
       .populate('studentProfile.skills.skill')
       .populate('studentProfile.skills.approvedBy', 'firstName lastName');
 

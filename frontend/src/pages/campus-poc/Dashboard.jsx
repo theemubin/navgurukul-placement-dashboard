@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { statsAPI, placementCycleAPI, userAPI } from '../../services/api';
+import { statsAPI, placementCycleAPI, userAPI, campusAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner, Badge } from '../../components/common/UIComponents';
 import { 
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2, 
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
-  CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter
+  CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const POCDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -21,9 +22,16 @@ const POCDashboard = () => {
   const [expandedCompany, setExpandedCompany] = useState(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [showCycleModal, setShowCycleModal] = useState(false);
+  // Campus selection state
+  const [showCampusModal, setShowCampusModal] = useState(false);
+  const [allCampuses, setAllCampuses] = useState([]);
+  const [managedCampuses, setManagedCampuses] = useState([]);
+  const [selectedCampuses, setSelectedCampuses] = useState([]);
+  const [savingCampuses, setSavingCampuses] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
+    fetchCampusData();
   }, []);
 
   useEffect(() => {
@@ -31,6 +39,44 @@ const POCDashboard = () => {
       fetchTrackingData();
     }
   }, [selectedCycle]);
+
+  const fetchCampusData = async () => {
+    try {
+      const [campusesRes, managedRes] = await Promise.all([
+        campusAPI.getCampuses(),
+        userAPI.getManagedCampuses()
+      ]);
+      setAllCampuses(campusesRes.data);
+      const managed = managedRes.data.managedCampuses || [];
+      setManagedCampuses(managed);
+      setSelectedCampuses(managed.map(c => c._id));
+    } catch (error) {
+      console.error('Error fetching campus data:', error);
+    }
+  };
+
+  const handleSaveCampuses = async () => {
+    setSavingCampuses(true);
+    try {
+      await userAPI.updateManagedCampuses(selectedCampuses);
+      toast.success('Managed campuses updated successfully');
+      setShowCampusModal(false);
+      fetchCampusData();
+      fetchDashboardData(); // Refresh stats for new campuses
+    } catch (error) {
+      toast.error('Failed to update managed campuses');
+    } finally {
+      setSavingCampuses(false);
+    }
+  };
+
+  const toggleCampusSelection = (campusId) => {
+    setSelectedCampuses(prev => 
+      prev.includes(campusId) 
+        ? prev.filter(id => id !== campusId)
+        : [...prev, campusId]
+    );
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -100,6 +146,26 @@ const POCDashboard = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Campus POC Dashboard</h1>
           <p className="text-gray-600">Track and manage student placements for your campus</p>
+          {/* Managed Campuses Display */}
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-gray-500">Managing:</span>
+            {managedCampuses.length > 0 ? (
+              managedCampuses.map(campus => (
+                <span key={campus._id} className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs font-medium">
+                  {campus.name}
+                </span>
+              ))
+            ) : (
+              <span className="text-sm text-gray-400">No campuses selected</span>
+            )}
+            <button 
+              onClick={() => setShowCampusModal(true)}
+              className="text-primary-600 hover:text-primary-800 text-sm font-medium flex items-center gap-1"
+            >
+              <Settings className="w-3 h-3" />
+              Change
+            </button>
+          </div>
         </div>
         <button
           onClick={() => setShowCycleModal(true)}
@@ -109,6 +175,63 @@ const POCDashboard = () => {
           New Placement Cycle
         </button>
       </div>
+
+      {/* Campus Selection Modal */}
+      {showCampusModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-4">Select Campuses to Manage</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Choose the campuses you want to manage. You will see students and approve profiles from these campuses.
+            </p>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {allCampuses.map(campus => (
+                <label 
+                  key={campus._id} 
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedCampuses.includes(campus._id) 
+                      ? 'border-primary-500 bg-primary-50' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedCampuses.includes(campus._id)}
+                    onChange={() => toggleCampusSelection(campus._id)}
+                    className="w-4 h-4 text-primary-600 rounded"
+                  />
+                  <div>
+                    <span className="font-medium text-gray-900">{campus.name}</span>
+                    {campus.location && (
+                      <span className="text-sm text-gray-500 ml-2">
+                        ({campus.location.city}, {campus.location.state})
+                      </span>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={() => {
+                  setSelectedCampuses(managedCampuses.map(c => c._id));
+                  setShowCampusModal(false);
+                }}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveCampuses}
+                disabled={savingCampuses || selectedCampuses.length === 0}
+                className="btn btn-primary"
+              >
+                {savingCampuses ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cycle Selector */}
       {cycles.length > 0 && (

@@ -58,6 +58,9 @@ export const userAPI = {
   updateStudentProfile: (studentId, data) =>
     api.put(`/users/students/${studentId}/profile`, data),
   getEligibleCount: (params) => api.get('/users/eligible-count', { params }),
+  // Managed campuses for Campus POCs
+  getManagedCampuses: () => api.get('/users/managed-campuses'),
+  updateManagedCampuses: (campusIds) => api.put('/users/managed-campuses', { campusIds }),
   uploadAvatar: (file) => {
     const formData = new FormData();
     formData.append('avatar', file);

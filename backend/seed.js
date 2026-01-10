@@ -221,11 +221,14 @@ const seedData = async () => {
     const pocMain = pocJashpur;
     const pocNorth = pocDharamshala;
 
+    // Hash password for insertMany (pre-save hook doesn't run on insertMany)
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
+
     // Students with Navgurukul-specific profile data
     const students = await User.insertMany([
       {
         email: 'john.doe@student.edu',
-        password: plainPassword,
+        password: hashedPassword,
         firstName: 'John',
         lastName: 'Doe',
         role: 'student',
@@ -296,7 +299,7 @@ const seedData = async () => {
       },
       {
         email: 'jane.smith@student.edu',
-        password: plainPassword,
+        password: hashedPassword,
         firstName: 'Jane',
         lastName: 'Smith',
         role: 'student',
@@ -352,7 +355,7 @@ const seedData = async () => {
       },
       {
         email: 'mike.wilson@student.edu',
-        password: plainPassword,
+        password: hashedPassword,
         firstName: 'Mike',
         lastName: 'Wilson',
         role: 'student',
@@ -407,7 +410,7 @@ const seedData = async () => {
       },
       {
         email: 'priya.sharma@student.edu',
-        password: plainPassword,
+        password: hashedPassword,
         firstName: 'Priya',
         lastName: 'Sharma',
         role: 'student',

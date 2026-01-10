@@ -51,10 +51,19 @@ const sameCampus = async (req, res, next) => {
     const targetUserId = req.params.studentId || req.params.userId;
     if (targetUserId) {
       const targetUser = await User.findById(targetUserId);
-      if (targetUser && targetUser.campus?.toString() !== req.user.campus?.toString()) {
-        return res.status(403).json({ 
-          message: 'Access denied. You can only access students from your campus.' 
-        });
+      if (targetUser) {
+        // Check if target user's campus is in the POC's managed campuses
+        const managedCampuses = req.user.managedCampuses?.length > 0 
+          ? req.user.managedCampuses.map(c => c.toString())
+          : (req.user.campus ? [req.user.campus.toString()] : []);
+        
+        const targetCampus = targetUser.campus?.toString();
+        
+        if (targetCampus && !managedCampuses.includes(targetCampus)) {
+          return res.status(403).json({ 
+            message: 'Access denied. You can only access students from your managed campuses.' 
+          });
+        }
       }
     }
     next();
