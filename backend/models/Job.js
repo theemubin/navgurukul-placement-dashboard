@@ -85,6 +85,7 @@ const jobSchema = new mongoose.Schema({
     },
     higherEducation: {
       required: { type: Boolean, default: false },
+      level: { type: String, enum: ['', 'bachelor', 'master', 'any'], default: '' },
       acceptedDegrees: { 
         type: [String], 
         default: [] // e.g., ['BA', 'BSc', 'BCom', 'BCA', 'BTech', 'Any Graduate']
@@ -105,8 +106,18 @@ const jobSchema = new mongoose.Schema({
       enum: [null, 'Foundation', 'Basics of Programming', 'DSA', 'Backend', 'Full Stack', 'Interview Prep']
     },
     
-    // Legacy fields for backward compatibility
+    // Other Requirements
     minCgpa: { type: Number, default: null },
+    certifications: { type: [String], default: [] }, // Required certifications
+    
+    // English Proficiency (CEFR levels)
+    englishWriting: { type: String, enum: ['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'], default: '' },
+    englishSpeaking: { type: String, enum: ['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'], default: '' },
+    
+    // Shortlist Deadline - Students must complete profile before this
+    shortlistDeadline: { type: Date, default: null },
+    
+    // Legacy fields for backward compatibility
     departments: { type: [String], default: [] },
     batches: { type: [String], default: [] }
   },
