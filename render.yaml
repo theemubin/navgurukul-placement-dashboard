@@ -1,7 +1,7 @@
 services:
   # Backend API Service
   - type: web
-    name: placement-dashboard-api
+    name: navgurukul-placement-api
     env: node
     region: oregon
     plan: free
@@ -22,7 +22,7 @@ services:
 
   # Frontend Static Site
   - type: web
-    name: placement-dashboard-frontend
+    name: navgurukul-placement-frontend
     env: static
     region: oregon
     plan: free

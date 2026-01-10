@@ -21,7 +21,7 @@ const app = express();
 // Middleware
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://placement-dashboard-frontend.onrender.com', process.env.FRONTEND_URL].filter(Boolean)
+    ? ['https://navgurukul-placement-frontend.onrender.com', process.env.FRONTEND_URL].filter(Boolean)
     : '*',
   credentials: true
 };
