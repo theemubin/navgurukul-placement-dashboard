@@ -70,49 +70,43 @@ const JobForm = () => {
     { value: 'C2', label: 'C2 - Proficient' }
   ];
 
-  // Module hierarchy per school
+  // Module hierarchy per school - MUST match Profile.jsx modules
+  // Note: Only Programming, Business, and Second Chance have predefined modules
+  // Finance and Education use custom descriptions in student profiles
   const schoolModules = {
     'School of Programming': [
-      'Foundation',
-      'Basics of Programming',
-      'DSA',
-      'Backend',
-      'Full Stack',
-      'Interview Prep'
+      'Programming Foundations',
+      'Problem Solving & Flowcharts',
+      'Web Fundamentals',
+      'JavaScript Fundamentals',
+      'Advanced JavaScript',
+      'DOM & Browser APIs',
+      'Python Fundamentals',
+      'Advanced Python',
+      'Data Structures & Algorithms',
+      'Advanced Data Structures',
+      'React & Frontend Frameworks'
     ],
     'School of Business': [
-      'Foundation',
-      'Communication',
-      'Sales & Marketing',
-      'Operations',
-      'Leadership'
-    ],
-    'School of Finance': [
-      'Foundation',
-      'Accounting Basics',
-      'Financial Analysis',
-      'Taxation',
-      'Advanced Finance'
-    ],
-    'School of Education': [
-      'Foundation',
-      'Pedagogy',
-      'Curriculum Design',
-      'Classroom Management',
-      'Assessment'
+      'CRM',
+      'Digital Marketing',
+      'Data Analytics',
+      'Advanced Google Sheets'
     ],
     'School of Second Chance': [
-      'Foundation',
-      'Basic Literacy',
-      'Digital Skills',
-      'Employability'
+      'Master Chef',
+      'Fashion Designing'
     ]
+    // Note: School of Finance and School of Education don't have predefined modules
   };
 
-  // Get modules for selected school (only show if exactly one school selected)
+  // Schools that have predefined modules
+  const schoolsWithModules = ['School of Programming', 'School of Business', 'School of Second Chance'];
+
+  // Get modules for selected school (only show if exactly one school with modules is selected)
   const getAvailableModules = () => {
     const selectedSchools = formData.eligibility.schools || [];
-    if (selectedSchools.length === 1) {
+    if (selectedSchools.length === 1 && schoolsWithModules.includes(selectedSchools[0])) {
       return schoolModules[selectedSchools[0]] || [];
     }
     return [];
@@ -1224,8 +1218,8 @@ const JobForm = () => {
               </div>
             </div>
 
-            {/* Module Requirement - Only show when exactly one school is selected */}
-            {(formData.eligibility.schools || []).length === 1 && (
+            {/* Module Requirement - Only show when exactly one school with predefined modules is selected */}
+            {(formData.eligibility.schools || []).length === 1 && schoolsWithModules.includes(formData.eligibility.schools[0]) && (
               <div className={`mt-3 p-3 rounded-lg border-2 transition-all ${
                 formData.eligibility.minModule ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'
               }`}>
@@ -1290,6 +1284,11 @@ const JobForm = () => {
                   </p>
                 )}
               </div>
+            )}
+            {(formData.eligibility.schools || []).length === 1 && !schoolsWithModules.includes(formData.eligibility.schools[0]) && (
+              <p className="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded">
+                {formData.eligibility.schools[0]} doesn't have predefined modules. Student eligibility will be based on school selection only.
+              </p>
             )}
             {(formData.eligibility.schools || []).length > 1 && (
               <p className="text-xs text-amber-600 mt-2">Select only one school to set module requirements</p>
