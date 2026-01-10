@@ -454,4 +454,155 @@ student3@navgurukul.org,Amazon,SDE-1,https://amazon.jobs/job789,Hyderabad,22 LPA
   res.send(csvContent);
 });
 
+// GET sample CSV for attendance bulk upload
+router.get('/sample/attendance', auth, authorize('campus_poc', 'coordinator', 'manager'), (req, res) => {
+  const csvContent = `email,attendancePercentage,dateOfJoining
+student1@navgurukul.org,85.5,2024-01-15
+student2@navgurukul.org,92.0,2024-02-01
+student3@navgurukul.org,78.0,2023-11-20`;
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=attendance_sample.csv');
+  res.send(csvContent);
+});
+
+// POST bulk upload attendance data
+router.post('/attendance', auth, authorize('campus_poc', 'coordinator', 'manager'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No CSV file uploaded' });
+    }
+
+    const rows = await parseCSV(req.file.buffer);
+    
+    if (rows.length === 0) {
+      return res.status(400).json({ message: 'CSV file is empty' });
+    }
+
+    // Validate required columns
+    const requiredColumns = ['email'];
+    const csvColumns = Object.keys(rows[0]);
+    const missingColumns = requiredColumns.filter(col => !csvColumns.includes(col));
+    
+    if (missingColumns.length > 0) {
+      return res.status(400).json({ 
+        message: `Missing required columns: ${missingColumns.join(', ')}` 
+      });
+    }
+
+    const results = {
+      success: [],
+      failed: [],
+      skipped: []
+    };
+
+    // For campus POC, only allow updating their campus students
+    const query = { role: 'student' };
+    if (req.user.role === 'campus_poc') {
+      query.campus = req.user.campus;
+    }
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+
+      try {
+        const email = row.email?.toLowerCase()?.trim();
+        
+        if (!email) {
+          results.failed.push({
+            row: rowNum,
+            email: 'N/A',
+            reason: 'Email is required'
+          });
+          continue;
+        }
+
+        // Find student
+        const student = await User.findOne({ ...query, email });
+        
+        if (!student) {
+          results.failed.push({
+            row: rowNum,
+            email,
+            reason: req.user.role === 'campus_poc' 
+              ? 'Student not found in your campus' 
+              : 'Student not found'
+          });
+          continue;
+        }
+
+        // Update attendance and/or joining date
+        const updates = {};
+        
+        if (row.attendancePercentage !== undefined && row.attendancePercentage !== '') {
+          const attendance = parseFloat(row.attendancePercentage);
+          if (isNaN(attendance) || attendance < 0 || attendance > 100) {
+            results.failed.push({
+              row: rowNum,
+              email,
+              reason: 'Invalid attendance percentage (must be 0-100)'
+            });
+            continue;
+          }
+          updates['studentProfile.attendancePercentage'] = attendance;
+        }
+
+        if (row.dateOfJoining) {
+          const joinDate = new Date(row.dateOfJoining);
+          if (isNaN(joinDate.getTime())) {
+            results.failed.push({
+              row: rowNum,
+              email,
+              reason: 'Invalid date format for dateOfJoining'
+            });
+            continue;
+          }
+          updates['studentProfile.dateOfJoining'] = joinDate;
+        }
+
+        if (Object.keys(updates).length === 0) {
+          results.skipped.push({
+            row: rowNum,
+            email,
+            reason: 'No valid fields to update'
+          });
+          continue;
+        }
+
+        await User.findByIdAndUpdate(student._id, { $set: updates });
+
+        results.success.push({
+          row: rowNum,
+          email,
+          name: `${student.firstName} ${student.lastName}`,
+          updates: Object.keys(updates).map(k => k.replace('studentProfile.', ''))
+        });
+
+      } catch (err) {
+        results.failed.push({
+          row: rowNum,
+          email: row.email || 'N/A',
+          reason: err.message
+        });
+      }
+    }
+
+    res.json({
+      message: 'Attendance data upload completed',
+      summary: {
+        total: rows.length,
+        success: results.success.length,
+        failed: results.failed.length,
+        skipped: results.skipped.length
+      },
+      results
+    });
+
+  } catch (error) {
+    console.error('Bulk upload attendance error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;

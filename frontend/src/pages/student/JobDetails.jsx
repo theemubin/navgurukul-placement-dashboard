@@ -5,7 +5,7 @@ import { LoadingSpinner, StatusBadge } from '../../components/common/UIComponent
 import { 
   ArrowLeft, Briefcase, MapPin, DollarSign, Calendar, Clock, 
   Users, Building, Globe, CheckCircle, AlertCircle, Heart, XCircle,
-  TrendingUp, Award, GraduationCap
+  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -91,12 +91,43 @@ const JobDetails = () => {
     improvementPlan: ''
   });
   const [customResponses, setCustomResponses] = useState({});
+  const [questions, setQuestions] = useState([]);
+  const [newQuestion, setNewQuestion] = useState('');
+  const [askingQuestion, setAskingQuestion] = useState(false);
 
   useEffect(() => {
     fetchJobWithMatch();
     checkIfApplied();
     fetchProfileStatus();
+    fetchQuestions();
   }, [id]);
+
+  const fetchQuestions = async () => {
+    try {
+      const response = await jobAPI.getQuestions(id);
+      setQuestions(response.data);
+    } catch (error) {
+      console.error('Error fetching questions:', error);
+    }
+  };
+
+  const handleAskQuestion = async () => {
+    if (newQuestion.trim().length < 10) {
+      toast.error('Question must be at least 10 characters');
+      return;
+    }
+    setAskingQuestion(true);
+    try {
+      await jobAPI.askQuestion(id, newQuestion);
+      toast.success('Question submitted! The coordinator will answer it soon.');
+      setNewQuestion('');
+      fetchQuestions();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error submitting question');
+    } finally {
+      setAskingQuestion(false);
+    }
+  };
 
   const fetchProfileStatus = async () => {
     try {
@@ -250,14 +281,39 @@ const JobDetails = () => {
                   {job.maxPositions} positions
                 </span>
               </div>
+              {/* Job Coordinator */}
+              {job.coordinator && (
+                <p className="text-sm text-gray-500 mt-2 flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  Job Coordinator: <span className="font-medium">{job.coordinator.firstName} {job.coordinator.lastName}</span>
+                </p>
+              )}
             </div>
           </div>
 
           <div className="flex flex-col items-end gap-2">
             <StatusBadge status={job.status} />
             <StatusBadge status={job.jobType} />
+            {job.eligibility?.femaleOnly && (
+              <span className="bg-pink-100 text-pink-700 px-2 py-1 rounded text-xs font-medium">
+                Female Only
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Expected Update Info */}
+        {job.expectedUpdateDate && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2 text-blue-700">
+              <Clock className="w-4 h-4" />
+              <span className="font-medium">Expected Update: {format(new Date(job.expectedUpdateDate), 'MMMM dd, yyyy')}</span>
+            </div>
+            {job.expectedUpdateNote && (
+              <p className="text-sm text-blue-600 mt-1">{job.expectedUpdateNote}</p>
+            )}
+          </div>
+        )}
 
         {/* Apply Button */}
         <div className="mt-6 pt-6 border-t flex flex-col md:flex-row items-center justify-between gap-4">
@@ -423,6 +479,95 @@ const JobDetails = () => {
               </div>
             </div>
           )}
+
+          {/* FAQ Section */}
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <MessageCircle className="w-5 h-5" />
+              Questions & Answers
+            </h2>
+            
+            {/* Ask a Question */}
+            <div className="mb-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newQuestion}
+                  onChange={(e) => setNewQuestion(e.target.value)}
+                  placeholder="Ask a question about this job..."
+                  className="flex-1"
+                />
+                <button
+                  onClick={handleAskQuestion}
+                  disabled={askingQuestion || newQuestion.length < 10}
+                  className="btn btn-primary flex items-center gap-1"
+                >
+                  <Send className="w-4 h-4" />
+                  {askingQuestion ? 'Sending...' : 'Ask'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Min 10 characters. Questions will be answered by the coordinator.</p>
+            </div>
+
+            {/* Questions List */}
+            {questions.length > 0 ? (
+              <div className="space-y-4">
+                {questions.map((q, idx) => (
+                  <div key={idx} className="border-l-4 border-primary-200 pl-4">
+                    <p className="font-medium text-gray-900">{q.question}</p>
+                    {q.answer ? (
+                      <div className="mt-2 bg-gray-50 p-3 rounded">
+                        <p className="text-gray-700 text-sm">{q.answer}</p>
+                        {q.answeredBy && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Answered by {q.answeredBy.firstName} {q.answeredBy.lastName}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic mt-1">Awaiting response...</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">No questions yet. Be the first to ask!</p>
+            )}
+          </div>
+
+          {/* Job Journey/Timeline */}
+          {job.timeline?.length > 0 && (
+            <div className="card">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <History className="w-5 h-5" />
+                Job Journey
+              </h2>
+              <div className="space-y-3">
+                {job.timeline.slice().reverse().map((event, idx) => (
+                  <div key={idx} className="flex gap-3 items-start">
+                    <div className="w-2 h-2 bg-primary-500 rounded-full mt-2"></div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{event.description}</p>
+                      <p className="text-xs text-gray-500">
+                        {format(new Date(event.changedAt), 'MMM dd, yyyy')}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {/* Always show created date */}
+                <div className="flex gap-3 items-start">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Job Posted</p>
+                    <p className="text-xs text-gray-500">
+                      {job.createdBy && `by ${job.createdBy.firstName} ${job.createdBy.lastName} • `}
+                      {format(new Date(job.createdAt), 'MMM dd, yyyy')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -487,10 +632,31 @@ const JobDetails = () => {
                   <span className="font-medium">{job.eligibility.minModule}</span>
                 </div>
               )}
+              {job.eligibility?.femaleOnly && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Gender Requirement</span>
+                  <span className="font-medium text-pink-600">Female Only</span>
+                </div>
+              )}
+              {job.eligibility?.minAttendance && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Min Attendance</span>
+                  <span className="font-medium">{job.eligibility.minAttendance}%</span>
+                </div>
+              )}
+              {job.eligibility?.minMonthsAtNavgurukul && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Min Time at NG</span>
+                  <span className="font-medium">{job.eligibility.minMonthsAtNavgurukul} months</span>
+                </div>
+              )}
               {(!job.eligibility?.schools?.length && 
                 !job.eligibility?.campuses?.length && 
                 !job.eligibility?.minCgpa &&
-                !job.eligibility?.minModule) && (
+                !job.eligibility?.minModule &&
+                !job.eligibility?.femaleOnly &&
+                !job.eligibility?.minAttendance &&
+                !job.eligibility?.minMonthsAtNavgurukul) && (
                 <p className="text-green-600 font-medium">Open for all students</p>
               )}
             </div>

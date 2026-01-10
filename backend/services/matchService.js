@@ -285,6 +285,71 @@ function calculateEligibilityMatch(student, job) {
     details.cgpa = { required: false, meets: true };
   }
 
+  // Gender (Female-only jobs)
+  if (eligibility.femaleOnly) {
+    totalRequired++;
+    const studentGender = student.gender || '';
+    const meets = studentGender === 'female';
+    if (meets) passedCount++;
+    details.gender = {
+      required: true,
+      meets,
+      studentValue: studentGender || 'Not specified',
+      jobRequirement: 'Female only',
+      message: meets 
+        ? `Gender: Eligible (Female-only job)`
+        : `Gender: This job is for female candidates only`
+    };
+  } else {
+    details.gender = { required: false, meets: true };
+  }
+
+  // Minimum Attendance
+  if (eligibility.minAttendance) {
+    totalRequired++;
+    const studentAttendance = profile.attendancePercentage || 0;
+    const meets = studentAttendance >= eligibility.minAttendance;
+    if (meets) passedCount++;
+    details.attendance = {
+      required: true,
+      meets,
+      studentValue: studentAttendance,
+      jobRequirement: eligibility.minAttendance,
+      message: meets 
+        ? `Attendance: ${studentAttendance}% (meets ${eligibility.minAttendance}% requirement)`
+        : `Attendance: ${studentAttendance}% (requires ${eligibility.minAttendance}%)`
+    };
+  } else {
+    details.attendance = { required: false, meets: true };
+  }
+
+  // Minimum Months at Navgurukul
+  if (eligibility.minMonthsAtNavgurukul) {
+    totalRequired++;
+    const joiningDate = profile.dateOfJoining || profile.joiningDate;
+    let monthsAtNavgurukul = 0;
+    
+    if (joiningDate) {
+      const joinDate = new Date(joiningDate);
+      const now = new Date();
+      monthsAtNavgurukul = Math.floor((now - joinDate) / (1000 * 60 * 60 * 24 * 30));
+    }
+    
+    const meets = monthsAtNavgurukul >= eligibility.minMonthsAtNavgurukul;
+    if (meets) passedCount++;
+    details.monthsAtNavgurukul = {
+      required: true,
+      meets,
+      studentValue: monthsAtNavgurukul,
+      jobRequirement: eligibility.minMonthsAtNavgurukul,
+      message: meets 
+        ? `Time at Navgurukul: ${monthsAtNavgurukul} months (meets ${eligibility.minMonthsAtNavgurukul} months requirement)`
+        : `Time at Navgurukul: ${monthsAtNavgurukul} months (requires ${eligibility.minMonthsAtNavgurukul} months)`
+    };
+  } else {
+    details.monthsAtNavgurukul = { required: false, meets: true };
+  }
+
   return {
     passed: passedCount,
     total: totalRequired,

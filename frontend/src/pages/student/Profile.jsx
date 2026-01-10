@@ -102,6 +102,7 @@ const StudentProfile = () => {
     firstName: '',
     lastName: '',
     phone: '',
+    gender: '',
     linkedIn: '',
     github: '',
     portfolio: '',
@@ -166,6 +167,7 @@ const StudentProfile = () => {
         firstName: data.firstName || '',
         lastName: data.lastName || '',
         phone: data.phone || '',
+        gender: data.gender || '',
         linkedIn: data.studentProfile?.linkedIn || '',
         github: data.studentProfile?.github || '',
         portfolio: data.studentProfile?.portfolio || '',
@@ -260,8 +262,8 @@ const StudentProfile = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      // Include campus in the profile update
-      const profileData = { ...formData, campus: selectedCampus };
+      // Include campus and gender in the profile update
+      const profileData = { ...formData, campus: selectedCampus, gender: formData.gender };
       await userAPI.updateProfile(profileData);
       toast.success('Profile updated successfully');
       updateUser({ firstName: formData.firstName, lastName: formData.lastName });
@@ -464,6 +466,19 @@ const StudentProfile = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                     <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} disabled={!canEdit} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                    <select 
+                      value={formData.gender || ''} 
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })} 
+                      disabled={!canEdit}
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
                   </div>
                 </div>
 

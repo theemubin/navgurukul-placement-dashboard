@@ -45,6 +45,10 @@ const JobForm = () => {
       // English proficiency (CEFR)
       englishWriting: '',
       englishSpeaking: '',
+      // Additional filters
+      femaleOnly: false,
+      minAttendance: null,
+      minMonthsAtNavgurukul: null,
       // Deadline
       shortlistDeadline: ''
     },
@@ -350,7 +354,14 @@ const JobForm = () => {
           schools: job.eligibility?.schools || [],
           campuses: job.eligibility?.campuses || [],
           minModule: job.eligibility?.minModule || '',
-          minCgpa: job.eligibility?.minCgpa || ''
+          minCgpa: job.eligibility?.minCgpa || '',
+          certifications: job.eligibility?.certifications || [],
+          englishWriting: job.eligibility?.englishWriting || '',
+          englishSpeaking: job.eligibility?.englishSpeaking || '',
+          femaleOnly: job.eligibility?.femaleOnly || false,
+          minAttendance: job.eligibility?.minAttendance || null,
+          minMonthsAtNavgurukul: job.eligibility?.minMonthsAtNavgurukul || null,
+          shortlistDeadline: job.eligibility?.shortlistDeadline ? job.eligibility.shortlistDeadline.split('T')[0] : ''
         },
         requirements: job.requirements?.length ? job.requirements : [''],
         responsibilities: job.responsibilities?.length ? job.responsibilities : [''],
@@ -403,6 +414,15 @@ const JobForm = () => {
           schools: formData.eligibility.schools || [],
           campuses: formData.eligibility.campuses || [],
           minModule: formData.eligibility.minModule || null,
+          // Other requirements
+          certifications: formData.eligibility.certifications || [],
+          englishWriting: formData.eligibility.englishWriting || '',
+          englishSpeaking: formData.eligibility.englishSpeaking || '',
+          shortlistDeadline: formData.eligibility.shortlistDeadline || null,
+          // Additional filters
+          femaleOnly: formData.eligibility.femaleOnly || false,
+          minAttendance: formData.eligibility.minAttendance ? Number(formData.eligibility.minAttendance) : null,
+          minMonthsAtNavgurukul: formData.eligibility.minMonthsAtNavgurukul ? Number(formData.eligibility.minMonthsAtNavgurukul) : null,
           // Legacy
           minCgpa: formData.eligibility.minCgpa ? Number(formData.eligibility.minCgpa) : null,
           // Calculate openForAll
@@ -412,7 +432,10 @@ const JobForm = () => {
                      (!formData.eligibility.schools || formData.eligibility.schools.length === 0) &&
                      (!formData.eligibility.campuses || formData.eligibility.campuses.length === 0) &&
                      !formData.eligibility.minModule &&
-                     !formData.eligibility.minCgpa
+                     !formData.eligibility.minCgpa &&
+                     !formData.eligibility.femaleOnly &&
+                     !formData.eligibility.minAttendance &&
+                     !formData.eligibility.minMonthsAtNavgurukul
         }
       };
 
@@ -1436,6 +1459,79 @@ const JobForm = () => {
                   Students will see this deadline prominently
                 </p>
               )}
+            </div>
+          </div>
+
+          {/* Additional Filters */}
+          <div className="mb-4">
+            <h3 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
+              <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+              Additional Filters
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Female Only Toggle */}
+              <div 
+                onClick={() => setFormData({
+                  ...formData,
+                  eligibility: { ...formData.eligibility, femaleOnly: !formData.eligibility.femaleOnly }
+                })}
+                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                  formData.eligibility.femaleOnly
+                    ? 'border-pink-500 bg-pink-50' 
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900 text-sm">Female Only</span>
+                  <div className={`w-10 h-6 rounded-full relative transition-colors ${
+                    formData.eligibility.femaleOnly ? 'bg-pink-500' : 'bg-gray-300'
+                  }`}>
+                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${
+                      formData.eligibility.femaleOnly ? 'left-5' : 'left-1'
+                    }`}></div>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Only female students can apply</p>
+              </div>
+
+              {/* Minimum Attendance */}
+              <div className={`p-3 rounded-lg border-2 transition-all ${
+                formData.eligibility.minAttendance ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'
+              }`}>
+                <span className="font-medium text-gray-900 text-sm block mb-1">Min Attendance %</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={formData.eligibility.minAttendance || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    eligibility: { ...formData.eligibility, minAttendance: e.target.value ? Number(e.target.value) : null }
+                  })}
+                  placeholder="e.g., 75"
+                  className="w-full text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">Minimum attendance required</p>
+              </div>
+
+              {/* Minimum Months at Navgurukul */}
+              <div className={`p-3 rounded-lg border-2 transition-all ${
+                formData.eligibility.minMonthsAtNavgurukul ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'
+              }`}>
+                <span className="font-medium text-gray-900 text-sm block mb-1">Min Months at NG</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.eligibility.minMonthsAtNavgurukul || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    eligibility: { ...formData.eligibility, minMonthsAtNavgurukul: e.target.value ? Number(e.target.value) : null }
+                  })}
+                  placeholder="e.g., 6"
+                  className="w-full text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">Months since joining</p>
+              </div>
             </div>
           </div>
 

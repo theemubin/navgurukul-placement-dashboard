@@ -668,4 +668,263 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
   }
 });
 
+// === FAQ Routes ===
+
+// Get questions for a job
+router.get('/:id/questions', auth, async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id)
+      .populate('questions.askedBy', 'firstName lastName')
+      .populate('questions.answeredBy', 'firstName lastName');
+
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    // For students, only return public questions with answers
+    const questions = req.user.role === 'student'
+      ? job.questions.filter(q => q.isPublic && q.answer)
+      : job.questions;
+
+    res.json(questions);
+  } catch (error) {
+    console.error('Get questions error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Ask a question (Students only)
+router.post('/:id/questions', auth, authorize('student'), [
+  body('question').trim().isLength({ min: 10 }).withMessage('Question must be at least 10 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    job.questions.push({
+      question: req.body.question,
+      askedBy: req.userId,
+      askedAt: new Date()
+    });
+
+    await job.save();
+
+    // Notify coordinators about new question
+    const coordinators = await User.find({ role: 'coordinator', isActive: true });
+    const notifications = coordinators.map(coordinator => ({
+      recipient: coordinator._id,
+      type: 'job_question',
+      title: 'New Question on Job',
+      message: `A student has asked a question on ${job.title} at ${job.company.name}`,
+      link: `/coordinator/jobs/${job._id}`,
+      relatedEntity: { type: 'job', id: job._id }
+    }));
+
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
+    }
+
+    res.status(201).json({ message: 'Question submitted successfully' });
+  } catch (error) {
+    console.error('Ask question error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Answer a question (Coordinators/Managers only)
+router.patch('/:id/questions/:questionId', auth, authorize('coordinator', 'manager'), [
+  body('answer').trim().notEmpty().withMessage('Answer is required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    const question = job.questions.id(req.params.questionId);
+    if (!question) {
+      return res.status(404).json({ message: 'Question not found' });
+    }
+
+    question.answer = req.body.answer;
+    question.answeredBy = req.userId;
+    question.answeredAt = new Date();
+    question.isPublic = req.body.isPublic !== false; // Default to public
+
+    await job.save();
+
+    // Notify the student who asked
+    if (question.askedBy) {
+      const notification = new Notification({
+        recipient: question.askedBy,
+        type: 'question_answered',
+        title: 'Your Question Was Answered',
+        message: `Your question about ${job.title} has been answered`,
+        link: `/student/jobs/${job._id}`,
+        relatedEntity: { type: 'job', id: job._id }
+      });
+      await notification.save();
+    }
+
+    res.json({ message: 'Question answered successfully', question });
+  } catch (error) {
+    console.error('Answer question error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// === Job Timeline/Journey Routes ===
+
+// Add timeline event
+router.post('/:id/timeline', auth, authorize('coordinator', 'manager'), [
+  body('event').isIn(['created', 'status_changed', 'deadline_extended', 'positions_updated', 'coordinator_assigned', 'custom']),
+  body('description').trim().notEmpty()
+], async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    job.timeline.push({
+      event: req.body.event,
+      description: req.body.description,
+      changedBy: req.userId,
+      changedAt: new Date(),
+      metadata: req.body.metadata || {}
+    });
+
+    await job.save();
+
+    res.json({ message: 'Timeline event added', timeline: job.timeline });
+  } catch (error) {
+    console.error('Add timeline event error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update expected update date
+router.patch('/:id/expected-update', auth, authorize('coordinator', 'manager'), [
+  body('expectedUpdateDate').optional().isISO8601(),
+  body('expectedUpdateNote').optional().trim()
+], async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    job.expectedUpdateDate = req.body.expectedUpdateDate || null;
+    job.expectedUpdateNote = req.body.expectedUpdateNote || '';
+
+    // Add to timeline
+    job.timeline.push({
+      event: 'custom',
+      description: `Expected update date set: ${req.body.expectedUpdateDate ? new Date(req.body.expectedUpdateDate).toLocaleDateString() : 'Cleared'}`,
+      changedBy: req.userId,
+      changedAt: new Date()
+    });
+
+    await job.save();
+
+    res.json({ message: 'Expected update date updated', job });
+  } catch (error) {
+    console.error('Update expected update error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Assign coordinator to job
+router.patch('/:id/coordinator', auth, authorize('manager'), [
+  body('coordinatorId').notEmpty()
+], async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    const coordinator = await User.findOne({ _id: req.body.coordinatorId, role: 'coordinator' });
+    if (!coordinator) {
+      return res.status(404).json({ message: 'Coordinator not found' });
+    }
+
+    job.coordinator = coordinator._id;
+
+    // Add to timeline
+    job.timeline.push({
+      event: 'coordinator_assigned',
+      description: `${coordinator.firstName} ${coordinator.lastName} assigned as job coordinator`,
+      changedBy: req.userId,
+      changedAt: new Date(),
+      metadata: { coordinatorId: coordinator._id }
+    });
+
+    await job.save();
+
+    // Notify coordinator
+    const notification = new Notification({
+      recipient: coordinator._id,
+      type: 'job_assigned',
+      title: 'Job Assigned to You',
+      message: `You have been assigned as coordinator for ${job.title} at ${job.company.name}`,
+      link: `/coordinator/jobs/${job._id}`,
+      relatedEntity: { type: 'job', id: job._id }
+    });
+    await notification.save();
+
+    res.json({ message: 'Coordinator assigned successfully', job });
+  } catch (error) {
+    console.error('Assign coordinator error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get coordinators with their job counts (for Manager dashboard)
+router.get('/stats/coordinator-jobs', auth, authorize('manager'), async (req, res) => {
+  try {
+    const coordinatorStats = await Job.aggregate([
+      { $match: { coordinator: { $exists: true, $ne: null } } },
+      { $group: { 
+        _id: '$coordinator', 
+        totalJobs: { $sum: 1 },
+        activeJobs: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+        closedJobs: { $sum: { $cond: [{ $in: ['$status', ['closed', 'filled']] }, 1, 0] } }
+      }},
+      { $lookup: {
+        from: 'users',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'coordinator'
+      }},
+      { $unwind: '$coordinator' },
+      { $project: {
+        _id: 1,
+        coordinatorName: { $concat: ['$coordinator.firstName', ' ', '$coordinator.lastName'] },
+        coordinatorEmail: '$coordinator.email',
+        totalJobs: 1,
+        activeJobs: 1,
+        closedJobs: 1
+      }}
+    ]);
+
+    res.json(coordinatorStats);
+  } catch (error) {
+    console.error('Get coordinator stats error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

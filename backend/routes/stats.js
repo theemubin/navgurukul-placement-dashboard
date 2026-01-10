@@ -307,6 +307,83 @@ router.get('/student', auth, authorize('student'), async (req, res) => {
   }
 });
 
+// Coordinator stats - Which coordinator is handling how many jobs
+router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) => {
+  try {
+    // Get all coordinators
+    const coordinators = await User.find({ 
+      role: 'coordinator', 
+      isActive: true 
+    }).select('firstName lastName email');
+
+    // Get jobs stats by coordinator
+    const coordinatorStats = await Promise.all(coordinators.map(async (coordinator) => {
+      // Jobs assigned to this coordinator
+      const assignedJobs = await Job.countDocuments({
+        assignedCoordinator: coordinator._id
+      });
+
+      // Jobs created by this coordinator
+      const createdJobs = await Job.countDocuments({
+        createdBy: coordinator._id
+      });
+
+      // Active jobs
+      const activeJobs = await Job.countDocuments({
+        $or: [
+          { assignedCoordinator: coordinator._id },
+          { createdBy: coordinator._id }
+        ],
+        status: 'active'
+      });
+
+      // Get applications for jobs handled by this coordinator
+      const coordinatorJobs = await Job.find({
+        $or: [
+          { assignedCoordinator: coordinator._id },
+          { createdBy: coordinator._id }
+        ]
+      }).select('_id');
+
+      const jobIds = coordinatorJobs.map(j => j._id);
+
+      const applications = await Application.countDocuments({
+        job: { $in: jobIds }
+      });
+
+      const placements = await Application.countDocuments({
+        job: { $in: jobIds },
+        status: 'selected'
+      });
+
+      return {
+        coordinator: {
+          id: coordinator._id,
+          name: `${coordinator.firstName} ${coordinator.lastName}`,
+          email: coordinator.email
+        },
+        assignedJobs,
+        createdJobs,
+        totalJobs: assignedJobs || createdJobs, // whichever is used
+        activeJobs,
+        totalApplications: applications,
+        placements,
+        conversionRate: applications > 0 
+          ? Math.round((placements / applications) * 100) 
+          : 0
+      };
+    }));
+
+    // Sort by total jobs descending
+    coordinatorStats.sort((a, b) => b.totalJobs - a.totalJobs);
+
+    res.json(coordinatorStats);
+  } catch (error) {
+    console.error('Get coordinator stats error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Campus POC dashboard stats
 router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
   try {

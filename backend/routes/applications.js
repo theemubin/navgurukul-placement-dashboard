@@ -430,4 +430,126 @@ router.get('/export/csv', auth, authorize('coordinator', 'manager'), async (req,
   }
 });
 
+// Export applications with field selection (XLS format)
+router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const { job, status, campus, fields } = req.body;
+    let query = {};
+
+    if (job) query.job = job;
+    if (status) query.status = status;
+
+    if (campus) {
+      const campusStudents = await User.find({ 
+        role: 'student', 
+        campus 
+      }).select('_id');
+      query.student = { $in: campusStudents.map(s => s._id) };
+    }
+
+    const applications = await Application.find(query)
+      .populate('student', 'firstName lastName email phone gender studentProfile campus')
+      .populate({
+        path: 'student',
+        populate: [
+          { path: 'campus', select: 'name' },
+          { path: 'studentProfile.skills.skill' }
+        ]
+      })
+      .populate('job', 'title company.name location jobType salary')
+      .populate('feedbackBy', 'firstName lastName');
+
+    // Available fields mapping
+    const fieldMap = {
+      studentName: (app) => `${app.student.firstName} ${app.student.lastName}`,
+      email: (app) => app.student.email,
+      phone: (app) => app.student.phone || '',
+      gender: (app) => app.student.gender || '',
+      campus: (app) => app.student.campus?.name || '',
+      school: (app) => app.student.studentProfile?.currentSchool || '',
+      currentModule: (app) => app.student.studentProfile?.currentModule || '',
+      joiningDate: (app) => app.student.studentProfile?.dateOfJoining ? new Date(app.student.studentProfile.dateOfJoining).toLocaleDateString() : '',
+      attendance: (app) => app.student.studentProfile?.attendancePercentage || '',
+      jobTitle: (app) => app.job.title,
+      company: (app) => app.job.company.name,
+      location: (app) => app.job.location,
+      jobType: (app) => app.job.jobType,
+      salary: (app) => app.job.salary?.min && app.job.salary?.max ? `${app.job.salary.min}-${app.job.salary.max}` : '',
+      status: (app) => app.status,
+      appliedDate: (app) => app.createdAt.toISOString().split('T')[0],
+      coverLetter: (app) => app.coverLetter || '',
+      feedback: (app) => app.feedback || '',
+      linkedIn: (app) => app.student.studentProfile?.linkedIn || '',
+      github: (app) => app.student.studentProfile?.github || '',
+      resume: (app) => app.student.studentProfile?.resume || '',
+      tenthPercentage: (app) => app.student.studentProfile?.tenthGrade?.percentage || '',
+      twelfthPercentage: (app) => app.student.studentProfile?.twelfthGrade?.percentage || ''
+    };
+
+    // Use selected fields or all fields
+    const selectedFields = fields?.length > 0 ? fields : Object.keys(fieldMap);
+    
+    // Generate headers
+    const headers = selectedFields.map(f => {
+      // Convert camelCase to Title Case
+      return f.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).trim();
+    });
+
+    // Generate rows
+    const rows = applications.map(app => 
+      selectedFields.map(field => {
+        const value = fieldMap[field] ? fieldMap[field](app) : '';
+        // Escape quotes and wrap in quotes if contains comma
+        const strValue = String(value);
+        return strValue.includes(',') || strValue.includes('"') 
+          ? `"${strValue.replace(/"/g, '""')}"` 
+          : strValue;
+      })
+    );
+
+    // Create TSV (Tab Separated Values) for easy Excel import
+    const tsv = [headers.join('\t'), ...rows.map(row => row.join('\t'))].join('\n');
+
+    // Add BOM for Excel UTF-8 compatibility
+    const bom = '\uFEFF';
+    
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=applications-export.xls');
+    res.send(bom + tsv);
+  } catch (error) {
+    console.error('Export XLS error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get available export fields
+router.get('/export/fields', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  const fields = [
+    { key: 'studentName', label: 'Student Name', category: 'Student Info' },
+    { key: 'email', label: 'Email', category: 'Student Info' },
+    { key: 'phone', label: 'Phone', category: 'Student Info' },
+    { key: 'gender', label: 'Gender', category: 'Student Info' },
+    { key: 'campus', label: 'Campus', category: 'Student Info' },
+    { key: 'school', label: 'Navgurukul School', category: 'Education' },
+    { key: 'currentModule', label: 'Current Module', category: 'Education' },
+    { key: 'joiningDate', label: 'Joining Date', category: 'Education' },
+    { key: 'attendance', label: 'Attendance %', category: 'Education' },
+    { key: 'tenthPercentage', label: '10th Percentage', category: 'Education' },
+    { key: 'twelfthPercentage', label: '12th Percentage', category: 'Education' },
+    { key: 'jobTitle', label: 'Job Title', category: 'Job Info' },
+    { key: 'company', label: 'Company', category: 'Job Info' },
+    { key: 'location', label: 'Location', category: 'Job Info' },
+    { key: 'jobType', label: 'Job Type', category: 'Job Info' },
+    { key: 'salary', label: 'Salary Range', category: 'Job Info' },
+    { key: 'status', label: 'Application Status', category: 'Application' },
+    { key: 'appliedDate', label: 'Applied Date', category: 'Application' },
+    { key: 'coverLetter', label: 'Cover Letter', category: 'Application' },
+    { key: 'feedback', label: 'Feedback', category: 'Application' },
+    { key: 'linkedIn', label: 'LinkedIn', category: 'Links' },
+    { key: 'github', label: 'GitHub', category: 'Links' },
+    { key: 'resume', label: 'Resume URL', category: 'Links' }
+  ];
+  res.json(fields);
+});
+
 module.exports = router;

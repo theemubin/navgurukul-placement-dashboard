@@ -33,6 +33,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  gender: {
+    type: String,
+    enum: ['', 'male', 'female', 'other'],
+    default: ''
+  },
   campus: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Campus'
@@ -79,6 +84,13 @@ const userSchema = new mongoose.Schema({
       enum: ['', 'School of Programming', 'School of Business', 'School of Finance', 'School of Education', 'School of Second Chance']
     },
     joiningDate: Date,
+    dateOfJoining: Date, // Official joining date for calculating months at Navgurukul
+    attendancePercentage: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null
+    },
     currentModule: String, // For Programming/Business - selected from predefined list
     customModuleDescription: String, // For Finance/Education - free text
     

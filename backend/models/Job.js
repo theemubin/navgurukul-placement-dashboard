@@ -116,6 +116,15 @@ const jobSchema = new mongoose.Schema({
     // Shortlist Deadline - Students must complete profile before this
     shortlistDeadline: { type: Date, default: null },
     
+    // Gender requirement (for female-only jobs)
+    femaleOnly: { type: Boolean, default: false },
+    
+    // Minimum months at Navgurukul
+    minMonthsAtNavgurukul: { type: Number, default: null },
+    
+    // Minimum attendance percentage
+    minAttendance: { type: Number, default: null },
+    
     // Legacy fields for backward compatibility
     minCgpa: { type: Number, default: null }, // Deprecated - keeping for backward compatibility
     departments: { type: [String], default: [] },
@@ -140,6 +149,26 @@ const jobSchema = new mongoose.Schema({
     changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     notes: String
   }],
+  // Job Journey/Timeline - tracking all important events
+  timeline: [{
+    event: {
+      type: String,
+      enum: ['created', 'status_changed', 'deadline_extended', 'positions_updated', 'coordinator_assigned', 'custom']
+    },
+    description: String,
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    changedAt: { type: Date, default: Date.now },
+    metadata: mongoose.Schema.Types.Mixed // Additional data for the event
+  }],
+  // Expected next update date for applicants
+  expectedUpdateDate: {
+    type: Date,
+    default: null
+  },
+  expectedUpdateNote: {
+    type: String,
+    default: ''
+  },
   interviewRounds: [{
     name: String,
     type: {
@@ -149,6 +178,11 @@ const jobSchema = new mongoose.Schema({
     description: String,
     scheduledDate: Date
   }],
+  // Job Coordinator (assigned to manage this job)
+  coordinator: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -157,7 +191,17 @@ const jobSchema = new mongoose.Schema({
   placementsCount: {
     type: Number,
     default: 0
-  }
+  },
+  // FAQ/Questions for this job
+  questions: [{
+    question: { type: String, required: true },
+    answer: { type: String, default: '' },
+    askedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    answeredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    askedAt: { type: Date, default: Date.now },
+    answeredAt: Date,
+    isPublic: { type: Boolean, default: true }
+  }]
 }, {
   timestamps: true
 });

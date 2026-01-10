@@ -3,17 +3,19 @@ import { statsAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner } from '../../components/common/UIComponents';
 import { 
   Users, Briefcase, Building2, Award, TrendingUp, 
-  CheckCircle, Clock, BarChart3, PieChart, Download
+  CheckCircle, Clock, BarChart3, PieChart, Download, UserCog
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
+  const [coordinatorStats, setCoordinatorStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('all');
 
   useEffect(() => {
     fetchStats();
+    fetchCoordinatorStats();
   }, [dateRange]);
 
   const fetchStats = async () => {
@@ -25,6 +27,15 @@ const Dashboard = () => {
       toast.error('Error fetching statistics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCoordinatorStats = async () => {
+    try {
+      const response = await statsAPI.getCoordinatorStats();
+      setCoordinatorStats(response.data);
+    } catch (error) {
+      console.error('Error fetching coordinator stats:', error);
     }
   };
 
@@ -221,6 +232,75 @@ const Dashboard = () => {
               <p className="text-gray-500 text-center py-4">No company data available</p>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Coordinator Performance Stats */}
+      <div className="card">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <UserCog className="w-5 h-5 text-primary-600" />
+          Coordinator Job Distribution
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Coordinator</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">Total Jobs</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">Active Jobs</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">Applications</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">Placements</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">Conversion</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {coordinatorStats.map((coord, index) => (
+                <tr key={coord.coordinator.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-sm font-bold text-primary-600">
+                        {coord.coordinator.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{coord.coordinator.name}</p>
+                        <p className="text-xs text-gray-500">{coord.coordinator.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-semibold text-gray-900">{coord.totalJobs}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                      {coord.activeJobs}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-gray-600">{coord.totalApplications}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-semibold text-primary-600">{coord.placements}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`px-2 py-1 rounded-full text-sm ${
+                      coord.conversionRate >= 20 ? 'bg-green-100 text-green-700' :
+                      coord.conversionRate >= 10 ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {coord.conversionRate}%
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {coordinatorStats.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                    No coordinator data available
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

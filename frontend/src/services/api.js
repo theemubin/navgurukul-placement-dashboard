@@ -116,7 +116,18 @@ export const jobAPI = {
   // Interest requests (for <60% match students)
   submitInterest: (jobId, data) => api.post(`/jobs/${jobId}/interest`, data),
   getInterestRequests: (jobId, params) => api.get(`/jobs/${jobId}/interest-requests`, { params }),
-  reviewInterestRequest: (requestId, data) => api.patch(`/jobs/interest-requests/${requestId}`, data)
+  reviewInterestRequest: (requestId, data) => api.patch(`/jobs/interest-requests/${requestId}`, data),
+  // FAQ/Questions
+  getQuestions: (jobId) => api.get(`/jobs/${jobId}/questions`),
+  askQuestion: (jobId, question) => api.post(`/jobs/${jobId}/questions`, { question }),
+  answerQuestion: (jobId, questionId, answer, isPublic) => api.patch(`/jobs/${jobId}/questions/${questionId}`, { answer, isPublic }),
+  // Timeline
+  addTimelineEvent: (jobId, event, description, metadata) => api.post(`/jobs/${jobId}/timeline`, { event, description, metadata }),
+  // Expected update
+  updateExpectedDate: (jobId, expectedUpdateDate, expectedUpdateNote) => api.patch(`/jobs/${jobId}/expected-update`, { expectedUpdateDate, expectedUpdateNote }),
+  // Coordinator assignment
+  assignCoordinator: (jobId, coordinatorId) => api.patch(`/jobs/${jobId}/coordinator`, { coordinatorId }),
+  getCoordinatorStats: () => api.get('/jobs/stats/coordinator-jobs')
 };
 
 // Application APIs
@@ -129,7 +140,10 @@ export const applicationAPI = {
   updateRound: (id, roundData) => api.put(`/applications/${id}/rounds`, roundData),
   addRecommendation: (id, reason) => api.put(`/applications/${id}/recommend`, { reason }),
   withdraw: (id) => api.put(`/applications/${id}/withdraw`),
-  exportCSV: (params) => api.get('/applications/export/csv', { params, responseType: 'blob' })
+  exportCSV: (params) => api.get('/applications/export/csv', { params, responseType: 'blob' }),
+  // Enhanced export with field selection
+  getExportFields: () => api.get('/applications/export/fields'),
+  exportXLS: (data) => api.post('/applications/export/xls', data, { responseType: 'blob' })
 };
 
 // Skill APIs
@@ -162,6 +176,7 @@ export const statsAPI = {
   getSchoolTracking: (cycleId) => api.get('/stats/campus-poc/school-tracking', { params: { cycleId } }),
   getStudentSummary: (params) => api.get('/stats/campus-poc/student-summary', { params }),
   getCycleStats: () => api.get('/stats/campus-poc/cycle-stats'),
+  getCoordinatorStats: () => api.get('/stats/coordinator-stats'),
   exportStats: (params) => api.get('/stats/export', { params, responseType: 'blob' })
 };
 
@@ -231,6 +246,7 @@ export const bulkUploadAPI = {
   downloadStudentsSample: () => api.get('/bulk-upload/sample/students', { responseType: 'blob' }),
   downloadSelfApplicationsSample: () => api.get('/bulk-upload/sample/self-applications', { responseType: 'blob' }),
   downloadSelfApplicationsCampusSample: () => api.get('/bulk-upload/sample/self-applications-campus', { responseType: 'blob' }),
+  downloadAttendanceSample: () => api.get('/bulk-upload/sample/attendance', { responseType: 'blob' }),
   // Upload files
   uploadStudents: (file) => {
     const formData = new FormData();
@@ -250,6 +266,13 @@ export const bulkUploadAPI = {
     const formData = new FormData();
     formData.append('file', file);
     return api.post('/bulk-upload/self-applications/campus', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  uploadAttendance: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/bulk-upload/attendance', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   }
