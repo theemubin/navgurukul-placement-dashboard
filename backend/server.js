@@ -18,14 +18,32 @@ const campusRoutes = require('./routes/campuses');
 
 const app = express();
 
-// Middleware
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://navgurukul-placement-frontend.onrender.com', process.env.FRONTEND_URL].filter(Boolean)
-    : '*',
-  credentials: true
-};
-app.use(cors(corsOptions));
+// Middleware - CORS Configuration
+const allowedOrigins = [
+  'https://navgurukul-placement-frontend.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all origins for now during testing
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
