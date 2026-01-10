@@ -23,11 +23,27 @@ class AIService {
   // Extract text from URL
   async extractTextFromURL(url) {
     try {
+      // Check for blocked domains
+      const blockedDomains = ['linkedin.com', 'glassdoor.com'];
+      const urlLower = url.toLowerCase();
+      
+      for (const domain of blockedDomains) {
+        if (urlLower.includes(domain)) {
+          throw new Error(`${domain} blocks direct access. Please download the job description as PDF and upload it instead.`);
+        }
+      }
+      
       const response = await axios.get(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1'
         },
-        timeout: 15000
+        timeout: 15000,
+        maxRedirects: 5
       });
       
       const $ = cheerio.load(response.data);
@@ -80,7 +96,14 @@ class AIService {
       throw new Error('AI service not configured. Please add your Google AI API key in Settings.');
     }
 
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // Use gemini-2.0-flash-exp or gemini-pro as fallback (gemini-1.5-flash deprecated)
+    let model;
+    try {
+      model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    } catch (e) {
+      // Fallback to gemini-pro if 2.0 not available
+      model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+    }
 
     const skillsList = existingSkills.length > 0 
       ? `Available skills in our system: ${existingSkills.join(', ')}`
