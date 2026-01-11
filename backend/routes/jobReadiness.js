@@ -1,3 +1,73 @@
+// Add a new criterion to the config (PoC/Manager)
+router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
+  try {
+    const { configId } = req.params;
+    const { name, description, link, comment, category, isMandatory, numericTarget, weight } = req.body;
+    if (!name) return res.status(400).json({ message: 'Name is required' });
+    const config = await JobReadinessConfig.findById(configId);
+    if (!config) return res.status(404).json({ message: 'Config not found' });
+    const criteriaId = name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+    config.criteria.push({
+      criteriaId,
+      name,
+      description,
+      link,
+      comment,
+      category,
+      isMandatory: isMandatory !== undefined ? isMandatory : true,
+      numericTarget,
+      weight: weight || 1
+    });
+    config.updatedBy = req.userId;
+    await config.save();
+    res.json(config);
+  } catch (error) {
+    console.error('Add criterion error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Edit a criterion in the config (PoC/Manager)
+router.put('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
+  try {
+    const { configId, criteriaId } = req.params;
+    const { name, description, link, comment, category, isMandatory, numericTarget, weight } = req.body;
+    const config = await JobReadinessConfig.findById(configId);
+    if (!config) return res.status(404).json({ message: 'Config not found' });
+    const criterion = config.criteria.find(c => c.criteriaId === criteriaId);
+    if (!criterion) return res.status(404).json({ message: 'Criterion not found' });
+    if (name) criterion.name = name;
+    if (description !== undefined) criterion.description = description;
+    if (link !== undefined) criterion.link = link;
+    if (comment !== undefined) criterion.comment = comment;
+    if (category) criterion.category = category;
+    if (isMandatory !== undefined) criterion.isMandatory = isMandatory;
+    if (numericTarget !== undefined) criterion.numericTarget = numericTarget;
+    if (weight !== undefined) criterion.weight = weight;
+    config.updatedBy = req.userId;
+    await config.save();
+    res.json(config);
+  } catch (error) {
+    console.error('Edit criterion error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete a criterion from the config (PoC/Manager)
+router.delete('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
+  try {
+    const { configId, criteriaId } = req.params;
+    const config = await JobReadinessConfig.findById(configId);
+    if (!config) return res.status(404).json({ message: 'Config not found' });
+    config.criteria = config.criteria.filter(c => c.criteriaId !== criteriaId);
+    config.updatedBy = req.userId;
+    await config.save();
+    res.json(config);
+  } catch (error) {
+    console.error('Delete criterion error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');

@@ -81,6 +81,8 @@ const jobReadinessConfigSchema = new mongoose.Schema({
       required: true
     },
     description: String,
+    link: String, // Optional link for the criterion
+    comment: String, // Optional comment for the criterion
     category: {
       type: String,
       enum: ['profile', 'skills', 'technical', 'preparation', 'academic', 'other'],
