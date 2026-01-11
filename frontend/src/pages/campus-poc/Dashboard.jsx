@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { statsAPI, placementCycleAPI, userAPI, campusAPI } from '../../services/api';
-import { StatsCard, LoadingSpinner, Badge } from '../../components/common/UIComponents';
+import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
 import { 
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2, 
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
@@ -14,6 +14,7 @@ const POCDashboard = () => {
   const [pendingSkills, setPendingSkills] = useState([]);
   const [companyTracking, setCompanyTracking] = useState([]);
   const [schoolTracking, setSchoolTracking] = useState([]);
+  const [eligibleJobs, setEligibleJobs] = useState([]);
   const [cycles, setCycles] = useState([]);
   const [selectedCycle, setSelectedCycle] = useState('');
   const [studentSummary, setStudentSummary] = useState(null);
@@ -28,6 +29,9 @@ const POCDashboard = () => {
   const [managedCampuses, setManagedCampuses] = useState([]);
   const [selectedCampuses, setSelectedCampuses] = useState([]);
   const [savingCampuses, setSavingCampuses] = useState(false);
+  // Eligible students modal state
+  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ open: false, job: null, students: [], loading: false });
+  const [studentFilter, setStudentFilter] = useState('all'); // 'all', 'applied', 'not-applied'
 
   useEffect(() => {
     fetchDashboardData();
@@ -80,20 +84,18 @@ const POCDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [statsResponse, pendingResponse, cyclesResponse] = await Promise.all([
+      const [statsResponse, pendingResponse, cyclesResponse, jobsResponse] = await Promise.all([
         statsAPI.getCampusPocStats(),
         userAPI.getPendingSkills(),
-        statsAPI.getCycleStats()
+        statsAPI.getCycleStats(),
+        statsAPI.getEligibleJobs()
       ]);
       setStats(statsResponse.data);
       setPendingSkills(pendingResponse.data.slice(0, 5));
       setCycles(cyclesResponse.data);
+      setEligibleJobs(jobsResponse.data.jobs || []);
       
-      // Set the most recent active cycle as default
-      const activeCycle = cyclesResponse.data.find(c => c.status === 'active');
-      if (activeCycle) {
-        setSelectedCycle(activeCycle.cycleId);
-      }
+      // Keep "All Cycles" as default - don't auto-select a specific cycle
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -114,6 +116,34 @@ const POCDashboard = () => {
     } catch (error) {
       console.error('Error fetching tracking data:', error);
     }
+  };
+
+  const fetchEligibleStudents = async (job) => {
+    setEligibleStudentsModal({ open: true, job, students: [], loading: true });
+    try {
+      const response = await statsAPI.getJobEligibleStudents(job._id);
+      setEligibleStudentsModal(prev => ({
+        ...prev,
+        students: response.data.students,
+        total: response.data.total,
+        applied: response.data.applied,
+        notApplied: response.data.notApplied,
+        loading: false
+      }));
+    } catch (error) {
+      console.error('Error fetching eligible students:', error);
+      toast.error('Failed to load eligible students');
+      setEligibleStudentsModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const getFilteredEligibleStudents = () => {
+    if (studentFilter === 'applied') {
+      return eligibleStudentsModal.students.filter(s => s.hasApplied);
+    } else if (studentFilter === 'not-applied') {
+      return eligibleStudentsModal.students.filter(s => !s.hasApplied);
+    }
+    return eligibleStudentsModal.students;
   };
 
   const getStatusBadge = (status) => {
@@ -233,6 +263,24 @@ const POCDashboard = () => {
         </div>
       )}
 
+      {/* Eligible Students Modal */}
+      <EligibleStudentsModal 
+        isOpen={eligibleStudentsModal.open}
+        onClose={() => {
+          setEligibleStudentsModal({ open: false, job: null, students: [], loading: false });
+          setStudentFilter('all');
+        }}
+        job={eligibleStudentsModal.job}
+        students={eligibleStudentsModal.students}
+        loading={eligibleStudentsModal.loading}
+        total={eligibleStudentsModal.total}
+        applied={eligibleStudentsModal.applied}
+        notApplied={eligibleStudentsModal.notApplied}
+        studentFilter={studentFilter}
+        setStudentFilter={setStudentFilter}
+        getFilteredStudents={getFilteredEligibleStudents}
+      />
+
       {/* Cycle Selector */}
       {cycles.length > 0 && (
         <div className="flex items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
@@ -290,9 +338,10 @@ const POCDashboard = () => {
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="flex gap-4">
+        <nav className="flex gap-4 overflow-x-auto">
           {[
             { id: 'overview', label: 'Overview', icon: Eye },
+            { id: 'jobs', label: 'Active Jobs', icon: Briefcase },
             { id: 'company', label: 'Company-wise', icon: Building2 },
             { id: 'school', label: 'School-wise', icon: GraduationCap },
             { id: 'students', label: 'Student Summary', icon: Users },
@@ -301,7 +350,7 @@ const POCDashboard = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -434,6 +483,99 @@ const POCDashboard = () => {
         </div>
       )}
 
+      {activeTab === 'jobs' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="font-semibold text-gray-900">Active Jobs for Your Campus</h3>
+              <p className="text-sm text-gray-500">Jobs your students can apply to</p>
+            </div>
+            <span className="text-sm bg-primary-100 text-primary-700 px-3 py-1 rounded-full font-medium">
+              {eligibleJobs.length} active jobs
+            </span>
+          </div>
+          
+          {eligibleJobs.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {eligibleJobs.map((job) => (
+                <div key={job._id} className="card hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Building2 className="w-6 h-6 text-gray-500" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">{job.title}</h4>
+                        <p className="text-sm text-gray-600">{job.company?.name}</p>
+                        <p className="text-xs text-gray-500 capitalize mt-1">{job.jobType?.replace('_', ' ')}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">Deadline</p>
+                      <p className="text-sm font-medium text-gray-700">
+                        {new Date(job.applicationDeadline).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Stats Row */}
+                  <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3">
+                    <button 
+                      className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
+                      onClick={() => fetchEligibleStudents(job)}
+                      title="Click to view eligible students"
+                    >
+                      <p className="text-lg font-bold text-indigo-600 hover:underline">{job.eligibleStudents}</p>
+                      <p className="text-xs text-gray-500">Eligible</p>
+                    </button>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-blue-600">{job.applicationCount}</p>
+                      <p className="text-xs text-gray-500">Applied</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-yellow-600">{job.statusCounts?.shortlisted + job.statusCounts?.in_progress || 0}</p>
+                      <p className="text-xs text-gray-500">In Progress</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-green-600">{job.statusCounts?.selected || 0}</p>
+                      <p className="text-xs text-gray-500">Selected</p>
+                    </div>
+                  </div>
+
+                  {/* Application Progress Bar */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Application Rate</span>
+                      <span>{job.eligibleStudents > 0 ? Math.round((job.applicationCount / job.eligibleStudents) * 100) : 0}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="h-2 rounded-full bg-primary-500 transition-all"
+                        style={{ width: `${job.eligibleStudents > 0 ? (job.applicationCount / job.eligibleStudents) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Positions */}
+                  <div className="mt-3 flex items-center justify-between text-sm">
+                    <span className="text-gray-500">{job.maxPositions} position{job.maxPositions !== 1 ? 's' : ''} available</span>
+                    {job.applicationCount === 0 && (
+                      <span className="text-orange-600 text-xs font-medium">No applications yet</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <Briefcase className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <p className="font-medium">No active jobs available</p>
+              <p className="text-sm">There are no jobs currently open for your campus</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {activeTab === 'company' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
@@ -489,15 +631,23 @@ const POCDashboard = () => {
                           <div className="flex items-center justify-between mb-3">
                             <div>
                               <p className="font-medium">{job.title}</p>
-                              <p className="text-xs text-gray-500 capitalize">{job.jobType?.replace('_', ' ')}</p>
+                              <div className="flex items-center gap-3 mt-1">
+                                <p className="text-xs text-gray-500 capitalize">{job.jobType?.replace('_', ' ')}</p>
+                                {job.eligibleCount !== undefined && (
+                                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                                    {job.eligibleCount} eligible students
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-sm text-gray-500">
-                              {job.applications.length} applicants
+                            <span className="text-sm font-semibold text-gray-700">
+                              {job.applications.length} applicant{job.applications.length !== 1 ? 's' : ''}
                             </span>
                           </div>
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                              <thead>
+                          {job.applications.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full text-sm">
+                                <thead>
                                 <tr className="text-left text-gray-500">
                                   <th className="pb-2 font-medium">Student</th>
                                   <th className="pb-2 font-medium">School</th>
@@ -529,7 +679,12 @@ const POCDashboard = () => {
                                 ))}
                               </tbody>
                             </table>
-                          </div>
+                            </div>
+                          ) : (
+                            <div className="text-center py-4 text-gray-500">
+                              <p className="text-sm">No applications yet</p>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1100,6 +1255,169 @@ const NewCycleModal = ({ onClose, onSuccess }) => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// Eligible Students Modal Component
+const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total, applied, notApplied, studentFilter, setStudentFilter, getFilteredStudents }) => {
+  if (!isOpen) return null;
+
+  const filteredStudents = getFilteredStudents();
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+      <div 
+        className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Eligible Students</h2>
+              {job && (
+                <p className="text-sm text-gray-600 mt-1">
+                  {job.title} at {job.company?.name}
+                </p>
+              )}
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Stats Summary */}
+          {!loading && (
+            <div className="flex gap-6 mt-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-indigo-600">{total}</p>
+                <p className="text-xs text-gray-500">Total Eligible</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600">{applied}</p>
+                <p className="text-xs text-gray-500">Applied</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-orange-600">{notApplied}</p>
+                <p className="text-xs text-gray-500">Not Applied</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Filter */}
+        <div className="px-6 py-3 border-b bg-gray-50">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStudentFilter('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                studentFilter === 'all' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              All ({total || 0})
+            </button>
+            <button
+              onClick={() => setStudentFilter('applied')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                studentFilter === 'applied' 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Applied ({applied || 0})
+            </button>
+            <button
+              onClick={() => setStudentFilter('not-applied')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                studentFilter === 'not-applied' 
+                  ? 'bg-orange-600 text-white' 
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Not Applied ({notApplied || 0})
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 py-4 overflow-y-auto max-h-[50vh]">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : filteredStudents.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <p>No students found</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredStudents.map((student) => (
+                <div 
+                  key={student._id} 
+                  className={`p-4 rounded-lg border ${
+                    student.hasApplied 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'bg-white border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                        <span className="text-gray-600 font-medium text-sm">
+                          {student.firstName?.charAt(0)}{student.lastName?.charAt(0)}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {student.firstName} {student.lastName}
+                        </p>
+                        <p className="text-sm text-gray-500">{student.email}</p>
+                        {student.enrollmentNumber && (
+                          <p className="text-xs text-gray-400">ID: {student.enrollmentNumber}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        student.skillMatch >= 80 ? 'bg-green-100 text-green-700' :
+                        student.skillMatch >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {student.skillMatch}% Match
+                      </div>
+                      {student.hasApplied ? (
+                        <div className="mt-1 inline-flex items-center gap-1 text-xs text-green-600">
+                          <CheckCircle className="w-3 h-3" />
+                          {student.applicationStatus}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-xs text-orange-600">Not Applied</p>
+                      )}
+                    </div>
+                  </div>
+                  {student.school && (
+                    <p className="mt-2 text-xs text-gray-500 ml-14">
+                      <GraduationCap className="w-3 h-3 inline mr-1" />
+                      {student.school}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end">
+          <button onClick={onClose} className="btn btn-secondary">
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );

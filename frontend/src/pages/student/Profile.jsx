@@ -118,6 +118,7 @@ const StudentProfile = () => {
     hometown: { pincode: '', village: '', district: '', state: '' },
     openForRoles: [],
     englishProficiency: { speaking: '', writing: '' },
+    languages: [], // Multi-language proficiency
     softSkills: {
       communication: 0, collaboration: 0, creativity: 0, criticalThinking: 0,
       problemSolving: 0, adaptability: 0, timeManagement: 0, leadership: 0,
@@ -130,6 +131,7 @@ const StudentProfile = () => {
 
   const [newCourseSkill, setNewCourseSkill] = useState('');
   const [addingCourseSkill, setAddingCourseSkill] = useState(false);
+  const [newLanguage, setNewLanguage] = useState({ language: '', speaking: '', writing: '', isNative: false });
 
   useEffect(() => {
     fetchProfile();
@@ -183,6 +185,7 @@ const StudentProfile = () => {
         hometown: data.studentProfile?.hometown || { pincode: '', village: '', district: '', state: '' },
         openForRoles: data.studentProfile?.openForRoles || [],
         englishProficiency: data.studentProfile?.englishProficiency || { speaking: '', writing: '' },
+        languages: data.studentProfile?.languages || [],
         softSkills: data.studentProfile?.softSkills || {
           communication: 0, collaboration: 0, creativity: 0, criticalThinking: 0,
           problemSolving: 0, adaptability: 0, timeManagement: 0, leadership: 0,
@@ -1151,35 +1154,154 @@ const StudentProfile = () => {
 
             {activeTab === 'languages' && (
               <div className="card">
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Languages className="w-5 h-5" />English Proficiency (CEFR Levels)</h2>
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Languages className="w-5 h-5" />Language Proficiency (CEFR Levels)</h2>
                 <p className="text-sm text-gray-500 mb-6">The Common European Framework of Reference (CEFR) is an international standard for describing language ability.</p>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Speaking Level</label>
-                    <div className="space-y-2">
-                      {cefrLevels.map((level) => (
-                        <label key={level} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${formData.englishProficiency.speaking === level ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'} ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}>
-                          <input type="radio" name="speaking" value={level} checked={formData.englishProficiency.speaking === level} onChange={(e) => setFormData({ ...formData, englishProficiency: { ...formData.englishProficiency, speaking: e.target.value } })} disabled={!canEdit} className="sr-only" />
-                          <span className="font-semibold text-primary-600">{level}</span>
-                          <span className="text-gray-600">{cefrDescriptions[level]}</span>
-                        </label>
-                      ))}
+                {/* English Proficiency - Primary */}
+                <div className="mb-8">
+                  <h3 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
+                    <span className="bg-primary-100 text-primary-700 px-2 py-0.5 rounded text-xs">Required</span>
+                    English Proficiency
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Speaking Level</label>
+                      <div className="space-y-2">
+                        {cefrLevels.map((level) => (
+                          <label key={level} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${formData.englishProficiency.speaking === level ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'} ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}>
+                            <input type="radio" name="speaking" value={level} checked={formData.englishProficiency.speaking === level} onChange={(e) => setFormData({ ...formData, englishProficiency: { ...formData.englishProficiency, speaking: e.target.value } })} disabled={!canEdit} className="sr-only" />
+                            <span className="font-semibold text-primary-600">{level}</span>
+                            <span className="text-gray-600">{cefrDescriptions[level]}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Writing Level</label>
+                      <div className="space-y-2">
+                        {cefrLevels.map((level) => (
+                          <label key={level} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${formData.englishProficiency.writing === level ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'} ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}>
+                            <input type="radio" name="writing" value={level} checked={formData.englishProficiency.writing === level} onChange={(e) => setFormData({ ...formData, englishProficiency: { ...formData.englishProficiency, writing: e.target.value } })} disabled={!canEdit} className="sr-only" />
+                            <span className="font-semibold text-primary-600">{level}</span>
+                            <span className="text-gray-600">{cefrDescriptions[level]}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Additional Languages */}
+                <div className="border-t pt-6">
+                  <h3 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">Optional</span>
+                    Additional Languages
+                  </h3>
                   
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Writing Level</label>
-                    <div className="space-y-2">
-                      {cefrLevels.map((level) => (
-                        <label key={level} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${formData.englishProficiency.writing === level ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'} ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}>
-                          <input type="radio" name="writing" value={level} checked={formData.englishProficiency.writing === level} onChange={(e) => setFormData({ ...formData, englishProficiency: { ...formData.englishProficiency, writing: e.target.value } })} disabled={!canEdit} className="sr-only" />
-                          <span className="font-semibold text-primary-600">{level}</span>
-                          <span className="text-gray-600">{cefrDescriptions[level]}</span>
-                        </label>
+                  {/* Existing Languages */}
+                  {formData.languages?.length > 0 && (
+                    <div className="space-y-3 mb-6">
+                      {formData.languages.map((lang, index) => (
+                        <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                          <div className="flex items-center gap-4">
+                            <div className="font-medium text-gray-900">{lang.language}</div>
+                            {lang.isNative && <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded">Native</span>}
+                            <div className="text-sm text-gray-500">
+                              Speaking: <span className="font-medium text-gray-700">{lang.speaking}</span>
+                              {' | '}
+                              Writing: <span className="font-medium text-gray-700">{lang.writing}</span>
+                            </div>
+                          </div>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...formData.languages];
+                                updated.splice(index, 1);
+                                setFormData({ ...formData, languages: updated });
+                              }}
+                              className="text-red-500 hover:text-red-700 p-1"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       ))}
                     </div>
-                  </div>
+                  )}
+
+                  {/* Add New Language */}
+                  {canEdit && (
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Add a Language</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Language</label>
+                          <input
+                            type="text"
+                            value={newLanguage.language}
+                            onChange={(e) => setNewLanguage({ ...newLanguage, language: e.target.value })}
+                            placeholder="e.g., Hindi, Spanish"
+                            className="input w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Speaking</label>
+                          <select
+                            value={newLanguage.speaking}
+                            onChange={(e) => setNewLanguage({ ...newLanguage, speaking: e.target.value })}
+                            className="input w-full"
+                          >
+                            <option value="">Select</option>
+                            {cefrLevels.map(level => (
+                              <option key={level} value={level}>{level}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Writing</label>
+                          <select
+                            value={newLanguage.writing}
+                            onChange={(e) => setNewLanguage({ ...newLanguage, writing: e.target.value })}
+                            className="input w-full"
+                          >
+                            <option value="">Select</option>
+                            {cefrLevels.map(level => (
+                              <option key={level} value={level}>{level}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newLanguage.isNative}
+                              onChange={(e) => setNewLanguage({ ...newLanguage, isNative: e.target.checked })}
+                              className="w-4 h-4 text-primary-600 rounded"
+                            />
+                            <span className="text-sm">Native</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newLanguage.language && newLanguage.speaking && newLanguage.writing) {
+                                setFormData({
+                                  ...formData,
+                                  languages: [...(formData.languages || []), { ...newLanguage }]
+                                });
+                                setNewLanguage({ language: '', speaking: '', writing: '', isNative: false });
+                              }
+                            }}
+                            disabled={!newLanguage.language || !newLanguage.speaking || !newLanguage.writing}
+                            className="btn btn-secondary text-sm"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-6 p-4 bg-blue-50 rounded-lg">
@@ -1275,8 +1397,8 @@ const StudentProfile = () => {
 
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">Profile Completion</h2>
-            <div className="space-y-3">
-              {[
+            {(() => {
+              const completionItems = [
                 { label: 'Personal Info', done: formData.firstName && formData.phone },
                 { label: 'Hometown', done: formData.hometown.pincode },
                 { label: 'Current School', done: formData.currentSchool },
@@ -1287,15 +1409,48 @@ const StudentProfile = () => {
                 { label: 'English Level', done: formData.englishProficiency.speaking },
                 { label: 'Open For Roles', done: formData.openForRoles.length > 0 },
                 { label: 'Resume', done: profile?.studentProfile?.resume }
-              ].map((item, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${item.done ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>
-                    {item.done && '✓'}
+              ];
+              const completedCount = completionItems.filter(item => item.done).length;
+              const completionPercent = Math.round((completedCount / completionItems.length) * 100);
+              
+              return (
+                <>
+                  {/* Percentage Display */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-2xl font-bold text-primary-600">{completionPercent}%</span>
+                      <span className="text-sm text-gray-500">{completedCount}/{completionItems.length} completed</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div 
+                        className={`h-3 rounded-full transition-all duration-500 ${
+                          completionPercent >= 80 ? 'bg-green-500' : 
+                          completionPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${completionPercent}%` }}
+                      />
+                    </div>
+                    {completionPercent < 100 && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Complete your profile to apply for jobs
+                      </p>
+                    )}
                   </div>
-                  <span className={item.done ? 'text-gray-700' : 'text-gray-400'}>{item.label}</span>
-                </div>
-              ))}
-            </div>
+                  
+                  {/* Checklist */}
+                  <div className="space-y-3">
+                    {completionItems.map((item, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${item.done ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>
+                          {item.done && '✓'}
+                        </div>
+                        <span className={item.done ? 'text-gray-700' : 'text-gray-400'}>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

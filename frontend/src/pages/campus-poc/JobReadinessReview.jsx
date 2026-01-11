@@ -39,7 +39,8 @@ function JobReadinessReview() {
       if (filter === 'job-ready') params.isJobReady = true;
       
       const res = await jobReadinessAPI.getCampusStudents(params);
-      setStudents(res.data);
+      // API returns { records: [...], pagination: {...} }
+      setStudents(res.data?.records || []);
       setError(null);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load students');
@@ -51,12 +52,14 @@ function JobReadinessReview() {
   const handleVerifyCriterion = async (status) => {
     try {
       setProcessing(true);
+      // reviewModal.student is a JobReadiness record, student._id is the actual User ID
+      const studentId = reviewModal.student?.student?._id || reviewModal.student?.student;
       await jobReadinessAPI.verifyStudentCriterion(
-        reviewModal.student._id,
+        studentId,
         reviewModal.criterion.criteriaId,
         {
-          status,
-          notes: document.getElementById('verificationNotes')?.value || ''
+          verified: status === 'verified',
+          verificationNotes: document.getElementById('verificationNotes')?.value || ''
         }
       );
       setReviewModal({ open: false, student: null, criterion: null });
@@ -77,8 +80,10 @@ function JobReadinessReview() {
   const handleApproveJobReady = async () => {
     try {
       setProcessing(true);
+      // approveModal.student is a JobReadiness record, student._id is the actual User ID
+      const studentId = approveModal.student?.student?._id || approveModal.student?.student;
       await jobReadinessAPI.approveStudentJobReady(
-        approveModal.student._id,
+        studentId,
         { notes: document.getElementById('approvalNotes')?.value || '' }
       );
       setApproveModal({ open: false, student: null });
@@ -90,33 +95,44 @@ function JobReadinessReview() {
     }
   };
 
-  const getProgressStats = (student) => {
-    const criteria = student.jobReadiness?.progress?.criteria || [];
+  const getProgressStats = (record) => {
+    const criteria = record.criteriaStatus || [];
     const total = criteria.length;
-    const verified = criteria.filter(c => c.verificationStatus === 'verified').length;
-    const pending = criteria.filter(c => c.verificationStatus === 'pending' && c.completed).length;
-    const selfMarked = criteria.filter(c => c.completed && c.verificationStatus === 'self_marked').length;
-    return { total, verified, pending, selfMarked };
+    const verified = criteria.filter(c => c.status === 'verified').length;
+    const pending = criteria.filter(c => c.status === 'completed').length; // Completed by student, awaiting verification
+    const inProgress = criteria.filter(c => c.status === 'in_progress').length;
+    return { total, verified, pending, inProgress };
   };
 
-  const canApproveJobReady = (student) => {
-    const stats = getProgressStats(student);
-    return stats.verified === stats.total && stats.total > 0;
+  const canApproveJobReady = (record) => {
+    const stats = getProgressStats(record);
+    return stats.verified === stats.total && stats.total > 0 && !record.isJobReady;
   };
 
-  const filteredStudents = students.filter(student => {
+  // Helper to get student name from record
+  const getStudentName = (record) => {
+    if (record.student) {
+      return `${record.student.firstName || ''} ${record.student.lastName || ''}`.trim() || 'Unknown';
+    }
+    return 'Unknown';
+  };
+
+  // Helper to get student email from record
+  const getStudentEmail = (record) => {
+    return record.student?.email || '';
+  };
+
+  const filteredStudents = students.filter(record => {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
-    return (
-      student.name?.toLowerCase().includes(search) ||
-      student.email?.toLowerCase().includes(search) ||
-      student.phone?.includes(search)
-    );
+    const name = getStudentName(record).toLowerCase();
+    const email = getStudentEmail(record).toLowerCase();
+    return name.includes(search) || email.includes(search);
   });
 
   const getOverallStats = () => {
     const total = students.length;
-    const jobReady = students.filter(s => s.jobReadiness?.progress?.isJobReady).length;
+    const jobReady = students.filter(s => s.isJobReady).length;
     const pendingReview = students.filter(s => {
       const stats = getProgressStats(s);
       return stats.pending > 0;
@@ -223,30 +239,28 @@ function JobReadinessReview() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filteredStudents.map(student => {
-            const stats = getProgressStats(student);
-            const isJobReady = student.jobReadiness?.progress?.isJobReady;
+          {filteredStudents.map(record => {
+            const stats = getProgressStats(record);
+            const isJobReady = record.isJobReady;
+            const studentName = getStudentName(record);
+            const studentEmail = getStudentEmail(record);
             
             return (
               <Card 
-                key={student._id} 
+                key={record._id} 
                 className={`hover:shadow-md transition-shadow cursor-pointer ${
-                  selectedStudent?._id === student._id ? 'ring-2 ring-indigo-500' : ''
+                  selectedStudent?._id === record._id ? 'ring-2 ring-indigo-500' : ''
                 } ${isJobReady ? 'border-l-4 border-l-green-500' : ''}`}
-                onClick={() => setSelectedStudent(selectedStudent?._id === student._id ? null : student)}
+                onClick={() => setSelectedStudent(selectedStudent?._id === record._id ? null : record)}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start">
                     <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center mr-4">
-                      {student.avatar ? (
-                        <img src={student.avatar} alt="" className="w-12 h-12 rounded-full object-cover" />
-                      ) : (
-                        <UserIcon className="w-6 h-6 text-indigo-600" />
-                      )}
+                      <UserIcon className="w-6 h-6 text-indigo-600" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900">{student.name}</h3>
+                        <h3 className="font-semibold text-gray-900">{studentName}</h3>
                         {isJobReady && (
                           <Badge variant="success">
                             <TrophyIcon className="w-3 h-3 mr-1" />
@@ -254,8 +268,11 @@ function JobReadinessReview() {
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500">{student.email}</p>
-                      <p className="text-sm text-gray-500">{student.school}</p>
+                      <p className="text-sm text-gray-500">{studentEmail}</p>
+                      <p className="text-sm text-gray-500">{record.school}</p>
+                      {record.readinessPercentage > 0 && (
+                        <p className="text-xs text-indigo-600 font-medium">{record.readinessPercentage}% Complete</p>
+                      )}
                     </div>
                   </div>
 
@@ -283,35 +300,35 @@ function JobReadinessReview() {
                 </div>
 
                 {/* Expanded Details */}
-                {selectedStudent?._id === student._id && (
+                {selectedStudent?._id === record._id && (
                   <div className="mt-4 pt-4 border-t">
                     <h4 className="font-medium text-gray-900 mb-3">Criteria Details</h4>
                     <div className="space-y-2">
-                      {student.jobReadiness?.progress?.criteria?.map(criterion => (
+                      {record.criteriaStatus?.map(criterion => (
                         <div 
                           key={criterion.criteriaId}
                           className={`p-3 rounded-lg border flex items-center justify-between ${
-                            criterion.verificationStatus === 'verified' 
+                            criterion.status === 'verified' 
                               ? 'bg-green-50 border-green-200' 
-                              : criterion.verificationStatus === 'pending'
+                              : criterion.status === 'completed'
                               ? 'bg-yellow-50 border-yellow-200'
-                              : criterion.verificationStatus === 'rejected'
-                              ? 'bg-red-50 border-red-200'
+                              : criterion.status === 'in_progress'
+                              ? 'bg-blue-50 border-blue-200'
                               : 'bg-gray-50 border-gray-200'
                           }`}
                         >
                           <div className="flex items-center">
-                            {criterion.verificationStatus === 'verified' ? (
+                            {criterion.status === 'verified' ? (
                               <CheckCircleIcon className="w-5 h-5 text-green-600 mr-2" />
-                            ) : criterion.verificationStatus === 'pending' ? (
+                            ) : criterion.status === 'completed' ? (
                               <ClockIcon className="w-5 h-5 text-yellow-600 mr-2" />
-                            ) : criterion.verificationStatus === 'rejected' ? (
-                              <XCircleIcon className="w-5 h-5 text-red-600 mr-2" />
+                            ) : criterion.status === 'in_progress' ? (
+                              <ClockIcon className="w-5 h-5 text-blue-600 mr-2" />
                             ) : (
                               <div className="w-5 h-5 border-2 border-gray-300 rounded-full mr-2" />
                             )}
                             <div>
-                              <span className="font-medium text-gray-900">{criterion.name}</span>
+                              <span className="font-medium text-gray-900">{criterion.criteriaId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
                               {criterion.proofUrl && (
                                 <a 
                                   href={criterion.proofUrl}
@@ -323,15 +340,18 @@ function JobReadinessReview() {
                                   View Proof
                                 </a>
                               )}
+                              {criterion.selfReportedValue && (
+                                <span className="text-xs text-gray-500 ml-2">Value: {criterion.selfReportedValue}</span>
+                              )}
                             </div>
                           </div>
                           
-                          {criterion.verificationStatus === 'pending' && (
+                          {criterion.status === 'completed' && (
                             <Button
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setReviewModal({ open: true, student, criterion });
+                                setReviewModal({ open: true, student: record, criterion });
                               }}
                             >
                               Review
@@ -342,13 +362,13 @@ function JobReadinessReview() {
                     </div>
 
                     {/* Approve as Job Ready Button */}
-                    {!isJobReady && canApproveJobReady(student) && (
+                    {!isJobReady && canApproveJobReady(record) && (
                       <div className="mt-4 pt-4 border-t">
                         <Button
                           className="w-full"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setApproveModal({ open: true, student });
+                            setApproveModal({ open: true, student: record });
                           }}
                         >
                           <TrophyIcon className="w-5 h-5 mr-2" />
@@ -368,19 +388,19 @@ function JobReadinessReview() {
       <Modal
         isOpen={reviewModal.open}
         onClose={() => setReviewModal({ open: false, student: null, criterion: null })}
-        title={`Review: ${reviewModal.criterion?.name || ''}`}
+        title={`Review: ${reviewModal.criterion?.criteriaId?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || ''}`}
       >
         <div className="space-y-4">
           <div>
             <p className="text-sm text-gray-600">
-              <strong>Student:</strong> {reviewModal.student?.name}
+              <strong>Student:</strong> {reviewModal.student ? getStudentName(reviewModal.student) : ''}
             </p>
             <p className="text-sm text-gray-600 mt-1">
-              <strong>Criterion:</strong> {reviewModal.criterion?.name}
+              <strong>Criterion:</strong> {reviewModal.criterion?.criteriaId?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
             </p>
-            {reviewModal.criterion?.description && (
+            {reviewModal.criterion?.selfReportedValue && (
               <p className="text-sm text-gray-500 mt-1">
-                {reviewModal.criterion.description}
+                <strong>Self-reported value:</strong> {reviewModal.criterion.selfReportedValue}
               </p>
             )}
           </div>
@@ -405,6 +425,15 @@ function JobReadinessReview() {
               <p className="text-sm font-medium text-gray-700 mb-1">Student Notes:</p>
               <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
                 {reviewModal.criterion.notes}
+              </p>
+            </div>
+          )}
+
+          {reviewModal.criterion?.verificationNotes && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-1">Previous Verification Notes:</p>
+              <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                {reviewModal.criterion.verificationNotes}
               </p>
             </div>
           )}
@@ -453,7 +482,7 @@ function JobReadinessReview() {
           <div className="text-center py-4">
             <TrophyIcon className="w-16 h-16 mx-auto text-green-500 mb-4" />
             <p className="text-lg font-medium text-gray-900">
-              Approve {approveModal.student?.name} as Job Ready?
+              Approve {approveModal.student ? getStudentName(approveModal.student) : ''} as Job Ready?
             </p>
             <p className="text-sm text-gray-500 mt-2">
               This student has completed and verified all job readiness criteria.

@@ -55,6 +55,8 @@ export const userAPI = {
   getPendingProfiles: () => api.get('/users/pending-profiles'),
   approveProfile: (studentId, status, revisionNotes) =>
     api.put(`/users/students/${studentId}/profile/approve`, { status, revisionNotes }),
+  requestProfileChanges: (studentId, revisionNotes) =>
+    api.put(`/users/students/${studentId}/profile/approve`, { status: 'needs_revision', revisionNotes }),
   updateStudentProfile: (studentId, data) =>
     api.put(`/users/students/${studentId}/profile`, data),
   getEligibleCount: (params) => api.get('/users/eligible-count', { params }),
@@ -119,6 +121,7 @@ export const jobAPI = {
   // Interest requests (for <60% match students)
   submitInterest: (jobId, data) => api.post(`/jobs/${jobId}/interest`, data),
   getInterestRequests: (jobId, params) => api.get(`/jobs/${jobId}/interest-requests`, { params }),
+  getAllInterestRequests: (params) => api.get(`/jobs/interest-requests/all`, { params }),
   reviewInterestRequest: (requestId, data) => api.patch(`/jobs/interest-requests/${requestId}`, data),
   // FAQ/Questions
   getQuestions: (jobId) => api.get(`/jobs/${jobId}/questions`),
@@ -130,7 +133,7 @@ export const jobAPI = {
   updateExpectedDate: (jobId, expectedUpdateDate, expectedUpdateNote) => api.patch(`/jobs/${jobId}/expected-update`, { expectedUpdateDate, expectedUpdateNote }),
   // Coordinator assignment
   assignCoordinator: (jobId, coordinatorId) => api.patch(`/jobs/${jobId}/coordinator`, { coordinatorId }),
-  getCoordinatorStats: () => api.get('/jobs/stats/coordinator-jobs')
+  getCoordinatorJobStats: () => api.get('/jobs/stats/coordinator-jobs') // Renamed to avoid conflict with statsAPI.getCoordinatorStats
 };
 
 // Application APIs
@@ -172,9 +175,12 @@ export const notificationAPI = {
 // Stats APIs
 export const statsAPI = {
   getDashboard: (params) => api.get('/stats/dashboard', { params }),
+  getDashboardStats: (params) => api.get('/stats/dashboard', { params }), // Alias for Manager Dashboard
   getCampusStats: () => api.get('/stats/campus'),
   getStudentStats: () => api.get('/stats/student'),
   getCampusPocStats: () => api.get('/stats/campus-poc'),
+  getEligibleJobs: () => api.get('/stats/campus-poc/eligible-jobs'),
+  getJobEligibleStudents: (jobId) => api.get(`/stats/campus-poc/job/${jobId}/eligible-students`),
   getCompanyTracking: (cycleId) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }),
   getSchoolTracking: (cycleId) => api.get('/stats/campus-poc/school-tracking', { params: { cycleId } }),
   getStudentSummary: (params) => api.get('/stats/campus-poc/student-summary', { params }),

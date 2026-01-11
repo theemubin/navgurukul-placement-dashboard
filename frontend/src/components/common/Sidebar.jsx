@@ -13,7 +13,8 @@ import {
   GraduationCap,
   ClipboardCheck,
   Target,
-  ExternalLink
+  ExternalLink,
+  Heart
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -38,7 +39,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/campus-poc/profile-approvals', icon: ClipboardCheck, label: 'Profile Approvals' },
           { path: '/campus-poc/skill-approvals', icon: CheckSquare, label: 'Skill Approvals' },
           { path: '/campus-poc/job-readiness', icon: Target, label: 'Job Readiness' },
-          { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' }
+          { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' },
+          { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests' }
         ];
       case 'coordinator':
         return [

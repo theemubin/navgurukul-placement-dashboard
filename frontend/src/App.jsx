@@ -25,6 +25,7 @@ import POCStudentDetails from './pages/campus-poc/StudentDetails';
 import POCProfileApprovals from './pages/campus-poc/ProfileApprovals';
 import POCJobReadinessReview from './pages/campus-poc/JobReadinessReview';
 import POCSelfApplicationsReview from './pages/campus-poc/SelfApplicationsReview';
+import POCInterestRequestsReview from './pages/campus-poc/InterestRequestsReview';
 
 // Coordinator Pages
 import CoordinatorDashboard from './pages/coordinator/Dashboard';
@@ -121,6 +122,7 @@ function App() {
         <Route path="profile-approvals" element={<POCProfileApprovals />} />
         <Route path="job-readiness" element={<POCJobReadinessReview />} />
         <Route path="self-applications" element={<POCSelfApplicationsReview />} />
+        <Route path="interest-requests" element={<POCInterestRequestsReview />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
