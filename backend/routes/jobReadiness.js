@@ -1,5 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const { body, validationResult } = require('express-validator');
+const { JobReadinessConfig, StudentJobReadiness, DEFAULT_CRITERIA } = require('../models/JobReadiness');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
+const { auth, authorize } = require('../middleware/auth');
 // ...existing code...
 // Add a new criterion to the config (PoC/Manager)
 router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
@@ -71,13 +76,6 @@ router.delete('/config/:configId/criteria/:criteriaId', auth, authorize('campus_
     res.status(500).json({ message: 'Server error' });
   }
 });
-const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const { JobReadinessConfig, StudentJobReadiness, DEFAULT_CRITERIA } = require('../models/JobReadiness');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
-const { auth, authorize } = require('../middleware/auth');
 
 // === Config Routes (for PoC/Manager) ===
 
