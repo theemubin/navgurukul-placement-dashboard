@@ -1,3 +1,6 @@
+const express = require('express');
+const router = express.Router();
+// ...existing code...
 // Add a new criterion to the config (PoC/Manager)
 router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
