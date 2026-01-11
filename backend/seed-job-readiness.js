@@ -29,24 +29,111 @@ async function seedJobReadinessConfig() {
       console.log(`Config already exists for ${school}`);
       continue;
     }
-    // Map DEFAULT_CRITERIA to config format
-    const criteria = DEFAULT_CRITERIA.map(c => ({
-      criteriaId: c.id,
-      name: c.name,
-      description: c.description,
-      category: c.category,
-      isActive: true,
-      isMandatory: true,
-      weight: 1
-    }));
-    const config = new JobReadinessConfig({
-      school,
-      campus: null,
-      criteria,
-      createdBy: manager._id
-    });
-    await config.save();
-    console.log(`Seeded job readiness config for ${school}`);
+    if (school === 'School of Programming') {
+      // Custom criteria as per requirements
+      const customCriteria = [
+        {
+          criteriaId: 'real_life_project',
+          name: 'One Real Life Project',
+          description: 'Project link (student)',
+          category: 'technical',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        },
+        {
+          criteriaId: 'ai_integrated_project',
+          name: 'One AI Integrated Project',
+          description: 'Project link (student)',
+          category: 'technical',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        },
+        {
+          criteriaId: 'ai_interviewer_score',
+          name: '70% above on AI interviewer tool',
+          description: 'PDF link (student)',
+          category: 'skills',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        },
+        {
+          criteriaId: 'linkedin_updated_reviewed',
+          name: 'LinkedIn updated + reviewed',
+          description: 'LinkedIn link (student) + PoC comment',
+          category: 'profile',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        },
+        {
+          criteriaId: 'resume_updated_reviewed',
+          name: 'Resume updated + reviewed',
+          description: 'Resume link (student) + PoC comment',
+          category: 'profile',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        },
+        {
+          criteriaId: 'portfolio_updated_reviewed',
+          name: 'Portfolio updated + reviewed',
+          description: 'Portfolio link (student) + PoC comment',
+          category: 'profile',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        },
+        {
+          criteriaId: 'mock_interviews_done',
+          name: 'At least 2 mock interviews done',
+          description: 'Type of job for mock (student) + two PoC comments',
+          category: 'preparation',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        },
+        {
+          criteriaId: 'communication_engagements',
+          name: '5 Communication Engagements',
+          description: 'Tick mark (student) + PoC comment',
+          category: 'skills',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        },
+        {
+          criteriaId: 'placement_drive_completed',
+          name: 'Placement drive completed',
+          description: 'Tick mark (student) + PoC comment',
+          category: 'preparation',
+          isActive: true,
+          isMandatory: true,
+          weight: 1
+        }
+      ];
+      const criteria = customCriteria;
+      const config = new JobReadinessConfig({
+        school,
+        campus: null,
+        criteria,
+        createdBy: manager._id
+      });
+      await config.save();
+      console.log(`Seeded job readiness config for ${school}`);
+    } else {
+      // For other schools, do not seed criteria
+      const config = new JobReadinessConfig({
+        school,
+        campus: null,
+        criteria: [],
+        createdBy: manager._id
+      });
+      await config.save();
+      console.log(`Seeded empty job readiness config for ${school}`);
+    }
   }
 
   await mongoose.disconnect();

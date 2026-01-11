@@ -10,7 +10,8 @@ const { auth, authorize } = require('../middleware/auth');
 router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { configId } = req.params;
-    const { name, description, link, comment, category, isMandatory, numericTarget, weight } = req.body;
+    const { name, description, type, pocCommentRequired, pocCommentTemplate, pocRatingRequired, pocRatingScale, link, category, isMandatory, numericTarget, weight } = req.body;
+    console.log('Adding criterion:', { name, type, pocCommentRequired, pocRatingRequired, category }); // Debug log
     if (!name) return res.status(400).json({ message: 'Name is required' });
     const config = await JobReadinessConfig.findById(configId);
     if (!config) return res.status(404).json({ message: 'Config not found' });
@@ -19,18 +20,29 @@ router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordin
       criteriaId,
       name,
       description,
+      type: type || 'answer',
+      pocCommentRequired: pocCommentRequired || false,
+      pocCommentTemplate,
+      pocRatingRequired: pocRatingRequired || false,
+      pocRatingScale: pocRatingScale || 5,
       link,
-      comment,
-      category,
+      category: category || 'other',
       isMandatory: isMandatory !== undefined ? isMandatory : true,
       numericTarget,
       weight: weight || 1
     });
+    console.log('Pushed criterion:', config.criteria[config.criteria.length - 1]);
     config.updatedBy = req.userId;
+    console.log('Saving config...');
     await config.save();
+    console.log('Config saved successfully');
     res.json(config);
   } catch (error) {
     console.error('Add criterion error:', error);
+    console.error('Error details:', error.message);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Validation error', details: error.errors });
+    }
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -39,15 +51,20 @@ router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordin
 router.put('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { configId, criteriaId } = req.params;
-    const { name, description, link, comment, category, isMandatory, numericTarget, weight } = req.body;
+    const { name, description, type, pocCommentRequired, pocCommentTemplate, pocRatingRequired, pocRatingScale, link, category, isMandatory, numericTarget, weight } = req.body;
     const config = await JobReadinessConfig.findById(configId);
     if (!config) return res.status(404).json({ message: 'Config not found' });
     const criterion = config.criteria.find(c => c.criteriaId === criteriaId);
     if (!criterion) return res.status(404).json({ message: 'Criterion not found' });
     if (name) criterion.name = name;
     if (description !== undefined) criterion.description = description;
+    if (type !== undefined) criterion.type = type;
+    if (pocCommentRequired !== undefined) criterion.pocCommentRequired = pocCommentRequired;
+    if (pocCommentTemplate !== undefined) criterion.pocCommentTemplate = pocCommentTemplate;
+    if (pocRatingRequired !== undefined) criterion.pocRatingRequired = pocRatingRequired;
+    if (pocRatingScale !== undefined) criterion.pocRatingScale = pocRatingScale;
     if (link !== undefined) criterion.link = link;
-    if (comment !== undefined) criterion.comment = comment;
+    if (category !== undefined) criterion.category = category;
     if (category) criterion.category = category;
     if (isMandatory !== undefined) criterion.isMandatory = isMandatory;
     if (numericTarget !== undefined) criterion.numericTarget = numericTarget;
@@ -207,13 +224,14 @@ router.get('/my-status', auth, authorize('student'), async (req, res) => {
 
 // Update my criterion status (Student)
 router.patch('/my-status/:criteriaId', auth, authorize('student'), [
-  body('status').isIn(['not_started', 'in_progress', 'completed']),
-  body('selfReportedValue').optional().isNumeric(),
-  body('proofUrl').optional().trim()
+  body('completed').optional().isBoolean(),
+  body('status').optional().isString(),
+  body('selfReportedValue').optional().trim(),
+  body('notes').optional().trim()
 ], async (req, res) => {
   try {
     const { criteriaId } = req.params;
-    const { status, selfReportedValue, proofUrl } = req.body;
+    const { completed, status, selfReportedValue, notes } = req.body;
 
     let readiness = await StudentJobReadiness.findOne({ student: req.userId });
 
@@ -224,21 +242,25 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), [
     // Find or add criterion status
     let criterionIndex = readiness.criteriaStatus.findIndex(c => c.criteriaId === criteriaId);
     
+    const newStatus = status || (completed ? 'completed' : 'not_started');
+    
     if (criterionIndex === -1) {
       readiness.criteriaStatus.push({
         criteriaId,
-        status,
+        status: newStatus,
         selfReportedValue,
-        proofUrl,
+        notes,
+        completedAt: completed ? new Date() : null,
         updatedAt: new Date()
       });
     } else {
       readiness.criteriaStatus[criterionIndex] = {
         ...readiness.criteriaStatus[criterionIndex],
-        status,
-        selfReportedValue: selfReportedValue ?? readiness.criteriaStatus[criterionIndex].selfReportedValue,
-        proofUrl: proofUrl ?? readiness.criteriaStatus[criterionIndex].proofUrl,
-        completedAt: status === 'completed' ? new Date() : readiness.criteriaStatus[criterionIndex].completedAt,
+        criteriaId: criteriaId, // Ensure criteriaId is preserved
+        status: newStatus,
+        selfReportedValue: selfReportedValue !== undefined ? selfReportedValue : readiness.criteriaStatus[criterionIndex].selfReportedValue,
+        notes: notes !== undefined ? notes : readiness.criteriaStatus[criterionIndex].notes,
+        completedAt: completed ? new Date() : readiness.criteriaStatus[criterionIndex].completedAt,
         updatedAt: new Date()
       };
     }
@@ -383,6 +405,82 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
     res.json(readiness);
   } catch (error) {
     console.error('Verify criterion error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Add PoC comment to a student's criterion (Campus PoC)
+router.post('/student/:studentId/comment/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), [
+  body('comment').trim().notEmpty()
+], async (req, res) => {
+  try {
+    const { studentId, criteriaId } = req.params;
+    const { comment } = req.body;
+
+    const readiness = await StudentJobReadiness.findOne({ student: studentId });
+    if (!readiness) return res.status(404).json({ message: 'Student job readiness not found' });
+
+    const criterionStatus = readiness.criteriaStatus.find(cs => cs.criteriaId === criteriaId);
+    if (!criterionStatus) return res.status(404).json({ message: 'Criterion not found' });
+
+    criterionStatus.pocComment = comment;
+    criterionStatus.pocCommentedBy = req.userId;
+    criterionStatus.pocCommentedAt = new Date();
+
+    await readiness.save();
+
+    // Create notification for student
+    const notification = new Notification({
+      recipient: studentId,
+      type: 'job_readiness_comment',
+      title: 'New Feedback on Job Readiness',
+      message: `Your PoC has added feedback on "${criteriaId.replace(/_/g, ' ')}".`,
+      link: '/student/job-readiness',
+      relatedEntity: { type: 'job_readiness', id: readiness._id }
+    });
+    await notification.save();
+
+    res.json(readiness);
+  } catch (error) {
+    console.error('Add PoC comment error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Add PoC rating to a student's criterion (Campus PoC)
+router.post('/student/:studentId/rate/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), [
+  body('rating').isInt({ min: 1, max: 10 })
+], async (req, res) => {
+  try {
+    const { studentId, criteriaId } = req.params;
+    const { rating } = req.body;
+
+    const readiness = await StudentJobReadiness.findOne({ student: studentId });
+    if (!readiness) return res.status(404).json({ message: 'Student job readiness not found' });
+
+    const criterionStatus = readiness.criteriaStatus.find(cs => cs.criteriaId === criteriaId);
+    if (!criterionStatus) return res.status(404).json({ message: 'Criterion not found' });
+
+    criterionStatus.pocRating = rating;
+    criterionStatus.pocRatedBy = req.userId;
+    criterionStatus.pocRatedAt = new Date();
+
+    await readiness.save();
+
+    // Create notification for student
+    const notification = new Notification({
+      recipient: studentId,
+      type: 'job_readiness_rating',
+      title: 'New Rating on Job Readiness',
+      message: `Your PoC has rated your "${criteriaId.replace(/_/g, ' ')}" as ${rating}/10.`,
+      link: '/student/job-readiness',
+      relatedEntity: { type: 'job_readiness', id: readiness._id }
+    });
+    await notification.save();
+
+    res.json(readiness);
+  } catch (error) {
+    console.error('Add PoC rating error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

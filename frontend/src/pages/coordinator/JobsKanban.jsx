@@ -17,7 +17,8 @@ import {
   Trash2,
   GripVertical,
   X,
-  EyeOff
+  EyeOff,
+  Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -35,7 +36,7 @@ const STAGE_COLORS = {
 };
 
 // Job Card component for Kanban
-const JobCard = ({ job, index }) => {
+const JobCard = ({ job, index, onExportJob }) => {
   const formatSalary = (salary) => {
     if (!salary?.min && !salary?.max) return null;
     if (salary.min && salary.max) {
@@ -111,17 +112,27 @@ const JobCard = ({ job, index }) => {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-100">
+          <div className="grid grid-cols-3 gap-1 mt-3 pt-2 border-t border-gray-100">
             <Link
               to={`/coordinator/jobs/${job._id}`}
-              className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 hover:text-primary-600 py-1.5 rounded hover:bg-gray-50 transition-colors"
+              className="flex items-center justify-center gap-1 text-xs text-gray-600 hover:text-primary-600 py-1.5 rounded hover:bg-gray-50 transition-colors"
             >
               <Eye className="w-3.5 h-3.5" />
               View
             </Link>
+            {onExportJob && (
+              <button
+                onClick={() => onExportJob(job._id, job.title)}
+                className="flex items-center justify-center gap-1 text-xs text-gray-600 hover:text-green-600 py-1.5 rounded hover:bg-gray-50 transition-colors"
+                title="Export Applications"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export
+              </button>
+            )}
             <Link
               to={`/coordinator/jobs/${job._id}/edit`}
-              className="flex-1 flex items-center justify-center gap-1 text-xs text-gray-600 hover:text-primary-600 py-1.5 rounded hover:bg-gray-50 transition-colors"
+              className="flex items-center justify-center gap-1 text-xs text-gray-600 hover:text-primary-600 py-1.5 rounded hover:bg-gray-50 transition-colors"
             >
               <Pencil className="w-3.5 h-3.5" />
               Edit
@@ -134,7 +145,7 @@ const JobCard = ({ job, index }) => {
 };
 
 // Kanban Column component
-const KanbanColumn = ({ stage, jobs, onEditStage }) => {
+const KanbanColumn = ({ stage, jobs, onEditStage, onExportJob }) => {
   const colorConfig = STAGE_COLORS[stage.color] || STAGE_COLORS.gray;
   
   return (
@@ -181,7 +192,7 @@ const KanbanColumn = ({ stage, jobs, onEditStage }) => {
               </div>
             ) : (
               jobs.map((job, index) => (
-                <JobCard key={job._id} job={job} index={index} />
+                <JobCard key={job._id} job={job} index={index} onExportJob={onExportJob} />
               ))
             )}
             {provided.placeholder}
@@ -485,7 +496,7 @@ const StageManagementModal = ({ isOpen, onClose, stages, onSave }) => {
 };
 
 // Main Kanban Board component
-const JobsKanban = () => {
+const JobsKanban = ({ onExportJob }) => {
   const [jobs, setJobs] = useState([]);
   const [stages, setStages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -620,6 +631,7 @@ const JobsKanban = () => {
               stage={stage}
               jobs={jobsByStatus[stage.id] || []}
               onEditStage={handleEditStage}
+              onExportJob={onExportJob}
             />
           ))}
         </div>

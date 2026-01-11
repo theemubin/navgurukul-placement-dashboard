@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { userAPI, applicationAPI } from '../../services/api';
+import { userAPI, applicationAPI, jobReadinessAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
 import { 
   ArrowLeft, User, Mail, Phone, GraduationCap, Linkedin, 
-  Github, Globe, FileText, Star, CheckCircle, XCircle, Clock 
+  Github, Globe, FileText, Star, CheckCircle, XCircle, Clock,
+  CheckSquare
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -14,11 +15,15 @@ const POCStudentDetails = () => {
   const navigate = useNavigate();
   const [student, setStudent] = useState(null);
   const [applications, setApplications] = useState([]);
+  const [jobReadiness, setJobReadiness] = useState(null);
+  const [jobReadinessConfig, setJobReadinessConfig] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showRecommendModal, setShowRecommendModal] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [recommendReason, setRecommendReason] = useState('');
   const [processing, setProcessing] = useState({});
+  const [pocComments, setPocComments] = useState({});
+  const [pocRatings, setPocRatings] = useState({});
 
   useEffect(() => {
     fetchStudentData();
@@ -26,12 +31,16 @@ const POCStudentDetails = () => {
 
   const fetchStudentData = async () => {
     try {
-      const [studentRes, appsRes] = await Promise.all([
+      const [studentRes, appsRes, readinessRes, configRes] = await Promise.all([
         userAPI.getStudent(id),
-        applicationAPI.getApplications({ student: id })
+        applicationAPI.getApplications({ student: id }),
+        jobReadinessAPI.getStudentReadiness(id),
+        jobReadinessAPI.getConfig()
       ]);
       setStudent(studentRes.data);
       setApplications(appsRes.data.applications);
+      setJobReadiness(readinessRes.data);
+      setJobReadinessConfig(configRes.data || []);
     } catch (error) {
       toast.error('Error loading student data');
       navigate('/campus-poc/students');
@@ -66,6 +75,58 @@ const POCStudentDetails = () => {
     } catch (error) {
       toast.error('Error adding recommendation');
     }
+  };
+
+  const handlePocComment = async (criteriaId, comment) => {
+    try {
+      await jobReadinessAPI.addPocComment(id, criteriaId, comment);
+      toast.success('Comment added');
+      fetchStudentData();
+    } catch (error) {
+      toast.error('Error adding comment');
+    }
+  };
+
+  const handlePocRating = async (criteriaId, rating) => {
+    try {
+      await jobReadinessAPI.addPocRating(id, criteriaId, rating);
+      toast.success('Rating added');
+      fetchStudentData();
+    } catch (error) {
+      toast.error('Error adding rating');
+    }
+  };
+
+  const handleVerifyCriterion = async (criteriaId, status, notes = '') => {
+    try {
+      await jobReadinessAPI.verifyCriterion(id, criteriaId, status, notes);
+      toast.success(`Criterion ${status}`);
+      fetchStudentData();
+    } catch (error) {
+      toast.error('Error verifying criterion');
+    }
+  };
+
+  const getCriteriaByCategory = () => {
+    const categories = {};
+    if (!jobReadinessConfig.length || !jobReadiness) return categories;
+
+    // Find the config for this student's school
+    const config = jobReadinessConfig.find(c => c.school === jobReadiness.school);
+    if (!config) return categories;
+
+    config.criteria.forEach(criterion => {
+      if (!categories[criterion.category]) {
+        categories[criterion.category] = [];
+      }
+      categories[criterion.category].push(criterion);
+    });
+
+    return categories;
+  };
+
+  const getStudentCriterionStatus = (criteriaId) => {
+    return jobReadiness?.criteriaStatus?.find(cs => cs.criteriaId === criteriaId);
   };
 
   if (loading) {
@@ -155,9 +216,9 @@ const POCStudentDetails = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Skills */}
-        <div className="lg:col-span-2">
+        <div>
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">Skills</h2>
             {profile.skills?.length > 0 ? (
@@ -203,6 +264,154 @@ const POCStudentDetails = () => {
               </div>
             ) : (
               <p className="text-gray-500">No skills added</p>
+            )}
+          </div>
+        </div>
+
+        {/* Job Readiness */}
+        <div>
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <CheckSquare className="w-5 h-5" />
+                Job Readiness Review
+              </h2>
+              <button
+                onClick={() => navigate('/campus-poc/job-readiness-criteria')}
+                className="btn btn-sm btn-outline"
+              >
+                Configure Criteria
+              </button>
+            </div>
+            <div className="bg-blue-50 p-3 rounded-lg mb-4">
+              <p className="text-blue-800 text-sm">
+                💡 <strong>Review Process:</strong> Rate student submissions, add feedback, then approve/reject each criterion.
+              </p>
+            </div>
+            {jobReadiness ? (
+              <div className="space-y-4">
+                {Object.entries(getCriteriaByCategory()).map(([category, criteria]) => (
+                  <div key={category} className="border rounded-lg p-3">
+                    <h3 className="font-medium text-gray-900 mb-3 capitalize">
+                      {category.replace('_', ' ')}
+                    </h3>
+                    <div className="space-y-3">
+                      {criteria.map(criterion => {
+                        const studentStatus = getStudentCriterionStatus(criterion.criteriaId);
+                        return (
+                          <div key={criterion.criteriaId} className="bg-gray-50 rounded p-3">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm text-gray-900">
+                                  {criterion.name}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {criterion.description}
+                                </div>
+                                {studentStatus?.selfReportedValue && (
+                                  <div className="text-xs text-blue-600 mt-1">
+                                    Student response: {studentStatus.selfReportedValue}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 ml-2">
+                                {studentStatus?.status === 'verified' && (
+                                  <CheckCircle className="w-4 h-4 text-green-500" />
+                                )}
+                                {studentStatus?.status === 'completed' && (
+                                  <Clock className="w-4 h-4 text-yellow-500" />
+                                )}
+                                {studentStatus?.status === 'in_progress' && (
+                                  <Clock className="w-4 h-4 text-blue-500" />
+                                )}
+                              </div>
+                            </div>
+                            
+                            {criterion.pocCommentRequired && (
+                              <div className="mt-3">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  {criterion.pocCommentTemplate || 'Your feedback'}
+                                </label>
+                                <div className="flex gap-2">
+                                  <textarea
+                                    className="flex-1 text-xs border rounded px-2 py-1"
+                                    rows={2}
+                                    placeholder="Add your comment..."
+                                    value={pocComments[criterion.criteriaId] || studentStatus?.pocComment || ''}
+                                    onChange={(e) => setPocComments(prev => ({
+                                      ...prev,
+                                      [criterion.criteriaId]: e.target.value
+                                    }))}
+                                  />
+                                  <button
+                                    onClick={() => handlePocComment(criterion.criteriaId, pocComments[criterion.criteriaId] || studentStatus?.pocComment || '')}
+                                    className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {criterion.pocRatingRequired && (
+                              <div className="mt-3">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  Rating (1-{criterion.pocRatingScale})
+                                </label>
+                                <div className="flex gap-2 items-center">
+                                  <select
+                                    value={pocRatings[criterion.criteriaId] || studentStatus?.pocRating || ''}
+                                    onChange={(e) => setPocRatings(prev => ({
+                                      ...prev,
+                                      [criterion.criteriaId]: parseInt(e.target.value)
+                                    }))}
+                                    className="text-xs border rounded px-2 py-1"
+                                  >
+                                    <option value="">Select rating...</option>
+                                    {Array.from({ length: criterion.pocRatingScale }, (_, i) => i + 1).map(num => (
+                                      <option key={num} value={num}>{num}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    onClick={() => handlePocRating(criterion.criteriaId, pocRatings[criterion.criteriaId] || studentStatus?.pocRating)}
+                                    className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                                  >
+                                    Save
+                                  </button>
+                                  {studentStatus?.pocRating && (
+                                    <span className="text-xs text-green-600 font-medium">
+                                      Current: {studentStatus.pocRating}/{criterion.pocRatingScale}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {studentStatus?.status === 'completed' && (
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={() => handleVerifyCriterion(criterion.criteriaId, 'verified')}
+                                  className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                                >
+                                  Verify
+                                </button>
+                                <button
+                                  onClick={() => handleVerifyCriterion(criterion.criteriaId, 'rejected')}
+                                  className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500">No job readiness data available</p>
             )}
           </div>
         </div>

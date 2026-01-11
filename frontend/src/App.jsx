@@ -24,6 +24,7 @@ import POCSkillApprovals from './pages/campus-poc/SkillApprovals';
 import POCStudentDetails from './pages/campus-poc/StudentDetails';
 import POCProfileApprovals from './pages/campus-poc/ProfileApprovals';
 import POCJobReadinessReview from './pages/campus-poc/JobReadinessReview';
+import JobReadinessCriteriaConfig from './pages/campus-poc/JobReadinessCriteriaConfig';
 import POCSelfApplicationsReview from './pages/campus-poc/SelfApplicationsReview';
 import POCInterestRequestsReview from './pages/campus-poc/InterestRequestsReview';
 
@@ -107,6 +108,7 @@ function App() {
         <Route path="job-readiness" element={<StudentJobReadiness />} />
         <Route path="self-applications" element={<StudentSelfApplications />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="job-readiness-criteria" element={<JobReadinessCriteriaConfig />} />
       </Route>
 
       {/* Campus POC Routes */}
@@ -121,6 +123,7 @@ function App() {
         <Route path="skill-approvals" element={<POCSkillApprovals />} />
         <Route path="profile-approvals" element={<POCProfileApprovals />} />
         <Route path="job-readiness" element={<POCJobReadinessReview />} />
+        <Route path="job-readiness-criteria" element={<JobReadinessCriteriaConfig />} />
         <Route path="self-applications" element={<POCSelfApplicationsReview />} />
         <Route path="interest-requests" element={<POCInterestRequestsReview />} />
         <Route path="notifications" element={<Notifications />} />

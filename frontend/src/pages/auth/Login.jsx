@@ -10,13 +10,30 @@ const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+
+  // Demo accounts for quick login
+  const demoAccounts = [
+    { email: "manager@placement.edu", role: "Manager" },
+    { email: "coordinator@placement.edu", role: "Coordinator" },
+    { email: "poc.jashpur@placement.edu", role: "Campus PoC (Jashpur)" },
+    { email: "poc.dharamshala@placement.edu", role: "Campus PoC (Dharamshala)" },
+    { email: "john.doe@student.edu", role: "Student (John Doe)" },
+    { email: "jane.smith@student.edu", role: "Student (Jane Smith)" },
+    { email: "mike.wilson@student.edu", role: "Student (Mike Wilson)" },
+    { email: "priya.sharma@student.edu", role: "Student (Priya Sharma)" },
+  ];
+
+  // Autofill demo account credentials
+  const handleDemoLogin = (demoEmail) => {
+    setFormData({ email: demoEmail, password: "password123" });
+  };
+
   // Status checker state
   const [showStatus, setShowStatus] = useState(false);
   const [healthStatus, setHealthStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState(null);
-  
+
   // Sync state
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [productionUri, setProductionUri] = useState('');
@@ -26,7 +43,6 @@ const Login = () => {
     setStatusLoading(true);
     setStatusError(null);
     const startTime = Date.now();
-    
     try {
       const response = await api.get('/health');
       setHealthStatus({
@@ -48,6 +64,10 @@ const Login = () => {
     }
     
     setSyncing(true);
+    // Autofill demo account credentials
+    const handleDemoLogin = (demoEmail) => {
+      setFormData({ email: demoEmail, password: "password123" });
+    };
     try {
       await api.post('/sync-from-production', { productionUri });
       toast.success('Database synced successfully!');
@@ -161,6 +181,23 @@ const Login = () => {
           <div className="mt-6 pt-6 border-t">
             <p className="text-sm text-gray-500 text-center mb-3">Demo Accounts:</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="demo-login-list mb-4 p-3 bg-gray-50 rounded shadow">
+                <div className="font-semibold mb-2">Quick Login (Demo Accounts):</div>
+                <ul className="space-y-1">
+                  {demoAccounts.map((acc) => (
+                    <li key={acc.email}>
+                      <button
+                        type="button"
+                        className="px-3 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-800 text-sm mr-2"
+                        onClick={() => handleDemoLogin(acc.email)}
+                      >
+                        {acc.role}: {acc.email}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-xs text-gray-500 mt-2">Password for all demo accounts: <span className="font-mono">password123</span></div>
+              </div>
               <div className="p-2 bg-gray-50 rounded">
                 <p className="font-medium">Student</p>
                 <p className="text-gray-500">john.doe@student.edu</p>

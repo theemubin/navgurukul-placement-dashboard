@@ -81,8 +81,26 @@ const jobReadinessConfigSchema = new mongoose.Schema({
       required: true
     },
     description: String,
+    type: {
+      type: String,
+      enum: ['answer', 'link', 'yes/no', 'comment'],
+      default: 'answer'
+    },
+    pocCommentRequired: {
+      type: Boolean,
+      default: false
+    },
+    pocCommentTemplate: String, // Template for PoC comments
+    pocRatingRequired: {
+      type: Boolean,
+      default: false
+    },
+    pocRatingScale: {
+      type: Number,
+      enum: [4],
+      default: 4
+    },
     link: String, // Optional link for the criterion
-    comment: String, // Optional comment for the criterion
     category: {
       type: String,
       enum: ['profile', 'skills', 'technical', 'preparation', 'academic', 'other'],
@@ -163,6 +181,20 @@ const studentJobReadinessSchema = new mongoose.Schema({
     },
     verifiedAt: Date,
     verificationNotes: String,
+    // PoC Comments
+    pocComment: String,
+    pocCommentedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    pocCommentedAt: Date,
+    // PoC Rating
+    pocRating: Number,
+    pocRatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    pocRatedAt: Date,
     completedAt: Date,
     updatedAt: {
       type: Date,

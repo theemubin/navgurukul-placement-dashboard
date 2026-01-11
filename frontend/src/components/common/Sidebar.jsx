@@ -39,6 +39,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/campus-poc/profile-approvals', icon: ClipboardCheck, label: 'Profile Approvals' },
           { path: '/campus-poc/skill-approvals', icon: CheckSquare, label: 'Skill Approvals' },
           { path: '/campus-poc/job-readiness', icon: Target, label: 'Job Readiness' },
+          { path: '/campus-poc/job-readiness-criteria', icon: CheckSquare, label: 'Readiness Criteria' },
           { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' },
           { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests' }
         ];
@@ -47,13 +48,15 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/coordinator', icon: Home, label: 'Dashboard', exact: true },
           { path: '/coordinator/jobs', icon: Briefcase, label: 'Job Management' },
           { path: '/coordinator/applications', icon: FileText, label: 'Applications' },
-          { path: '/coordinator/skills', icon: Settings, label: 'Skill Categories' }
+          { path: '/coordinator/skills', icon: Settings, label: 'Skill Categories' },
+          { path: '/campus-poc/job-readiness-criteria', icon: CheckSquare, label: 'Readiness Criteria' }
         ];
       case 'manager':
         return [
           { path: '/manager', icon: Home, label: 'Dashboard', exact: true },
           { path: '/manager/reports', icon: BarChart3, label: 'Reports & Export' },
-          { path: '/manager/settings', icon: Settings, label: 'Platform Settings' }
+          { path: '/manager/settings', icon: Settings, label: 'Platform Settings' },
+          { path: '/campus-poc/job-readiness-criteria', icon: CheckSquare, label: 'Readiness Criteria' }
         ];
       default:
         return [];

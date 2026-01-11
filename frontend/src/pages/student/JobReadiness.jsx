@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { jobReadinessAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert, Modal } from '../../components/common/UIComponents';
@@ -42,13 +42,41 @@ function JobReadiness() {
 
   useEffect(() => {
     fetchReadinessStatus();
+    
+    // Cleanup function
+    return () => {
+      Object.values(debounceRef.current).forEach(timeout => {
+        if (timeout) clearTimeout(timeout);
+      });
+    };
   }, []);
 
   const fetchReadinessStatus = async () => {
     try {
       setLoading(true);
       const res = await jobReadinessAPI.getMyStatus();
-      setReadinessData(res.data);
+      
+      // Transform the data to match expected format
+      const data = res.data;
+      const transformedData = {
+        ...data.readiness,
+        progress: {
+          criteria: (data.config || []).map(configCriterion => {
+            const status = data.readiness.criteriaStatus?.find(cs => cs.criteriaId === configCriterion.criteriaId) || {};
+            return {
+              ...configCriterion,
+              ...status,
+              completed: status.status === 'completed' || status.selfReported === true,
+              verificationStatus: status.pocVerified === 'approved' ? 'verified' : 
+                                  status.pocVerified === 'rejected' ? 'rejected' : 
+                                  status.status === 'completed' ? 'pending' : 'not_started'
+            };
+          }),
+          isJobReady: data.readiness.isJobReady || false
+        }
+      };
+      
+      setReadinessData(transformedData);
       setError(null);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load job readiness status');
@@ -74,6 +102,43 @@ function JobReadiness() {
       setUpdating(null);
     }
   };
+
+  const debounceRef = useRef({});
+
+  const handleUpdateCriterion = useCallback(async (criterion, updates) => {
+    const criteriaId = criterion.criteriaId;
+    
+    // Clear existing timeout for this criterion
+    if (debounceRef.current[criteriaId]) {
+      clearTimeout(debounceRef.current[criteriaId]);
+    }
+    
+    // Set new timeout
+    debounceRef.current[criteriaId] = setTimeout(async () => {
+      try {
+        setUpdating(criteriaId);
+        
+        // Auto-mark as completed if there's a meaningful value
+        const hasValue = updates.selfReportedValue && updates.selfReportedValue.trim().length > 0;
+        
+        const payload = {
+          ...updates,
+          completed: hasValue,
+          status: hasValue ? 'completed' : 'not_started'
+        };
+        
+        console.log('Updating criterion:', criteriaId, payload);
+        
+        await jobReadinessAPI.updateMyCriterion(criteriaId, payload);
+        await fetchReadinessStatus();
+      } catch (err) {
+        console.error('Update error:', err);
+        setError(err.response?.data?.message || 'Failed to update criterion');
+      } finally {
+        setUpdating(null);
+      }
+    }, 500); // 500ms debounce
+  }, [fetchReadinessStatus]);
 
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
@@ -153,12 +218,17 @@ function JobReadiness() {
   const groupedCriteria = groupCriteriaByCategory(readinessData?.progress?.criteria || []);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Job Readiness Checklist</h1>
-        <p className="mt-2 text-gray-600">
-          Complete all criteria to become "Job Ready" and unlock more placement opportunities.
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900">My Job Readiness Progress</h1>
+        <div className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+          <p className="text-blue-800 text-sm mb-2">🎯 <strong>How this works:</strong></p>
+          <div className="text-blue-700 text-sm space-y-1">
+            <p>1. <strong>Complete criteria</strong> below by providing required information</p>
+            <p>2. <strong>Campus PoCs review</strong> your submissions and may add ratings/feedback</p>
+            <p>3. <strong>Get approved</strong> to become job-ready and apply for positions</p>
+          </div>
+        </div>
       </div>
 
       {error && <Alert type="error" className="mb-6">{error}</Alert>}
@@ -257,6 +327,145 @@ function JobReadiness() {
                         {criterion.description && (
                           <p className="text-sm text-gray-600 mt-1">{criterion.description}</p>
                         )}
+                        
+                        {/* Input field based on criterion type */}
+                        <div className="mt-3 relative">
+                          {updating === criterion.criteriaId && (
+                            <div className="absolute top-0 right-0 bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs">
+                              Saving...
+                            </div>
+                          )}
+                          {criterion.type === 'answer' && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Your Answer</label>
+                              <input
+                                type="text"
+                                value={criterion.selfReportedValue || ''}
+                                onChange={(e) => {
+                                  // Immediate visual feedback - update local state
+                                  const newValue = e.target.value;
+                                  setReadinessData(prev => ({
+                                    ...prev,
+                                    progress: {
+                                      ...prev.progress,
+                                      criteria: prev.progress.criteria.map(c => 
+                                        c.criteriaId === criterion.criteriaId 
+                                          ? { ...c, selfReportedValue: newValue }
+                                          : c
+                                      )
+                                    }
+                                  }));
+                                  // Debounced API call
+                                  handleUpdateCriterion(criterion, { selfReportedValue: newValue });
+                                }}
+                                className="w-full text-sm border rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Enter your answer..."
+                                disabled={updating === criterion.criteriaId}
+                              />
+                            </div>
+                          )}
+                          {criterion.type === 'link' && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Link/URL</label>
+                              <input
+                                type="url"
+                                value={criterion.selfReportedValue || ''}
+                                onChange={(e) => {
+                                  const newValue = e.target.value;
+                                  setReadinessData(prev => ({
+                                    ...prev,
+                                    progress: {
+                                      ...prev.progress,
+                                      criteria: prev.progress.criteria.map(c => 
+                                        c.criteriaId === criterion.criteriaId 
+                                          ? { ...c, selfReportedValue: newValue }
+                                          : c
+                                      )
+                                    }
+                                  }));
+                                  handleUpdateCriterion(criterion, { selfReportedValue: newValue });
+                                }}
+                                className="w-full text-sm border rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="https://..."
+                                disabled={updating === criterion.criteriaId}
+                              />
+                            </div>
+                          )}
+                          {criterion.type === 'yes/no' && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Response</label>
+                              <select
+                                value={criterion.selfReportedValue || ''}
+                                onChange={(e) => {
+                                  const newValue = e.target.value;
+                                  setReadinessData(prev => ({
+                                    ...prev,
+                                    progress: {
+                                      ...prev.progress,
+                                      criteria: prev.progress.criteria.map(c => 
+                                        c.criteriaId === criterion.criteriaId 
+                                          ? { ...c, selfReportedValue: newValue }
+                                          : c
+                                      )
+                                    }
+                                  }));
+                                  handleUpdateCriterion(criterion, { selfReportedValue: newValue });
+                                }}
+                                className="text-sm border rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                disabled={updating === criterion.criteriaId}
+                              >
+                                <option value="">Select...</option>
+                                <option value="yes">Yes</option>
+                                <option value="no">No</option>
+                              </select>
+                            </div>
+                          )}
+                          {criterion.type === 'comment' && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Your Comment</label>
+                              <textarea
+                                value={criterion.selfReportedValue || ''}
+                                onChange={(e) => {
+                                  const newValue = e.target.value;
+                                  setReadinessData(prev => ({
+                                    ...prev,
+                                    progress: {
+                                      ...prev.progress,
+                                      criteria: prev.progress.criteria.map(c => 
+                                        c.criteriaId === criterion.criteriaId 
+                                          ? { ...c, selfReportedValue: newValue }
+                                          : c
+                                      )
+                                    }
+                                  }));
+                                  handleUpdateCriterion(criterion, { selfReportedValue: newValue });
+                                }}
+                                className="w-full text-sm border rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                rows={3}
+                                placeholder="Enter your detailed response..."
+                                disabled={updating === criterion.criteriaId}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* PoC Feedback Section */}
+                        {(criterion.pocComment || criterion.pocRating) && (
+                          <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-xs text-yellow-800 font-medium mb-2">📝 PoC Feedback:</p>
+                            {criterion.pocRating && (
+                              <div className="text-sm text-yellow-700 mb-1">
+                                <span className="font-medium">Rating:</span> {criterion.pocRating}/4
+                              </div>
+                            )}
+                            {criterion.pocComment && (
+                              <div className="text-sm text-yellow-700">
+                                <span className="font-medium">Comment:</span> {criterion.pocComment}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
                         {criterion.requiresProof && !criterion.completed && (
                           <p className="text-xs text-amber-600 mt-1 flex items-center">
                             <DocumentArrowUpIcon className="w-4 h-4 mr-1" />

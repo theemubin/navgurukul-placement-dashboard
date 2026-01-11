@@ -8,9 +8,11 @@ const StudentDashboard = () => {
   const [stats, setStats] = useState(null);
   const [recentApplications, setRecentApplications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [jobReadiness, setJobReadiness] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
+    fetchJobReadiness();
   }, []);
 
   const fetchDashboardData = async () => {
@@ -22,6 +24,23 @@ const StudentDashboard = () => {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchJobReadiness = async () => {
+    try {
+      const res = await import('../../services/api').then(m => m.jobReadinessAPI.getMyStatus());
+      if (
+        res.data?.school === 'School of Programming' &&
+        Array.isArray(res.data?.progress?.criteria) &&
+        res.data.progress.criteria.length > 0
+      ) {
+        setJobReadiness(res.data);
+      } else {
+        setJobReadiness(null);
+      }
+    } catch (err) {
+      setJobReadiness(null);
     }
   };
 
@@ -40,6 +59,19 @@ const StudentDashboard = () => {
         <h1 className="text-2xl font-bold text-gray-900">Student Dashboard</h1>
         <p className="text-gray-600">Track your placement journey</p>
       </div>
+
+      {/* Job Readiness Summary (School of Programming only) */}
+      {jobReadiness && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <StatsCard
+            icon={CheckCircle}
+            label="Job Readiness"
+            value={jobReadiness.progress.isJobReady ? 'Job Ready' : jobReadiness.progress.criteria && jobReadiness.progress.criteria.filter(c => c.completed).length > 0 ? 'In Progress' : 'Not Ready'}
+            subValue={jobReadiness.progress.criteria ? `${jobReadiness.progress.criteria.filter(c => c.completed).length} of ${jobReadiness.progress.criteria.length} completed` : ''}
+            color={jobReadiness.progress.isJobReady ? 'green' : jobReadiness.progress.criteria && jobReadiness.progress.criteria.filter(c => c.completed).length > 0 ? 'yellow' : 'red'}
+          />
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

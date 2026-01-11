@@ -525,29 +525,95 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
 // Get available export fields
 router.get('/export/fields', auth, authorize('coordinator', 'manager'), async (req, res) => {
   const fields = [
+    // Basic Student Info
     { key: 'studentName', label: 'Student Name', category: 'Student Info' },
     { key: 'email', label: 'Email', category: 'Student Info' },
     { key: 'phone', label: 'Phone', category: 'Student Info' },
     { key: 'gender', label: 'Gender', category: 'Student Info' },
-    { key: 'campus', label: 'Campus', category: 'Student Info' },
-    { key: 'school', label: 'Navgurukul School', category: 'Education' },
-    { key: 'currentModule', label: 'Current Module', category: 'Education' },
-    { key: 'joiningDate', label: 'Joining Date', category: 'Education' },
-    { key: 'attendance', label: 'Attendance %', category: 'Education' },
-    { key: 'tenthPercentage', label: '10th Percentage', category: 'Education' },
-    { key: 'twelfthPercentage', label: '12th Percentage', category: 'Education' },
+    
+    // Campus Info
+    { key: 'campus', label: 'Campus Name', category: 'Campus Info' },
+    { key: 'campusCode', label: 'Campus Code', category: 'Campus Info' },
+    
+    // Navgurukul Education
+    { key: 'currentSchool', label: 'Current School', category: 'Navgurukul Education' },
+    { key: 'joiningDate', label: 'Joining Date', category: 'Navgurukul Education' },
+    { key: 'currentModule', label: 'Current Module', category: 'Navgurukul Education' },
+    { key: 'customModuleDescription', label: 'Custom Module Description', category: 'Navgurukul Education' },
+    { key: 'attendance', label: 'Attendance %', category: 'Navgurukul Education' },
+    
+    // Academic Background - 10th Grade
+    { key: 'tenthBoard', label: '10th Board', category: 'Academic Background' },
+    { key: 'tenthPercentage', label: '10th Percentage', category: 'Academic Background' },
+    { key: 'tenthPassingYear', label: '10th Passing Year', category: 'Academic Background' },
+    { key: 'tenthState', label: '10th State', category: 'Academic Background' },
+    
+    // Academic Background - 12th Grade
+    { key: 'twelfthBoard', label: '12th Board', category: 'Academic Background' },
+    { key: 'twelfthPercentage', label: '12th Percentage', category: 'Academic Background' },
+    { key: 'twelfthPassingYear', label: '12th Passing Year', category: 'Academic Background' },
+    { key: 'twelfthState', label: '12th State', category: 'Academic Background' },
+    
+    // Higher Education
+    { key: 'higherEducation', label: 'Higher Education Details', category: 'Academic Background' },
+    
+    // Location
+    { key: 'hometown', label: 'Hometown Details', category: 'Personal Info' },
+    
+    // Technical Skills
+    { key: 'technicalSkills', label: 'Technical Skills', category: 'Skills' },
+    
+    // Soft Skills
+    { key: 'communication', label: 'Communication Skill', category: 'Soft Skills' },
+    { key: 'collaboration', label: 'Collaboration Skill', category: 'Soft Skills' },
+    { key: 'creativity', label: 'Creativity Skill', category: 'Soft Skills' },
+    { key: 'criticalThinking', label: 'Critical Thinking Skill', category: 'Soft Skills' },
+    { key: 'problemSolving', label: 'Problem Solving Skill', category: 'Soft Skills' },
+    { key: 'adaptability', label: 'Adaptability Skill', category: 'Soft Skills' },
+    { key: 'timeManagement', label: 'Time Management Skill', category: 'Soft Skills' },
+    { key: 'leadership', label: 'Leadership Skill', category: 'Soft Skills' },
+    { key: 'teamwork', label: 'Teamwork Skill', category: 'Soft Skills' },
+    { key: 'emotionalIntelligence', label: 'Emotional Intelligence', category: 'Soft Skills' },
+    
+    // Language Skills
+    { key: 'languages', label: 'Language Proficiency', category: 'Language Skills' },
+    { key: 'englishSpeaking', label: 'English Speaking (Legacy)', category: 'Language Skills' },
+    { key: 'englishWriting', label: 'English Writing (Legacy)', category: 'Language Skills' },
+    
+    // Courses & Learning
+    { key: 'courses', label: 'Completed Courses', category: 'Learning & Development' },
+    { key: 'openForRoles', label: 'Open for Roles', category: 'Career Preferences' },
+    
+    // Profile Links & Documents
+    { key: 'linkedIn', label: 'LinkedIn Profile', category: 'Profile Links' },
+    { key: 'github', label: 'GitHub Profile', category: 'Profile Links' },
+    { key: 'portfolio', label: 'Portfolio Website', category: 'Profile Links' },
+    { key: 'resume', label: 'Resume URL', category: 'Profile Links' },
+    
+    // Personal Details
+    { key: 'about', label: 'About/Bio', category: 'Personal Info' },
+    { key: 'expectedSalary', label: 'Expected Salary', category: 'Career Preferences' },
+    { key: 'profileStatus', label: 'Profile Approval Status', category: 'Profile Status' },
+    
+    // Job Information
     { key: 'jobTitle', label: 'Job Title', category: 'Job Info' },
     { key: 'company', label: 'Company', category: 'Job Info' },
-    { key: 'location', label: 'Location', category: 'Job Info' },
+    { key: 'location', label: 'Job Location', category: 'Job Info' },
     { key: 'jobType', label: 'Job Type', category: 'Job Info' },
-    { key: 'salary', label: 'Salary Range', category: 'Job Info' },
+    { key: 'salary', label: 'Job Salary Range', category: 'Job Info' },
+    
+    // Application Details
     { key: 'status', label: 'Application Status', category: 'Application' },
     { key: 'appliedDate', label: 'Applied Date', category: 'Application' },
     { key: 'coverLetter', label: 'Cover Letter', category: 'Application' },
-    { key: 'feedback', label: 'Feedback', category: 'Application' },
-    { key: 'linkedIn', label: 'LinkedIn', category: 'Links' },
-    { key: 'github', label: 'GitHub', category: 'Links' },
-    { key: 'resume', label: 'Resume URL', category: 'Links' }
+    { key: 'feedback', label: 'Interview Feedback', category: 'Application' },
+    { key: 'currentRound', label: 'Current Interview Round', category: 'Application' },
+    { key: 'customResponses', label: 'Custom Requirements Responses', category: 'Application' },
+    
+    // Job Readiness
+    { key: 'jobReadinessCompleted', label: 'Job Readiness Completed', category: 'Job Readiness' },
+    { key: 'jobReadinessStatus', label: 'Job Readiness Status', category: 'Job Readiness' },
+    { key: 'jobReadinessCriteria', label: 'Job Readiness Criteria Details', category: 'Job Readiness' }
   ];
   res.json(fields);
 });

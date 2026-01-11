@@ -109,6 +109,8 @@ export const jobAPI = {
   updateJob: (id, data) => api.put(`/jobs/${id}`, data),
   deleteJob: (id) => api.delete(`/jobs/${id}`),
   updateJobStatus: (id, status, notes) => api.patch(`/jobs/${id}/status`, { status, notes }),
+  // Export job applications
+  exportJobApplications: (id, data) => api.post(`/jobs/${id}/export`, data, { responseType: 'blob' }),
   // AI-powered JD parsing
   parseJDFromUrl: (url) => api.post('/jobs/parse-jd', { url }),
   parseJDFromPDF: (file) => {
@@ -230,11 +232,15 @@ export const jobReadinessAPI = {
   // Config management (for Coordinator/Manager)
   getConfig: (params) => api.get('/job-readiness/config', { params }),
   createConfig: (data) => api.post('/job-readiness/config', data),
+  addCriterion: (configId, data) => api.post(`/job-readiness/config/${configId}/criteria`, data),
+  editCriterion: (configId, criteriaId, data) => api.put(`/job-readiness/config/${configId}/criteria/${criteriaId}`, data),
+  deleteCriterion: (configId, criteriaId) => api.delete(`/job-readiness/config/${configId}/criteria/${criteriaId}`),
   // Student self-tracking
   getMyStatus: () => api.get('/job-readiness/my-status'),
   updateMyCriterion: (criteriaId, data) => {
     const formData = new FormData();
-    formData.append('completed', data.completed);
+    if (data.completed !== undefined) formData.append('completed', data.completed);
+    if (data.selfReportedValue !== undefined) formData.append('selfReportedValue', data.selfReportedValue);
     if (data.notes) formData.append('notes', data.notes);
     if (data.proofFile) formData.append('proofFile', data.proofFile);
     return api.patch(`/job-readiness/my-status/${criteriaId}`, formData, {
@@ -243,8 +249,13 @@ export const jobReadinessAPI = {
   },
   // Campus PoC review
   getCampusStudents: (params) => api.get('/job-readiness/campus-students', { params }),
-  verifyStudentCriterion: (studentId, criteriaId, data) => 
-    api.patch(`/job-readiness/student/${studentId}/verify/${criteriaId}`, data),
+  verifyCriterion: (studentId, criteriaId, status, notes) => 
+    api.patch(`/job-readiness/student/${studentId}/verify/${criteriaId}`, { status, verificationNotes: notes }),
+  addPocComment: (studentId, criteriaId, comment) => 
+    api.post(`/job-readiness/student/${studentId}/comment/${criteriaId}`, { comment }),
+  addPocRating: (studentId, criteriaId, rating) => 
+    api.post(`/job-readiness/student/${studentId}/rate/${criteriaId}`, { rating }),
+  getStudentReadiness: (studentId) => api.get(`/job-readiness/student/${studentId}`),
   approveStudentJobReady: (studentId, data) => 
     api.patch(`/job-readiness/student/${studentId}/approve`, data)
 };

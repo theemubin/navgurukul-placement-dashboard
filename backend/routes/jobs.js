@@ -971,4 +971,202 @@ router.get('/stats/coordinator-jobs', auth, authorize('manager'), async (req, re
   }
 });
 
+// Export job applications with field selection
+router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fields, format = 'csv' } = req.body;
+    const Application = require('../models/Application');
+    const JobReadiness = require('../models/JobReadiness');
+
+    // Check if job exists
+    const job = await Job.findById(id);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    // Get applications for this job with comprehensive population
+    const applications = await Application.find({ job: id })
+      .populate({
+        path: 'student',
+        select: 'firstName lastName email phone gender studentProfile campus',
+        populate: [
+          { path: 'campus', select: 'name code' },
+          { path: 'studentProfile.skills.skill', select: 'name' }
+        ]
+      })
+      .populate('job', 'title company.name location jobType salary customRequirements')
+      .populate('feedbackBy', 'firstName lastName');
+
+    // Get job readiness data for students
+    const studentIds = applications.map(app => app.student._id);
+    const jobReadinessData = await JobReadiness.find({
+      student: { $in: studentIds }
+    }).populate('student', 'firstName lastName');
+
+    // Create job readiness lookup
+    const jobReadinessLookup = {};
+    jobReadinessData.forEach(jrd => {
+      jobReadinessLookup[jrd.student._id.toString()] = jrd;
+    });
+
+    // Enhanced field mapping with all student data
+    const fieldMap = {
+      // Basic Student Info
+      studentName: (app) => `${app.student.firstName} ${app.student.lastName}`,
+      email: (app) => app.student.email,
+      phone: (app) => app.student.phone || '',
+      gender: (app) => app.student.gender || '',
+      
+      // Campus Info
+      campus: (app) => app.student.campus?.name || '',
+      campusCode: (app) => app.student.campus?.code || '',
+      
+      // Navgurukul Education
+      currentSchool: (app) => app.student.studentProfile?.currentSchool || '',
+      joiningDate: (app) => app.student.studentProfile?.dateOfJoining ? new Date(app.student.studentProfile.dateOfJoining).toLocaleDateString() : '',
+      currentModule: (app) => app.student.studentProfile?.currentModule || '',
+      customModuleDescription: (app) => app.student.studentProfile?.customModuleDescription || '',
+      attendance: (app) => app.student.studentProfile?.attendancePercentage || '',
+      
+      // Academic Background
+      tenthBoard: (app) => app.student.studentProfile?.tenthGrade?.board || '',
+      tenthPercentage: (app) => app.student.studentProfile?.tenthGrade?.percentage || '',
+      tenthPassingYear: (app) => app.student.studentProfile?.tenthGrade?.passingYear || '',
+      tenthState: (app) => app.student.studentProfile?.tenthGrade?.state || '',
+      
+      twelfthBoard: (app) => app.student.studentProfile?.twelfthGrade?.board || '',
+      twelfthPercentage: (app) => app.student.studentProfile?.twelfthGrade?.percentage || '',
+      twelfthPassingYear: (app) => app.student.studentProfile?.twelfthGrade?.passingYear || '',
+      twelfthState: (app) => app.student.studentProfile?.twelfthGrade?.state || '',
+      
+      // Higher Education
+      higherEducation: (app) => app.student.studentProfile?.higherEducation?.map(edu => 
+        `${edu.degree} in ${edu.fieldOfStudy} from ${edu.institution} (${edu.startYear}-${edu.endYear})`
+      ).join('; ') || '',
+      
+      // Location Info
+      hometown: (app) => {
+        const hometown = app.student.studentProfile?.hometown;
+        if (!hometown) return '';
+        return `${hometown.village || ''}, ${hometown.district || ''}, ${hometown.state || ''} - ${hometown.pincode || ''}`.replace(/^,\s*|,\s*$/g, '');
+      },
+      
+      // Skills
+      technicalSkills: (app) => app.student.studentProfile?.technicalSkills?.map(skill => 
+        `${skill.skillName} (${skill.selfRating}/4)`
+      ).join('; ') || '',
+      
+      // Soft Skills
+      communication: (app) => app.student.studentProfile?.softSkills?.communication || '',
+      collaboration: (app) => app.student.studentProfile?.softSkills?.collaboration || '',
+      creativity: (app) => app.student.studentProfile?.softSkills?.creativity || '',
+      criticalThinking: (app) => app.student.studentProfile?.softSkills?.criticalThinking || '',
+      problemSolving: (app) => app.student.studentProfile?.softSkills?.problemSolving || '',
+      adaptability: (app) => app.student.studentProfile?.softSkills?.adaptability || '',
+      timeManagement: (app) => app.student.studentProfile?.softSkills?.timeManagement || '',
+      leadership: (app) => app.student.studentProfile?.softSkills?.leadership || '',
+      teamwork: (app) => app.student.studentProfile?.softSkills?.teamwork || '',
+      emotionalIntelligence: (app) => app.student.studentProfile?.softSkills?.emotionalIntelligence || '',
+      
+      // Language Skills
+      languages: (app) => app.student.studentProfile?.languages?.map(lang => 
+        `${lang.language} (S:${lang.speaking}, W:${lang.writing})`
+      ).join('; ') || '',
+      
+      // English Proficiency (legacy)
+      englishSpeaking: (app) => app.student.studentProfile?.englishProficiency?.speaking || '',
+      englishWriting: (app) => app.student.studentProfile?.englishProficiency?.writing || '',
+      
+      // Courses
+      courses: (app) => app.student.studentProfile?.courses?.map(course => 
+        `${course.courseName} (${course.provider})`
+      ).join('; ') || '',
+      
+      // Open for roles
+      openForRoles: (app) => app.student.studentProfile?.openForRoles?.join('; ') || '',
+      
+      // Profile Links
+      linkedIn: (app) => app.student.studentProfile?.linkedIn || '',
+      github: (app) => app.student.studentProfile?.github || '',
+      portfolio: (app) => app.student.studentProfile?.portfolio || '',
+      resume: (app) => app.student.studentProfile?.resume || '',
+      
+      // About & Expectations
+      about: (app) => app.student.studentProfile?.about || '',
+      expectedSalary: (app) => app.student.studentProfile?.expectedSalary || '',
+      
+      // Profile Status
+      profileStatus: (app) => app.student.studentProfile?.profileStatus || '',
+      
+      // Job Info
+      jobTitle: (app) => app.job.title,
+      company: (app) => app.job.company.name,
+      location: (app) => app.job.location,
+      jobType: (app) => app.job.jobType,
+      salary: (app) => app.job.salary?.min && app.job.salary?.max ? `${app.job.salary.min}-${app.job.salary.max}` : '',
+      
+      // Application Info
+      status: (app) => app.status,
+      appliedDate: (app) => app.createdAt.toISOString().split('T')[0],
+      coverLetter: (app) => app.coverLetter || '',
+      feedback: (app) => app.feedback || '',
+      currentRound: (app) => app.currentRound || 0,
+      
+      // Custom Requirements Responses
+      customResponses: (app) => app.customResponses?.map(cr => 
+        `${cr.requirement}: ${cr.response ? 'Yes' : 'No'}`
+      ).join('; ') || '',
+      
+      // Job Readiness Data
+      jobReadinessCompleted: (app) => {
+        const jrd = jobReadinessLookup[app.student._id.toString()];
+        return jrd ? 'Yes' : 'No';
+      },
+      jobReadinessStatus: (app) => {
+        const jrd = jobReadinessLookup[app.student._id.toString()];
+        return jrd?.status || 'Not Started';
+      },
+      jobReadinessCriteria: (app) => {
+        const jrd = jobReadinessLookup[app.student._id.toString()];
+        if (!jrd?.criteria) return '';
+        return jrd.criteria.map(c => 
+          `${c.name}: ${c.studentResponse || c.studentLink || (c.completed ? 'Completed' : 'Pending')}`
+        ).join('; ');
+      }
+    };
+
+    // Use selected fields or all fields
+    const selectedFields = fields?.length > 0 ? fields : Object.keys(fieldMap);
+    
+    // Generate headers
+    const headers = selectedFields.map(f => {
+      // Convert camelCase to Title Case
+      return f.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).trim();
+    });
+
+    // Generate rows
+    const rows = applications.map(app => 
+      selectedFields.map(field => {
+        const value = fieldMap[field] ? fieldMap[field](app) : '';
+        // Clean and escape CSV data
+        const strValue = String(value).replace(/"/g, '""').replace(/[\r\n]/g, ' ').trim();
+        return strValue.includes(',') || strValue.includes('"') || strValue.includes('\n') 
+          ? `"${strValue}"` 
+          : strValue;
+      })
+    );
+
+    // Create CSV
+    const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=${job.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_applications.csv`);
+    res.send('\uFEFF' + csv); // Add BOM for Excel UTF-8 compatibility
+  } catch (error) {
+    console.error('Export job applications error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;
