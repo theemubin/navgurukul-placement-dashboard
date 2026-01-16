@@ -40,6 +40,11 @@ const settingsSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  // Council Posts
+  councilPosts: {
+    type: [String],
+    default: ['General Secretary', 'Technical Secretary', 'Cultural Secretary', 'Sports Secretary', 'Health Secretary', 'Mess Secretary', 'Maintenance Secretary', 'Discipline Secretary', 'Academic Secretary', 'Placement Coordinator']
+  },
   // Course skills (user-added skills from courses - available to all)
   courseSkills: {
     type: [String],
@@ -50,6 +55,22 @@ const settingsSchema = new mongoose.Schema({
     type: [String],
     default: ['Navgurukul', 'Coursera', 'Udemy', 'LinkedIn Learning', 'YouTube', 'Other']
   },
+  higherEducationOptions: {
+    type: Map,
+    of: [String],
+    default: new Map()
+  },
+  // Institution options (Educational institutes: Name -> Pincode)
+  institutionOptions: {
+    type: Map,
+    of: String,
+    default: new Map()
+  },
+  // Inactive schools (manager can toggle)
+  inactiveSchools: {
+    type: [String],
+    default: []
+  },
   // Job pipeline stages (customizable workflow)
   jobPipelineStages: {
     type: [pipelineStageSchema],
@@ -57,7 +78,7 @@ const settingsSchema = new mongoose.Schema({
   },
   // AI Integration Settings
   aiConfig: {
-    googleApiKeys: [{ 
+    googleApiKeys: [{
       key: { type: String, required: true },
       label: { type: String, default: '' }, // Optional label like "Primary", "Backup", etc.
       addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -88,47 +109,201 @@ const DEFAULT_PIPELINE_STAGES = [
   { id: 'filled', label: 'Filled', description: 'Position(s) filled', color: 'purple', order: 7, isDefault: true, visibleToStudents: true, studentLabel: 'Position Filled' }
 ];
 
+// Default School Modules
+const DEFAULT_SCHOOL_MODULES = new Map([
+  ['School of Programming', []],
+  ['School of Business', []],
+  ['School of Second Chance', []],
+  ['School of Finance', []],
+  ['School of Education', []],
+  ['School of Design', ['Graphic Design', 'UI/UX Design', 'Product Design', 'Motion Graphics']]
+]);
+
+// Default Higher Education Options (Department -> Specializations)
+const DEFAULT_HIGHER_EDUCATION_OPTIONS = new Map([
+  ['Engineering', ['Computer Science & Engineering', 'Information Technology', 'Electronics & Communication', 'Mechanical Engineering', 'Civil Engineering', 'Electrical Engineering']],
+  ['Computer Applications', ['BCA', 'MCA', 'B.Sc IT']],
+  ['Management', ['BBA', 'MBA', 'Marketing', 'Finance', 'Human Resources', 'Operations']],
+  ['Science', ['Physics', 'Chemistry', 'Mathematics', 'Biology', 'Biotechnology']],
+  ['Commerce', ['Accounting', 'Finance', 'Banking', 'Economics']],
+  ['Arts & Humanities', ['English', 'History', 'Psychology', 'Sociology', 'Political Science']],
+  ['Other', ['Generic']]
+]);
+
+// Default Institution Options (Name -> Pincode)
+const DEFAULT_INSTITUTION_OPTIONS = new Map([
+  ['IIT Delhi', '110016'],
+  ['IIT Bombay', '400076'],
+  ['IIT Kanpur', '208016'],
+  ['IIT Madras', '600036'],
+  ['IIT Kharagpur', '721302'],
+  ['IIT Roorkee', '247667'],
+  ['IIT Guwahati', '781039'],
+  ['NIT Trichy', '620015'],
+  ['NIT Karnataka', '575025'],
+  ['NIT Rourkela', '769008'],
+  ['NIT Warangal', '506004'],
+  ['NIT Calicut', '673601'],
+  ['BITS Pilani', '333031'],
+  ['BITS Goa', '403726'],
+  ['BITS Hyderabad', '500078'],
+  ['IISc Bangalore', '560012'],
+  ['JNU Delhi', '110067'],
+  ['Delhi University', '110007'],
+  ['Mumbai University', '400032'],
+  ['Anna University', '600025'],
+  ['Amity University', '201313'],
+  ['Lovely Professional University', '144411'],
+  ['Chandigarh University', '140413'],
+  ['Indira Gandhi National Open University (IGNOU)', '110068'],
+  ['Other', '']
+]);
+
 // Ensure only one settings document exists
-settingsSchema.statics.getSettings = async function() {
-  let settings = await this.findOne();
-  if (!settings) {
-    settings = await this.create({
-      schoolModules: new Map([
-        ['School Of Programming', []],
-        ['School Of Business', []],
-        ['School of Second Chance', []],
-        ['School of Finance', []],
-        ['School of Education', []]
-      ]),
-      rolePreferences: [],
-      technicalSkills: [],
-      degreeOptions: [],
-      softSkills: [],
-      jobPipelineStages: DEFAULT_PIPELINE_STAGES
-    });
+settingsSchema.statics.getSettings = async function () {
+  try {
+    let settings = await this.findOne();
+    if (!settings) {
+      settings = await this.create({
+        schoolModules: DEFAULT_SCHOOL_MODULES,
+        rolePreferences: [],
+        technicalSkills: [],
+        degreeOptions: [],
+        softSkills: [],
+        jobPipelineStages: DEFAULT_PIPELINE_STAGES,
+        inactiveSchools: [],
+        higherEducationOptions: DEFAULT_HIGHER_EDUCATION_OPTIONS,
+        institutionOptions: DEFAULT_INSTITUTION_OPTIONS
+      });
+    }
+
+    // Ensure pipeline stages exist (for existing databases)
+    if (!settings.jobPipelineStages || settings.jobPipelineStages.length === 0) {
+      settings.jobPipelineStages = DEFAULT_PIPELINE_STAGES;
+      await settings.save();
+    }
+
+    // Ensure all standard schools exist and migrate legacy names
+    let schoolsChanged = false;
+
+    // Ensure schoolModules is a Map (handles cases where Mongoose returns a plain object)
+    if (!settings.schoolModules || typeof settings.schoolModules.has !== 'function') {
+      console.log('Warning: settings.schoolModules is not a Map. Converting...');
+      const source = settings.schoolModules && typeof settings.schoolModules === 'object' ? settings.schoolModules : {};
+      const entries = (source instanceof Map) ? source : Object.entries(source);
+      settings.schoolModules = new Map(entries.length > 0 ? entries : DEFAULT_SCHOOL_MODULES);
+      schoolsChanged = true;
+    }
+
+    // Migration: Merge "School Of ..." into "School of ..." to fix duplicates
+    const schoolMerges = [
+      { from: 'School Of Programming', to: 'School of Programming' },
+      { from: 'School Of Business', to: 'School of Business' },
+      { from: 'School Of Finance', to: 'School of Finance' },
+      { from: 'School Of Education', to: 'School of Education' },
+      { from: 'School Of Second Chance', to: 'School of Second Chance' }
+    ];
+
+    for (const merge of schoolMerges) {
+      if (settings.schoolModules && settings.schoolModules.has(merge.from)) {
+        const existingModules = settings.schoolModules.get(merge.from) || [];
+        const targetModules = settings.schoolModules.get(merge.to) || [];
+        // Merge unique modules
+        const merged = [...new Set([...targetModules, ...existingModules])];
+
+        settings.schoolModules.set(merge.to, merged);
+        settings.schoolModules.delete(merge.from);
+        schoolsChanged = true;
+        console.log(`Migrated school: ${merge.from} -> ${merge.to}`);
+
+        // Update student profiles using the old name
+        try {
+          const User = mongoose.model('User');
+          await User.updateMany(
+            { 'studentProfile.currentSchool': merge.from },
+            { $set: { 'studentProfile.currentSchool': merge.to } }
+          );
+        } catch (err) {
+          console.error(`Error migrating Users for ${merge.from}:`, err.message);
+        }
+      }
+    }
+
+    // Ensure all standard schools exist
+    console.log('Ensuring default schools exist...');
+    for (const [school, modules] of DEFAULT_SCHOOL_MODULES) {
+      if (!settings.schoolModules.has(school)) {
+        settings.schoolModules.set(school, modules);
+        schoolsChanged = true;
+        console.log(`Added missing default school: ${school}`);
+      }
+    }
+
+    // Ensure higherEducationOptions is a Map
+    if (!settings.higherEducationOptions || typeof settings.higherEducationOptions.has !== 'function') {
+      console.log('Warning: settings.higherEducationOptions is not a Map. Initializing...');
+      const source = settings.higherEducationOptions && typeof settings.higherEducationOptions === 'object' ? settings.higherEducationOptions : {};
+      const entries = (source instanceof Map) ? source : Object.entries(source);
+      settings.higherEducationOptions = new Map(entries.length > 0 ? entries : DEFAULT_HIGHER_EDUCATION_OPTIONS);
+      schoolsChanged = true;
+    }
+
+    // Ensure institutionOptions is a Map and initialized
+    if (!settings.institutionOptions || typeof settings.institutionOptions.has !== 'function') {
+      console.log('Warning: settings.institutionOptions is not a Map. Initializing...');
+      const source = settings.institutionOptions || [];
+      const newMap = new Map();
+      if (Array.isArray(source)) {
+        // Migrate from [String] to Map<String, String>
+        source.forEach(inst => {
+          if (typeof inst === 'string') {
+            newMap.set(inst, '');
+          }
+        });
+      } else if (typeof source === 'object') {
+        Object.entries(source).forEach(([k, v]) => newMap.set(k, v));
+      }
+
+      // Merge with defaults to populate missing pincodes
+      const defaults = DEFAULT_INSTITUTION_OPTIONS;
+      defaults.forEach((pin, name) => {
+        if (!newMap.has(name)) {
+          newMap.set(name, pin);
+        } else if (!newMap.get(name)) {
+          newMap.set(name, pin);
+        }
+      });
+
+      settings.institutionOptions = newMap;
+      schoolsChanged = true;
+    }
+
+    if (schoolsChanged) {
+      console.log('Saving settings changes...');
+      await settings.save();
+      console.log('Settings saved successfully.');
+    }
+
+    return settings;
+  } catch (error) {
+    console.error('CRITICAL: getSettings failed:', error);
+    // Return findOne result as fallback to avoid crashing route
+    return await this.findOne();
   }
-  
-  // Ensure pipeline stages exist (for existing databases)
-  if (!settings.jobPipelineStages || settings.jobPipelineStages.length === 0) {
-    settings.jobPipelineStages = DEFAULT_PIPELINE_STAGES;
-    await settings.save();
-  }
-  
-  return settings;
 };
 
 // Get valid status IDs for validation
-settingsSchema.statics.getValidStatuses = async function() {
+settingsSchema.statics.getValidStatuses = async function () {
   const settings = await this.getSettings();
   return settings.jobPipelineStages.map(stage => stage.id);
 };
 
-settingsSchema.statics.updateSettings = async function(updates, userId) {
+settingsSchema.statics.updateSettings = async function (updates, userId) {
   let settings = await this.findOne();
   if (!settings) {
     settings = new this();
   }
-  
+
   if (updates.schoolModules) {
     // Convert object to Map if needed
     if (!(updates.schoolModules instanceof Map)) {
@@ -141,32 +316,47 @@ settingsSchema.statics.updateSettings = async function(updates, userId) {
   if (updates.technicalSkills) settings.technicalSkills = updates.technicalSkills;
   if (updates.degreeOptions) settings.degreeOptions = updates.degreeOptions;
   if (updates.softSkills) settings.softSkills = updates.softSkills;
+  if (updates.inactiveSchools) settings.inactiveSchools = updates.inactiveSchools;
   if (updates.jobPipelineStages) settings.jobPipelineStages = updates.jobPipelineStages;
+  if (updates.higherEducationOptions) {
+    if (!(updates.higherEducationOptions instanceof Map)) {
+      settings.higherEducationOptions = new Map(Object.entries(updates.higherEducationOptions));
+    } else {
+      settings.higherEducationOptions = updates.higherEducationOptions;
+    }
+  }
+  if (updates.institutionOptions) {
+    if (!(updates.institutionOptions instanceof Map)) {
+      settings.institutionOptions = new Map(Object.entries(updates.institutionOptions));
+    } else {
+      settings.institutionOptions = updates.institutionOptions;
+    }
+  }
   if (userId) settings.lastUpdatedBy = userId;
-  
+
   await settings.save();
   return settings;
 };
 
 // Add a new pipeline stage
-settingsSchema.statics.addPipelineStage = async function(stage, userId) {
+settingsSchema.statics.addPipelineStage = async function (stage, userId) {
   const settings = await this.getSettings();
-  
+
   // Generate ID from label if not provided
   if (!stage.id) {
     stage.id = stage.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
   }
-  
+
   // Check for duplicate ID
   if (settings.jobPipelineStages.some(s => s.id === stage.id)) {
     throw new Error('Stage with this ID already exists');
   }
-  
+
   // Set order to end if not specified
   if (stage.order === undefined) {
     stage.order = settings.jobPipelineStages.length;
   }
-  
+
   settings.jobPipelineStages.push(stage);
   settings.jobPipelineStages.sort((a, b) => a.order - b.order);
   settings.lastUpdatedBy = userId;
@@ -175,62 +365,62 @@ settingsSchema.statics.addPipelineStage = async function(stage, userId) {
 };
 
 // Update a pipeline stage
-settingsSchema.statics.updatePipelineStage = async function(stageId, updates, userId) {
+settingsSchema.statics.updatePipelineStage = async function (stageId, updates, userId) {
   const settings = await this.getSettings();
   const stageIndex = settings.jobPipelineStages.findIndex(s => s.id === stageId);
-  
+
   if (stageIndex === -1) {
     throw new Error('Stage not found');
   }
-  
+
   const stage = settings.jobPipelineStages[stageIndex];
-  
+
   // Prevent changing ID of default stages
   if (stage.isDefault && updates.id && updates.id !== stage.id) {
     throw new Error('Cannot change ID of default stages');
   }
-  
+
   // Update allowed fields
   if (updates.label) stage.label = updates.label;
   if (updates.description !== undefined) stage.description = updates.description;
   if (updates.color) stage.color = updates.color;
   if (updates.visibleToStudents !== undefined) stage.visibleToStudents = updates.visibleToStudents;
   if (updates.studentLabel !== undefined) stage.studentLabel = updates.studentLabel;
-  
+
   settings.lastUpdatedBy = userId;
   await settings.save();
   return settings;
 };
 
 // Delete a pipeline stage
-settingsSchema.statics.deletePipelineStage = async function(stageId, userId) {
+settingsSchema.statics.deletePipelineStage = async function (stageId, userId) {
   const settings = await this.getSettings();
   const stage = settings.jobPipelineStages.find(s => s.id === stageId);
-  
+
   if (!stage) {
     throw new Error('Stage not found');
   }
-  
+
   if (stage.isDefault) {
     throw new Error('Cannot delete default stages');
   }
-  
+
   settings.jobPipelineStages = settings.jobPipelineStages.filter(s => s.id !== stageId);
-  
+
   // Reorder remaining stages
   settings.jobPipelineStages.forEach((s, idx) => {
     s.order = idx;
   });
-  
+
   settings.lastUpdatedBy = userId;
   await settings.save();
   return settings;
 };
 
 // Reorder pipeline stages
-settingsSchema.statics.reorderPipelineStages = async function(stageIds, userId) {
+settingsSchema.statics.reorderPipelineStages = async function (stageIds, userId) {
   const settings = await this.getSettings();
-  
+
   // Validate all IDs exist
   const existingIds = settings.jobPipelineStages.map(s => s.id);
   for (const id of stageIds) {
@@ -238,14 +428,14 @@ settingsSchema.statics.reorderPipelineStages = async function(stageIds, userId) 
       throw new Error(`Stage ${id} not found`);
     }
   }
-  
+
   // Reorder based on the new order
   const reordered = stageIds.map((id, index) => {
     const stage = settings.jobPipelineStages.find(s => s.id === id);
     stage.order = index;
     return stage;
   });
-  
+
   settings.jobPipelineStages = reordered;
   settings.lastUpdatedBy = userId;
   await settings.save();

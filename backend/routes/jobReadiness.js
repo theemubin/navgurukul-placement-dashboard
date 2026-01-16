@@ -4,7 +4,7 @@ const { body, validationResult } = require('express-validator');
 const { JobReadinessConfig, StudentJobReadiness, DEFAULT_CRITERIA } = require('../models/JobReadiness');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
-const { auth, authorize } = require('../middleware/auth');
+const { auth, authorize, sameCampus } = require('../middleware/auth');
 // ...existing code...
 // Add a new criterion to the config (PoC/Manager)
 router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
@@ -100,11 +100,11 @@ router.delete('/config/:configId/criteria/:criteriaId', auth, authorize('campus_
 router.get('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { school, campus } = req.query;
-    
+
     let query = {};
     if (school) query.school = school;
     if (campus) query.campus = campus;
-    
+
     // For campus PoC, default to their campus
     if (req.user.role === 'campus_poc' && !campus) {
       query.campus = req.user.campus;
@@ -241,9 +241,9 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), [
 
     // Find or add criterion status
     let criterionIndex = readiness.criteriaStatus.findIndex(c => c.criteriaId === criteriaId);
-    
+
     const newStatus = status || (completed ? 'completed' : 'not_started');
-    
+
     if (criterionIndex === -1) {
       readiness.criteriaStatus.push({
         criteriaId,
@@ -280,12 +280,18 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), [
 router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { school, isJobReady, page = 1, limit = 20 } = req.query;
-    
+
     let query = {};
-    
-    // Campus PoC sees only their campus
+
+    // Campus PoC sees only their managed campuses
     if (req.user.role === 'campus_poc') {
-      query.campus = req.user.campus;
+      const managedCampuses = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses
+        : (req.user.campus ? [req.user.campus] : []);
+
+      if (managedCampuses.length > 0) {
+        query.campus = { $in: managedCampuses };
+      }
     }
 
     if (school) query.school = school;
@@ -327,9 +333,13 @@ router.get('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
 
     // Authorization check for campus PoC
     if (req.user.role === 'campus_poc') {
-      const student = await User.findById(req.params.studentId);
-      if (student.campus?.toString() !== req.user.campus?.toString()) {
-        return res.status(403).json({ message: 'Not authorized' });
+      const managedCampuses = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses.map(c => c.toString())
+        : (req.user.campus ? [req.user.campus.toString()] : []);
+
+      const studentCampus = readiness.campus?.toString();
+      if (studentCampus && !managedCampuses.includes(studentCampus)) {
+        return res.status(403).json({ message: 'Not authorized for this student\'s campus' });
       }
     }
 
@@ -367,14 +377,18 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
 
     // Authorization check
     if (req.user.role === 'campus_poc') {
-      if (readiness.campus?.toString() !== req.user.campus?.toString()) {
-        return res.status(403).json({ message: 'Not authorized' });
+      const managedCampuses = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses.map(id => id.toString())
+        : (req.user.campus ? [req.user.campus.toString()] : []);
+
+      if (readiness.campus?.toString() && !managedCampuses.includes(readiness.campus.toString())) {
+        return res.status(403).json({ message: 'Not authorized for this student\'s campus' });
       }
     }
 
     // Find criterion
     const criterionIndex = readiness.criteriaStatus.findIndex(c => c.criteriaId === criteriaId);
-    
+
     if (criterionIndex === -1) {
       return res.status(404).json({ message: 'Criterion not found' });
     }
@@ -394,7 +408,7 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
       recipient: studentId,
       type: 'criterion_verified',
       title: verified ? 'Readiness Criterion Verified!' : 'Readiness Update',
-      message: verified 
+      message: verified
         ? `Your "${criteriaId}" criterion has been verified.`
         : `Your "${criteriaId}" criterion needs review. ${verificationNotes || ''}`,
       link: '/student/job-readiness',
@@ -410,7 +424,7 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
 });
 
 // Add PoC comment to a student's criterion (Campus PoC)
-router.post('/student/:studentId/comment/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), [
+router.post('/student/:studentId/comment/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, [
   body('comment').trim().notEmpty()
 ], async (req, res) => {
   try {
@@ -448,7 +462,7 @@ router.post('/student/:studentId/comment/:criteriaId', auth, authorize('campus_p
 });
 
 // Add PoC rating to a student's criterion (Campus PoC)
-router.post('/student/:studentId/rate/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), [
+router.post('/student/:studentId/rate/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, [
   body('rating').isInt({ min: 1, max: 10 })
 ], async (req, res) => {
   try {
@@ -502,8 +516,12 @@ router.patch('/student/:studentId/approve', auth, authorize('campus_poc', 'coord
 
     // Authorization check
     if (req.user.role === 'campus_poc') {
-      if (readiness.campus?.toString() !== req.user.campus?.toString()) {
-        return res.status(403).json({ message: 'Not authorized' });
+      const managedCampuses = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses.map(id => id.toString())
+        : (req.user.campus ? [req.user.campus.toString()] : []);
+
+      if (readiness.campus?.toString() && !managedCampuses.includes(readiness.campus.toString())) {
+        return res.status(403).json({ message: 'Not authorized for this student\'s campus' });
       }
     }
 
@@ -519,7 +537,7 @@ router.patch('/student/:studentId/approve', auth, authorize('campus_poc', 'coord
       recipient: studentId,
       type: approved ? 'job_ready_approved' : 'job_ready_pending',
       title: approved ? '🎉 You are Job Ready!' : 'Job Readiness Update',
-      message: approved 
+      message: approved
         ? 'Congratulations! Your Campus PoC has approved you as job ready. You can now apply for jobs!'
         : `Your job readiness status needs attention. ${approvalNotes || ''}`,
       link: '/student/job-readiness',

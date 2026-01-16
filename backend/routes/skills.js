@@ -17,7 +17,11 @@ router.get('/', auth, async (req, res) => {
     }
 
     if (category) {
-      query.category = category;
+      if (category.includes(',')) {
+        query.category = { $in: category.split(',') };
+      } else {
+        query.category = category;
+      }
     }
 
     if (search) {
@@ -125,7 +129,7 @@ router.post('/', auth, authorize('coordinator', 'manager', 'campus_poc'), [
 router.put('/:id', auth, authorize('coordinator', 'manager', 'campus_poc'), async (req, res) => {
   try {
     const skill = await Skill.findById(req.params.id);
-    
+
     if (!skill) {
       return res.status(404).json({ message: 'Skill not found' });
     }
@@ -168,7 +172,7 @@ router.put('/:id', auth, authorize('coordinator', 'manager', 'campus_poc'), asyn
 router.delete('/:id', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const skill = await Skill.findById(req.params.id);
-    
+
     if (!skill) {
       return res.status(404).json({ message: 'Skill not found' });
     }

@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { statsAPI, placementCycleAPI, userAPI, campusAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
-import { 
-  Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2, 
+import {
+  Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings
 } from 'lucide-react';
@@ -39,10 +39,8 @@ const POCDashboard = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedCycle || cycles.length > 0) {
-      fetchTrackingData();
-    }
-  }, [selectedCycle]);
+    fetchDashboardData();
+  }, [statusFilter]);
 
   const fetchCampusData = async () => {
     try {
@@ -75,8 +73,8 @@ const POCDashboard = () => {
   };
 
   const toggleCampusSelection = (campusId) => {
-    setSelectedCampuses(prev => 
-      prev.includes(campusId) 
+    setSelectedCampuses(prev =>
+      prev.includes(campusId)
         ? prev.filter(id => id !== campusId)
         : [...prev, campusId]
     );
@@ -85,7 +83,7 @@ const POCDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const [statsResponse, pendingResponse, cyclesResponse, jobsResponse] = await Promise.all([
-        statsAPI.getCampusPocStats(),
+        statsAPI.getCampusPocStats(statusFilter),
         userAPI.getPendingSkills(),
         statsAPI.getCycleStats(),
         statsAPI.getEligibleJobs()
@@ -94,8 +92,6 @@ const POCDashboard = () => {
       setPendingSkills(pendingResponse.data.slice(0, 5));
       setCycles(cyclesResponse.data);
       setEligibleJobs(jobsResponse.data.jobs || []);
-      
-      // Keep "All Cycles" as default - don't auto-select a specific cycle
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -188,7 +184,7 @@ const POCDashboard = () => {
             ) : (
               <span className="text-sm text-gray-400">No campuses selected</span>
             )}
-            <button 
+            <button
               onClick={() => setShowCampusModal(true)}
               className="text-primary-600 hover:text-primary-800 text-sm font-medium flex items-center gap-1"
             >
@@ -216,13 +212,12 @@ const POCDashboard = () => {
             </p>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {allCampuses.map(campus => (
-                <label 
-                  key={campus._id} 
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                    selectedCampuses.includes(campus._id) 
-                      ? 'border-primary-500 bg-primary-50' 
+                <label
+                  key={campus._id}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedCampuses.includes(campus._id)
+                      ? 'border-primary-500 bg-primary-50'
                       : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   <input
                     type="checkbox"
@@ -242,7 +237,7 @@ const POCDashboard = () => {
               ))}
             </div>
             <div className="flex justify-end gap-3 mt-6">
-              <button 
+              <button
                 onClick={() => {
                   setSelectedCampuses(managedCampuses.map(c => c._id));
                   setShowCampusModal(false);
@@ -251,7 +246,7 @@ const POCDashboard = () => {
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleSaveCampuses}
                 disabled={savingCampuses || selectedCampuses.length === 0}
                 className="btn btn-primary"
@@ -264,7 +259,7 @@ const POCDashboard = () => {
       )}
 
       {/* Eligible Students Modal */}
-      <EligibleStudentsModal 
+      <EligibleStudentsModal
         isOpen={eligibleStudentsModal.open}
         onClose={() => {
           setEligibleStudentsModal({ open: false, job: null, students: [], loading: false });
@@ -281,28 +276,50 @@ const POCDashboard = () => {
         getFilteredStudents={getFilteredEligibleStudents}
       />
 
-      {/* Cycle Selector */}
-      {cycles.length > 0 && (
-        <div className="flex items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
-          <Calendar className="w-5 h-5 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">Placement Cycle:</span>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-medium text-gray-700">Filter By Status:</span>
           <select
-            value={selectedCycle}
-            onChange={(e) => setSelectedCycle(e.target.value)}
-            className="input max-w-xs"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              // fetchDashboardData will be called with the new filter
+            }}
+            className="input text-sm min-w-[150px]"
           >
-            <option value="">All Cycles</option>
-            {cycles.map(cycle => (
-              <option key={cycle.cycleId} value={cycle.cycleId}>
-                {cycle.name} ({cycle.students} students)
-              </option>
-            ))}
+            <option value="">All Students</option>
+            <option value="Active">Active</option>
+            <option value="Placed">Placed</option>
+            <option value="Dropout">Dropout</option>
+            <option value="Internship Paid">Internship Paid</option>
+            <option value="Internship UnPaid">Internship UnPaid</option>
           </select>
         </div>
-      )}
+
+        {cycles.length > 0 && (
+          <div className="flex items-center gap-2 border-l pl-4">
+            <Calendar className="w-4 h-4 text-gray-500" />
+            <span className="text-sm font-medium text-gray-700">Placement Cycle:</span>
+            <select
+              value={selectedCycle}
+              onChange={(e) => setSelectedCycle(e.target.value)}
+              className="input text-sm min-w-[150px]"
+            >
+              <option value="">All Cycles</option>
+              {cycles.map(cycle => (
+                <option key={cycle.cycleId} value={cycle.cycleId}>
+                  {cycle.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <StatsCard
           icon={Users}
           label="Total Students"
@@ -322,17 +339,22 @@ const POCDashboard = () => {
           color="orange"
         />
         <StatsCard
-          icon={Briefcase}
-          label="Applications"
-          value={stats?.totalApplications || 0}
-          color="purple"
+          icon={CheckCircle}
+          label="Job Ready"
+          value={stats?.readinessPool?.['Job Ready'] || 0}
+          color="green"
+        />
+        <StatsCard
+          icon={Clock}
+          label="Under Process"
+          value={stats?.readinessPool?.['Job Ready Under Process'] || 0}
+          color="indigo"
         />
         <StatsCard
           icon={TrendingUp}
-          label="Placements"
-          value={stats?.totalPlacements || 0}
-          subValue={`${stats?.placementRate || 0}% rate`}
-          color="green"
+          label="Interested"
+          value={stats?.interestCount || 0}
+          color="purple"
         />
       </div>
 
@@ -350,11 +372,10 @@ const POCDashboard = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === tab.id
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === tab.id
                   ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >
               <tab.icon className="w-4 h-4" />
               {tab.label}
@@ -505,7 +526,7 @@ const POCDashboard = () => {
               {eligibleJobs.length} active jobs
             </span>
           </div>
-          
+
           {eligibleJobs.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {eligibleJobs.map((job) => (
@@ -531,7 +552,7 @@ const POCDashboard = () => {
 
                   {/* Stats Row */}
                   <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3">
-                    <button 
+                    <button
                       className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
                       onClick={() => fetchEligibleStudents(job)}
                       title="Click to view eligible students"
@@ -560,7 +581,7 @@ const POCDashboard = () => {
                       <span>{job.eligibleStudents > 0 ? Math.round((job.applicationCount / job.eligibleStudents) * 100) : 0}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
+                      <div
                         className="h-2 rounded-full bg-primary-500 transition-all"
                         style={{ width: `${job.eligibleStudents > 0 ? (job.applicationCount / job.eligibleStudents) * 100 : 0}%` }}
                       />
@@ -593,7 +614,7 @@ const POCDashboard = () => {
             <h3 className="font-semibold text-gray-900">Company-wise Application Tracking</h3>
             <span className="text-sm text-gray-500">{companyTracking.length} companies</span>
           </div>
-          
+
           {companyTracking.length > 0 ? (
             <div className="space-y-3">
               {companyTracking.map((company) => (
@@ -659,37 +680,37 @@ const POCDashboard = () => {
                             <div className="overflow-x-auto">
                               <table className="min-w-full text-sm">
                                 <thead>
-                                <tr className="text-left text-gray-500">
-                                  <th className="pb-2 font-medium">Student</th>
-                                  <th className="pb-2 font-medium">School</th>
-                                  <th className="pb-2 font-medium">Status</th>
-                                  <th className="pb-2 font-medium">Round</th>
-                                  <th className="pb-2 font-medium">Applied</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200">
-                                {job.applications.map((app) => (
-                                  <tr key={app.applicationId}>
-                                    <td className="py-2">
-                                      <Link 
-                                        to={`/campus-poc/students/${app.studentId}`}
-                                        className="text-primary-600 hover:underline"
-                                      >
-                                        {app.studentName}
-                                      </Link>
-                                    </td>
-                                    <td className="py-2 text-gray-600">{app.school || 'N/A'}</td>
-                                    <td className="py-2">{getStatusBadge(app.status)}</td>
-                                    <td className="py-2">
-                                      {app.currentRound + 1}/{app.totalRounds || '?'}
-                                    </td>
-                                    <td className="py-2 text-gray-500">
-                                      {new Date(app.appliedAt).toLocaleDateString()}
-                                    </td>
+                                  <tr className="text-left text-gray-500">
+                                    <th className="pb-2 font-medium">Student</th>
+                                    <th className="pb-2 font-medium">School</th>
+                                    <th className="pb-2 font-medium">Status</th>
+                                    <th className="pb-2 font-medium">Round</th>
+                                    <th className="pb-2 font-medium">Applied</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                  {job.applications.map((app) => (
+                                    <tr key={app.applicationId}>
+                                      <td className="py-2">
+                                        <Link
+                                          to={`/campus-poc/students/${app.studentId}`}
+                                          className="text-primary-600 hover:underline"
+                                        >
+                                          {app.studentName}
+                                        </Link>
+                                      </td>
+                                      <td className="py-2 text-gray-600">{app.school || 'N/A'}</td>
+                                      <td className="py-2">{getStatusBadge(app.status)}</td>
+                                      <td className="py-2">
+                                        {app.currentRound + 1}/{app.totalRounds || '?'}
+                                      </td>
+                                      <td className="py-2 text-gray-500">
+                                        {new Date(app.appliedAt).toLocaleDateString()}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </div>
                           ) : (
                             <div className="text-center py-4 text-gray-500">
@@ -715,7 +736,7 @@ const POCDashboard = () => {
       {activeTab === 'school' && (
         <div className="space-y-4">
           <h3 className="font-semibold text-gray-900">School-wise Student Tracking</h3>
-          
+
           {schoolTracking.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {schoolTracking.map((school) => (
@@ -748,7 +769,7 @@ const POCDashboard = () => {
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {school.students.slice(0, 5).map((student) => (
                       <div key={student.studentId} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
-                        <Link 
+                        <Link
                           to={`/campus-poc/students/${student.studentId}`}
                           className="text-primary-600 hover:underline truncate max-w-[150px]"
                         >
@@ -821,7 +842,7 @@ const POCDashboard = () => {
                       <tr key={student.studentId} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div>
-                            <Link 
+                            <Link
                               to={`/campus-poc/students/${student.studentId}`}
                               className="font-medium text-primary-600 hover:underline"
                             >
@@ -857,7 +878,7 @@ const POCDashboard = () => {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <Link 
+                          <Link
                             to={`/campus-poc/students/${student.studentId}`}
                             className="text-primary-600 hover:text-primary-800"
                           >
@@ -880,8 +901,8 @@ const POCDashboard = () => {
       )}
 
       {activeTab === 'cycles' && (
-        <CycleManagement 
-          cycles={cycles} 
+        <CycleManagement
+          cycles={cycles}
           onUpdate={fetchDashboardData}
           showModal={showCycleModal}
           setShowModal={setShowCycleModal}
@@ -890,8 +911,8 @@ const POCDashboard = () => {
 
       {/* New Cycle Modal */}
       {showCycleModal && activeTab !== 'cycles' && (
-        <NewCycleModal 
-          onClose={() => setShowCycleModal(false)} 
+        <NewCycleModal
+          onClose={() => setShowCycleModal(false)}
           onSuccess={() => {
             setShowCycleModal(false);
             fetchDashboardData();
@@ -974,11 +995,10 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                   setSelectedCycleId(cycle.cycleId);
                   fetchCycleStudents(cycle.cycleId);
                 }}
-                className={`w-full text-left p-4 rounded-lg border transition-colors ${
-                  selectedCycleId === cycle.cycleId
+                className={`w-full text-left p-4 rounded-lg border transition-colors ${selectedCycleId === cycle.cycleId
                     ? 'border-primary-500 bg-primary-50'
                     : 'border-gray-200 hover:border-gray-300'
-                }`}
+                  }`}
               >
                 <div className="flex justify-between items-start">
                   <div>
@@ -1000,8 +1020,8 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                       <span>{cycle.progress}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1.5">
-                      <div 
-                        className="bg-primary-600 h-1.5 rounded-full" 
+                      <div
+                        className="bg-primary-600 h-1.5 rounded-full"
                         style={{ width: `${Math.min(cycle.progress, 100)}%` }}
                       />
                     </div>
@@ -1127,8 +1147,8 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
 
       {/* New Cycle Modal */}
       {showModal && (
-        <NewCycleModal 
-          onClose={() => setShowModal(false)} 
+        <NewCycleModal
+          onClose={() => setShowModal(false)}
           onSuccess={() => {
             setShowModal(false);
             onUpdate();
@@ -1185,7 +1205,7 @@ const NewCycleModal = ({ onClose, onSuccess }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <h3 className="text-lg font-semibold mb-4">Create New Placement Cycle</h3>
-        
+
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
             {error}
@@ -1279,7 +1299,7 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div 
+      <div
         className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -1323,31 +1343,28 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
           <div className="flex gap-2">
             <button
               onClick={() => setStudentFilter('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                studentFilter === 'all' 
-                  ? 'bg-indigo-600 text-white' 
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${studentFilter === 'all'
+                  ? 'bg-indigo-600 text-white'
                   : 'bg-white text-gray-600 hover:bg-gray-100'
-              }`}
+                }`}
             >
               All ({total || 0})
             </button>
             <button
               onClick={() => setStudentFilter('applied')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                studentFilter === 'applied' 
-                  ? 'bg-green-600 text-white' 
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${studentFilter === 'applied'
+                  ? 'bg-green-600 text-white'
                   : 'bg-white text-gray-600 hover:bg-gray-100'
-              }`}
+                }`}
             >
               Applied ({applied || 0})
             </button>
             <button
               onClick={() => setStudentFilter('not-applied')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                studentFilter === 'not-applied' 
-                  ? 'bg-orange-600 text-white' 
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${studentFilter === 'not-applied'
+                  ? 'bg-orange-600 text-white'
                   : 'bg-white text-gray-600 hover:bg-gray-100'
-              }`}
+                }`}
             >
               Not Applied ({notApplied || 0})
             </button>
@@ -1368,13 +1385,12 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
           ) : (
             <div className="space-y-3">
               {filteredStudents.map((student) => (
-                <div 
-                  key={student._id} 
-                  className={`p-4 rounded-lg border ${
-                    student.hasApplied 
-                      ? 'bg-green-50 border-green-200' 
+                <div
+                  key={student._id}
+                  className={`p-4 rounded-lg border ${student.hasApplied
+                      ? 'bg-green-50 border-green-200'
                       : 'bg-white border-gray-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -1394,11 +1410,10 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        student.skillMatch >= 80 ? 'bg-green-100 text-green-700' :
-                        student.skillMatch >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
+                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${student.skillMatch >= 80 ? 'bg-green-100 text-green-700' :
+                          student.skillMatch >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                        }`}>
                         {student.skillMatch}% Match
                       </div>
                       {student.hasApplied ? (

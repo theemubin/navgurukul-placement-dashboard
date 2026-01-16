@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { settingsAPI, placementCycleAPI, campusAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert } from '../../components/common/UIComponents';
+import { Plus } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const Settings = () => {
   const [settings, setSettings] = useState(null);
@@ -16,7 +18,12 @@ const Settings = () => {
   const [newRole, setNewRole] = useState('');
   const [newSkill, setNewSkill] = useState('');
   const [newDegree, setNewDegree] = useState('');
+  const [newSpecialization, setNewSpecialization] = useState({}); // degree -> string
   const [newSoftSkill, setNewSoftSkill] = useState('');
+  const [newInstitution, setNewInstitution] = useState('');
+  const [newInstitutionPincode, setNewInstitutionPincode] = useState('');
+  const [educationStats, setEducationStats] = useState({ institutes: {}, departments: {} });
+  const [loadingStats, setLoadingStats] = useState(false);
 
   // Placement cycle states
   const [placementCycles, setPlacementCycles] = useState([]);
@@ -35,6 +42,7 @@ const Settings = () => {
     fetchCampuses();
     fetchAiConfig();
     fetchAiStatus();
+    fetchEducationAnalytics();
   }, []);
 
   const [aiStatus, setAiStatus] = useState(null);  // runtime status (working/quota/etc)
@@ -161,11 +169,13 @@ const Settings = () => {
     }
   };
 
+  const { user } = useAuth();
+
   const saveSettings = async () => {
     try {
       setSaving(true);
       setError(null);
-      await settingsAPI.updateSettings(settings);
+      await settingsAPI.updateSettings(settings, user?._id);
       setSuccess('Settings saved successfully');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -222,15 +232,61 @@ const Settings = () => {
     setSettings({ ...settings, technicalSkills: settings.technicalSkills.filter(s => s !== skill) });
   };
 
-  // Degree options management
+  // Degree & Higher Education management
   const addDegree = () => {
-    if (!newDegree.trim() || settings.degreeOptions.includes(newDegree.trim())) return;
-    setSettings({ ...settings, degreeOptions: [...settings.degreeOptions, newDegree.trim()] });
+    const degree = newDegree.trim();
+    if (!degree) return;
+
+    // Update old degreeOptions for compatibility
+    const oldOptions = settings.degreeOptions || [];
+    const newOldOptions = oldOptions.includes(degree) ? oldOptions : [...oldOptions, degree];
+
+    // Update new higherEducationOptions
+    const higherEdu = { ...(settings.higherEducationOptions || {}) };
+    if (!higherEdu[degree]) {
+      higherEdu[degree] = [];
+    }
+
+    setSettings({
+      ...settings,
+      degreeOptions: newOldOptions,
+      higherEducationOptions: higherEdu
+    });
     setNewDegree('');
   };
 
   const removeDegree = (degree) => {
-    setSettings({ ...settings, degreeOptions: settings.degreeOptions.filter(d => d !== degree) });
+    const higherEdu = { ...(settings.higherEducationOptions || {}) };
+    delete higherEdu[degree];
+
+    setSettings({
+      ...settings,
+      degreeOptions: (settings.degreeOptions || []).filter(d => d !== degree),
+      higherEducationOptions: higherEdu
+    });
+  };
+
+  const addSpecialization = (degree) => {
+    const spec = (newSpecialization[degree] || '').trim();
+    if (!spec) return;
+
+    const higherEdu = { ...(settings.higherEducationOptions || {}) };
+    if (!higherEdu[degree]) higherEdu[degree] = [];
+
+    if (!higherEdu[degree].includes(spec)) {
+      higherEdu[degree] = [...higherEdu[degree], spec];
+    }
+
+    setSettings({ ...settings, higherEducationOptions: higherEdu });
+    setNewSpecialization({ ...newSpecialization, [degree]: '' });
+  };
+
+  const removeSpecialization = (degree, spec) => {
+    const higherEdu = { ...(settings.higherEducationOptions || {}) };
+    if (higherEdu[degree]) {
+      higherEdu[degree] = higherEdu[degree].filter(s => s !== spec);
+    }
+    setSettings({ ...settings, higherEducationOptions: higherEdu });
   };
 
   // Soft skills management
@@ -244,19 +300,87 @@ const Settings = () => {
     setSettings({ ...settings, softSkills: settings.softSkills.filter(s => s !== skill) });
   };
 
-  const schools = [
-    'School Of Programming',
-    'School Of Business',
-    'School of Second Chance',
-    'School of Finance',
-    'School of Education'
-  ];
+  // Institution management
+  const addInstitution = () => {
+    const institution = newInstitution.trim();
+    if (!institution || (settings.institutionOptions || {})[institution]) return;
+    setSettings({
+      ...settings,
+      institutionOptions: {
+        ...(settings.institutionOptions || {}),
+        [institution]: newInstitutionPincode.trim()
+      }
+    });
+    setNewInstitution('');
+    setNewInstitutionPincode('');
+  };
+
+  const removeInstitution = (institution) => {
+    const updated = { ...(settings.institutionOptions || {}) };
+    delete updated[institution];
+    setSettings({
+      ...settings,
+      institutionOptions: updated
+    });
+  };
+
+  const updateInstitutionPincode = (institution, pincode) => {
+    setSettings({
+      ...settings,
+      institutionOptions: {
+        ...(settings.institutionOptions || {}),
+        [institution]: pincode
+      }
+    });
+  };
+
+  const fetchEducationAnalytics = async () => {
+    try {
+      setLoadingStats(true);
+      const response = await settingsAPI.getEducationAnalytics();
+      setEducationStats(response.data.data);
+    } catch (err) {
+      console.error('Error fetching education analytics:', err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  const handleRename = async (type, oldName) => {
+    const newName = prompt(`Rename "${oldName}" to:`, oldName);
+    if (!newName || newName === oldName) return;
+
+    try {
+      setSaving(true);
+      await settingsAPI.renameEducationItem({ type, oldName, newName });
+      setSuccess(`Renamed successfully`);
+      fetchSettings(); // Refresh global settings
+      fetchEducationAnalytics(); // Refresh stats
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError('Failed to rename item');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const schools = settings?.schoolModules
+    ? Object.keys(settings.schoolModules).sort((a, b) => a.localeCompare(b))
+    : [];
+
+  useEffect(() => {
+    if (settings && !settings.schoolModules) {
+      setSettings(prev => ({ ...prev, schoolModules: {} }));
+    }
+  }, [settings]);
 
   const tabs = [
     { id: 'modules', label: 'School Modules', icon: '📚' },
     { id: 'roles', label: 'Role Preferences', icon: '💼' },
     { id: 'skills', label: 'Technical Skills', icon: '🔧' },
-    { id: 'degrees', label: 'Degree Options', icon: '🎓' },
+    { id: 'degrees', label: 'Departments', icon: '🎓' },
+    { id: 'institutions', label: 'Institutions', icon: '🏛️' },
+    { id: 'analytics', label: 'Education Analytics', icon: '📊' },
     { id: 'softskills', label: 'Soft Skills', icon: '🤝' },
     { id: 'cycles', label: 'Placement Cycles', icon: '📅' },
     { id: 'campuses', label: 'Campuses', icon: '🏫' },
@@ -314,11 +438,10 @@ const Settings = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${activeTab === tab.id
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
             >
               <span className="mr-2">{tab.icon}</span>
               {tab.label}
@@ -327,33 +450,76 @@ const Settings = () => {
         </nav>
       </div>
 
+      {/* Add New School Button (Only for modules tab) */}
+      {activeTab === 'modules' && (
+        <div className="mb-4 flex justify-end">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const name = prompt('Enter new school name:');
+              if (name) {
+                const updated = { ...settings.schoolModules };
+                updated[name] = [];
+                setSettings({ ...settings, schoolModules: updated });
+              }
+            }}
+            className="flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add New School
+          </Button>
+        </div>
+      )}
+
       {/* School Modules Tab */}
       {activeTab === 'modules' && (
         <div className="space-y-6">
           <p className="text-gray-600">
             Manage the modules/phases for each Navgurukul school. The order of modules represents the learning progression.
           </p>
-          
+
           {schools.map((school) => (
             <Card key={school} className="overflow-hidden">
-              <div 
+              <div
                 className="flex items-center justify-between cursor-pointer"
                 onClick={() => setEditingSchool(editingSchool === school ? null : school)}
               >
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{school}</h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-semibold text-gray-900">{school}</h3>
+                    <Badge variant={settings.inactiveSchools?.includes(school) ? 'danger' : 'success'}>
+                      {settings.inactiveSchools?.includes(school) ? 'Inactive' : 'Active'}
+                    </Badge>
+                  </div>
                   <p className="text-sm text-gray-500">
                     {settings.schoolModules?.[school]?.length || 0} modules
                   </p>
                 </div>
-                <svg 
-                  className={`w-5 h-5 transform transition-transform ${editingSchool === school ? 'rotate-180' : ''}`}
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <div className="flex items-center gap-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const isInactive = settings.inactiveSchools?.includes(school);
+                      const updatedInactive = isInactive
+                        ? settings.inactiveSchools.filter(s => s !== school)
+                        : [...(settings.inactiveSchools || []), school];
+                      setSettings({ ...settings, inactiveSchools: updatedInactive });
+                    }}
+                  >
+                    {settings.inactiveSchools?.includes(school) ? 'Activate' : 'Deactivate'}
+                  </Button>
+                  <svg
+                    className={`w-5 h-5 transform transition-transform ${editingSchool === school ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </div>
 
               {editingSchool === school && (
@@ -376,8 +542,8 @@ const Settings = () => {
                   {/* Module list */}
                   <div className="space-y-2">
                     {(settings.schoolModules?.[school] || []).map((module, index) => (
-                      <div 
-                        key={module} 
+                      <div
+                        key={module}
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                       >
                         <div className="flex items-center">
@@ -451,8 +617,8 @@ const Settings = () => {
           {/* Role list */}
           <div className="flex flex-wrap gap-2">
             {settings.rolePreferences?.map((role) => (
-              <span 
-                key={role} 
+              <span
+                key={role}
                 className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm"
               >
                 {role}
@@ -472,6 +638,152 @@ const Settings = () => {
             <p className="text-gray-500 text-center py-4">No roles added yet</p>
           )}
         </Card>
+      )}
+
+      {/* Institutions Tab */}
+      {activeTab === 'institutions' && (
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Education Institutions</h3>
+              <p className="text-sm text-gray-600">Manage the master list of universities and colleges available to students.</p>
+            </div>
+          </div>
+
+          <div className="flex gap-2 mb-6">
+            <input
+              type="text"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter institution name..."
+              value={newInstitution}
+              onChange={(e) => setNewInstitution(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && addInstitution()}
+            />
+            <input
+              type="text"
+              className="w-32 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Pincode"
+              value={newInstitutionPincode}
+              onChange={(e) => setNewInstitutionPincode(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && addInstitution()}
+            />
+            <Button
+              variant="primary"
+              onClick={addInstitution}
+              disabled={!newInstitution.trim()}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {Object.entries(settings.institutionOptions || {}).sort((a, b) => a[0].localeCompare(b[0])).map(([name, pincode], index) => (
+              <div
+                key={index}
+                className="flex flex-col p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-200 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-900 font-bold truncate pr-2 uppercase text-xs tracking-wider">{name}</span>
+                  <button
+                    onClick={() => removeInstitution(name)}
+                    className="text-red-500 hover:text-red-700 p-1"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 font-medium">PIN:</span>
+                  <input
+                    type="text"
+                    value={pincode || ''}
+                    onChange={(e) => updateInstitutionPincode(name, e.target.value)}
+                    className="text-xs bg-gray-50 border-none rounded px-1.5 py-0.5 focus:ring-1 focus:ring-blue-400 w-20"
+                    placeholder="Not set"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {Object.keys(settings.institutionOptions || {}).length === 0 && (
+            <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+              No institutions added to the list yet.
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Education Analytics Tab */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-6">
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Institute Distribution</h3>
+                <p className="text-sm text-gray-600">Total students per institute. Use edit to rename or merge duplicate entries.</p>
+              </div>
+              <Button variant="secondary" size="sm" onClick={fetchEducationAnalytics} disabled={loadingStats}>
+                {loadingStats ? 'Loading...' : 'Refresh'}
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(educationStats.institutes || {}).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
+                <div key={name} className="p-4 bg-white border border-gray-200 rounded-lg flex justify-between items-center hover:shadow-sm transition-shadow">
+                  <div>
+                    <span className="block font-medium text-gray-900 truncate max-w-[200px]" title={name}>{name}</span>
+                    <span className="text-sm text-gray-500 font-semibold">{count} students</span>
+                  </div>
+                  <button
+                    onClick={() => handleRename('institution', name)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                    title="Rename / Merge"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              {Object.keys(educationStats.institutes || {}).length === 0 && !loadingStats && (
+                <div className="col-span-full text-center py-8 text-gray-500">No institute data available.</div>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Department Distribution</h3>
+                <p className="text-sm text-gray-600">Total students per department globally across all institutes.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(educationStats.departments || {}).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
+                <div key={name} className="p-4 bg-white border border-gray-200 rounded-lg flex justify-between items-center hover:shadow-sm transition-shadow">
+                  <div>
+                    <span className="block font-medium text-gray-900 truncate max-w-[200px]" title={name}>{name}</span>
+                    <span className="text-sm text-gray-500 font-semibold">{count} students</span>
+                  </div>
+                  <button
+                    onClick={() => handleRename('department', name)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                    title="Rename / Merge"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              {Object.keys(educationStats.departments || {}).length === 0 && !loadingStats && (
+                <div className="col-span-full text-center py-8 text-gray-500">No department data available.</div>
+              )}
+            </div>
+          </Card>
+        </div>
       )}
 
       {/* Technical Skills Tab */}
@@ -500,8 +812,8 @@ const Settings = () => {
           {/* Skill list */}
           <div className="flex flex-wrap gap-2">
             {settings.technicalSkills?.map((skill) => (
-              <span 
-                key={skill} 
+              <span
+                key={skill}
                 className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-sm"
               >
                 {skill}
@@ -523,53 +835,101 @@ const Settings = () => {
         </Card>
       )}
 
-      {/* Degree Options Tab */}
+      {/* Higher Education Options Tab */}
       {activeTab === 'degrees' && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Degree Options</h3>
-          <p className="text-gray-600 mb-4">
-            Educational qualifications that students can select in their profile.
-          </p>
+        <div className="space-y-6">
+          <Card>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Departments & Specializations</h3>
+            <p className="text-gray-600 mb-4">
+              Add departments and their corresponding specializations that students can select in their profiles.
+            </p>
 
-          {/* Add new degree */}
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newDegree}
-              onChange={(e) => setNewDegree(e.target.value)}
-              placeholder="Add new degree option..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              onKeyPress={(e) => e.key === 'Enter' && addDegree()}
-            />
-            <Button variant="primary" onClick={addDegree}>
-              Add Degree
-            </Button>
-          </div>
+            {/* Add new department */}
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newDegree}
+                onChange={(e) => setNewDegree(e.target.value)}
+                placeholder="Add new department (e.g., Computer Science, Commerce, Science)..."
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onKeyPress={(e) => e.key === 'Enter' && addDegree()}
+              />
+              <Button variant="primary" onClick={addDegree}>
+                <Plus className="w-5 h-5 mr-2" />
+                Add Department
+              </Button>
+            </div>
+          </Card>
 
-          {/* Degree list */}
-          <div className="space-y-2">
-            {settings.degreeOptions?.map((degree, index) => (
-              <div 
-                key={degree} 
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-              >
-                <span className="text-gray-900">{degree}</span>
-                <button
-                  onClick={() => removeDegree(degree)}
-                  className="p-1 text-red-400 hover:text-red-600"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {Object.keys(settings.higherEducationOptions || {}).sort().map((degree) => (
+              <Card key={degree} className="flex flex-col h-full">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b">
+                  <h4 className="font-bold text-gray-900 text-lg">{degree}</h4>
+                  <button
+                    onClick={() => removeDegree(degree)}
+                    className="p-1 text-red-400 hover:text-red-600 transition-colors"
+                    title={`Remove ${degree}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Specializations</p>
+
+                  {/* Add Specialization */}
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      type="text"
+                      value={newSpecialization[degree] || ''}
+                      onChange={(e) => setNewSpecialization({ ...newSpecialization, [degree]: e.target.value })}
+                      placeholder={`Add specialization for ${degree}...`}
+                      className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                      onKeyPress={(e) => e.key === 'Enter' && addSpecialization(degree)}
+                    />
+                    <button
+                      onClick={() => addSpecialization(degree)}
+                      className="p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {settings.higherEducationOptions[degree]?.map((spec) => (
+                      <span
+                        key={spec}
+                        className="inline-flex items-center px-2.5 py-1 bg-gray-100 text-gray-700 rounded-md text-xs font-medium border border-gray-200"
+                      >
+                        {spec}
+                        <button
+                          onClick={() => removeSpecialization(degree, spec)}
+                          className="ml-1.5 text-gray-400 hover:text-red-500"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
+                    {(settings.higherEducationOptions[degree]?.length === 0 || !settings.higherEducationOptions[degree]) && (
+                      <p className="text-gray-400 text-xs italic">No specializations added yet</p>
+                    )}
+                  </div>
+                </div>
+              </Card>
             ))}
           </div>
 
-          {(!settings.degreeOptions || settings.degreeOptions.length === 0) && (
-            <p className="text-gray-500 text-center py-4">No degree options added yet</p>
+          {(!settings.higherEducationOptions || Object.keys(settings.higherEducationOptions).length === 0) && (
+            <Card className="text-center py-12">
+              <p className="text-gray-500">No degree options added yet. Add your first degree above.</p>
+            </Card>
           )}
-        </Card>
+        </div>
       )}
 
       {/* Soft Skills Tab */}
@@ -598,8 +958,8 @@ const Settings = () => {
           {/* Soft skill list */}
           <div className="flex flex-wrap gap-2">
             {settings.softSkills?.map((skill) => (
-              <span 
-                key={skill} 
+              <span
+                key={skill}
                 className="inline-flex items-center px-3 py-1.5 bg-purple-100 text-purple-800 rounded-full text-sm"
               >
                 {skill}
@@ -641,10 +1001,10 @@ const Settings = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Month</option>
-                  {['January', 'February', 'March', 'April', 'May', 'June', 
+                  {['January', 'February', 'March', 'April', 'May', 'June',
                     'July', 'August', 'September', 'October', 'November', 'December'].map((m, i) => (
-                    <option key={m} value={i + 1}>{m}</option>
-                  ))}
+                      <option key={m} value={i + 1}>{m}</option>
+                    ))}
                 </select>
               </div>
               <div>
@@ -671,9 +1031,9 @@ const Settings = () => {
                 />
               </div>
             </div>
-            <Button 
-              variant="primary" 
-              onClick={createPlacementCycle} 
+            <Button
+              variant="primary"
+              onClick={createPlacementCycle}
               disabled={creatingCycle}
               className="mt-4"
             >
@@ -684,8 +1044,8 @@ const Settings = () => {
           {/* Cycles list */}
           <div className="space-y-3">
             {placementCycles.map((cycle) => (
-              <div 
-                key={cycle._id} 
+              <div
+                key={cycle._id}
                 className="flex items-center justify-between p-4 bg-white border rounded-lg"
               >
                 <div>
@@ -740,8 +1100,8 @@ const Settings = () => {
           {/* Campus list */}
           <div className="space-y-3">
             {campuses.map((campus) => (
-              <div 
-                key={campus._id} 
+              <div
+                key={campus._id}
                 className="flex items-center justify-between p-4 bg-white border rounded-lg"
               >
                 <div>
@@ -768,7 +1128,7 @@ const Settings = () => {
 
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-blue-800 text-sm">
-              <strong>Note:</strong> Campus management is configured during initial setup. 
+              <strong>Note:</strong> Campus management is configured during initial setup.
               Contact the system administrator to add or modify campuses.
             </p>
           </div>
@@ -791,7 +1151,7 @@ const Settings = () => {
                 <div>
                   <p className="font-medium text-gray-900">AI Auto-Fill</p>
                   <p className="text-sm text-gray-500">
-                    {aiConfig.hasApiKey 
+                    {aiConfig.hasApiKey
                       ? `API Key: ${aiConfig.apiKeyPreview}`
                       : 'No API key configured'
                     }
@@ -804,14 +1164,12 @@ const Settings = () => {
                 </Badge>
                 <button
                   onClick={toggleAiEnabled}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    aiConfig.enabled ? 'bg-green-500' : 'bg-gray-200'
-                  }`}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${aiConfig.enabled ? 'bg-green-500' : 'bg-gray-200'
+                    }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      aiConfig.enabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${aiConfig.enabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
                   />
                 </button>
               </div>
@@ -870,9 +1228,9 @@ const Settings = () => {
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Get your free API key from{' '}
-                  <a 
-                    href="https://aistudio.google.com/app/apikey" 
-                    target="_blank" 
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:underline"
                   >
@@ -902,8 +1260,8 @@ const Settings = () => {
             {/* Fallback Info */}
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-blue-800 text-sm">
-                <strong>Fallback Mode:</strong> If AI is disabled or API key is not set, 
-                the system will use basic text extraction (regex-based) which provides 
+                <strong>Fallback Mode:</strong> If AI is disabled or API key is not set,
+                the system will use basic text extraction (regex-based) which provides
                 limited but still useful auto-fill functionality.
               </p>
             </div>

@@ -13,8 +13,13 @@ const applicationSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['applied', 'shortlisted', 'in_progress', 'selected', 'rejected', 'withdrawn'],
+    enum: ['applied', 'shortlisted', 'in_progress', 'selected', 'rejected', 'withdrawn', 'interested'],
     default: 'applied'
+  },
+  applicationType: {
+    type: String,
+    enum: ['regular', 'interest'],
+    default: 'regular'
   },
   currentRound: {
     type: Number,

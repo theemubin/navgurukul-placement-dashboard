@@ -17,7 +17,7 @@ const Notifications = () => {
     try {
       setLoading(true);
       const response = await notificationAPI.getNotifications();
-      setNotifications(response.data || []);
+      setNotifications(response.data.notifications || []);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -28,7 +28,7 @@ const Notifications = () => {
   const markAsRead = async (id) => {
     try {
       await notificationAPI.markAsRead(id);
-      setNotifications(notifications.map(n => 
+      setNotifications(notifications.map(n =>
         n._id === id ? { ...n, read: true } : n
       ));
     } catch (error) {
@@ -134,11 +134,10 @@ const Notifications = () => {
           <button
             key={tab.value}
             onClick={() => setFilter(tab.value)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-[2px] transition ${
-              filter === tab.value
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-[2px] transition ${filter === tab.value
                 ? 'border-primary-600 text-primary-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
             {tab.label}
             {tab.value === 'unread' && unreadCount > 0 && (
@@ -162,9 +161,8 @@ const Notifications = () => {
           {filteredNotifications.map((notification) => (
             <div
               key={notification._id}
-              className={`card flex items-start gap-4 transition ${
-                !notification.read ? 'bg-primary-50 border-primary-200' : ''
-              }`}
+              className={`card flex items-start gap-4 transition ${!notification.read ? 'bg-primary-50 border-primary-200' : ''
+                }`}
             >
               <div className={`p-3 rounded-full ${getIconColor(notification.type)}`}>
                 {getIcon(notification.type)}

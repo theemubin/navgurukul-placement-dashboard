@@ -29,7 +29,7 @@ const parseCSV = (buffer) => {
   return new Promise((resolve, reject) => {
     const results = [];
     const stream = Readable.from(buffer.toString());
-    
+
     stream
       .pipe(csvParser())
       .on('data', (data) => results.push(data))
@@ -50,10 +50,10 @@ const generatePassword = () => {
 
 // GET sample CSV template for students
 router.get('/sample/students', auth, authorize('campus_poc', 'coordinator', 'manager'), (req, res) => {
-  const csvContent = `firstName,lastName,email,phone,campus,school,batch,tenthGrade,twelfthGrade,highestDegree
-John,Doe,john.doe@example.com,9876543210,Bangalore,School of Programming,2024,85.5,78.2,BCA
-Jane,Smith,jane.smith@example.com,9876543211,Delhi,School of Programming,2024,90.0,88.5,B.Tech
-Rahul,Kumar,rahul.kumar@example.com,9876543212,Bangalore,School of Business,2025,75.0,72.0,12th Pass`;
+  const csvContent = `firstName,lastName,email,phone,campus,school,batch,tenthGrade,twelfthGrade,highestDegree,specialization,currentStatus
+John,Doe,john.doe@example.com,9876543210,Bangalore,School of Programming,2024,85.5,78.2,B.Tech,Computer Science,Active
+Jane,Smith,jane.smith@example.com,9876543211,Delhi,School of Programming,2024,90.0,88.5,B.Tech,Information Technology,Active
+Rahul,Kumar,rahul.kumar@example.com,9876543212,Bangalore,School of Business,2025,75.0,72.0,MBA,Finance,Placed`;
 
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename=students_sample.csv');
@@ -80,7 +80,7 @@ router.post('/students', auth, authorize('campus_poc', 'coordinator', 'manager')
     }
 
     const rows = await parseCSV(req.file.buffer);
-    
+
     if (rows.length === 0) {
       return res.status(400).json({ message: 'CSV file is empty' });
     }
@@ -89,10 +89,10 @@ router.post('/students', auth, authorize('campus_poc', 'coordinator', 'manager')
     const requiredColumns = ['firstName', 'lastName', 'email'];
     const csvColumns = Object.keys(rows[0]);
     const missingColumns = requiredColumns.filter(col => !csvColumns.includes(col));
-    
+
     if (missingColumns.length > 0) {
-      return res.status(400).json({ 
-        message: `Missing required columns: ${missingColumns.join(', ')}` 
+      return res.status(400).json({
+        message: `Missing required columns: ${missingColumns.join(', ')}`
       });
     }
 
@@ -163,7 +163,13 @@ router.post('/students', auth, authorize('campus_poc', 'coordinator', 'manager')
             tenthGrade: row.tenthGrade ? parseFloat(row.tenthGrade) : undefined,
             twelfthGrade: row.twelfthGrade ? parseFloat(row.twelfthGrade) : undefined,
             highestDegree: row.highestDegree?.trim() || '',
-            profileStatus: 'draft'
+            profileStatus: 'draft',
+            currentStatus: row.currentStatus?.trim() || 'Active',
+            higherEducation: row.highestDegree ? [{
+              degree: row.highestDegree.trim(),
+              fieldOfStudy: row.specialization?.trim() || '',
+              isCompleted: true
+            }] : []
           }
         };
 
@@ -223,7 +229,7 @@ router.post('/self-applications', auth, authorize('student'), upload.single('fil
     }
 
     const rows = await parseCSV(req.file.buffer);
-    
+
     if (rows.length === 0) {
       return res.status(400).json({ message: 'CSV file is empty' });
     }
@@ -232,10 +238,10 @@ router.post('/self-applications', auth, authorize('student'), upload.single('fil
     const requiredColumns = ['companyName', 'jobTitle'];
     const csvColumns = Object.keys(rows[0]);
     const missingColumns = requiredColumns.filter(col => !csvColumns.includes(col));
-    
+
     if (missingColumns.length > 0) {
-      return res.status(400).json({ 
-        message: `Missing required columns: ${missingColumns.join(', ')}` 
+      return res.status(400).json({
+        message: `Missing required columns: ${missingColumns.join(', ')}`
       });
     }
 
@@ -252,7 +258,7 @@ router.post('/self-applications', auth, authorize('student'), upload.single('fil
 
       try {
         const status = row.status?.toLowerCase()?.trim() || 'applied';
-        
+
         if (!validStatuses.includes(status)) {
           results.failed.push({
             row: rowNum,
@@ -323,7 +329,7 @@ router.post('/self-applications/campus', auth, authorize('campus_poc'), upload.s
     }
 
     const rows = await parseCSV(req.file.buffer);
-    
+
     if (rows.length === 0) {
       return res.status(400).json({ message: 'CSV file is empty' });
     }
@@ -332,19 +338,19 @@ router.post('/self-applications/campus', auth, authorize('campus_poc'), upload.s
     const requiredColumns = ['studentEmail', 'companyName', 'jobTitle'];
     const csvColumns = Object.keys(rows[0]);
     const missingColumns = requiredColumns.filter(col => !csvColumns.includes(col));
-    
+
     if (missingColumns.length > 0) {
-      return res.status(400).json({ 
-        message: `Missing required columns: ${missingColumns.join(', ')}` 
+      return res.status(400).json({
+        message: `Missing required columns: ${missingColumns.join(', ')}`
       });
     }
 
     // Get students from this campus
-    const campusStudents = await User.find({ 
-      campus: req.user.campus, 
-      role: 'student' 
+    const campusStudents = await User.find({
+      campus: req.user.campus,
+      role: 'student'
     }).select('_id email');
-    
+
     const studentMap = {};
     campusStudents.forEach(s => {
       studentMap[s.email.toLowerCase()] = s._id;
@@ -375,7 +381,7 @@ router.post('/self-applications/campus', auth, authorize('campus_poc'), upload.s
         }
 
         const status = row.status?.toLowerCase()?.trim() || 'applied';
-        
+
         if (!validStatuses.includes(status)) {
           results.failed.push({
             row: rowNum,
@@ -474,7 +480,7 @@ router.post('/attendance', auth, authorize('campus_poc', 'coordinator', 'manager
     }
 
     const rows = await parseCSV(req.file.buffer);
-    
+
     if (rows.length === 0) {
       return res.status(400).json({ message: 'CSV file is empty' });
     }
@@ -483,10 +489,10 @@ router.post('/attendance', auth, authorize('campus_poc', 'coordinator', 'manager
     const requiredColumns = ['email'];
     const csvColumns = Object.keys(rows[0]);
     const missingColumns = requiredColumns.filter(col => !csvColumns.includes(col));
-    
+
     if (missingColumns.length > 0) {
-      return res.status(400).json({ 
-        message: `Missing required columns: ${missingColumns.join(', ')}` 
+      return res.status(400).json({
+        message: `Missing required columns: ${missingColumns.join(', ')}`
       });
     }
 
@@ -508,7 +514,7 @@ router.post('/attendance', auth, authorize('campus_poc', 'coordinator', 'manager
 
       try {
         const email = row.email?.toLowerCase()?.trim();
-        
+
         if (!email) {
           results.failed.push({
             row: rowNum,
@@ -520,13 +526,13 @@ router.post('/attendance', auth, authorize('campus_poc', 'coordinator', 'manager
 
         // Find student
         const student = await User.findOne({ ...query, email });
-        
+
         if (!student) {
           results.failed.push({
             row: rowNum,
             email,
-            reason: req.user.role === 'campus_poc' 
-              ? 'Student not found in your campus' 
+            reason: req.user.role === 'campus_poc'
+              ? 'Student not found in your campus'
               : 'Student not found'
           });
           continue;
@@ -534,7 +540,7 @@ router.post('/attendance', auth, authorize('campus_poc', 'coordinator', 'manager
 
         // Update attendance and/or joining date
         const updates = {};
-        
+
         if (row.attendancePercentage !== undefined && row.attendancePercentage !== '') {
           const attendance = parseFloat(row.attendancePercentage);
           if (isNaN(attendance) || attendance < 0 || attendance > 100) {

@@ -26,8 +26,7 @@ import POCStudents from './pages/campus-poc/Students';
 import POCSkillApprovals from './pages/campus-poc/SkillApprovals';
 import POCStudentDetails from './pages/campus-poc/StudentDetails';
 import POCProfileApprovals from './pages/campus-poc/ProfileApprovals';
-import POCJobReadinessReview from './pages/campus-poc/JobReadinessReview';
-import JobReadinessCriteriaConfig from './pages/campus-poc/JobReadinessCriteriaConfig';
+import UnifiedJobReadiness from './pages/campus-poc/UnifiedJobReadiness';
 import POCSelfApplicationsReview from './pages/campus-poc/SelfApplicationsReview';
 import POCInterestRequestsReview from './pages/campus-poc/InterestRequestsReview';
 import POCSkills from './pages/campus-poc/Skills';
@@ -39,6 +38,8 @@ import JobForm from './pages/coordinator/JobForm';
 import CoordinatorApplications from './pages/coordinator/Applications';
 import CoordinatorSkills from './pages/coordinator/Skills';
 import CoordinatorSettings from './pages/coordinator/Settings';
+import CoordinatorInterestRequests from './pages/coordinator/InterestRequests';
+import CoordinatorForum from './pages/coordinator/Forum';
 
 // Manager Pages
 import ManagerDashboard from './pages/manager/Dashboard';
@@ -116,7 +117,7 @@ function App() {
         <Route path="job-readiness" element={<StudentJobReadiness />} />
         <Route path="self-applications" element={<StudentSelfApplications />} />
         <Route path="notifications" element={<Notifications />} />
-        <Route path="job-readiness-criteria" element={<JobReadinessCriteriaConfig />} />
+
       </Route>
 
       {/* Campus POC Routes */}
@@ -130,8 +131,7 @@ function App() {
         <Route path="students/:id" element={<POCStudentDetails />} />
         <Route path="skill-approvals" element={<POCSkillApprovals />} />
         <Route path="profile-approvals" element={<POCProfileApprovals />} />
-        <Route path="job-readiness" element={<POCJobReadinessReview />} />
-        <Route path="job-readiness-criteria" element={<JobReadinessCriteriaConfig />} />
+        <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="self-applications" element={<POCSelfApplicationsReview />} />
         <Route path="interest-requests" element={<POCInterestRequestsReview />} />
         <Route path="skills" element={<POCSkills />} />
@@ -150,7 +150,10 @@ function App() {
         <Route path="jobs/:id/edit" element={<JobForm />} />
         <Route path="applications" element={<CoordinatorApplications />} />
         <Route path="skills" element={<CoordinatorSkills />} />
+        <Route path="interest-requests" element={<CoordinatorInterestRequests />} />
+        <Route path="forum" element={<CoordinatorForum />} />
         <Route path="settings" element={<CoordinatorSettings />} />
+        <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
@@ -163,6 +166,7 @@ function App() {
         <Route index element={<ManagerDashboard />} />
         <Route path="reports" element={<ManagerReports />} />
         <Route path="settings" element={<ManagerSettings />} />
+        <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 

@@ -40,7 +40,7 @@ function calculateMatch(student, job) {
   const eligibilityAllPassed = Object.values(breakdown.eligibility.details)
     .every(detail => !detail.required || detail.meets);
 
-  let overallPercentage = 
+  let overallPercentage =
     (breakdown.skills.percentage * weights.skills) +
     (breakdown.eligibility.percentage * weights.eligibility) +
     (breakdown.requirements.percentage * weights.requirements);
@@ -69,16 +69,16 @@ function calculateSkillMatch(student, job) {
 
   const studentSkills = student.studentProfile?.technicalSkills || [];
   const studentSoftSkills = student.studentProfile?.softSkills || {};
-  
+
   // Create map of student skills by name (case-insensitive) and by skill ID
   const studentSkillByName = new Map();
   const studentSkillById = new Map();
-  
+
   // Add technical skills
   studentSkills.forEach(s => {
     const skillNameLower = (s.skillName || '').toLowerCase();
     const skillId = s.skillId?.toString() || '';
-    
+
     if (skillNameLower) {
       studentSkillByName.set(skillNameLower, s.selfRating || 0);
     }
@@ -104,7 +104,7 @@ function calculateSkillMatch(student, job) {
     if (skill) {
       const skillId = skill._id?.toString() || skill.toString();
       const skillName = skill.name?.toLowerCase() || '';
-      
+
       // Only set to 1 if not already in map (self-rated skills take precedence)
       if (skillId && !studentSkillById.has(skillId)) {
         studentSkillById.set(skillId, 1); // Has the skill, assume beginner
@@ -129,11 +129,11 @@ function calculateSkillMatch(student, job) {
 
     // Check if student has this skill - try ID first (most reliable), then name
     let studentLevel = 0;
-    
+
     if (skillId) {
       studentLevel = studentSkillById.get(skillId) || 0;
     }
-    
+
     // If not found by ID, try by name
     if (studentLevel === 0 && skillName) {
       studentLevel = studentSkillByName.get(skillName) || 0;
@@ -188,7 +188,7 @@ function calculateEligibilityMatch(student, job) {
       meets,
       studentValue: studentPct,
       jobRequirement: minPct,
-      message: meets 
+      message: meets
         ? `10th: ${studentPct}% (meets ${minPct}% requirement)`
         : `10th: ${studentPct}% (requires ${minPct}%)`
     };
@@ -208,7 +208,7 @@ function calculateEligibilityMatch(student, job) {
       meets,
       studentValue: studentPct,
       jobRequirement: minPct,
-      message: meets 
+      message: meets
         ? `12th: ${studentPct}% (meets ${minPct}% requirement)`
         : `12th: ${studentPct}% (requires ${minPct}%)`
     };
@@ -221,23 +221,23 @@ function calculateEligibilityMatch(student, job) {
     totalRequired++;
     const acceptedDegrees = eligibility.higherEducation.acceptedDegrees || [];
     const studentDegrees = (profile.higherEducation || []).map(h => h.degree?.toLowerCase());
-    
+
     let meets = false;
     if (acceptedDegrees.includes('Any Graduate') && studentDegrees.length > 0) {
       meets = true;
     } else {
-      meets = acceptedDegrees.some(deg => 
+      meets = acceptedDegrees.some(deg =>
         studentDegrees.some(sd => sd?.includes(deg.toLowerCase()))
       );
     }
-    
+
     if (meets) passedCount++;
     details.higherEducation = {
       required: true,
       meets,
       studentValue: studentDegrees.join(', ') || 'None',
       jobRequirement: acceptedDegrees.join(', '),
-      message: meets 
+      message: meets
         ? `Education: Matches requirement`
         : `Education: Requires ${acceptedDegrees.join('/')}`
     };
@@ -249,15 +249,19 @@ function calculateEligibilityMatch(student, job) {
   const requiredSchools = eligibility.schools || [];
   if (requiredSchools.length > 0) {
     totalRequired++;
-    const studentSchool = profile.currentSchool || '';
-    const meets = requiredSchools.includes(studentSchool);
+    const studentSchool = (profile.currentSchool || '').trim();
+    // Normalize for comparison
+    const normalizedStudentSchool = studentSchool.toLowerCase();
+    const normalizedRequiredSchools = requiredSchools.map(s => (s || '').trim().toLowerCase());
+
+    const meets = normalizedRequiredSchools.includes(normalizedStudentSchool);
     if (meets) passedCount++;
     details.school = {
       required: true,
       meets,
       studentValue: studentSchool || 'Not specified',
       jobRequirement: requiredSchools.join(', '),
-      message: meets 
+      message: meets
         ? `School: ${studentSchool} (eligible)`
         : `School: Requires ${requiredSchools.join('/')}`
     };
@@ -277,7 +281,7 @@ function calculateEligibilityMatch(student, job) {
       meets,
       studentValue: studentCampus,
       jobRequirement: `${requiredCampuses.length} campuses`,
-      message: meets 
+      message: meets
         ? `Campus: Eligible`
         : `Campus: Not in eligible list`
     };
@@ -298,7 +302,7 @@ function calculateEligibilityMatch(student, job) {
       meets,
       studentValue: studentModule || 'Not specified',
       jobRequirement: eligibility.minModule,
-      message: meets 
+      message: meets
         ? `Module: ${studentModule} (meets ${eligibility.minModule} requirement)`
         : `Module: Requires ${eligibility.minModule} or higher`
     };
@@ -319,7 +323,7 @@ function calculateEligibilityMatch(student, job) {
       meets,
       studentValue: estimatedCgpa.toFixed(1),
       jobRequirement: eligibility.minCgpa,
-      message: meets 
+      message: meets
         ? `CGPA: Meets requirement`
         : `CGPA: Requires ${eligibility.minCgpa}`
     };
@@ -338,7 +342,7 @@ function calculateEligibilityMatch(student, job) {
       meets,
       studentValue: studentGender || 'Not specified',
       jobRequirement: 'Female only',
-      message: meets 
+      message: meets
         ? `Gender: Eligible (Female-only job)`
         : `Gender: This job is for female candidates only`
     };
@@ -357,7 +361,7 @@ function calculateEligibilityMatch(student, job) {
       meets,
       studentValue: studentAttendance,
       jobRequirement: eligibility.minAttendance,
-      message: meets 
+      message: meets
         ? `Attendance: ${studentAttendance}% (meets ${eligibility.minAttendance}% requirement)`
         : `Attendance: ${studentAttendance}% (requires ${eligibility.minAttendance}%)`
     };
@@ -370,13 +374,13 @@ function calculateEligibilityMatch(student, job) {
     totalRequired++;
     const joiningDate = profile.dateOfJoining || profile.joiningDate;
     let monthsAtNavgurukul = 0;
-    
+
     if (joiningDate) {
       const joinDate = new Date(joiningDate);
       const now = new Date();
       monthsAtNavgurukul = Math.floor((now - joinDate) / (1000 * 60 * 60 * 24 * 30));
     }
-    
+
     const meets = monthsAtNavgurukul >= eligibility.minMonthsAtNavgurukul;
     if (meets) passedCount++;
     details.monthsAtNavgurukul = {
@@ -384,7 +388,7 @@ function calculateEligibilityMatch(student, job) {
       meets,
       studentValue: monthsAtNavgurukul,
       jobRequirement: eligibility.minMonthsAtNavgurukul,
-      message: meets 
+      message: meets
         ? `Time at Navgurukul: ${monthsAtNavgurukul} months (meets ${eligibility.minMonthsAtNavgurukul} months requirement)`
         : `Time at Navgurukul: ${monthsAtNavgurukul} months (requires ${eligibility.minMonthsAtNavgurukul} months)`
     };
@@ -417,7 +421,7 @@ function calculateRequirementsMatch(student, job, studentResponses = {}) {
     const req = customReqs[i];
     const studentResponse = studentResponses[i] || false;
     const meets = studentResponse === true;
-    
+
     if (meets || !req.isMandatory) {
       metCount++;
     }
@@ -453,7 +457,7 @@ function generateSummary(breakdown, overallPercentage) {
         .filter(s => !s.meets)
         .map(s => `${s.skillName} (need ${s.requiredLevelLabel})`)
         .slice(0, 3); // Show up to 3
-      
+
       const missing = breakdown.skills.required - breakdown.skills.matched;
       if (missingSkills.length > 0) {
         messages.push(`⚠️ ${missing} skill${missing > 1 ? 's' : ''} need improvement: ${missingSkills.join(', ')}${breakdown.skills.details.filter(s => !s.meets).length > 3 ? '...' : ''}`);
@@ -467,7 +471,7 @@ function generateSummary(breakdown, overallPercentage) {
   const failedEligibility = Object.entries(breakdown.eligibility.details)
     .filter(([_, detail]) => detail.required && !detail.meets)
     .map(([key, detail]) => detail.message);
-  
+
   if (failedEligibility.length > 0) {
     messages.push(`❌ Eligibility gaps: ${failedEligibility.join('; ')}`);
   } else if (breakdown.eligibility.total > 0) {

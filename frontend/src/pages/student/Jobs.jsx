@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { jobAPI, authAPI, settingsAPI } from '../../services/api';
+import { jobAPI, authAPI, settingsAPI, jobReadinessAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Badge } from '../../components/common/UIComponents';
 import { Briefcase, MapPin, DollarSign, Calendar, Search, Filter, Star, AlertCircle, GraduationCap, Clock, CheckCircle, Users, TrendingUp, XCircle, Heart } from 'lucide-react';
 import { format } from 'date-fns';
@@ -22,13 +22,13 @@ const COLOR_VARIANTS = {
 const JobStatusBadge = ({ status, stages }) => {
   // Find the stage configuration
   const stage = stages.find(s => s.id === status);
-  
+
   // Don't show badge if stage is not visible to students or not found
   if (!stage || !stage.visibleToStudents) return null;
-  
+
   const variant = COLOR_VARIANTS[stage.color] || 'default';
   const label = stage.studentLabel || stage.label;
-  
+
   return (
     <Badge variant={variant} className="flex items-center gap-1">
       {label}
@@ -48,10 +48,12 @@ const StudentJobs = () => {
   const [internshipPagination, setInternshipPagination] = useState({ current: 1, pages: 1, total: 0 });
   const [filters, setFilters] = useState({ search: '' });
   const [pipelineStages, setPipelineStages] = useState([]);
+  const [readiness, setReadiness] = useState(null);
 
   useEffect(() => {
     fetchProfileStatus();
     fetchPipelineStages();
+    fetchReadiness();
   }, []);
 
   const fetchPipelineStages = async () => {
@@ -60,6 +62,15 @@ const StudentJobs = () => {
       setPipelineStages(response.data.data || []);
     } catch (error) {
       console.error('Error fetching pipeline stages:', error);
+    }
+  };
+
+  const fetchReadiness = async () => {
+    try {
+      const response = await jobReadinessAPI.getMyStatus();
+      setReadiness(response.data);
+    } catch (error) {
+      console.error('Error fetching readiness:', error);
     }
   };
 
@@ -154,8 +165,8 @@ const StudentJobs = () => {
     return `Up to ${format(salary.max)}`;
   };
 
-  const displayJobs = activeTab === 'matching' 
-    ? matchingJobs 
+  const displayJobs = activeTab === 'matching'
+    ? matchingJobs
     : (activeCategory === 'jobs' ? jobs : internships);
 
   const pagination = activeCategory === 'jobs' ? jobPagination : internshipPagination;
@@ -171,7 +182,7 @@ const StudentJobs = () => {
             <div>
               <h4 className="font-medium text-yellow-800">Profile Approval Required</h4>
               <p className="text-yellow-700 text-sm mt-1">
-                {profileStatus === 'pending_approval' 
+                {profileStatus === 'pending_approval'
                   ? 'Your profile is pending approval by Campus POC. You can browse jobs but cannot apply until approved.'
                   : 'Your profile needs to be submitted and approved by Campus POC before you can apply for jobs. '}
                 <Link to="/student/profile" className="underline font-medium">Go to Profile</Link>
@@ -187,8 +198,8 @@ const StudentJobs = () => {
           {activeCategory === 'jobs' ? 'Job Listings' : 'Internship Opportunities'}
         </h1>
         <p className="text-gray-600">
-          {activeCategory === 'jobs' 
-            ? 'Find full-time, part-time, and contract opportunities' 
+          {activeCategory === 'jobs'
+            ? 'Find full-time, part-time, and contract opportunities'
             : 'Find internship opportunities to kickstart your career'}
         </p>
       </div>
@@ -197,22 +208,20 @@ const StudentJobs = () => {
       <div className="flex gap-4">
         <button
           onClick={() => { setActiveCategory('jobs'); setActiveTab('all'); }}
-          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
-            activeCategory === 'jobs'
+          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${activeCategory === 'jobs'
               ? 'bg-primary-600 text-white shadow-lg'
               : 'bg-white text-gray-600 border hover:border-primary-300 hover:text-primary-600'
-          }`}
+            }`}
         >
           <Briefcase className="w-5 h-5" />
           Jobs
         </button>
         <button
           onClick={() => { setActiveCategory('internships'); setActiveTab('all'); }}
-          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
-            activeCategory === 'internships'
+          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${activeCategory === 'internships'
               ? 'bg-primary-600 text-white shadow-lg'
               : 'bg-white text-gray-600 border hover:border-primary-300 hover:text-primary-600'
-          }`}
+            }`}
         >
           <GraduationCap className="w-5 h-5" />
           Internships
@@ -223,21 +232,19 @@ const StudentJobs = () => {
       <div className="flex gap-4 border-b">
         <button
           onClick={() => setActiveTab('all')}
-          className={`pb-3 px-1 font-medium transition-colors ${
-            activeTab === 'all'
+          className={`pb-3 px-1 font-medium transition-colors ${activeTab === 'all'
               ? 'text-primary-600 border-b-2 border-primary-600'
               : 'text-gray-500 hover:text-gray-700'
-          }`}
+            }`}
         >
           All {activeCategory === 'jobs' ? 'Jobs' : 'Internships'}
         </button>
         <button
           onClick={() => setActiveTab('matching')}
-          className={`pb-3 px-1 font-medium transition-colors flex items-center gap-2 ${
-            activeTab === 'matching'
+          className={`pb-3 px-1 font-medium transition-colors flex items-center gap-2 ${activeTab === 'matching'
               ? 'text-primary-600 border-b-2 border-primary-600'
               : 'text-gray-500 hover:text-gray-700'
-          }`}
+            }`}
         >
           <Star className="w-4 h-4" />
           Matching {activeCategory === 'jobs' ? 'Jobs' : 'Internships'}
@@ -278,10 +285,9 @@ const StudentJobs = () => {
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-start gap-3">
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${
-                      job.jobType === 'internship' ? 'bg-purple-100' : 'bg-gray-100'
-                    }`}>
-                      {job.jobType === 'internship' 
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${job.jobType === 'internship' ? 'bg-purple-100' : 'bg-gray-100'
+                      }`}>
+                      {job.jobType === 'internship'
                         ? <GraduationCap className="w-6 h-6 text-purple-500" />
                         : <Briefcase className="w-6 h-6 text-gray-400" />
                       }
@@ -311,15 +317,14 @@ const StudentJobs = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Skills */}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {job.requiredSkills?.slice(0, 5).map((s) => (
-                      <span 
-                        key={s.skill?._id} 
-                        className={`text-xs px-2 py-1 rounded ${
-                          s.required ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'
-                        }`}
+                      <span
+                        key={s.skill?._id}
+                        className={`text-xs px-2 py-1 rounded ${s.required ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'
+                          }`}
                       >
                         {s.skill?.name}
                       </span>
@@ -335,37 +340,73 @@ const StudentJobs = () => {
                 <div className="flex flex-col items-end gap-2">
                   <JobStatusBadge status={job.status} stages={pipelineStages} />
                   <StatusBadge status={job.jobType} />
-                  
-                  {/* Match Percentage Display */}
-                  {job.matchDetails && (
-                    <div className="text-right">
-                      <div className={`text-lg font-bold ${
-                        job.matchDetails.overallPercentage >= 80 ? 'text-green-600' :
-                        job.matchDetails.overallPercentage >= 60 ? 'text-blue-600' :
-                        job.matchDetails.overallPercentage >= 40 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
+
+                  {/* Use Job Readiness logic for Apply/Interest */}
+                  <div className="text-right">
+                    {job.matchDetails?.overallPercentage !== undefined && (
+                      <div className={`text-lg font-bold ${job.matchDetails.overallPercentage >= 80 ? 'text-green-600' :
+                          job.matchDetails.overallPercentage >= 60 ? 'text-blue-600' :
+                            job.matchDetails.overallPercentage >= 40 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
                         {job.matchDetails.overallPercentage}% Match
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {job.matchDetails.canApply ? (
-                          <span className="flex items-center gap-1 text-green-600">
-                            <CheckCircle className="w-3 h-3" /> Eligible to apply
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-orange-600">
-                            <Heart className="w-3 h-3" /> Show interest
-                          </span>
-                        )}
-                      </div>
+                    )}
+
+                    <div className="text-xs text-gray-500 mt-1">
+                      {(() => {
+                        const studentPct = readiness?.readinessPercentage || 0;
+                        const requirement = job.eligibility?.readinessRequirement || 'yes';
+
+                        if (requirement === 'yes') {
+                          if (studentPct === 100) {
+                            return (
+                              <span className="flex items-center gap-1 text-green-600">
+                                <CheckCircle className="w-3 h-3" /> Ready to Apply
+                              </span>
+                            );
+                          } else {
+                            return (
+                              <span className="flex items-center gap-1 text-orange-600">
+                                <Heart className="w-3 h-3" /> Expression of Interest
+                              </span>
+                            );
+                          }
+                        } else if (requirement === 'in_progress') {
+                          if (studentPct >= 100) {
+                            return (
+                              <span className="flex items-center gap-1 text-green-600">
+                                <CheckCircle className="w-3 h-3" /> Ready to Apply
+                              </span>
+                            );
+                          } else if (studentPct >= 30) {
+                            return (
+                              <span className="flex items-center gap-1 text-indigo-600">
+                                <Clock className="w-3 h-3" /> Eligible (In Process)
+                              </span>
+                            );
+                          } else {
+                            return (
+                              <span className="flex items-center gap-1 text-orange-600">
+                                <Heart className="w-3 h-3" /> Expression of Interest
+                              </span>
+                            );
+                          }
+                        } else {
+                          return (
+                            <span className="flex items-center gap-1 text-green-600">
+                              <CheckCircle className="w-3 h-3" /> Open to Apply
+                            </span>
+                          );
+                        }
+                      })()}
                     </div>
-                  )}
-                  
+                  </div>
+
                   {/* Legacy match percentage for backward compatibility */}
                   {!job.matchDetails && job.matchPercentage !== undefined && (
-                    <div className={`text-sm font-medium ${
-                      job.matchPercentage >= 70 ? 'text-green-600' :
-                      job.matchPercentage >= 40 ? 'text-yellow-600' : 'text-red-600'
-                    }`}>
+                    <div className={`text-sm font-medium ${job.matchPercentage >= 70 ? 'text-green-600' :
+                        job.matchPercentage >= 40 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
                       {job.matchPercentage}% Match
                     </div>
                   )}
@@ -373,7 +414,7 @@ const StudentJobs = () => {
               </div>
             </Link>
           ))}
-          
+
           {activeTab === 'all' && (
             <Pagination
               current={pagination.current}
@@ -386,7 +427,7 @@ const StudentJobs = () => {
         <EmptyState
           icon={activeCategory === 'jobs' ? Briefcase : GraduationCap}
           title={`No ${activeCategory} found`}
-          description={activeTab === 'matching' 
+          description={activeTab === 'matching'
             ? "Add and get your skills approved to see matching opportunities"
             : `No ${activeCategory === 'jobs' ? 'job' : 'internship'} postings available at the moment`
           }

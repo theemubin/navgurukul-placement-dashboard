@@ -20,7 +20,11 @@ const notificationSchema = new mongoose.Schema({
       'placement_confirmed',
       'profile_approval_needed',
       'profile_approved',
+      'profile_approval_needed',
+      'profile_approved',
       'profile_needs_revision',
+      'job_question',
+      'question_answered',
       'general'
     ],
     required: true

@@ -11,7 +11,7 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: function() {
+    required: function () {
       return !this.googleId; // Password not required if using Google OAuth
     },
     minlength: 6
@@ -102,6 +102,11 @@ const userSchema = new mongoose.Schema({
       enum: ['draft', 'pending_approval', 'approved', 'needs_revision'],
       default: 'draft'
     },
+    currentStatus: {
+      type: String,
+      enum: ['Active', 'Placed', 'Dropout', 'Internship Paid', 'Internship UnPaid'],
+      default: 'Active'
+    },
     revisionNotes: String,
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -109,7 +114,13 @@ const userSchema = new mongoose.Schema({
     },
     approvedAt: Date,
     lastSubmittedAt: Date,
-    
+
+    // Snapshot of the last approved profile for diffing
+    lastApprovedSnapshot: {
+      type: mongoose.Schema.Types.Mixed, // Stores the entire studentProfile object
+      default: null
+    },
+
     // Current Navgurukul Education
     currentSchool: {
       type: String,
@@ -126,7 +137,7 @@ const userSchema = new mongoose.Schema({
     },
     currentModule: String, // For Programming/Business - selected from predefined list
     customModuleDescription: String, // For Finance/Education - free text
-    
+
     // 10th Grade Details
     tenthGrade: {
       passingYear: Number,
@@ -137,7 +148,7 @@ const userSchema = new mongoose.Schema({
       },
       percentage: Number
     },
-    
+
     // 12th Grade Details
     twelfthGrade: {
       passingYear: Number,
@@ -148,12 +159,16 @@ const userSchema = new mongoose.Schema({
       },
       percentage: Number
     },
-    
+
     // Higher Education (can have multiple)
     higherEducation: [{
-      degree: String,
       institution: String,
-      fieldOfStudy: String,
+      department: String,
+      specialization: String,
+      degree: String,
+      fieldOfStudy: String, // Keeping for legacy/compatibility
+      pincode: String,
+      district: String,
       startYear: Number,
       endYear: Number,
       percentage: Number,
@@ -162,7 +177,7 @@ const userSchema = new mongoose.Schema({
         default: false
       }
     }],
-    
+
     // Courses completed
     courses: [{
       courseName: String,
@@ -175,7 +190,7 @@ const userSchema = new mongoose.Schema({
         default: Date.now
       }
     }],
-    
+
     // Hometown with pincode-based location
     hometown: {
       pincode: String,
@@ -183,12 +198,12 @@ const userSchema = new mongoose.Schema({
       district: String,
       state: String
     },
-    
+
     // Open for roles (job preferences)
     openForRoles: [{
       type: String
     }],
-    
+
     // Technical Skills with self-assessment rubric
     technicalSkills: [{
       skillId: {
@@ -207,7 +222,7 @@ const userSchema = new mongoose.Schema({
         default: Date.now
       }
     }],
-    
+
     // English Proficiency (CEFR Levels) - legacy, kept for backward compatibility
     englishProficiency: {
       speaking: {
@@ -219,7 +234,7 @@ const userSchema = new mongoose.Schema({
         enum: ['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']
       }
     },
-    
+
     // Multi-language proficiency with CEFR levels
     languages: [{
       language: {
@@ -250,7 +265,7 @@ const userSchema = new mongoose.Schema({
         default: false
       }
     }],
-    
+
     // Soft Skills with levels (0-4)
     softSkills: {
       communication: { type: Number, min: 0, max: 4, default: 0 },
@@ -264,7 +279,22 @@ const userSchema = new mongoose.Schema({
       teamwork: { type: Number, min: 0, max: 4, default: 0 },
       emotionalIntelligence: { type: Number, min: 0, max: 4, default: 0 }
     },
-    
+
+    // Council Service
+    councilService: [{
+      post: { type: String, required: true },
+      monthsServed: { type: Number, required: true, min: 0 },
+      certificateUrl: String,
+      status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+      },
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      approvedAt: Date,
+      addedAt: { type: Date, default: Date.now }
+    }],
+
     // Legacy skills (for POC approval)
     skills: [{
       skill: {
@@ -282,7 +312,7 @@ const userSchema = new mongoose.Schema({
       },
       approvedAt: Date
     }],
-    
+
     resume: String,
     resumeLink: String,
     linkedIn: String,
@@ -296,19 +326,19 @@ const userSchema = new mongoose.Schema({
 });
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
 // Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
 // Get full name
-userSchema.virtual('fullName').get(function() {
+userSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`;
 });
 

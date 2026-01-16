@@ -73,7 +73,7 @@ const jobSchema = new mongoose.Schema({
   eligibility: {
     // When all criteria fields are empty/null, the job is open for everyone
     openForAll: { type: Boolean, default: true }, // Explicit flag for open positions
-    
+
     // Academic Requirements
     tenthGrade: {
       required: { type: Boolean, default: false },
@@ -86,45 +86,58 @@ const jobSchema = new mongoose.Schema({
     higherEducation: {
       required: { type: Boolean, default: false },
       level: { type: String, enum: ['', 'bachelor', 'master', 'any'], default: '' },
-      acceptedDegrees: { 
-        type: [String], 
+      acceptedDegrees: {
+        type: [String],
         default: [] // e.g., ['BA', 'BSc', 'BCom', 'BCA', 'BTech', 'Any Graduate']
       }
     },
-    
+
     // Navgurukul Specific
     schools: { type: [String], default: [] }, // Navgurukul schools - empty means all schools
     campuses: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Campus'
     }], // empty means all campuses eligible
-    
+
     // Module hierarchy requirement (school-specific)
-    minModule: { 
-      type: String, 
+    minModule: {
+      type: String,
       default: null
       // No enum constraint - modules vary by school
     },
-    
+
     // Other Requirements
     certifications: { type: [String], default: [] }, // Required certifications
-    
+
+    // Council Post Eligibility
+    councilPosts: [{
+      post: String,
+      minMonths: { type: Number, default: 0 }
+    }],
+
     // English Proficiency (CEFR levels)
     englishWriting: { type: String, enum: ['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'], default: '' },
     englishSpeaking: { type: String, enum: ['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'], default: '' },
-    
+
     // Shortlist Deadline - Students must complete profile before this
     shortlistDeadline: { type: Date, default: null },
-    
+
     // Gender requirement (for female-only jobs)
     femaleOnly: { type: Boolean, default: false },
-    
+
     // Minimum months at Navgurukul
     minMonthsAtNavgurukul: { type: Number, default: null },
-    
+
     // Minimum attendance percentage
     minAttendance: { type: Number, default: null },
-    
+
+    // Job Readiness requirement
+    readinessRequirement: {
+      type: String,
+      enum: ['yes', 'no', 'in_progress'],
+      default: 'yes'
+    },
+
     // Legacy fields for backward compatibility
     minCgpa: { type: Number, default: null }, // Deprecated - keeping for backward compatibility
     departments: { type: [String], default: [] },

@@ -206,6 +206,12 @@ const studentJobReadinessSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Label for readiness (Job Ready, Under Process, Not Job Ready)
+  readinessStatus: {
+    type: String,
+    enum: ['Job Ready', 'Job Ready Under Process', 'Not Job Ready'],
+    default: 'Not Job Ready'
+  },
   // Job ready status
   isJobReady: {
     type: Boolean,
@@ -232,7 +238,7 @@ studentJobReadinessSchema.index({ campus: 1, school: 1 });
 studentJobReadinessSchema.index({ isJobReady: 1 });
 
 // Method to calculate readiness percentage
-studentJobReadinessSchema.methods.calculateReadiness = async function() {
+studentJobReadinessSchema.methods.calculateReadiness = async function () {
   const config = await JobReadinessConfig.findOne({
     school: this.school,
     $or: [{ campus: this.campus }, { campus: null }],
@@ -240,36 +246,60 @@ studentJobReadinessSchema.methods.calculateReadiness = async function() {
   }).sort({ campus: -1 }); // Prefer campus-specific config
 
   if (!config || !config.criteria || config.criteria.length === 0) {
-    this.readinessPercentage = 0;
-    return 0;
+    this.readinessPercentage = 100;
+    this.isJobReady = true;
+    this.readinessStatus = 'Job Ready';
+    return 100;
   }
 
   const activeCriteria = config.criteria.filter(c => c.isActive);
+
+  if (activeCriteria.length === 0) {
+    this.readinessPercentage = 100;
+    this.isJobReady = true;
+    this.readinessStatus = 'Job Ready';
+    return 100;
+  }
+
   let totalWeight = 0;
   let achievedWeight = 0;
+  let allMandatoryCompleted = true;
 
   for (const criterion of activeCriteria) {
     totalWeight += criterion.weight;
     const studentCriterion = this.criteriaStatus.find(
       s => s.criteriaId === criterion.criteriaId
     );
-    
-    if (studentCriterion && 
-        (studentCriterion.status === 'completed' || studentCriterion.status === 'verified')) {
+
+    const isCompleted = studentCriterion &&
+      (studentCriterion.status === 'completed' || studentCriterion.status === 'verified');
+
+    if (isCompleted) {
       achievedWeight += criterion.weight;
+    }
+
+    if (criterion.isMandatory && !isCompleted) {
+      allMandatoryCompleted = false;
     }
   }
 
-  this.readinessPercentage = totalWeight > 0 
-    ? Math.round((achievedWeight / totalWeight) * 100) 
+  this.readinessPercentage = totalWeight > 0
+    ? Math.round((achievedWeight / totalWeight) * 100)
     : 0;
-  
-  // Auto-set job ready if all mandatory criteria are completed
-  const mandatoryCriteria = activeCriteria.filter(c => c.isMandatory);
-  this.isJobReady = mandatoryCriteria.every(mc => {
-    const status = this.criteriaStatus.find(s => s.criteriaId === mc.criteriaId);
-    return status && (status.status === 'completed' || status.status === 'verified');
-  });
+
+  // Set status label based on percentage
+  if (this.readinessPercentage === 100) {
+    this.readinessStatus = 'Job Ready';
+  } else if (this.readinessPercentage >= 30) {
+    this.readinessStatus = 'Job Ready Under Process';
+  } else {
+    this.readinessStatus = 'Not Job Ready';
+  }
+
+  // Auto-set job ready if all mandatory criteria are completed AND it's 100%? 
+  // User said "100% is Job Ready", so let's stick to percentage for isJobReady if it reaches 100%
+  // But also respect mandatory criteria.
+  this.isJobReady = (this.readinessPercentage === 100) && allMandatoryCompleted;
 
   return this.readinessPercentage;
 };

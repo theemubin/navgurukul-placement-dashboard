@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { jobAPI, applicationAPI, authAPI } from '../../services/api';
+import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
-import { 
-  ArrowLeft, Briefcase, MapPin, DollarSign, Calendar, Clock, 
+import {
+  ArrowLeft, Briefcase, MapPin, DollarSign, Calendar, Clock,
   Users, Building, Globe, CheckCircle, AlertCircle, Heart, XCircle,
-  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History
+  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History, Check, Trash
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -15,7 +15,7 @@ const MatchCircle = ({ percentage }) => {
   const radius = 40;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
-  
+
   const getColor = () => {
     if (percentage >= 80) return '#22c55e'; // green
     if (percentage >= 60) return '#3b82f6'; // blue
@@ -86,10 +86,9 @@ const JobDetails = () => {
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [showInterestModal, setShowInterestModal] = useState(false);
   const [interestForm, setInterestForm] = useState({
-    reason: '',
-    acknowledgedGaps: [],
     improvementPlan: ''
   });
+  const [readiness, setReadiness] = useState(null);
   const [customResponses, setCustomResponses] = useState({});
   const [questions, setQuestions] = useState([]);
   const [newQuestion, setNewQuestion] = useState('');
@@ -99,12 +98,19 @@ const JobDetails = () => {
     fetchJobWithMatch();
     checkIfApplied();
     fetchProfileStatus();
-    fetchQuestions();
+    fetchReadiness();
   }, [id]);
 
+  useEffect(() => {
+    if (job) {
+      fetchQuestions();
+    }
+  }, [job]);
+
   const fetchQuestions = async () => {
+    if (!job?.company?.name) return;
     try {
-      const response = await jobAPI.getQuestions(id);
+      const response = await questionAPI.getQuestions({ company: job.company.name });
       setQuestions(response.data);
     } catch (error) {
       console.error('Error fetching questions:', error);
@@ -118,8 +124,8 @@ const JobDetails = () => {
     }
     setAskingQuestion(true);
     try {
-      await jobAPI.askQuestion(id, newQuestion);
-      toast.success('Question submitted! The coordinator will answer it soon.');
+      await questionAPI.askQuestion({ jobId: id, question: newQuestion });
+      toast.success('Question submitted!');
       setNewQuestion('');
       fetchQuestions();
     } catch (error) {
@@ -135,6 +141,15 @@ const JobDetails = () => {
       setProfileStatus(response.data?.studentProfile?.profileStatus || 'draft');
     } catch (error) {
       console.error('Error fetching profile status:', error);
+    }
+  };
+
+  const fetchReadiness = async () => {
+    try {
+      const response = await jobReadinessAPI.getMyStatus();
+      setReadiness(response.data);
+    } catch (error) {
+      console.error('Error fetching readiness:', error);
     }
   };
 
@@ -171,7 +186,7 @@ const JobDetails = () => {
   const handleApply = async () => {
     // Check mandatory custom requirements
     if (job.customRequirements?.length > 0) {
-      const missingMandatory = job.customRequirements.some((req, index) => 
+      const missingMandatory = job.customRequirements.some((req, index) =>
         req.isMandatory && !customResponses[index]
       );
       if (missingMandatory) {
@@ -198,6 +213,19 @@ const JobDetails = () => {
       setCustomResponses({});
     } catch (error) {
       toast.error(error.response?.data?.message || 'Error submitting application');
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleInterestExpression = async () => {
+    setApplying(true);
+    try {
+      await applicationAPI.apply(id, '', [], 'interest');
+      toast.success('Interest expressed successfully!');
+      setHasApplied(true);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error submitting interest');
     } finally {
       setApplying(false);
     }
@@ -355,21 +383,44 @@ const JobDetails = () => {
               <XCircle className="w-5 h-5" />
               <span>Interest request not approved</span>
             </div>
-          ) : matchDetails && !matchDetails.canApply ? (
-            <button
-              onClick={() => setShowInterestModal(true)}
-              className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2"
-            >
-              <Heart className="w-4 h-4" />
-              Show Interest
-            </button>
           ) : (
-            <button
-              onClick={() => setShowApplyModal(true)}
-              className="btn btn-primary"
-            >
-              Apply Now
-            </button>
+            <div className="flex gap-3">
+              {(() => {
+                const studentPct = readiness?.readinessPercentage || 0;
+                const requirement = job.eligibility?.readinessRequirement || 'yes';
+
+                let canApply = false;
+                if (requirement === 'yes') {
+                  canApply = studentPct === 100;
+                } else if (requirement === 'in_progress') {
+                  canApply = studentPct >= 30;
+                } else {
+                  canApply = true;
+                }
+
+                if (canApply) {
+                  return (
+                    <button
+                      onClick={() => setShowApplyModal(true)}
+                      className="btn btn-primary"
+                    >
+                      Apply Now
+                    </button>
+                  );
+                } else {
+                  return (
+                    <button
+                      onClick={handleInterestExpression}
+                      disabled={applying}
+                      className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2"
+                    >
+                      <Heart className="w-4 h-4" />
+                      {applying ? 'Submitting...' : 'Show Interest'}
+                    </button>
+                  );
+                }
+              })()}
+            </div>
           )}
         </div>
       </div>
@@ -382,7 +433,7 @@ const JobDetails = () => {
               <MatchCircle percentage={matchDetails.overallPercentage} />
               <p className="text-sm text-gray-600 mt-2">Your Match Score</p>
             </div>
-            
+
             <div className="flex-1 space-y-4">
               {/* Summary Messages */}
               <div className="space-y-1">
@@ -480,21 +531,32 @@ const JobDetails = () => {
             </div>
           )}
 
-          {/* FAQ Section */}
+          {/* Company Forum Section */}
           <div className="card">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <MessageCircle className="w-5 h-5" />
-              Questions & Answers
-            </h2>
-            
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <MessageCircle className="w-5 h-5" />
+                Company Forum
+              </h2>
+              {questions.filter(q => !q.answer).length > 0 && (
+                <span className="bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full text-xs font-medium">
+                  {questions.filter(q => !q.answer).length} unanswered
+                </span>
+              )}
+            </div>
+
+            <p className="text-sm text-gray-500 mb-4">
+              Questions asked here are visible to all students applying for {job.company?.name}.
+            </p>
+
             {/* Ask a Question */}
-            <div className="mb-4">
+            <div className="mb-6">
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={newQuestion}
                   onChange={(e) => setNewQuestion(e.target.value)}
-                  placeholder="Ask a question about this job..."
+                  placeholder={`Ask a question about ${job.company?.name}...`}
                   className="flex-1"
                 />
                 <button
@@ -506,32 +568,88 @@ const JobDetails = () => {
                   {askingQuestion ? 'Sending...' : 'Ask'}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Min 10 characters. Questions will be answered by the coordinator.</p>
+              <p className="text-xs text-gray-500 mt-1">Min 10 characters. Your identity will be kept anonymous to other students.</p>
             </div>
 
             {/* Questions List */}
             {questions.length > 0 ? (
               <div className="space-y-4">
                 {questions.map((q, idx) => (
-                  <div key={idx} className="border-l-4 border-primary-200 pl-4">
-                    <p className="font-medium text-gray-900">{q.question}</p>
+                  <div key={q._id || idx} className="border-l-4 border-primary-200 pl-4 py-1">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-gray-900">{q.question}</p>
+                        <div className="flex gap-2 text-xs text-gray-400 mt-1">
+                          <span>{format(new Date(q.createdAt), 'MMM d, yyyy')}</span>
+                          {q.jobTitle && q.jobTitle !== job.title && (
+                            <span>• via {q.jobTitle}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Coordinator Actions */}
+                      {['coordinator', 'manager', 'campus_poc'].includes(JSON.parse(localStorage.getItem('user'))?.role) && (
+                        <button
+                          onClick={async () => {
+                            if (window.confirm('Delete this question?')) {
+                              try {
+                                await questionAPI.deleteQuestion(q._id);
+                                toast.success('Question deleted');
+                                fetchQuestions();
+                              } catch (e) { toast.error('Failed to delete'); }
+                            }
+                          }}
+                          className="text-red-400 hover:text-red-600 p-1"
+                          title="Delete Question"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
                     {q.answer ? (
-                      <div className="mt-2 bg-gray-50 p-3 rounded">
+                      <div className="mt-2 bg-gray-50 p-3 rounded relative group">
                         <p className="text-gray-700 text-sm">{q.answer}</p>
-                        {q.answeredBy && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Answered by {q.answeredBy.firstName} {q.answeredBy.lastName}
+                        {q.answeredAt && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            Answered {format(new Date(q.answeredAt), 'MMM d, yyyy')}
                           </p>
                         )}
+
+                        {/* Coordinator Edit Answer Button (Optional enhancement) */}
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-500 italic mt-1">Awaiting response...</p>
+                      <div className="mt-2">
+                        {['coordinator', 'manager', 'campus_poc'].includes(JSON.parse(localStorage.getItem('user'))?.role) ? (
+                          <div className="flex gap-2 mt-2">
+                            <input
+                              type="text"
+                              placeholder="Write an answer..."
+                              className="text-sm py-1 px-2 border rounded flex-1"
+                              onKeyDown={async (e) => {
+                                if (e.key === 'Enter') {
+                                  try {
+                                    await questionAPI.answerQuestion(q._id, e.target.value);
+                                    toast.success('Answer submitted');
+                                    fetchQuestions();
+                                  } catch (err) { toast.error('Failed to submit answer'); }
+                                }
+                              }}
+                            />
+                            <button className="btn btn-xs btn-primary">Answer</button>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">Awaiting response...</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500 text-sm">No questions yet. Be the first to ask!</p>
+              <p className="text-gray-500 text-sm text-center py-4 bg-gray-50 rounded">
+                No questions asked yet for {job.company?.name}.
+              </p>
             )}
           </div>
 
@@ -581,20 +699,19 @@ const JobDetails = () => {
                 const skillDetail = matchDetails?.breakdown?.skills?.details?.find(
                   d => d.skillId === (s.skill?._id?.toString() || s.skill?.toString())
                 );
-                
+
                 const proficiencyLevels = ['None', 'Beginner', 'Intermediate', 'Advanced', 'Expert'];
                 const requiredLevel = s.proficiencyLevel || 1;
                 const studentLevel = skillDetail?.studentLevel || 0;
                 const meets = skillDetail?.meets || false;
-                
+
                 return (
-                  <div 
+                  <div
                     key={s.skill?._id}
-                    className={`p-3 rounded-lg border-2 ${
-                      meets 
-                        ? 'border-green-200 bg-green-50' 
-                        : 'border-orange-200 bg-orange-50'
-                    }`}
+                    className={`p-3 rounded-lg border-2 ${meets
+                      ? 'border-green-200 bg-green-50'
+                      : 'border-orange-200 bg-orange-50'
+                      }`}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-gray-900">{s.skill?.name || 'Unknown Skill'}</span>
@@ -604,7 +721,7 @@ const JobDetails = () => {
                         <AlertCircle className="w-5 h-5 text-orange-600" />
                       )}
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Required Level</p>
@@ -615,7 +732,7 @@ const JobDetails = () => {
                         <ProficiencyBadge level={studentLevel} />
                       </div>
                     </div>
-                    
+
                     {!meets && (
                       <p className="text-xs text-orange-700 mt-2">
                         ⚠️ You need to improve from {proficiencyLevels[studentLevel]} to {proficiencyLevels[requiredLevel]}
@@ -685,15 +802,15 @@ const JobDetails = () => {
                   <span className="font-medium">{job.eligibility.minMonthsAtNavgurukul} months</span>
                 </div>
               )}
-              {(!job.eligibility?.schools?.length && 
-                !job.eligibility?.campuses?.length && 
+              {(!job.eligibility?.schools?.length &&
+                !job.eligibility?.campuses?.length &&
                 !job.eligibility?.minCgpa &&
                 !job.eligibility?.minModule &&
                 !job.eligibility?.femaleOnly &&
                 !job.eligibility?.minAttendance &&
                 !job.eligibility?.minMonthsAtNavgurukul) && (
-                <p className="text-green-600 font-medium">Open for all students</p>
-              )}
+                  <p className="text-green-600 font-medium">Open for all students</p>
+                )}
             </div>
           </div>
 
@@ -707,7 +824,7 @@ const JobDetails = () => {
               <div>
                 <p className="font-medium">{job.company?.name}</p>
                 {job.company?.website && (
-                  <a 
+                  <a
                     href={job.company.website}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -741,18 +858,33 @@ const JobDetails = () => {
                 <h4 className="font-medium text-gray-800 mb-3">Please confirm the following:</h4>
                 <div className="space-y-3">
                   {job.customRequirements.map((req, index) => (
-                    <div key={index} className="flex items-start gap-3">
+                    <div key={index}
+                      className="flex items-start gap-3 group cursor-pointer"
+                      onClick={() => setCustomResponses(prev => ({
+                        ...prev,
+                        [index]: !prev[index]
+                      }))}
+                    >
+                      <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-colors duration-200 ease-in-out ${customResponses[index]
+                        ? 'bg-blue-600 border-blue-600'
+                        : 'bg-white border-gray-300 group-hover:border-blue-500'
+                        }`}>
+                        {customResponses[index] && (
+                          <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                        )}
+                      </div>
+
                       <input
                         type="checkbox"
                         id={`req-${index}`}
                         checked={customResponses[index] || false}
-                        onChange={(e) => setCustomResponses({
-                          ...customResponses,
-                          [index]: e.target.checked
-                        })}
-                        className="mt-1 rounded"
+                        onChange={() => { }} // Handled by parent div
+                        className="hidden"
                       />
-                      <label htmlFor={`req-${index}`} className="text-sm text-gray-700">
+                      <label
+                        htmlFor={`req-${index}`}
+                        className="text-sm text-gray-700 cursor-pointer select-none"
+                      >
                         {req.requirement}
                         {req.isMandatory && <span className="text-red-500 ml-1">*</span>}
                       </label>
@@ -777,15 +909,15 @@ const JobDetails = () => {
               />
             </div>
             <div className="flex justify-end gap-3">
-              <button 
-                onClick={() => setShowApplyModal(false)} 
+              <button
+                onClick={() => setShowApplyModal(false)}
                 className="btn btn-secondary"
                 disabled={applying}
               >
                 Cancel
               </button>
-              <button 
-                onClick={handleApply} 
+              <button
+                onClick={handleApply}
                 className="btn btn-primary"
                 disabled={applying || (job.customRequirements?.some(r => r.isMandatory && !customResponses[job.customRequirements.indexOf(r)]))}
               >
@@ -866,15 +998,15 @@ const JobDetails = () => {
             </div>
 
             <div className="flex justify-end gap-3 mt-6">
-              <button 
-                onClick={() => setShowInterestModal(false)} 
+              <button
+                onClick={() => setShowInterestModal(false)}
                 className="btn btn-secondary"
                 disabled={submittingInterest}
               >
                 Cancel
               </button>
-              <button 
-                onClick={handleSubmitInterest} 
+              <button
+                onClick={handleSubmitInterest}
                 className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2"
                 disabled={submittingInterest || interestForm.reason.length < 50}
               >

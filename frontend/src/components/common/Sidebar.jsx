@@ -1,26 +1,34 @@
+import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { questionAPI } from '../../services/api';
 import {
-  Home,
-  User,
-  Briefcase,
-  FileText,
-  Users,
-  CheckSquare,
-  BarChart3,
-  Settings,
-  X,
-  GraduationCap,
-  ClipboardCheck,
-  Target,
-  ExternalLink,
-  Heart,
-  Key
+  Home, User, Briefcase, FileText, Users, CheckSquare, BarChart3, Settings,
+  X, GraduationCap, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const location = useLocation();
+  const [forumUnreadCount, setForumUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'coordinator') {
+      fetchUnreadCount();
+      const interval = setInterval(fetchUnreadCount, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await questionAPI.getQuestions();
+      const count = response.data.filter(q => !q.answer).length;
+      setForumUnreadCount(count);
+    } catch (error) {
+      console.error('Error fetching forum unread count:', error);
+    }
+  };
 
   const getNavItems = () => {
     switch (user?.role) {
@@ -41,7 +49,6 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/campus-poc/skill-approvals', icon: CheckSquare, label: 'Skill Approvals' },
           { path: '/campus-poc/skills', icon: Settings, label: 'Skill Categories' },
           { path: '/campus-poc/job-readiness', icon: Target, label: 'Job Readiness' },
-          { path: '/campus-poc/job-readiness-criteria', icon: CheckSquare, label: 'Readiness Criteria' },
           { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' },
           { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests' }
         ];
@@ -50,8 +57,10 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/coordinator', icon: Home, label: 'Dashboard', exact: true },
           { path: '/coordinator/jobs', icon: Briefcase, label: 'Job Management' },
           { path: '/coordinator/applications', icon: FileText, label: 'Applications' },
+          { path: '/coordinator/interest-requests', icon: Heart, label: 'Interest Requests' },
+          { path: '/coordinator/forum', icon: MessageCircle, label: 'Q&A Forum', badge: forumUnreadCount },
           { path: '/coordinator/skills', icon: Settings, label: 'Skill Categories' },
-          { path: '/campus-poc/job-readiness-criteria', icon: CheckSquare, label: 'Readiness Criteria' },
+          { path: '/coordinator/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/coordinator/settings', icon: Key, label: 'Settings' }
         ];
       case 'manager':
@@ -59,7 +68,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/manager', icon: Home, label: 'Dashboard', exact: true },
           { path: '/manager/reports', icon: BarChart3, label: 'Reports & Export' },
           { path: '/manager/settings', icon: Settings, label: 'Platform Settings' },
-          { path: '/campus-poc/job-readiness-criteria', icon: CheckSquare, label: 'Readiness Criteria' }
+          { path: '/manager/job-readiness', icon: Target, label: 'Job Readiness' }
         ];
       default:
         return [];
@@ -93,7 +102,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             <p className="text-xs text-gray-500">Dashboard</p>
           </div>
         </div>
-        <button 
+        <button
           onClick={onClose}
           className="md:hidden p-2 rounded-lg hover:bg-gray-100"
         >
@@ -122,7 +131,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       <nav className="p-4 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.exact 
+          const isActive = item.exact
             ? location.pathname === item.path
             : location.pathname.startsWith(item.path);
 
@@ -132,15 +141,22 @@ const Sidebar = ({ isOpen, onClose }) => {
               to={item.path}
               onClick={onClose}
               className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors
-                ${isActive 
-                  ? 'bg-primary-50 text-primary-700' 
+                flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors
+                ${isActive
+                  ? 'bg-primary-50 text-primary-700'
                   : 'text-gray-600 hover:bg-gray-100'
                 }
               `}
             >
-              <Icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
+              <div className="flex items-center gap-3">
+                <Icon className="w-5 h-5" />
+                <span className="font-medium">{item.label}</span>
+              </div>
+              {item.badge > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  {item.badge}
+                </span>
+              )}
             </NavLink>
           );
         })}

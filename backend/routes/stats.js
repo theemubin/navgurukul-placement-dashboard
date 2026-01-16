@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Job = require('../models/Job');
 const Application = require('../models/Application');
 const Campus = require('../models/Campus');
+const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
 
 // Get dashboard stats (Managers and Coordinators)
@@ -123,11 +124,11 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const monthlyTrend = await Application.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           status: 'selected',
           updatedAt: { $gte: sixMonthsAgo }
-        } 
+        }
       },
       {
         $group: {
@@ -148,8 +149,8 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
         totalApplications,
         totalPlacements,
         activeCompanies,
-        placementRate: totalStudents > 0 
-          ? Math.round((totalPlacements / totalStudents) * 100) 
+        placementRate: totalStudents > 0
+          ? Math.round((totalPlacements / totalStudents) * 100)
           : 0
       },
       applicationsByStatus: applicationsByStatus.reduce((acc, item) => {
@@ -172,17 +173,17 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
 router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const campuses = await Campus.find({ isActive: true });
-    
+
     const campusStats = await Promise.all(campuses.map(async (campus) => {
-      const students = await User.countDocuments({ 
-        role: 'student', 
+      const students = await User.countDocuments({
+        role: 'student',
         campus: campus._id,
-        isActive: true 
+        isActive: true
       });
 
-      const studentIds = await User.find({ 
-        role: 'student', 
-        campus: campus._id 
+      const studentIds = await User.find({
+        role: 'student',
+        campus: campus._id
       }).select('_id');
 
       const placements = await Application.countDocuments({
@@ -199,7 +200,7 @@ router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res
         students,
         placements,
         target: campus.placementTarget,
-        progress: campus.placementTarget > 0 
+        progress: campus.placementTarget > 0
           ? Math.round((placements / campus.placementTarget) * 100)
           : 0
       };
@@ -222,7 +223,7 @@ router.get('/export', auth, authorize('coordinator', 'manager'), async (req, res
 
     if (type === 'placements') {
       headers = ['Student Name', 'Email', 'Campus', 'Company', 'Job Title', 'Job Type', 'Placement Date'];
-      
+
       let query = { status: 'selected' };
       if (campus) {
         const campusStudents = await User.find({ campus }).select('_id');
@@ -248,7 +249,7 @@ router.get('/export', auth, authorize('coordinator', 'manager'), async (req, res
       ]);
     } else if (type === 'students') {
       headers = ['Name', 'Email', 'Enrollment No', 'Department', 'Batch', 'CGPA', 'Campus', 'Placement Status'];
-      
+
       let query = { role: 'student' };
       if (campus) query.campus = campus;
 
@@ -313,9 +314,9 @@ router.get('/student', auth, authorize('student'), async (req, res) => {
 router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) => {
   try {
     // Get all coordinators
-    const coordinators = await User.find({ 
-      role: 'coordinator', 
-      isActive: true 
+    const coordinators = await User.find({
+      role: 'coordinator',
+      isActive: true
     }).select('firstName lastName email');
 
     // Get jobs stats by coordinator
@@ -371,8 +372,8 @@ router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) =>
         activeJobs,
         totalApplications: applications,
         placements,
-        conversionRate: applications > 0 
-          ? Math.round((placements / applications) * 100) 
+        conversionRate: applications > 0
+          ? Math.round((placements / applications) * 100)
           : 0
       };
     }));
@@ -391,12 +392,19 @@ router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) =>
 router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const campusId = req.user.campus;
+    const { status: filterStatus } = req.query; // Filter by Active/Placed etc
 
-    const students = await User.find({ 
-      role: 'student', 
+    let studentQuery = {
+      role: 'student',
       campus: campusId,
-      isActive: true 
-    });
+      isActive: true
+    };
+
+    if (filterStatus) {
+      studentQuery['studentProfile.currentStatus'] = filterStatus;
+    }
+
+    const students = await User.find(studentQuery);
 
     const studentIds = students.map(s => s._id);
 
@@ -406,7 +414,7 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
     }, 0);
 
     // Pending profile approvals
-    const pendingProfiles = students.filter(s => 
+    const pendingProfiles = students.filter(s =>
       s.studentProfile?.profileStatus === 'pending_approval'
     ).length;
 
@@ -417,15 +425,58 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
 
     const placements = applications.filter(a => a.status === 'selected').length;
 
+    // Student status counts
+    const statusCounts = {
+      'Active': 0,
+      'Placed': 0,
+      'Dropout': 0,
+      'Internship Paid': 0,
+      'Internship UnPaid': 0
+    };
+
+    students.forEach(s => {
+      const status = s.studentProfile?.currentStatus || 'Active';
+      if (statusCounts[status] !== undefined) {
+        statusCounts[status]++;
+      }
+    });
+
+    // Readiness pool stats
+    const readinessRecords = await StudentJobReadiness.find({
+      student: { $in: studentIds }
+    });
+
+    const readinessPool = {
+      'Job Ready': 0,
+      'Job Ready Under Process': 0,
+      'Not Job Ready': 0
+    };
+
+    readinessRecords.forEach(record => {
+      const status = record.readinessStatus || 'Not Job Ready';
+      if (readinessPool[status] !== undefined) {
+        readinessPool[status]++;
+      }
+    });
+
+    // Interest count
+    const interestCount = await Application.countDocuments({
+      student: { $in: studentIds },
+      applicationType: 'interest'
+    });
+
     res.json({
       totalStudents: students.length,
       pendingSkillApprovals: pendingSkills,
       pendingProfileApprovals: pendingProfiles,
       totalApplications: applications.length,
       totalPlacements: placements,
-      placementRate: students.length > 0 
-        ? Math.round((placements / students.length) * 100) 
-        : 0
+      placementRate: students.length > 0
+        ? Math.round((placements / students.length) * 100)
+        : 0,
+      statusCounts,
+      readinessPool,
+      interestCount
     });
   } catch (error) {
     console.error('Get campus POC stats error:', error);
@@ -463,7 +514,7 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
       job: jobId,
       student: { $in: students.map(s => s._id) }
     }).select('student status');
-    
+
     applications.forEach(app => {
       applicationMap[app.student.toString()] = app.status;
     });
@@ -474,12 +525,12 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
         .filter(s => s.verified)
         .map(s => s.skill?._id?.toString())
         .filter(Boolean);
-      
+
       const requiredSkillIds = (job.requiredSkills || [])
         .filter(s => s.isRequired)
         .map(s => s.skill?._id?.toString())
         .filter(Boolean);
-      
+
       const matchedSkills = studentSkillIds.filter(id => requiredSkillIds.includes(id)).length;
       const totalRequired = requiredSkillIds.length;
       const skillMatch = totalRequired > 0 ? Math.round((matchedSkills / totalRequired) * 100) : 100;
@@ -600,10 +651,10 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
     const { cycleId } = req.query;
 
     // Get students for this campus (optionally filtered by cycle)
-    let studentQuery = { 
-      role: 'student', 
+    let studentQuery = {
+      role: 'student',
       campus: campusId,
-      isActive: true 
+      isActive: true
     };
 
     if (cycleId) {
@@ -643,20 +694,20 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
           }
         };
       }
-      
+
       companyMap[companyName].totalApplications++;
       companyMap[companyName].statusCounts[app.status]++;
-      
+
       // Group by job within company
       const jobTitle = app.job?.title || 'Unknown';
       if (!companyMap[companyName].jobs[jobTitle]) {
         // Calculate eligible students for this job based on campus eligibility
         const jobEligibility = app.job?.eligibility || {};
         let eligibleCount = totalEligibleStudents;
-        
+
         // If job has specific campus restrictions, count accordingly
         if (jobEligibility.campuses && jobEligibility.campuses.length > 0) {
-          const campusMatches = jobEligibility.campuses.some(c => 
+          const campusMatches = jobEligibility.campuses.some(c =>
             c.toString() === campusId.toString()
           );
           eligibleCount = campusMatches ? totalEligibleStudents : 0;
@@ -670,7 +721,7 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
           applications: []
         };
       }
-      
+
       companyMap[companyName].jobs[jobTitle].applications.push({
         applicationId: app._id,
         studentId: app.student?._id,
@@ -707,10 +758,10 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc'), async (
     const campusId = req.user.campus;
     const { cycleId } = req.query;
 
-    let studentQuery = { 
-      role: 'student', 
+    let studentQuery = {
+      role: 'student',
       campus: campusId,
-      isActive: true 
+      isActive: true
     };
 
     if (cycleId) {
@@ -737,7 +788,7 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc'), async (
     // Group by school
     const schoolMap = {};
     const schools = ['School of Programming', 'School of Business', 'School of Finance', 'School of Education', 'School of Second Chance', 'Unassigned'];
-    
+
     schools.forEach(school => {
       schoolMap[school] = {
         school,
@@ -754,7 +805,7 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc'), async (
     students.forEach(student => {
       const school = student.studentProfile?.currentSchool || 'Unassigned';
       const studentApps = applications.filter(a => a.student.toString() === student._id.toString());
-      
+
       const placed = studentApps.some(a => a.status === 'selected');
       const inProgress = studentApps.some(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status));
 
@@ -795,10 +846,10 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
     const campusId = req.user.campus;
     const { cycleId, status, school } = req.query;
 
-    let studentQuery = { 
-      role: 'student', 
+    let studentQuery = {
+      role: 'student',
       campus: campusId,
-      isActive: true 
+      isActive: true
     };
 
     if (cycleId) {
@@ -827,7 +878,7 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
       const studentApps = applications.filter(a => a.student.toString() === student._id.toString());
       const selectedApp = studentApps.find(a => a.status === 'selected');
       const inProgressApps = studentApps.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status));
-      
+
       let placementStatus = 'not_applied';
       if (selectedApp) placementStatus = 'placed';
       else if (inProgressApps.length > 0) placementStatus = 'in_progress';
@@ -924,7 +975,7 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), async (req,
         applications: applications.length,
         placed,
         inProgress,
-        progress: cycle.targetPlacements > 0 
+        progress: cycle.targetPlacements > 0
           ? Math.round((placed / cycle.targetPlacements) * 100)
           : (students.length > 0 ? Math.round((placed / students.length) * 100) : 0)
       };

@@ -49,7 +49,7 @@ export const userAPI = {
   updateProfile: (data) => api.put('/users/profile', data),
   submitProfile: () => api.post('/users/profile/submit'),
   addSkill: (skillId) => api.post('/users/profile/skills', { skillId }),
-  approveSkill: (studentId, skillId, status) => 
+  approveSkill: (studentId, skillId, status) =>
     api.put(`/users/students/${studentId}/skills/${skillId}`, { status }),
   getPendingSkills: () => api.get('/users/pending-skills'),
   getPendingProfiles: () => api.get('/users/pending-profiles'),
@@ -60,6 +60,7 @@ export const userAPI = {
   updateStudentProfile: (studentId, data) =>
     api.put(`/users/students/${studentId}/profile`, data),
   getEligibleCount: (params) => api.get('/users/eligible-count', { params }),
+  getStudentLocations: () => api.get('/users/student-locations'),
   // Managed campuses for Campus POCs
   getManagedCampuses: () => api.get('/users/managed-campuses'),
   updateManagedCampuses: (campusIds) => api.put('/users/managed-campuses', { campusIds }),
@@ -85,7 +86,8 @@ export const userAPI = {
   getAIKeys: () => api.get('/users/me/ai-keys'),
   addAIKey: (data) => api.post('/users/me/ai-keys', data),
   updateAIKey: (keyId, data) => api.patch(`/users/me/ai-keys/${keyId}`, data),
-  deleteAIKey: (keyId) => api.delete(`/users/me/ai-keys/${keyId}`)
+  deleteAIKey: (keyId) => api.delete(`/users/me/ai-keys/${keyId}`),
+  updateStudentStatus: (studentId, status) => api.put(`/users/students/${studentId}/status`, { status })
 };
 
 // Settings APIs
@@ -104,10 +106,13 @@ export const settingsAPI = {
   updatePipelineStage: (stageId, updates) => api.put(`/settings/pipeline-stages/${stageId}`, updates),
   deletePipelineStage: (stageId) => api.delete(`/settings/pipeline-stages/${stageId}`),
   reorderPipelineStages: (stageIds) => api.put('/settings/pipeline-stages-order', { stageIds }),
-  // AI config
-  getAIConfig: () => api.get('/settings/ai-config'),
   updateAIConfig: (config) => api.put('/settings/ai-config', config),
-  getAIStatus: () => api.get('/settings/ai-status')
+  getAIStatus: () => api.get('/settings/ai-status'),
+  updateSettings: (data) => api.put('/settings', data),
+  addHigherEducationOption: (data) => api.post('/settings/higher-education/add', data),
+  addInstitutionOption: (institution, pincode = '') => api.post('/settings/institutions/add', { institution, pincode }),
+  getEducationAnalytics: () => api.get('/settings/analytics/education'),
+  renameEducationItem: (data) => api.post('/settings/education/rename', data)
 };
 
 // Job APIs
@@ -116,6 +121,8 @@ export const jobAPI = {
   getMatchingJobs: () => api.get('/jobs/matching'),
   getJob: (id) => api.get(`/jobs/${id}`),
   getJobWithMatch: (id) => api.get(`/jobs/${id}/match`),
+  getCompanies: () => api.get('/jobs/companies'),
+  getLocations: () => api.get('/jobs/locations'),
   createJob: (data) => api.post('/jobs', data),
   updateJob: (id, data) => api.put(`/jobs/${id}`, data),
   deleteJob: (id) => api.delete(`/jobs/${id}`),
@@ -146,7 +153,7 @@ export const jobAPI = {
   updateExpectedDate: (jobId, expectedUpdateDate, expectedUpdateNote) => api.patch(`/jobs/${jobId}/expected-update`, { expectedUpdateDate, expectedUpdateNote }),
   // Coordinator assignment
   assignCoordinator: (jobId, coordinatorId) => api.patch(`/jobs/${jobId}/coordinator`, { coordinatorId }),
-  getCoordinatorJobStats: () => api.get('/jobs/stats/coordinator-jobs') // Renamed to avoid conflict with statsAPI.getCoordinatorStats
+  getCoordinatorJobStats: () => api.get('/jobs/stats/coordinator-jobs')
 };
 
 // Application APIs
@@ -154,7 +161,7 @@ export const applicationAPI = {
   getApplications: (params) => api.get('/applications', { params }),
   getApplication: (id) => api.get(`/applications/${id}`),
   apply: (jobId, coverLetter, customResponses) => api.post('/applications', { jobId, coverLetter, customResponses }),
-  updateStatus: (id, status, feedback) => 
+  updateStatus: (id, status, feedback) =>
     api.put(`/applications/${id}/status`, { status, feedback }),
   updateRound: (id, roundData) => api.put(`/applications/${id}/rounds`, roundData),
   addRecommendation: (id, reason) => api.put(`/applications/${id}/recommend`, { reason }),
@@ -175,6 +182,14 @@ export const skillAPI = {
   deleteSkill: (id) => api.delete(`/skills/${id}`)
 };
 
+// Questions APIs (Company Forum)
+export const questionAPI = {
+  getQuestions: (params) => api.get('/questions', { params }),
+  askQuestion: (data) => api.post('/questions', data),
+  answerQuestion: (id, answer) => api.patch(`/questions/${id}/answer`, { answer }),
+  deleteQuestion: (id) => api.delete(`/questions/${id}`)
+};
+
 // Notification APIs
 export const notificationAPI = {
   getNotifications: (params) => api.get('/notifications', { params }),
@@ -191,7 +206,7 @@ export const statsAPI = {
   getDashboardStats: (params) => api.get('/stats/dashboard', { params }), // Alias for Manager Dashboard
   getCampusStats: () => api.get('/stats/campus'),
   getStudentStats: () => api.get('/stats/student'),
-  getCampusPocStats: () => api.get('/stats/campus-poc'),
+  getCampusPocStats: (status) => api.get('/stats/campus-poc', { params: { status } }),
   getEligibleJobs: () => api.get('/stats/campus-poc/eligible-jobs'),
   getJobEligibleStudents: (jobId) => api.get(`/stats/campus-poc/job/${jobId}/eligible-students`),
   getCompanyTracking: (cycleId) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }),
@@ -265,14 +280,14 @@ export const jobReadinessAPI = {
   },
   // Campus PoC review
   getCampusStudents: (params) => api.get('/job-readiness/campus-students', { params }),
-  verifyCriterion: (studentId, criteriaId, status, notes) => 
+  verifyCriterion: (studentId, criteriaId, status, notes) =>
     api.patch(`/job-readiness/student/${studentId}/verify/${criteriaId}`, { status, verificationNotes: notes }),
-  addPocComment: (studentId, criteriaId, comment) => 
+  addPocComment: (studentId, criteriaId, comment) =>
     api.post(`/job-readiness/student/${studentId}/comment/${criteriaId}`, { comment }),
-  addPocRating: (studentId, criteriaId, rating) => 
+  addPocRating: (studentId, criteriaId, rating) =>
     api.post(`/job-readiness/student/${studentId}/rate/${criteriaId}`, { rating }),
   getStudentReadiness: (studentId) => api.get(`/job-readiness/student/${studentId}`),
-  approveStudentJobReady: (studentId, data) => 
+  approveStudentJobReady: (studentId, data) =>
     api.patch(`/job-readiness/student/${studentId}/approve`, data)
 };
 

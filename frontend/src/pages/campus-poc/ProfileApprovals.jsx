@@ -48,7 +48,7 @@ const ProfileApprovals = () => {
       setError('Please provide comments for requesting changes');
       return;
     }
-    
+
     try {
       setActionLoading(true);
       await userAPI.requestProfileChanges(selectedStudent._id, rejectComments);
@@ -123,12 +123,58 @@ const ProfileApprovals = () => {
       // Profile status
       profileStatus: sp.profileStatus || 'draft',
       lastSubmittedAt: sp.lastSubmittedAt,
+      lastApprovedSnapshot: sp.lastApprovedSnapshot || null
     };
   };
 
   const getRatingLabel = (rating) => {
     const labels = ['Not Set', 'Basic', 'Intermediate', 'Advanced', 'Expert'];
     return labels[rating] || 'Not Set';
+  };
+
+  // Helper to check if a field has changed
+  const hasChanged = (currentValue, snapshotValue) => {
+    if (!snapshotValue) return false;
+
+    // Normalize values for comparison
+    const normalize = (val) => {
+      if (val === null || val === undefined) return '';
+      return String(val).trim();
+    };
+
+    return normalize(currentValue) !== normalize(snapshotValue);
+  };
+
+  // Helper to check deeper objects (hometown, education)
+  const isObjectChanged = (currentObj, snapshotObj, fields) => {
+    if (!snapshotObj) return false;
+    return fields.some(field => hasChanged(currentObj[field], snapshotObj[field]));
+  };
+
+  // Render a field with optional highlight
+  const RenderField = ({ label, value, snapshotValue, className = '' }) => {
+    const changed = hasChanged(value, snapshotValue);
+    const isNew = snapshotValue === null || snapshotValue === undefined;
+
+    return (
+      <div className={`${className}`}>
+        <span className="text-sm text-gray-500">{label}</span>
+        <div className="font-medium">
+          {changed ? (
+            <div className="bg-yellow-50 border-l-2 border-yellow-400 pl-2 py-1">
+              <span className="text-yellow-800">{value || 'Not provided'}</span>
+              {snapshotValue && (
+                <div className="text-xs text-red-500 mt-0.5 strike-through">
+                  <span className="line-through opacity-75">{snapshotValue}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-gray-900">{value || 'Not provided'}</span>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Calculate profile completion percentage
@@ -191,84 +237,84 @@ const ProfileApprovals = () => {
           {pendingProfiles.map((student) => {
             const completion = calculateCompletion(student);
             return (
-            <Card key={student._id} className="hover:shadow-lg transition-shadow">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center">
-                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <span className="text-blue-600 font-semibold text-lg">
-                      {student.firstName?.charAt(0)}{student.lastName?.charAt(0)}
+              <Card key={student._id} className="hover:shadow-lg transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center">
+                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                      <span className="text-blue-600 font-semibold text-lg">
+                        {student.firstName?.charAt(0)}{student.lastName?.charAt(0)}
+                      </span>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {student.firstName} {student.lastName}
+                      </h3>
+                      <p className="text-sm text-gray-500">{student.email}</p>
+                    </div>
+                  </div>
+                  <Badge variant="warning">Pending</Badge>
+                </div>
+
+                {/* Profile Completion Bar */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-500">Profile Completion</span>
+                    <span className={`font-semibold ${completion >= 80 ? 'text-green-600' : completion >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{completion}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${completion >= 80 ? 'bg-green-500' : completion >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                      style={{ width: `${completion}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center text-sm">
+                    <span className="text-gray-500 w-24">School:</span>
+                    <span className="text-gray-900">{student.studentProfile?.currentSchool || student.currentEducation?.school || 'Not set'}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <span className="text-gray-500 w-24">Module:</span>
+                    <span className="text-gray-900">{student.studentProfile?.currentModule || student.currentEducation?.currentModule || 'Not set'}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <span className="text-gray-500 w-24">Location:</span>
+                    <span className="text-gray-900">
+                      {student.studentProfile?.hometown?.district
+                        ? `${student.studentProfile.hometown.district}, ${student.studentProfile.hometown.state}`
+                        : (student.hometown?.district ? `${student.hometown.district}, ${student.hometown.state}` : 'Not set')}
                     </span>
                   </div>
-                  <div className="ml-3">
-                    <h3 className="text-lg font-medium text-gray-900">
-                      {student.firstName} {student.lastName}
-                    </h3>
-                    <p className="text-sm text-gray-500">{student.email}</p>
+                  <div className="flex items-center text-sm">
+                    <span className="text-gray-500 w-24">Roles:</span>
+                    <span className="text-gray-900">
+                      {(student.studentProfile?.openForRoles?.length > 0 || student.rolePreferences?.length > 0)
+                        ? `${(student.studentProfile?.openForRoles || student.rolePreferences).slice(0, 2).join(', ')}${(student.studentProfile?.openForRoles || student.rolePreferences).length > 2 ? '...' : ''}`
+                        : 'Not set'}
+                    </span>
                   </div>
                 </div>
-                <Badge variant="warning">Pending</Badge>
-              </div>
 
-              {/* Profile Completion Bar */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-500">Profile Completion</span>
-                  <span className={`font-semibold ${completion >= 80 ? 'text-green-600' : completion >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{completion}%</span>
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => openDetailsModal(student)}
+                  >
+                    View Details
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => handleApprove(student._id)}
+                  >
+                    Approve
+                  </Button>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div 
-                    className={`h-1.5 rounded-full ${completion >= 80 ? 'bg-green-500' : completion >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                    style={{ width: `${completion}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center text-sm">
-                  <span className="text-gray-500 w-24">School:</span>
-                  <span className="text-gray-900">{student.studentProfile?.currentSchool || student.currentEducation?.school || 'Not set'}</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <span className="text-gray-500 w-24">Module:</span>
-                  <span className="text-gray-900">{student.studentProfile?.currentModule || student.currentEducation?.currentModule || 'Not set'}</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <span className="text-gray-500 w-24">Location:</span>
-                  <span className="text-gray-900">
-                    {student.studentProfile?.hometown?.district 
-                      ? `${student.studentProfile.hometown.district}, ${student.studentProfile.hometown.state}` 
-                      : (student.hometown?.district ? `${student.hometown.district}, ${student.hometown.state}` : 'Not set')}
-                  </span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <span className="text-gray-500 w-24">Roles:</span>
-                  <span className="text-gray-900">
-                    {(student.studentProfile?.openForRoles?.length > 0 || student.rolePreferences?.length > 0)
-                      ? `${(student.studentProfile?.openForRoles || student.rolePreferences).slice(0, 2).join(', ')}${(student.studentProfile?.openForRoles || student.rolePreferences).length > 2 ? '...' : ''}`
-                      : 'Not set'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => openDetailsModal(student)}
-                >
-                  View Details
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleApprove(student._id)}
-                >
-                  Approve
-                </Button>
-              </div>
-            </Card>
+              </Card>
             );
           })}
         </div>
@@ -278,203 +324,360 @@ const ProfileApprovals = () => {
       {showDetailsModal && selectedStudent && (() => {
         const profileData = getProfileData(selectedStudent);
         const completionPercent = calculateCompletion(selectedStudent);
-        
+
         return (
-        <Modal
-          isOpen={showDetailsModal}
-          onClose={() => setShowDetailsModal(false)}
-          title={`${selectedStudent.firstName} ${selectedStudent.lastName}'s Profile`}
-          size="xl"
-        >
-          <div className="max-h-[70vh] overflow-y-auto">
-            {/* Profile Completion Bar */}
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Profile Completion</span>
-                <span className="text-sm font-bold text-primary-600">{completionPercent}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className={`h-2 rounded-full ${completionPercent >= 80 ? 'bg-green-500' : completionPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                  style={{ width: `${completionPercent}%` }}
-                />
-              </div>
-              {profileData.lastSubmittedAt && (
-                <p className="text-xs text-gray-500 mt-2">
-                  Submitted: {new Date(profileData.lastSubmittedAt).toLocaleString()}
-                </p>
-              )}
-            </div>
-
-            {/* Personal Information */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Personal Information</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-sm text-gray-500">Email</span>
-                  <p className="font-medium">{selectedStudent.email}</p>
+          <Modal
+            isOpen={showDetailsModal}
+            onClose={() => setShowDetailsModal(false)}
+            title={`${selectedStudent.firstName} ${selectedStudent.lastName}'s Profile`}
+            size="xl"
+          >
+            <div className="max-h-[70vh] overflow-y-auto">
+              {/* Profile Completion Bar */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Profile Completion</span>
+                  <span className="text-sm font-bold text-primary-600">{completionPercent}%</span>
                 </div>
-                <div>
-                  <span className="text-sm text-gray-500">Phone</span>
-                  <p className="font-medium">{selectedStudent.phone || 'Not provided'}</p>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${completionPercent >= 80 ? 'bg-green-500' : completionPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                    style={{ width: `${completionPercent}%` }}
+                  />
                 </div>
-                <div>
-                  <span className="text-sm text-gray-500">Date of Birth</span>
-                  <p className="font-medium">
-                    {selectedStudent.dateOfBirth 
-                      ? new Date(selectedStudent.dateOfBirth).toLocaleDateString() 
-                      : 'Not provided'}
+                {profileData.lastSubmittedAt && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Submitted: {new Date(profileData.lastSubmittedAt).toLocaleString()}
                   </p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">Gender</span>
-                  <p className="font-medium capitalize">{selectedStudent.gender || 'Not provided'}</p>
+                )}
+              </div>
+
+              {/* Personal Information */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Personal Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <RenderField
+                    label="Email"
+                    value={selectedStudent.email}
+                    snapshotValue={null} // Email usually doesn't change here or isn't part of profile snapshot in same way
+                  />
+                  <RenderField
+                    label="Phone"
+                    value={selectedStudent.phone}
+                    snapshotValue={profileData.lastApprovedSnapshot?.phone}
+                  />
+                  <RenderField
+                    label="Date of Birth"
+                    value={selectedStudent.dateOfBirth ? new Date(selectedStudent.dateOfBirth).toLocaleDateString() : ''}
+                    snapshotValue={profileData.lastApprovedSnapshot?.dateOfBirth ? new Date(profileData.lastApprovedSnapshot.dateOfBirth).toLocaleDateString() : ''}
+                  />
+                  <RenderField
+                    label="Gender"
+                    value={selectedStudent.gender}
+                    snapshotValue={profileData.lastApprovedSnapshot?.gender}
+                    className="capitalize"
+                  />
                 </div>
               </div>
-            </div>
 
-            {/* Hometown */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Hometown</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-sm text-gray-500">Pincode</span>
-                  <p className="font-medium">{profileData.hometown.pincode || 'Not provided'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">Village/Town</span>
-                  <p className="font-medium">{profileData.hometown.village || 'Not provided'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">District</span>
-                  <p className="font-medium">{profileData.hometown.district || 'Not provided'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">State</span>
-                  <p className="font-medium">{profileData.hometown.state || 'Not provided'}</p>
+              {/* Hometown */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Hometown</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <RenderField
+                    label="Pincode"
+                    value={profileData.hometown.pincode}
+                    snapshotValue={profileData.lastApprovedSnapshot?.hometown?.pincode}
+                  />
+                  <RenderField
+                    label="Village/Town"
+                    value={profileData.hometown.village}
+                    snapshotValue={profileData.lastApprovedSnapshot?.hometown?.village}
+                  />
+                  <RenderField
+                    label="District"
+                    value={profileData.hometown.district}
+                    snapshotValue={profileData.lastApprovedSnapshot?.hometown?.district}
+                  />
+                  <RenderField
+                    label="State"
+                    value={profileData.hometown.state}
+                    snapshotValue={profileData.lastApprovedSnapshot?.hometown?.state}
+                  />
                 </div>
               </div>
-            </div>
 
-            {/* Current Education (Navgurukul) */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Current Education (Navgurukul)</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-sm text-gray-500">School</span>
-                  <p className="font-medium">{profileData.currentSchool || 'Not provided'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">Specialization/Description</span>
-                  <p className="font-medium">{profileData.specialization || 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">Joining Date</span>
-                  <p className="font-medium">
-                    {profileData.joiningDate 
-                      ? new Date(profileData.joiningDate).toLocaleDateString() 
-                      : 'Not provided'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">Current Module</span>
-                  <p className="font-medium">{profileData.currentModule || 'Not provided'}</p>
+              {/* Current Education (Navgurukul) */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Current Education (Navgurukul)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <RenderField
+                    label="School"
+                    value={profileData.currentSchool}
+                    snapshotValue={profileData.lastApprovedSnapshot?.currentSchool}
+                  />
+                  <RenderField
+                    label="Specialization/Description"
+                    value={profileData.specialization}
+                    snapshotValue={profileData.lastApprovedSnapshot?.customModuleDescription}
+                  />
+                  <RenderField
+                    label="Joining Date"
+                    value={profileData.joiningDate ? new Date(profileData.joiningDate).toLocaleDateString() : ''}
+                    snapshotValue={profileData.lastApprovedSnapshot?.joiningDate ? new Date(profileData.lastApprovedSnapshot.joiningDate).toLocaleDateString() : ''}
+                  />
+                  <RenderField
+                    label="Current Module"
+                    value={profileData.currentModule}
+                    snapshotValue={profileData.lastApprovedSnapshot?.currentModule}
+                  />
                 </div>
               </div>
-            </div>
 
-            {/* Previous Education */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Previous Education</h3>
-              
-              {/* 10th Grade */}
-              {profileData.tenthGrade.percentage && (
-                <div className="mb-4">
-                  <h4 className="font-medium text-gray-700 mb-2">10th Grade</h4>
-                  <div className="grid grid-cols-3 gap-4 pl-4">
-                    <div>
-                      <span className="text-sm text-gray-500">Percentage</span>
-                      <p className="font-medium">{profileData.tenthGrade.percentage}%</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-500">Board</span>
-                      <p className="font-medium">{profileData.tenthGrade.board || 'Not provided'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-500">Year of Passing</span>
-                      <p className="font-medium">{profileData.tenthGrade.passingYear || profileData.tenthGrade.yearOfPassing || 'Not provided'}</p>
+              {/* Previous Education */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Previous Education</h3>
+
+                {/* 10th Grade */}
+                {profileData.tenthGrade.percentage && (
+                  <div className={`mb-4 ${isObjectChanged(profileData.tenthGrade, profileData.lastApprovedSnapshot?.tenthGrade, ['percentage', 'board', 'passingYear']) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                    <h4 className="font-medium text-gray-700 mb-2">
+                      10th Grade
+                      {isObjectChanged(profileData.tenthGrade, profileData.lastApprovedSnapshot?.tenthGrade, ['percentage', 'board', 'passingYear']) && (
+                        <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                      )}
+                    </h4>
+                    <div className="grid grid-cols-3 gap-4 pl-4">
+                      <RenderField
+                        label="Percentage"
+                        value={`${profileData.tenthGrade.percentage}%`}
+                        snapshotValue={profileData.lastApprovedSnapshot?.tenthGrade?.percentage ? `${profileData.lastApprovedSnapshot.tenthGrade.percentage}%` : null}
+                      />
+                      <RenderField
+                        label="Board"
+                        value={profileData.tenthGrade.board}
+                        snapshotValue={profileData.lastApprovedSnapshot?.tenthGrade?.board}
+                      />
+                      <RenderField
+                        label="Year"
+                        value={profileData.tenthGrade.passingYear}
+                        snapshotValue={profileData.lastApprovedSnapshot?.tenthGrade?.passingYear}
+                      />
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* 12th Grade */}
-              {profileData.twelfthGrade.percentage && (
-                <div className="mb-4">
-                  <h4 className="font-medium text-gray-700 mb-2">12th Grade</h4>
-                  <div className="grid grid-cols-4 gap-4 pl-4">
-                    <div>
-                      <span className="text-sm text-gray-500">Percentage</span>
-                      <p className="font-medium">{profileData.twelfthGrade.percentage}%</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-500">Board</span>
-                      <p className="font-medium">{profileData.twelfthGrade.board || 'Not provided'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-500">Stream</span>
-                      <p className="font-medium">{profileData.twelfthGrade.stream || 'Not provided'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-500">Year of Passing</span>
-                      <p className="font-medium">{profileData.twelfthGrade.passingYear || profileData.twelfthGrade.yearOfPassing || 'Not provided'}</p>
+                {/* 12th Grade */}
+                {profileData.twelfthGrade.percentage && (
+                  <div className={`mb-4 ${isObjectChanged(profileData.twelfthGrade, profileData.lastApprovedSnapshot?.twelfthGrade, ['percentage', 'board', 'stream', 'passingYear']) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                    <h4 className="font-medium text-gray-700 mb-2">
+                      12th Grade
+                      {isObjectChanged(profileData.twelfthGrade, profileData.lastApprovedSnapshot?.twelfthGrade, ['percentage', 'board', 'stream', 'passingYear']) && (
+                        <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                      )}
+                    </h4>
+                    <div className="grid grid-cols-4 gap-4 pl-4">
+                      <RenderField
+                        label="Percentage"
+                        value={`${profileData.twelfthGrade.percentage}%`}
+                        snapshotValue={profileData.lastApprovedSnapshot?.twelfthGrade?.percentage ? `${profileData.lastApprovedSnapshot.twelfthGrade.percentage}%` : null}
+                      />
+                      <RenderField
+                        label="Board"
+                        value={profileData.twelfthGrade.board}
+                        snapshotValue={profileData.lastApprovedSnapshot?.twelfthGrade?.board}
+                      />
+                      <RenderField
+                        label="Stream"
+                        value={profileData.twelfthGrade.stream}
+                        snapshotValue={profileData.lastApprovedSnapshot?.twelfthGrade?.stream}
+                      />
+                      <RenderField
+                        label="Year"
+                        value={profileData.twelfthGrade.passingYear}
+                        snapshotValue={profileData.lastApprovedSnapshot?.twelfthGrade?.passingYear}
+                      />
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Higher Education */}
-              {profileData.higherEducation?.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="font-medium text-gray-700 mb-2">Higher Education</h4>
-                  {profileData.higherEducation.map((edu, index) => (
-                    <div key={index} className="grid grid-cols-4 gap-4 pl-4 mb-2 p-2 bg-gray-50 rounded">
-                      <div>
-                        <span className="text-sm text-gray-500">Degree</span>
-                        <p className="font-medium">{edu.degree || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <span className="text-sm text-gray-500">Institution</span>
-                        <p className="font-medium">{edu.institution || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <span className="text-sm text-gray-500">Field</span>
-                        <p className="font-medium">{edu.fieldOfStudy || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <span className="text-sm text-gray-500">Year</span>
-                        <p className="font-medium">{edu.endYear || edu.startYear || 'N/A'}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                {/* Higher Education */}
+                {profileData.higherEducation?.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="font-medium text-gray-700 mb-2">Higher Education</h4>
+                    {profileData.higherEducation.map((edu, index) => {
+                      // Try to find matching snapshot item by _id if possible, or fallback to index
+                      const snapshotEdu = profileData.lastApprovedSnapshot?.higherEducation?.find(s => s._id === edu._id) ||
+                        profileData.lastApprovedSnapshot?.higherEducation?.[index];
 
-              {/* Courses */}
-              {profileData.courses?.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="font-medium text-gray-700 mb-2">Courses Completed</h4>
-                  <div className="space-y-2">
-                    {profileData.courses.map((course, index) => (
-                      <div key={index} className="p-2 bg-gray-50 rounded flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">{course.courseName}</p>
-                          <p className="text-sm text-gray-500">{course.provider}</p>
+                      return (
+                        <div key={index} className="grid grid-cols-4 gap-4 pl-4 mb-2 p-2 bg-gray-50 rounded">
+                          <RenderField label="Degree" value={edu.degree} snapshotValue={snapshotEdu?.degree} />
+                          <RenderField label="Institution" value={edu.institution} snapshotValue={snapshotEdu?.institution} />
+                          <RenderField label="Field" value={edu.fieldOfStudy} snapshotValue={snapshotEdu?.fieldOfStudy} />
+                          <RenderField label="Year" value={edu.endYear || edu.startYear} snapshotValue={snapshotEdu?.endYear || snapshotEdu?.startYear} />
                         </div>
-                        {course.completionDate && (
-                          <span className="text-xs text-gray-400">
-                            {new Date(course.completionDate).toLocaleDateString()}
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Courses */}
+                {profileData.courses?.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="font-medium text-gray-700 mb-2">Courses Completed</h4>
+                    <div className="space-y-2">
+                      {profileData.courses.map((course, index) => {
+                        const snapshotCourse = profileData.lastApprovedSnapshot?.courses?.find(c => c._id === course._id) ||
+                          profileData.lastApprovedSnapshot?.courses?.[index];
+                        const isChanged = snapshotCourse && (
+                          course.courseName !== snapshotCourse.courseName ||
+                          course.provider !== snapshotCourse.provider ||
+                          course.completionDate !== snapshotCourse.completionDate
+                        );
+
+                        return (
+                          <div key={index} className={`p-2 rounded flex items-center justify-between ${isChanged ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'}`}>
+                            <div className="flex-1">
+                              <RenderField label="Course" value={course.courseName} snapshotValue={snapshotCourse?.courseName} className="mb-1" />
+                              <RenderField label="Provider" value={course.provider} snapshotValue={snapshotCourse?.provider} />
+                            </div>
+                            {course.completionDate && (
+                              <RenderField
+                                label="Date"
+                                value={new Date(course.completionDate).toLocaleDateString()}
+                                snapshotValue={snapshotCourse?.completionDate ? new Date(snapshotCourse.completionDate).toLocaleDateString() : null}
+                                className="ml-4 text-right"
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Technical Skills */}
+              {profileData.technicalSkills?.length > 0 && (
+                <div className={`mb-6 ${JSON.stringify(profileData.technicalSkills.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify(profileData.lastApprovedSnapshot?.technicalSkills?.map(s => ({ n: s.skillName, r: s.selfRating }))) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+                    Technical Skills
+                    {JSON.stringify(profileData.technicalSkills.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify(profileData.lastApprovedSnapshot?.technicalSkills?.map(s => ({ n: s.skillName, r: s.selfRating }))) && (
+                      <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                    )}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {profileData.technicalSkills.map((skill, index) => {
+                      // Check if this specific skill is new or changed
+                      const snapshotSkill = profileData.lastApprovedSnapshot?.technicalSkills?.find(s => s.skillName === skill.skillName || s.skillId === skill.skillId);
+                      const isNew = !snapshotSkill;
+                      const isChanged = snapshotSkill && snapshotSkill.selfRating !== skill.selfRating;
+
+                      return (
+                        <span
+                          key={index}
+                          className={`px-3 py-1 rounded-full text-sm ${isNew || isChanged ? 'bg-yellow-200 text-yellow-900 ring-2 ring-yellow-400' : 'bg-blue-100 text-blue-800'}`}
+                        >
+                          {skill.skillName || skill.name} {skill.selfRating ? `(${getRatingLabel(skill.selfRating)})` : skill.proficiency ? `(${skill.proficiency})` : ''}
+                          {isChanged && <span className="text-xs ml-1 opacity-75">prev: {getRatingLabel(snapshotSkill.selfRating)}</span>}
+                          {isNew && <span className="text-xs ml-1 text-green-700 font-bold">(New)</span>}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* English Proficiency */}
+              {(profileData.englishProficiency.speaking || profileData.englishProficiency.writing) && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">English Proficiency (CEFR)</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <RenderField
+                      label="Speaking"
+                      value={profileData.englishProficiency.speaking ? `${profileData.englishProficiency.speaking} - ${getCEFRLabel(profileData.englishProficiency.speaking)}` : 'Not provided'}
+                      snapshotValue={profileData.lastApprovedSnapshot?.englishProficiency?.speaking ? `${profileData.lastApprovedSnapshot.englishProficiency.speaking} - ${getCEFRLabel(profileData.lastApprovedSnapshot.englishProficiency.speaking)}` : null}
+                    />
+                    <RenderField
+                      label="Writing"
+                      value={profileData.englishProficiency.writing ? `${profileData.englishProficiency.writing} - ${getCEFRLabel(profileData.englishProficiency.writing)}` : 'Not provided'}
+                      snapshotValue={profileData.lastApprovedSnapshot?.englishProficiency?.writing ? `${profileData.lastApprovedSnapshot.englishProficiency.writing} - ${getCEFRLabel(profileData.lastApprovedSnapshot.englishProficiency.writing)}` : null}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Soft Skills */}
+              {Object.values(profileData.softSkills).some(v => v > 0) && (
+                <div className={`mb-6 ${isObjectChanged(profileData.softSkills, profileData.lastApprovedSnapshot?.softSkills, Object.keys(profileData.softSkills)) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+                    Soft Skills
+                    {isObjectChanged(profileData.softSkills, profileData.lastApprovedSnapshot?.softSkills, Object.keys(profileData.softSkills)) && (
+                      <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                    )}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(profileData.softSkills).filter(([_, v]) => v > 0).map(([skill, rating]) => {
+                      const snapshotRating = profileData.lastApprovedSnapshot?.softSkills?.[skill];
+                      const changed = snapshotRating !== undefined && snapshotRating !== rating;
+
+                      return (
+                        <div key={skill} className={`flex items-center justify-between p-2 rounded ${changed ? 'bg-yellow-100 ring-1 ring-yellow-300' : 'bg-purple-50'}`}>
+                          <div className="flex flex-col">
+                            <span className="text-sm capitalize">{skill.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            {changed && <span className="text-xs text-gray-500">Prev: {getRatingLabel(snapshotRating)}</span>}
+                          </div>
+                          <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded">{getRatingLabel(rating)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Role Preferences / Open For Roles */}
+              {profileData.openForRoles?.length > 0 && (
+                <div className={`mb-6 ${JSON.stringify(profileData.openForRoles.sort()) !== JSON.stringify(profileData.lastApprovedSnapshot?.openForRoles?.sort()) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+                    Open For Roles
+                    {JSON.stringify(profileData.openForRoles.sort()) !== JSON.stringify(profileData.lastApprovedSnapshot?.openForRoles?.sort()) && (
+                      <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                    )}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {profileData.openForRoles.map((role, index) => {
+                      const wasSelected = profileData.lastApprovedSnapshot?.openForRoles?.includes(role);
+                      const isNew = profileData.lastApprovedSnapshot && !wasSelected;
+
+                      return (
+                        <span key={index} className={`px-3 py-1 rounded-full text-sm ${isNew ? 'bg-yellow-200 text-yellow-900 border border-yellow-400' : 'bg-green-100 text-green-800'}`}>
+                          {index + 1}. {role}
+                          {isNew && <span className="ml-1 text-xs font-bold">(New)</span>}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Previous Approval History */}
+              {selectedStudent.approvalHistory?.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Approval History</h3>
+                  <div className="space-y-3">
+                    {selectedStudent.approvalHistory.map((history, index) => (
+                      <div key={index} className="bg-gray-50 p-3 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <Badge variant={history.status === 'approved' ? 'success' : history.status === 'changes_requested' ? 'warning' : 'default'}>
+                            {history.status.replace('_', ' ')}
+                          </Badge>
+                          <span className="text-sm text-gray-500">
+                            {new Date(history.reviewedAt).toLocaleString()}
                           </span>
+                        </div>
+                        {history.comments && (
+                          <p className="mt-2 text-sm text-gray-600">{history.comments}</p>
                         )}
                       </div>
                     ))}
@@ -483,122 +686,30 @@ const ProfileApprovals = () => {
               )}
             </div>
 
-            {/* Technical Skills */}
-            {profileData.technicalSkills?.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Technical Skills</h3>
-                <div className="flex flex-wrap gap-2">
-                  {profileData.technicalSkills.map((skill, index) => (
-                    <span
-                      key={index}
-                      className="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
-                    >
-                      {skill.skillName || skill.name} {skill.selfRating ? `(${getRatingLabel(skill.selfRating)})` : skill.proficiency ? `(${skill.proficiency})` : ''}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* English Proficiency */}
-            {(profileData.englishProficiency.speaking || profileData.englishProficiency.writing) && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">English Proficiency (CEFR)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-sm text-gray-500">Speaking</span>
-                    <p className="font-medium">
-                      {profileData.englishProficiency.speaking ? `${profileData.englishProficiency.speaking} - ${getCEFRLabel(profileData.englishProficiency.speaking)}` : 'Not provided'}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-500">Writing</span>
-                    <p className="font-medium">
-                      {profileData.englishProficiency.writing ? `${profileData.englishProficiency.writing} - ${getCEFRLabel(profileData.englishProficiency.writing)}` : 'Not provided'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Soft Skills */}
-            {Object.values(profileData.softSkills).some(v => v > 0) && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Soft Skills</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(profileData.softSkills).filter(([_, v]) => v > 0).map(([skill, rating]) => (
-                    <div key={skill} className="flex items-center justify-between p-2 bg-purple-50 rounded">
-                      <span className="text-sm capitalize">{skill.replace(/([A-Z])/g, ' $1').trim()}</span>
-                      <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded">{getRatingLabel(rating)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Role Preferences / Open For Roles */}
-            {profileData.openForRoles?.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Open For Roles</h3>
-                <div className="flex flex-wrap gap-2">
-                  {profileData.openForRoles.map((role, index) => (
-                    <span key={index} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                      {index + 1}. {role}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Previous Approval History */}
-            {selectedStudent.approvalHistory?.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Approval History</h3>
-                <div className="space-y-3">
-                  {selectedStudent.approvalHistory.map((history, index) => (
-                    <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <Badge variant={history.status === 'approved' ? 'success' : history.status === 'changes_requested' ? 'warning' : 'default'}>
-                          {history.status.replace('_', ' ')}
-                        </Badge>
-                        <span className="text-sm text-gray-500">
-                          {new Date(history.reviewedAt).toLocaleString()}
-                        </span>
-                      </div>
-                      {history.comments && (
-                        <p className="mt-2 text-sm text-gray-600">{history.comments}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="mt-6 flex justify-end gap-3 border-t pt-4">
-            <Button
-              variant="secondary"
-              onClick={() => setShowDetailsModal(false)}
-            >
-              Close
-            </Button>
-            <Button
-              variant="danger"
-              onClick={openRejectModal}
-              disabled={actionLoading}
-            >
-              Request Changes
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => handleApprove(selectedStudent._id)}
-              disabled={actionLoading}
-            >
-              {actionLoading ? 'Processing...' : 'Approve Profile'}
-            </Button>
-          </div>
-        </Modal>
+            {/* Action Buttons */}
+            <div className="mt-6 flex justify-end gap-3 border-t pt-4">
+              <Button
+                variant="secondary"
+                onClick={() => setShowDetailsModal(false)}
+              >
+                Close
+              </Button>
+              <Button
+                variant="danger"
+                onClick={openRejectModal}
+                disabled={actionLoading}
+              >
+                Request Changes
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => handleApprove(selectedStudent._id)}
+                disabled={actionLoading}
+              >
+                {actionLoading ? 'Processing...' : 'Approve Profile'}
+              </Button>
+            </div>
+          </Modal>
         );
       })()}
 

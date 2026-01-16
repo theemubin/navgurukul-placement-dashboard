@@ -9,31 +9,35 @@ const upload = require('../middleware/upload');
 // Get all students (for Campus POCs, Coordinators, Managers)
 router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
-    const { campus, school, batch, page = 1, limit = 20, search } = req.query;
-    
+    const { campus, school, batch, page = 1, limit = 20, search, status } = req.query;
+
     let query = { role: 'student' };
-    
+
     // Campus POCs can see students from their managed campuses
     if (req.user.role === 'campus_poc') {
-      const managedCampuses = req.user.managedCampuses?.length > 0 
-        ? req.user.managedCampuses 
+      const managedCampuses = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses
         : (req.user.campus ? [req.user.campus] : []);
-      
+
       if (managedCampuses.length > 0) {
         query.campus = { $in: managedCampuses };
       }
     } else if (campus) {
       query.campus = campus;
     }
-    
+
     if (school) {
       query['studentProfile.currentSchool'] = school;
     }
-    
+
     if (batch) {
       query['studentProfile.batch'] = batch;
     }
-    
+
+    if (status) {
+      query['studentProfile.currentStatus'] = status;
+    }
+
     if (search) {
       query.$or = [
         { firstName: { $regex: search, $options: 'i' } },
@@ -86,6 +90,44 @@ router.get('/students/:studentId', auth, authorize('campus_poc', 'coordinator', 
   }
 });
 
+// Update student status (placed, unplaced, etc.)
+router.put('/students/:studentId/status', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const { studentId } = req.params;
+
+    if (!status) {
+      return res.status(400).json({ message: 'Status is required' });
+    }
+
+    const student = await User.findById(studentId);
+    if (!student || student.role !== 'student') {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    student.studentProfile.currentStatus = status;
+    await student.save();
+
+    // Notify student
+    await Notification.create({
+      recipient: studentId,
+      type: 'status_update',
+      title: 'Status Updated',
+      message: `Your placement status has been updated to ${status.replace(/_/g, ' ')}.`,
+      link: '/profile',
+      relatedEntity: { type: 'user', id: studentId }
+    });
+
+    res.json({
+      message: 'Student status updated successfully',
+      status: student.studentProfile.currentStatus
+    });
+  } catch (error) {
+    console.error('Update student status error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Update student profile (for students)
 router.put('/profile', auth, authorize('student'), upload.single('resume'), async (req, res) => {
   try {
@@ -96,7 +138,7 @@ router.put('/profile', auth, authorize('student'), upload.single('resume'), asyn
     if (updates.firstName) user.firstName = updates.firstName;
     if (updates.lastName) user.lastName = updates.lastName;
     if (updates.phone) user.phone = updates.phone;
-    
+
     // Update campus
     if (updates.campus) {
       user.campus = updates.campus;
@@ -190,14 +232,15 @@ router.put('/profile', auth, authorize('student'), upload.single('resume'), asyn
         user.studentProfile.resume = req.file.path;
       }
 
-      // If profile was approved and user made changes, set to draft
+      // If profile was approved and user made changes, set to draft and save snapshot
       if (user.studentProfile.profileStatus === 'approved') {
+        user.studentProfile.lastApprovedSnapshot = { ...user.studentProfile.toObject() };
         user.studentProfile.profileStatus = 'draft';
       }
     }
 
     await user.save();
-    
+
     const updatedUser = await User.findById(req.userId)
       .select('-password')
       .populate('campus')
@@ -214,22 +257,22 @@ router.put('/profile', auth, authorize('student'), upload.single('resume'), asyn
 router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
   try {
     const user = await User.findById(req.userId);
-    
+
     user.studentProfile.profileStatus = 'pending_approval';
     user.studentProfile.lastSubmittedAt = new Date();
     user.studentProfile.revisionNotes = '';
-    
+
     await user.save();
 
     // Notify Campus POCs who manage this campus
-    const campusPocs = await User.find({ 
+    const campusPocs = await User.find({
       role: 'campus_poc',
       $or: [
         { campus: user.campus },
         { managedCampuses: user.campus }
       ]
     });
-    
+
     for (const poc of campusPocs) {
       await Notification.create({
         recipient: poc._id,
@@ -252,7 +295,7 @@ router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
 router.put('/managed-campuses', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const { campusIds } = req.body;
-    
+
     if (!Array.isArray(campusIds)) {
       return res.status(400).json({ message: 'campusIds must be an array' });
     }
@@ -265,9 +308,9 @@ router.put('/managed-campuses', auth, authorize('campus_poc'), async (req, res) 
       .select('-password')
       .populate('managedCampuses', 'name code');
 
-    res.json({ 
-      message: 'Managed campuses updated successfully', 
-      managedCampuses: updatedUser.managedCampuses 
+    res.json({
+      message: 'Managed campuses updated successfully',
+      managedCampuses: updatedUser.managedCampuses
     });
   } catch (error) {
     console.error('Update managed campuses error:', error);
@@ -282,8 +325,8 @@ router.get('/managed-campuses', auth, authorize('campus_poc'), async (req, res) 
       .populate('managedCampuses', 'name code')
       .populate('campus', 'name code');
 
-    const managedCampuses = user.managedCampuses?.length > 0 
-      ? user.managedCampuses 
+    const managedCampuses = user.managedCampuses?.length > 0
+      ? user.managedCampuses
       : (user.campus ? [user.campus] : []);
 
     res.json({ managedCampuses });
@@ -309,7 +352,7 @@ router.put('/students/:studentId/profile/approve', auth, authorize('campus_poc',
     }
 
     student.studentProfile.profileStatus = status;
-    
+
     if (status === 'approved') {
       student.studentProfile.approvedBy = req.userId;
       student.studentProfile.approvedAt = new Date();
@@ -325,8 +368,8 @@ router.put('/students/:studentId/profile/approve', auth, authorize('campus_poc',
       recipient: studentId,
       type: status === 'approved' ? 'profile_approved' : 'profile_needs_revision',
       title: status === 'approved' ? 'Profile Approved' : 'Profile Needs Revision',
-      message: status === 'approved' 
-        ? 'Your profile has been approved by Campus POC.' 
+      message: status === 'approved'
+        ? 'Your profile has been approved by Campus POC.'
         : `Your profile needs revision: ${revisionNotes || 'Please check with Campus POC.'}`,
       link: '/profile',
       relatedEntity: { type: 'user', id: studentId }
@@ -349,10 +392,10 @@ router.get('/pending-profiles', auth, authorize('campus_poc', 'coordinator', 'ma
 
     // Campus POC can see students from their managed campuses
     if (req.user.role === 'campus_poc') {
-      const managedCampuses = req.user.managedCampuses?.length > 0 
-        ? req.user.managedCampuses 
+      const managedCampuses = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses
         : (req.user.campus ? [req.user.campus] : []);
-      
+
       if (managedCampuses.length > 0) {
         query.campus = { $in: managedCampuses };
       }
@@ -375,7 +418,7 @@ router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordi
   try {
     const { studentId } = req.params;
     const updates = req.body;
-    
+
     const student = await User.findById(studentId);
     if (!student || student.role !== 'student') {
       return res.status(404).json({ message: 'Student not found' });
@@ -531,7 +574,7 @@ router.put('/students/:studentId/skills/:skillId', auth, authorize('campus_poc',
     // Notify student
     const Skill = require('../models/Skill');
     const skill = await Skill.findById(skillId);
-    
+
     await Notification.create({
       recipient: studentId,
       type: status === 'approved' ? 'skill_approved' : 'skill_rejected',
@@ -596,6 +639,34 @@ router.post('/avatar', auth, upload.single('avatar'), async (req, res) => {
   }
 });
 
+// Get unique student locations (hometown/state) for eligibility
+router.get('/student-locations', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const locations = await User.aggregate([
+      { $match: { role: 'student' } },
+      {
+        $group: {
+          _id: null,
+          districts: { $addToSet: "$studentProfile.hometown.district" },
+          states: { $addToSet: "$studentProfile.hometown.state" }
+        }
+      }
+    ]);
+
+    if (locations.length > 0) {
+      res.json({
+        districts: locations[0].districts.filter(d => d).sort(),
+        states: locations[0].states.filter(s => s).sort()
+      });
+    } else {
+      res.json({ districts: [], states: [] });
+    }
+  } catch (error) {
+    console.error('Get student locations error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get eligible student count based on criteria (for Coordinators)
 router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
@@ -608,11 +679,14 @@ router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (
       higherEducationMinPercentage,
       schools,
       campuses,
-      currentModule
+      currentModule,
+      hometown,
+      homestate,
+      gender
     } = req.query;
 
     // Build query for students
-    let query = { 
+    let query = {
       role: 'student',
       'studentProfile.profileStatus': 'approved'
     };
@@ -647,6 +721,38 @@ router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (
 
     if (currentModule) {
       query['studentProfile.currentModule'] = currentModule;
+    }
+
+    // New Filters
+    if (hometown) {
+      // Case insensitive match for hometown district
+      query['studentProfile.hometown.district'] = { $regex: new RegExp(`^${hometown}$`, 'i') };
+    }
+
+    if (homestate) {
+      query['studentProfile.hometown.state'] = { $regex: new RegExp(`^${homestate}$`, 'i') };
+    }
+
+    if (gender && gender !== 'any') {
+      query.gender = gender;
+    }
+
+    // Checking for Council Post Eligibility
+    // (This requires looking into user's councilService array)
+    // format of query parameter: councilPost=PostName,minMonths=6
+    // But typically passed as separate params or json
+    // Let's assume passed as `councilPost` and `minCouncilMonths`
+    const { councilPost, minCouncilMonths } = req.query;
+
+    if (councilPost) {
+      // Using $elemMatch to find students who have the specific post with enough months and approved status
+      query.studentProfile.councilService = {
+        $elemMatch: {
+          post: councilPost, // Exact match
+          monthsServed: { $gte: parseInt(minCouncilMonths || 0) },
+          status: 'approved'
+        }
+      };
     }
 
     const count = await User.countDocuments(query);
@@ -729,14 +835,14 @@ router.get('/me/ai-keys', auth, authorize('coordinator', 'manager'), async (req,
 router.post('/me/ai-keys', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { key, label } = req.body;
-    
+
     if (!key || !key.trim()) {
       return res.status(400).json({ message: 'API key is required' });
     }
 
     const user = await User.findById(req.userId);
     if (!user.aiApiKeys) user.aiApiKeys = [];
-    
+
     // Limit to 5 keys per user
     if (user.aiApiKeys.length >= 5) {
       return res.status(400).json({ message: 'Maximum 5 API keys allowed per user' });

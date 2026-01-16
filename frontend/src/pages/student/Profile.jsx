@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { authAPI, userAPI, settingsAPI, campusAPI, placementCycleAPI, skillAPI, utilsAPI } from '../../services/api';
 import { LoadingSpinner } from '../../components/common/UIComponents';
-import { 
+import SearchableSelect from '../../components/common/SearchableSelect';
+import {
   User, Mail, Phone, GraduationCap, Upload, Save, Send,
   Linkedin, Github, Globe, BookOpen, Languages, Brain,
   MapPin, Calendar, Briefcase, CheckCircle, Clock, AlertCircle,
-  Plus, Trash2, Award, Building2
+  Plus, Trash2, Award, Building2, Search
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -34,7 +35,7 @@ const fallbackSchools = [
 const cefrLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const cefrDescriptions = {
   'A1': 'Beginner',
-  'A2': 'Elementary', 
+  'A2': 'Elementary',
   'B1': 'Intermediate',
   'B2': 'Upper Intermediate',
   'C1': 'Advanced',
@@ -68,7 +69,8 @@ const defaultSettings = {
     'School of Business': ['CRM', 'Digital Marketing', 'Data Analytics', 'Advanced Google Sheets'],
     'School of Second Chance': ['Master Chef', 'Fashion Designing'],
     'School of Finance': [],
-    'School of Education': []
+    'School of Education': [],
+    'School of Design': ['Graphic Design', 'UI/UX Design', 'Product Design', 'Motion Graphics']
   },
   programmingModules: [
     'Programming Foundations', 'Problem Solving & Flowcharts', 'Web Fundamentals',
@@ -110,7 +112,7 @@ const StudentProfile = () => {
   const [placementCycles, setPlacementCycles] = useState([]);
   const [selectedCampus, setSelectedCampus] = useState('');
   const [selectedPlacementCycle, setSelectedPlacementCycle] = useState('');
-  
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -140,16 +142,21 @@ const StudentProfile = () => {
     technicalSkills: [],
     profileStatus: 'draft',
     revisionNotes: '',
-    resumeLink: ''
+    resumeLink: '',
+    councilService: []
   });
 
   const [newCourseSkill, setNewCourseSkill] = useState('');
   const [addingCourseSkill, setAddingCourseSkill] = useState(false);
+  const [newCouncilService, setNewCouncilService] = useState({ post: '', monthsServed: '', certificateUrl: '' });
+  const [addingCouncilService, setAddingCouncilService] = useState(false);
+  const [showProfileCouncilSuggestions, setShowProfileCouncilSuggestions] = useState(false);
   const [newLanguage, setNewLanguage] = useState({ language: '', speaking: '', writing: '', isNative: false });
   const [resumeLinkStatus, setResumeLinkStatus] = useState({ checked: false, ok: false, status: null });
 
   const schoolList = Object.keys(settings.schoolModules || {});
-  const schools = schoolList.length > 0 ? schoolList : fallbackSchools;
+  const schools = (schoolList.length > 0 ? schoolList : fallbackSchools)
+    .filter(s => !settings.inactiveSchools?.includes(s) || s === formData.currentSchool);
 
   useEffect(() => {
     fetchProfile();
@@ -161,7 +168,8 @@ const StudentProfile = () => {
 
   const fetchSkills = async () => {
     try {
-      const response = await skillAPI.getSkills({ category: 'technical' });
+      // Fetch technical, domain, and other skills to ensure all options are available
+      const response = await skillAPI.getSkills({ category: 'technical,domain,other' });
       setAllSkills(response.data);
     } catch (error) {
       console.error('Error fetching skills:', error);
@@ -227,7 +235,8 @@ const StudentProfile = () => {
         technicalSkills: data.studentProfile?.technicalSkills || [],
         profileStatus: data.studentProfile?.profileStatus || 'draft',
         revisionNotes: data.studentProfile?.revisionNotes || '',
-        resumeLink: data.studentProfile?.resumeLink || ''
+        resumeLink: data.studentProfile?.resumeLink || '',
+        councilService: data.studentProfile?.councilService || []
       });
 
       // If profile has a resume link, check accessibility (do this inside try so we can use `data` safely)
@@ -259,6 +268,89 @@ const StudentProfile = () => {
     }
   };
 
+  const handleAddEducationOption = async (department, specialization = '') => {
+    try {
+      const response = await settingsAPI.addHigherEducationOption({ department, specialization });
+      if (response.data.success) {
+        setSettings(prev => ({
+          ...prev,
+          higherEducationOptions: response.data.data
+        }));
+        toast.success(specialization ? `Added specialization "${specialization}" to ${department}` : `Added department "${department}"`);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error adding education option:', error);
+      toast.error('Failed to add new option');
+    }
+    return false;
+  };
+
+  const handleAddInstitutionOption = async (institution, pincode = '') => {
+    try {
+      const response = await settingsAPI.addInstitutionOption(institution, pincode);
+      if (response.data.success) {
+        setSettings(prev => ({
+          ...prev,
+          institutionOptions: response.data.data
+        }));
+        toast.success(`Added "${institution}" with pincode "${pincode}" to the list`);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error adding institution option:', error);
+      toast.error('Failed to add new institution');
+    }
+    return false;
+  };
+
+  const fetchPincodeAuto = async (institution, index) => {
+    if (!institution) return;
+    try {
+      const searchName = institution.split(',')[0].trim();
+      const response = await fetch(`https://api.postalpincode.in/postoffice/${encodeURIComponent(searchName)}`);
+      const data = await response.json();
+
+      if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
+        const po = data[0].PostOffice[0];
+        const pincode = po.Pincode;
+        const district = po.District;
+        const updated = [...formData.higherEducation];
+        updated[index].pincode = pincode;
+        updated[index].district = district;
+        setFormData({ ...formData, higherEducation: updated });
+        toast.success(`Fetched: ${pincode}, ${district}`);
+
+        // Also update our global list if it was empty
+        if (!settings.institutionOptions?.[institution]) {
+          handleAddInstitutionOption(institution, pincode);
+        }
+      } else {
+        toast.error("Could not auto-fetch location details. Please enter manually.");
+      }
+    } catch (error) {
+      console.error("Pincode fetch error:", error);
+      toast.error("Failed to fetch location automatically");
+    }
+  };
+
+  const fetchDistrictForEdu = async (pincode, index) => {
+    if (pincode.length !== 6) return;
+    try {
+      const response = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+      const data = await response.json();
+      if (data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
+        const district = data[0].PostOffice[0].District || '';
+        const updated = [...formData.higherEducation];
+        updated[index].district = district;
+        setFormData({ ...formData, higherEducation: updated });
+        toast.success(`District found: ${district}`);
+      }
+    } catch (error) {
+      console.error("Error fetching district:", error);
+    }
+  };
+
   const getModulesForSchool = () => {
     const mapped = settings.schoolModules?.[formData.currentSchool];
     if (Array.isArray(mapped) && mapped.length > 0) return mapped;
@@ -286,7 +378,7 @@ const StudentProfile = () => {
       try {
         const response = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
         const data = await response.json();
-        
+
         if (data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
           const postOffice = data[0].PostOffice[0];
           setFormData(prev => ({
@@ -349,7 +441,8 @@ const StudentProfile = () => {
       updateUser({ firstName: formData.firstName, lastName: formData.lastName });
       fetchProfile();
     } catch (error) {
-      toast.error('Error updating profile');
+      console.error('Profile update error:', error);
+      toast.error(error.response?.data?.message || 'Error updating profile');
     } finally {
       setSaving(false);
     }
@@ -428,11 +521,12 @@ const StudentProfile = () => {
     { id: 'education', label: 'Education', icon: GraduationCap },
     { id: 'skills', label: 'Skills', icon: Brain },
     { id: 'languages', label: 'Languages', icon: Languages },
+    { id: 'council', label: 'Council', icon: Award },
     { id: 'roles', label: 'Open For', icon: Briefcase }
   ];
 
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 30 }, (_, i) => currentYear - i);
+  const years = Array.from({ length: 47 }, (_, i) => (currentYear + 6) - i);
   const modulesForSchool = getModulesForSchool();
   const hasModulesForSchool = modulesForSchool.length > 0;
 
@@ -515,11 +609,10 @@ const StudentProfile = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-[2px] transition flex items-center gap-2 whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-[2px] transition flex items-center gap-2 whitespace-nowrap ${activeTab === tab.id
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               <TabIcon className="w-4 h-4" />
               {tab.label}
@@ -556,9 +649,9 @@ const StudentProfile = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                    <select 
-                      value={formData.gender || ''} 
-                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })} 
+                    <select
+                      value={formData.gender || ''}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                       disabled={!canEdit}
                     >
                       <option value="">Select Gender</option>
@@ -577,9 +670,9 @@ const StudentProfile = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Campus *</label>
                     <div className="flex items-center gap-2">
-                      <select 
-                        value={selectedCampus || ''} 
-                        onChange={(e) => setSelectedCampus(e.target.value)} 
+                      <select
+                        value={selectedCampus || ''}
+                        onChange={(e) => setSelectedCampus(e.target.value)}
                         disabled={!canEdit}
                         required
                       >
@@ -669,7 +762,7 @@ const StudentProfile = () => {
                 </div>
 
                 {canEdit && (
-                  <button type="submit" disabled={saving || (formData.resumeLink && resumeLinkStatus.checked && !resumeLinkStatus.ok)} className="btn btn-primary flex items-center gap-2">
+                  <button type="submit" disabled={saving} className="btn btn-primary flex items-center gap-2">
                     <Save className="w-4 h-4" />
                     {saving ? 'Saving...' : 'Save Changes'}
                   </button>
@@ -696,7 +789,7 @@ const StudentProfile = () => {
                       <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><Calendar className="w-4 h-4" /> Joining Date</label>
                       <input type="date" value={formData.joiningDate} onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })} disabled={!canEdit} />
                     </div>
-                    
+
                     {formData.currentSchool && (
                       hasModulesForSchool ? (
                         <div className="md:col-span-2">
@@ -793,6 +886,8 @@ const StudentProfile = () => {
                             degree: '',
                             institution: '',
                             fieldOfStudy: '',
+                            pincode: '',
+                            district: '',
                             startYear: '',
                             endYear: '',
                             percentage: '',
@@ -827,44 +922,133 @@ const StudentProfile = () => {
                           )}
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Degree/Diploma</label>
-                              <input
-                                type="text"
-                                value={edu.degree}
-                                onChange={(e) => {
-                                  const updated = [...formData.higherEducation];
-                                  updated[index].degree = e.target.value;
-                                  setFormData({ ...formData, higherEducation: updated });
-                                }}
-                                placeholder="e.g., B.Tech, BCA, Diploma"
-                                disabled={!canEdit}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Institution</label>
-                              <input
-                                type="text"
+                              <SearchableSelect
+                                label="Institution"
+                                placeholder="Select or type University/College"
+                                options={Object.keys(settings.institutionOptions || {})}
                                 value={edu.institution}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                   const updated = [...formData.higherEducation];
-                                  updated[index].institution = e.target.value;
+                                  updated[index].institution = value;
+                                  // Auto-fill pincode if available
+                                  const pincode = settings.institutionOptions?.[value];
+                                  if (pincode) {
+                                    updated[index].pincode = pincode;
+                                  }
                                   setFormData({ ...formData, higherEducation: updated });
                                 }}
-                                placeholder="University/College name"
+                                onAdd={(val) => {
+                                  handleAddInstitutionOption(val).then(success => {
+                                    if (success) {
+                                      const updated = [...formData.higherEducation];
+                                      updated[index].institution = val;
+                                      setFormData({ ...formData, higherEducation: updated });
+                                    }
+                                  });
+                                }}
                                 disabled={!canEdit}
                               />
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Field of Study</label>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-sm font-medium text-gray-700">Pincode</label>
+                                {edu.institution && !edu.pincode && (
+                                  <button
+                                    type="button"
+                                    onClick={() => fetchPincodeAuto(edu.institution, index)}
+                                    className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5"
+                                  >
+                                    <Search className="w-2.5 h-2.5" /> Auto-fetch
+                                  </button>
+                                )}
+                              </div>
                               <input
                                 type="text"
-                                value={edu.fieldOfStudy}
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                                placeholder="College Pincode"
+                                value={edu.pincode || ''}
                                 onChange={(e) => {
                                   const updated = [...formData.higherEducation];
-                                  updated[index].fieldOfStudy = e.target.value;
+                                  updated[index].pincode = e.target.value;
+                                  setFormData({ ...formData, higherEducation: updated });
+
+                                  // Auto-fetch district if pincode reaches 6 digits
+                                  if (e.target.value.length === 6) {
+                                    fetchDistrictForEdu(e.target.value, index);
+                                    // Auto-update global list if it's a known institution but missing pincode
+                                    if (edu.institution) {
+                                      handleAddInstitutionOption(edu.institution, e.target.value);
+                                    }
+                                  }
+                                }}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                District <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                className="w-full px-3 py-2 border rounded-lg bg-gray-50 outline-none"
+                                placeholder="Auto-filled via Pincode"
+                                value={edu.district || ''}
+                                readOnly
+                                disabled={!canEdit}
+                              />
+                            </div>
+                            <div>
+                              <SearchableSelect
+                                label="Department"
+                                placeholder="Select or type Department"
+                                options={Object.keys(settings.higherEducationOptions || {})}
+                                value={edu.department || edu.fieldOfStudy}
+                                onChange={(value) => {
+                                  const updated = [...formData.higherEducation];
+                                  updated[index].department = value;
+                                  updated[index].fieldOfStudy = value; // Sync for legacy
+                                  // Clear specialization if department changes
+                                  updated[index].specialization = '';
                                   setFormData({ ...formData, higherEducation: updated });
                                 }}
-                                placeholder="e.g., Computer Science"
+                                onAdd={(val) => {
+                                  handleAddEducationOption(val).then(success => {
+                                    if (success) {
+                                      const updated = [...formData.higherEducation];
+                                      updated[index].department = val;
+                                      updated[index].fieldOfStudy = val;
+                                      setFormData({ ...formData, higherEducation: updated });
+                                    }
+                                  });
+                                }}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                            <div>
+                              <SearchableSelect
+                                label="Specialization"
+                                placeholder="Select or type Specialization"
+                                options={(edu.department || edu.fieldOfStudy) ? (settings.higherEducationOptions?.[edu.department || edu.fieldOfStudy] || []) : []}
+                                value={edu.specialization}
+                                onChange={(value) => {
+                                  const updated = [...formData.higherEducation];
+                                  updated[index].specialization = value;
+                                  setFormData({ ...formData, higherEducation: updated });
+                                }}
+                                onAdd={(val) => {
+                                  const dept = edu.department || edu.fieldOfStudy;
+                                  if (!dept) {
+                                    toast.error('Please select a department first');
+                                    return;
+                                  }
+                                  handleAddEducationOption(dept, val).then(success => {
+                                    if (success) {
+                                      const updated = [...formData.higherEducation];
+                                      updated[index].specialization = val;
+                                      setFormData({ ...formData, higherEducation: updated });
+                                    }
+                                  });
+                                }}
                                 disabled={!canEdit}
                               />
                             </div>
@@ -873,8 +1057,14 @@ const StudentProfile = () => {
                               <select
                                 value={edu.startYear}
                                 onChange={(e) => {
+                                  const startVal = parseInt(e.target.value);
                                   const updated = [...formData.higherEducation];
                                   updated[index].startYear = e.target.value;
+
+                                  // +3 logic for auto-filling completion year
+                                  if (startVal && (!updated[index].endYear || parseInt(updated[index].endYear) < startVal)) {
+                                    updated[index].endYear = (startVal + 3).toString();
+                                  }
                                   setFormData({ ...formData, higherEducation: updated });
                                 }}
                                 disabled={!canEdit}
@@ -895,7 +1085,7 @@ const StudentProfile = () => {
                                 disabled={!canEdit}
                               >
                                 <option value="">Select Year</option>
-                                {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                {years.filter(y => !edu.startYear || y >= edu.startYear).map(y => <option key={y} value={y}>{y}</option>)}
                               </select>
                             </div>
                             <div>
@@ -1150,15 +1340,15 @@ const StudentProfile = () => {
                 <div className="card">
                   <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Brain className="w-5 h-5" />Technical Skills (Self-Assessment)</h2>
                   <p className="text-sm text-gray-500 mb-4">Select your technical skills and rate yourself (1 = Basic, 4 = Expert)</p>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {allSkills.map((skill) => {
-                      const existingSkill = formData.technicalSkills.find(s => 
+                      const existingSkill = formData.technicalSkills.find(s =>
                         s.skillId === skill._id || s.skillName === skill.name
                       );
                       const isSelected = !!existingSkill;
                       const rating = existingSkill?.selfRating || 0;
-                      
+
                       return (
                         <div key={skill._id} className={`p-3 rounded-lg border-2 transition ${isSelected ? 'bg-primary-50 border-primary-300' : 'bg-gray-50 border-transparent'}`}>
                           <div className="flex items-center justify-between mb-2">
@@ -1170,17 +1360,17 @@ const StudentProfile = () => {
                                   if (e.target.checked) {
                                     setFormData({
                                       ...formData,
-                                      technicalSkills: [...formData.technicalSkills, { 
+                                      technicalSkills: [...formData.technicalSkills, {
                                         skillId: skill._id,
-                                        skillName: skill.name, 
-                                        selfRating: 1, 
-                                        addedAt: new Date() 
+                                        skillName: skill.name,
+                                        selfRating: 1,
+                                        addedAt: new Date()
                                       }]
                                     });
                                   } else {
                                     setFormData({
                                       ...formData,
-                                      technicalSkills: formData.technicalSkills.filter(s => 
+                                      technicalSkills: formData.technicalSkills.filter(s =>
                                         s.skillId !== skill._id && s.skillName !== skill.name
                                       )
                                     });
@@ -1200,8 +1390,8 @@ const StudentProfile = () => {
                                   type="button"
                                   onClick={() => {
                                     const updated = formData.technicalSkills.map(s =>
-                                      (s.skillId === skill._id || s.skillName === skill.name) 
-                                        ? { ...s, skillId: skill._id, skillName: skill.name, selfRating: level } 
+                                      (s.skillId === skill._id || s.skillName === skill.name)
+                                        ? { ...s, skillId: skill._id, skillName: skill.name, selfRating: level }
                                         : s
                                     );
                                     setFormData({ ...formData, technicalSkills: updated });
@@ -1264,12 +1454,177 @@ const StudentProfile = () => {
                 )}
               </div>
             )}
+            {activeTab === 'council' && (
+              <div className="card space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <Award className="w-5 h-5" />
+                    Council Service
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setAddingCouncilService(true)}
+                    className="text-primary-600 text-sm font-medium hover:underline flex items-center gap-1"
+                    disabled={!canEdit}
+                  >
+                    <Plus className="w-4 h-4" /> Add Service
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* List Existing Services */}
+                  {(formData.councilService || []).map((service, index) => (
+                    <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{service.post}</h3>
+                          <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {service.monthsServed} Months</span>
+                            {service.certificateUrl && (
+                              <a href={service.certificateUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary-600 hover:underline">
+                                <Award className="w-3 h-3" /> Certificate
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${service.status === 'approved' ? 'bg-green-100 text-green-700' :
+                            service.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                            {service.status ? service.status.charAt(0).toUpperCase() + service.status.slice(1) : 'Pending'}
+                          </span>
+                          {canEdit && service.status !== 'approved' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...formData.councilService];
+                                updated.splice(index, 1);
+                                setFormData({ ...formData, councilService: updated });
+                              }}
+                              className="text-red-500 hover:bg-red-50 p-1 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {formData.councilService?.length === 0 && !addingCouncilService && (
+                    <p className="text-gray-500 text-center py-4 italic">No council service added yet.</p>
+                  )}
+
+                  {/* Add New Service Form */}
+                  {addingCouncilService && (
+                    <div className="p-4 border-2 border-primary-100 rounded-lg bg-primary-50 space-y-3 animate-fadeIn">
+                      <h4 className="font-medium text-primary-800 text-sm">Add New Council Service</h4>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="relative">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Post Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. General Secretary"
+                            className="w-full text-sm rounded border-gray-300"
+                            value={newCouncilService.post}
+                            onChange={(e) => {
+                              setNewCouncilService({ ...newCouncilService, post: e.target.value });
+                              setShowProfileCouncilSuggestions(true);
+                            }}
+                            onFocus={() => setShowProfileCouncilSuggestions(true)}
+                          />
+                          {showProfileCouncilSuggestions && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setShowProfileCouncilSuggestions(false)}></div>
+                              <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                                {(settings.councilPosts || [])
+                                  .filter(p => p.toLowerCase().includes(newCouncilService.post.toLowerCase()))
+                                  .map(p => (
+                                    <button
+                                      key={p}
+                                      type="button"
+                                      onClick={() => {
+                                        setNewCouncilService({ ...newCouncilService, post: p });
+                                        setShowProfileCouncilSuggestions(false);
+                                      }}
+                                      className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-0"
+                                    >
+                                      {p}
+                                    </button>
+                                  ))}
+                                {/* If not found, showing it will be added as new/pending is implicit by the logic that student adds what they did */}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Months Served</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 6"
+                            className="w-full text-sm rounded border-gray-300"
+                            value={newCouncilService.monthsServed}
+                            onChange={(e) => setNewCouncilService({ ...newCouncilService, monthsServed: e.target.value })}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Certificate URL (Drive/Link)</label>
+                          <input
+                            type="url"
+                            placeholder="https://..."
+                            className="w-full text-sm rounded border-gray-300"
+                            value={newCouncilService.certificateUrl}
+                            onChange={(e) => setNewCouncilService({ ...newCouncilService, certificateUrl: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setAddingCouncilService(false)}
+                          className="text-gray-500 text-sm hover:text-gray-700"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newCouncilService.post || !newCouncilService.monthsServed) {
+                              return toast.error('Post name and months served are required');
+                            }
+                            const entry = {
+                              post: newCouncilService.post,
+                              monthsServed: parseInt(newCouncilService.monthsServed),
+                              certificateUrl: newCouncilService.certificateUrl,
+                              status: 'pending' // Default
+                            };
+                            setFormData({
+                              ...formData,
+                              councilService: [...(formData.councilService || []), entry]
+                            });
+                            setNewCouncilService({ post: '', monthsServed: '', certificateUrl: '' });
+                            setAddingCouncilService(false);
+                          }}
+                          className="px-3 py-1 bg-primary-600 text-white rounded text-sm hover:bg-primary-700"
+                        >
+                          Add Service
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
 
             {activeTab === 'languages' && (
               <div className="card">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Languages className="w-5 h-5" />Language Proficiency (CEFR Levels)</h2>
                 <p className="text-sm text-gray-500 mb-6">The Common European Framework of Reference (CEFR) is an international standard for describing language ability.</p>
-                
+
                 {/* English Proficiency - Primary */}
                 <div className="mb-8">
                   <h3 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
@@ -1289,7 +1644,7 @@ const StudentProfile = () => {
                         ))}
                       </div>
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Writing Level</label>
                       <div className="space-y-2">
@@ -1311,7 +1666,7 @@ const StudentProfile = () => {
                     <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">Optional</span>
                     Additional Languages
                   </h3>
-                  
+
                   {/* Existing Languages */}
                   {formData.languages?.length > 0 && (
                     <div className="space-y-3 mb-6">
@@ -1442,7 +1797,7 @@ const StudentProfile = () => {
               <div className="card">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5" />Open For Roles</h2>
                 <p className="text-sm text-gray-500 mb-6">Select the roles you are interested in. This helps placement coordinators match you with suitable opportunities.</p>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {(settings.availableRoles || []).map((role) => (
                     <label key={role} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition border-2 ${formData.openForRoles.includes(role) ? 'bg-primary-50 border-primary-500' : 'bg-gray-50 border-transparent hover:bg-gray-100'} ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}>
@@ -1470,8 +1825,8 @@ const StudentProfile = () => {
                 {formData.profileStatus === 'pending_approval' ? 'Awaiting Approval' : 'Ready to Submit?'}
               </h2>
               <p className="text-sm text-primary-700 mb-4">
-                {formData.profileStatus === 'pending_approval' 
-                  ? 'Your profile is being reviewed. If you make changes, you\'ll need to resubmit.' 
+                {formData.profileStatus === 'pending_approval'
+                  ? 'Your profile is being reviewed. If you make changes, you\'ll need to resubmit.'
                   : 'Once you\'ve completed all sections, submit your profile for approval by your Campus POC.'}
               </p>
               <button onClick={handleSubmitForApproval} disabled={submitting || formData.profileStatus === 'pending_approval'} className="btn btn-primary w-full flex items-center justify-center gap-2">
@@ -1559,7 +1914,7 @@ const StudentProfile = () => {
               ];
               const completedCount = completionItems.filter(item => item.done).length;
               const completionPercent = Math.round((completedCount / completionItems.length) * 100);
-              
+
               return (
                 <>
                   {/* Percentage Display */}
@@ -1569,11 +1924,10 @@ const StudentProfile = () => {
                       <span className="text-sm text-gray-500">{completedCount}/{completionItems.length} completed</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div 
-                        className={`h-3 rounded-full transition-all duration-500 ${
-                          completionPercent >= 80 ? 'bg-green-500' : 
+                      <div
+                        className={`h-3 rounded-full transition-all duration-500 ${completionPercent >= 80 ? 'bg-green-500' :
                           completionPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                        }`}
+                          }`}
                         style={{ width: `${completionPercent}%` }}
                       />
                     </div>
@@ -1583,7 +1937,7 @@ const StudentProfile = () => {
                       </p>
                     )}
                   </div>
-                  
+
                   {/* Checklist */}
                   <div className="space-y-3">
                     {completionItems.map((item, index) => (

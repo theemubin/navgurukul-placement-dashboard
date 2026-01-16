@@ -12,6 +12,37 @@ const AIService = require('../services/aiService');
 const { calculateMatch, getJobsWithMatch } = require('../services/matchService');
 const multer = require('multer');
 
+// Get unique companies for autocomplete
+router.get('/companies', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const companies = await Job.aggregate([
+      {
+        $group: {
+          _id: "$company.name",
+          name: { $first: "$company.name" },
+          website: { $first: "$company.website" },
+          description: { $first: "$company.description" },
+          logo: { $first: "$company.logo" }
+        }
+      },
+      { $sort: { name: 1 } }
+    ]);
+    res.json(companies);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching companies' });
+  }
+});
+
+// Get unique locations for autocomplete
+router.get('/locations', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const locations = await Job.distinct('location');
+    res.json(locations.filter(l => l).sort());
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching locations' });
+  }
+});
+
 // Configure multer for PDF uploads
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -72,28 +103,28 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
         text = await aiService.extractTextFromURL(url);
       }
     } catch (extractError) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: extractError.message || 'Failed to extract content from the provided source.',
         success: false
       });
     }
 
     if (!text || text.length < 50) {
-      return res.status(400).json({ 
-        message: 'Could not extract enough text from the provided source. Please try a different file or URL.' 
+      return res.status(400).json({
+        message: 'Could not extract enough text from the provided source. Please try a different file or URL.'
       });
     }
 
     let parsedData;
-    
+
     // Step 1: Try code-based extraction first (conserves AI quota)
     console.log('Attempting code-based JD parsing...');
     parsedData = await aiService.parseJobDescriptionWithCode(text);
     let parsedWith = 'code';
-    
+
     // Step 2: If code-based gave minimal results and AI is available, try AI
-    if (allKeys.length > 0 && settings.aiConfig?.enabled !== false && 
-        (!parsedData || !parsedData.title || parsedData.suggestedSkills.length < 3)) {
+    if (allKeys.length > 0 && settings.aiConfig?.enabled !== false &&
+      (!parsedData || !parsedData.title || parsedData.suggestedSkills.length < 3)) {
       console.log('Code extraction had limited results, attempting AI parsing...');
       try {
         const aiResult = await aiService.parseJobDescription(text, skillNames);
@@ -112,19 +143,19 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
         parsedData.aiErrorCode = aiError.code || aiError.originalError?.code || null;
       }
     }
-    
+
     if (!parsedData) {
       // Final fallback to regex extraction
       parsedData = aiService.parseJobDescriptionFallback(text);
       parsedWith = 'fallback';
     }
-    
+
     parsedData.parsedWith = parsedWith;
 
     // Match suggested skills with existing skills in database
     if (parsedData.suggestedSkills?.length > 0 && existingSkills.length > 0) {
-      const matchedSkills = existingSkills.filter(skill => 
-        parsedData.suggestedSkills.some(suggested => 
+      const matchedSkills = existingSkills.filter(skill =>
+        parsedData.suggestedSkills.some(suggested =>
           skill.name.toLowerCase().includes(suggested.toLowerCase()) ||
           suggested.toLowerCase().includes(skill.name.toLowerCase())
         )
@@ -133,9 +164,9 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
     }
 
     // Ask AI service for a more precise status
-    let aiStatus = { 
-      configured: allKeys.length > 0, 
-      enabled: settings.aiConfig?.enabled !== false, 
+    let aiStatus = {
+      configured: allKeys.length > 0,
+      enabled: settings.aiConfig?.enabled !== false,
       working: false,
       totalKeys: allKeys.length,
       userKeys: userKeys.length,
@@ -168,7 +199,7 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
 
   } catch (error) {
     console.error('Parse JD error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: error.message || 'Failed to parse job description',
       success: false
     });
@@ -178,9 +209,9 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
 // Get all jobs (filtered by role and eligibility)
 router.get('/', auth, async (req, res) => {
   try {
-    const { 
+    const {
       status, company, jobType, campus, search,
-      page = 1, limit = 20 
+      page = 1, limit = 20
     } = req.query;
 
     let query = {};
@@ -192,13 +223,13 @@ router.get('/', auth, async (req, res) => {
       const visibleStages = settings.jobPipelineStages
         .filter(stage => stage.visibleToStudents)
         .map(stage => stage.id);
-      
+
       // Include legacy 'active' status for backward compatibility
       const studentVisibleStatuses = [...visibleStages, 'active'];
-      
+
       query.status = { $in: studentVisibleStatuses };
       query.applicationDeadline = { $gte: new Date() };
-      
+
       // Filter by student's campus
       if (req.user.campus) {
         query.$or = [
@@ -268,7 +299,7 @@ router.get('/matching', auth, authorize('student'), async (req, res) => {
     const visibleStages = settings.jobPipelineStages
       .filter(stage => stage.visibleToStudents)
       .map(stage => stage.id);
-    
+
     // Include legacy 'active' status for backward compatibility
     const studentVisibleStatuses = [...visibleStages, 'active'];
 
@@ -384,7 +415,7 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
 
     // Check if job status is visible to students (active or student-visible pipeline stage)
     const settings = await Settings.getSettings();
-    const isVisibleToStudents = job.status === 'active' || 
+    const isVisibleToStudents = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
 
     // Notify eligible students if job is visible
@@ -392,7 +423,7 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
       const eligibleStudents = await User.find({
         role: 'student',
         isActive: true,
-        campus: job.eligibility.campuses?.length > 0 
+        campus: job.eligibility.campuses?.length > 0
           ? { $in: job.eligibility.campuses }
           : { $exists: true }
       });
@@ -420,19 +451,19 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
 router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const job = await Job.findById(req.params.id);
-    
+
     if (!job) {
       return res.status(404).json({ message: 'Job not found' });
     }
 
     const settings = await Settings.getSettings();
-    const wasVisible = job.status === 'active' || 
+    const wasVisible = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
-    
+
     Object.assign(job, req.body);
     await job.save();
 
-    const isNowVisible = job.status === 'active' || 
+    const isNowVisible = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
 
     // If job just became visible to students, notify them
@@ -465,7 +496,7 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
 router.delete('/:id', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const job = await Job.findById(req.params.id);
-    
+
     if (!job) {
       return res.status(404).json({ message: 'Job not found' });
     }
@@ -482,21 +513,21 @@ router.delete('/:id', auth, authorize('coordinator', 'manager'), async (req, res
 router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { status: newStatus, notes } = req.body;
-    
+
     if (!newStatus) {
       return res.status(400).json({ message: 'Status is required' });
     }
-    
+
     // Validate status against pipeline stages
     const validStatuses = await Settings.getValidStatuses();
     if (!validStatuses.includes(newStatus)) {
-      return res.status(400).json({ 
-        message: `Invalid status. Valid statuses are: ${validStatuses.join(', ')}` 
+      return res.status(400).json({
+        message: `Invalid status. Valid statuses are: ${validStatuses.join(', ')}`
       });
     }
 
     const job = await Job.findById(req.params.id);
-    
+
     if (!job) {
       return res.status(404).json({ message: 'Job not found' });
     }
@@ -505,7 +536,7 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
 
     // Update status
     job.status = newStatus;
-    
+
     // Add to status history
     job.statusHistory = job.statusHistory || [];
     job.statusHistory.push({
@@ -521,16 +552,16 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
     const settings = await Settings.getSettings();
     const newStage = settings.jobPipelineStages.find(s => s.id === newStatus);
     const prevStage = settings.jobPipelineStages.find(s => s.id === previousStatus);
-    
+
     // Notify students if job became visible (moved to a student-visible stage from non-visible)
     const wasVisible = prevStage?.visibleToStudents;
     const isNowVisible = newStage?.visibleToStudents;
-    
+
     if (!wasVisible && isNowVisible && newStatus !== 'closed' && newStatus !== 'filled') {
       const eligibleStudents = await User.find({
         role: 'student',
         isActive: true,
-        campus: job.eligibility.campuses?.length > 0 
+        campus: job.eligibility.campuses?.length > 0
           ? { $in: job.eligibility.campuses }
           : { $exists: true }
       });
@@ -554,8 +585,8 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
     await job.populate('eligibility.campuses', 'name');
     await job.populate('createdBy', 'firstName lastName');
 
-    res.json({ 
-      message: 'Job status updated successfully', 
+    res.json({
+      message: 'Job status updated successfully',
       job,
       previousStatus,
       newStatus
@@ -598,7 +629,7 @@ router.post('/:id/interest', auth, authorize('student'), [
 
     // Only allow interest requests for <60% match
     if (matchDetails.overallPercentage >= 60) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'You meet the requirements. Please apply directly instead of showing interest.'
       });
     }
@@ -610,7 +641,7 @@ router.post('/:id/interest', auth, authorize('student'), [
     });
 
     if (existing) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: `You already have a ${existing.status} interest request for this job.`
       });
     }
@@ -674,16 +705,16 @@ router.get('/interest-requests/all', auth, authorize('campus_poc', 'coordinator'
 
     // Campus PoC can only see requests from their campus students
     if (req.user.role === 'campus_poc') {
-      const campusStudents = await User.find({ 
-        role: 'student', 
-        campus: req.user.campus 
+      const campusStudents = await User.find({
+        role: 'student',
+        campus: req.user.campus
       }).select('_id');
       query.student = { $in: campusStudents.map(s => s._id) };
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await InterestRequest.countDocuments(query);
-    
+
     const requests = await InterestRequest.find(query)
       .populate('student', 'firstName lastName email studentProfile.currentSchool studentProfile.enrollmentNumber')
       .populate('job', 'title company applicationDeadline application_stage')
@@ -716,9 +747,9 @@ router.get('/:id/interest-requests', auth, authorize('coordinator', 'manager', '
 
     // Campus PoC can only see requests from their campus
     if (req.user.role === 'campus_poc') {
-      const campusStudents = await User.find({ 
-        role: 'student', 
-        campus: req.user.campus 
+      const campusStudents = await User.find({
+        role: 'student',
+        campus: req.user.campus
       }).select('_id');
       query.student = { $in: campusStudents.map(s => s._id) };
     }
@@ -762,7 +793,7 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
     request.reviewedBy = req.userId;
     request.reviewedAt = new Date();
     request.reviewNotes = reviewNotes;
-    
+
     if (status === 'rejected') {
       request.rejectionReason = rejectionReason || 'Not approved by Campus PoC';
     }
@@ -1022,27 +1053,33 @@ router.get('/stats/coordinator-jobs', auth, authorize('manager'), async (req, re
   try {
     const coordinatorStats = await Job.aggregate([
       { $match: { coordinator: { $exists: true, $ne: null } } },
-      { $group: { 
-        _id: '$coordinator', 
-        totalJobs: { $sum: 1 },
-        activeJobs: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
-        closedJobs: { $sum: { $cond: [{ $in: ['$status', ['closed', 'filled']] }, 1, 0] } }
-      }},
-      { $lookup: {
-        from: 'users',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'coordinator'
-      }},
+      {
+        $group: {
+          _id: '$coordinator',
+          totalJobs: { $sum: 1 },
+          activeJobs: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+          closedJobs: { $sum: { $cond: [{ $in: ['$status', ['closed', 'filled']] }, 1, 0] } }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'coordinator'
+        }
+      },
       { $unwind: '$coordinator' },
-      { $project: {
-        _id: 1,
-        coordinatorName: { $concat: ['$coordinator.firstName', ' ', '$coordinator.lastName'] },
-        coordinatorEmail: '$coordinator.email',
-        totalJobs: 1,
-        activeJobs: 1,
-        closedJobs: 1
-      }}
+      {
+        $project: {
+          _id: 1,
+          coordinatorName: { $concat: ['$coordinator.firstName', ' ', '$coordinator.lastName'] },
+          coordinatorEmail: '$coordinator.email',
+          totalJobs: 1,
+          activeJobs: 1,
+          closedJobs: 1
+        }
+      }
     ]);
 
     res.json(coordinatorStats);
@@ -1098,46 +1135,46 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
       email: (app) => app.student.email,
       phone: (app) => app.student.phone || '',
       gender: (app) => app.student.gender || '',
-      
+
       // Campus Info
       campus: (app) => app.student.campus?.name || '',
       campusCode: (app) => app.student.campus?.code || '',
-      
+
       // Navgurukul Education
       currentSchool: (app) => app.student.studentProfile?.currentSchool || '',
       joiningDate: (app) => app.student.studentProfile?.dateOfJoining ? new Date(app.student.studentProfile.dateOfJoining).toLocaleDateString() : '',
       currentModule: (app) => app.student.studentProfile?.currentModule || '',
       customModuleDescription: (app) => app.student.studentProfile?.customModuleDescription || '',
       attendance: (app) => app.student.studentProfile?.attendancePercentage || '',
-      
+
       // Academic Background
       tenthBoard: (app) => app.student.studentProfile?.tenthGrade?.board || '',
       tenthPercentage: (app) => app.student.studentProfile?.tenthGrade?.percentage || '',
       tenthPassingYear: (app) => app.student.studentProfile?.tenthGrade?.passingYear || '',
       tenthState: (app) => app.student.studentProfile?.tenthGrade?.state || '',
-      
+
       twelfthBoard: (app) => app.student.studentProfile?.twelfthGrade?.board || '',
       twelfthPercentage: (app) => app.student.studentProfile?.twelfthGrade?.percentage || '',
       twelfthPassingYear: (app) => app.student.studentProfile?.twelfthGrade?.passingYear || '',
       twelfthState: (app) => app.student.studentProfile?.twelfthGrade?.state || '',
-      
+
       // Higher Education
-      higherEducation: (app) => app.student.studentProfile?.higherEducation?.map(edu => 
+      higherEducation: (app) => app.student.studentProfile?.higherEducation?.map(edu =>
         `${edu.degree} in ${edu.fieldOfStudy} from ${edu.institution} (${edu.startYear}-${edu.endYear})`
       ).join('; ') || '',
-      
+
       // Location Info
       hometown: (app) => {
         const hometown = app.student.studentProfile?.hometown;
         if (!hometown) return '';
         return `${hometown.village || ''}, ${hometown.district || ''}, ${hometown.state || ''} - ${hometown.pincode || ''}`.replace(/^,\s*|,\s*$/g, '');
       },
-      
+
       // Skills
-      technicalSkills: (app) => app.student.studentProfile?.technicalSkills?.map(skill => 
+      technicalSkills: (app) => app.student.studentProfile?.technicalSkills?.map(skill =>
         `${skill.skillName} (${skill.selfRating}/4)`
       ).join('; ') || '',
-      
+
       // Soft Skills
       communication: (app) => app.student.studentProfile?.softSkills?.communication || '',
       collaboration: (app) => app.student.studentProfile?.softSkills?.collaboration || '',
@@ -1149,56 +1186,56 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
       leadership: (app) => app.student.studentProfile?.softSkills?.leadership || '',
       teamwork: (app) => app.student.studentProfile?.softSkills?.teamwork || '',
       emotionalIntelligence: (app) => app.student.studentProfile?.softSkills?.emotionalIntelligence || '',
-      
+
       // Language Skills
-      languages: (app) => app.student.studentProfile?.languages?.map(lang => 
+      languages: (app) => app.student.studentProfile?.languages?.map(lang =>
         `${lang.language} (S:${lang.speaking}, W:${lang.writing})`
       ).join('; ') || '',
-      
+
       // English Proficiency (legacy)
       englishSpeaking: (app) => app.student.studentProfile?.englishProficiency?.speaking || '',
       englishWriting: (app) => app.student.studentProfile?.englishProficiency?.writing || '',
-      
+
       // Courses
-      courses: (app) => app.student.studentProfile?.courses?.map(course => 
+      courses: (app) => app.student.studentProfile?.courses?.map(course =>
         `${course.courseName} (${course.provider})`
       ).join('; ') || '',
-      
+
       // Open for roles
       openForRoles: (app) => app.student.studentProfile?.openForRoles?.join('; ') || '',
-      
+
       // Profile Links
       linkedIn: (app) => app.student.studentProfile?.linkedIn || '',
       github: (app) => app.student.studentProfile?.github || '',
       portfolio: (app) => app.student.studentProfile?.portfolio || '',
       resume: (app) => app.student.studentProfile?.resume || '',
-      
+
       // About & Expectations
       about: (app) => app.student.studentProfile?.about || '',
       expectedSalary: (app) => app.student.studentProfile?.expectedSalary || '',
-      
+
       // Profile Status
       profileStatus: (app) => app.student.studentProfile?.profileStatus || '',
-      
+
       // Job Info
       jobTitle: (app) => app.job.title,
       company: (app) => app.job.company.name,
       location: (app) => app.job.location,
       jobType: (app) => app.job.jobType,
       salary: (app) => app.job.salary?.min && app.job.salary?.max ? `${app.job.salary.min}-${app.job.salary.max}` : '',
-      
+
       // Application Info
       status: (app) => app.status,
       appliedDate: (app) => app.createdAt.toISOString().split('T')[0],
       coverLetter: (app) => app.coverLetter || '',
       feedback: (app) => app.feedback || '',
       currentRound: (app) => app.currentRound || 0,
-      
+
       // Custom Requirements Responses
-      customResponses: (app) => app.customResponses?.map(cr => 
+      customResponses: (app) => app.customResponses?.map(cr =>
         `${cr.requirement}: ${cr.response ? 'Yes' : 'No'}`
       ).join('; ') || '',
-      
+
       // Job Readiness Data
       jobReadinessCompleted: (app) => {
         const jrd = jobReadinessLookup[app.student._id.toString()];
@@ -1211,7 +1248,7 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
       jobReadinessCriteria: (app) => {
         const jrd = jobReadinessLookup[app.student._id.toString()];
         if (!jrd?.criteria) return '';
-        return jrd.criteria.map(c => 
+        return jrd.criteria.map(c =>
           `${c.name}: ${c.studentResponse || c.studentLink || (c.completed ? 'Completed' : 'Pending')}`
         ).join('; ');
       }
@@ -1220,12 +1257,12 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
     // Use selected fields or all fields
     const selectedFields = fields?.length > 0 ? fields : Object.keys(fieldMap);
     const layout = req.body.layout || 'resume'; // 'resume' or 'table'
-    
+
     // Handle different export formats
     if (format === 'pdf') {
       // Generate PDF export
       const PDFDocument = require('pdfkit');
-      const doc = new PDFDocument({ 
+      const doc = new PDFDocument({
         margin: 50,
         size: 'A4',
         info: {
@@ -1235,50 +1272,50 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
           Creator: 'NavGurukul Placement System'
         }
       });
-      
+
       // Set response headers for PDF
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${job.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_applications_report.pdf"`);
-      
+
       doc.pipe(res);
-      
+
       // Add NavGurukul Header
       doc.fontSize(24).fillColor('#1e40af').text('NavGurukul', 50, 50);
       doc.fontSize(10).fillColor('#64748b').text('Placement Dashboard', 50, 78);
-      
+
       // Add title
       doc.fontSize(18).fillColor('#000').text('Job Applications Report', 50, 110, { align: 'center' });
-      
+
       // Add separator line
       doc.moveTo(50, 140).lineTo(545, 140).strokeColor('#e5e7eb').stroke();
-      
+
       // Add job details in a structured format
       let yPosition = 160;
       doc.fontSize(14).fillColor('#1f2937');
-      
+
       // Job Information Section
       doc.text('Job Information', 50, yPosition, { underline: true });
       yPosition += 25;
-      
+
       const jobInfo = [
         ['Position:', job.title],
         ['Company:', job.company.name],
         ['Location:', job.location],
         ['Job Type:', job.jobType.replace('_', ' ').toUpperCase()],
         ['Total Applications:', applications.length.toString()],
-        ['Report Generated:', new Date().toLocaleDateString('en-IN', { 
-          year: 'numeric', month: 'long', day: 'numeric' 
+        ['Report Generated:', new Date().toLocaleDateString('en-IN', {
+          year: 'numeric', month: 'long', day: 'numeric'
         })]
       ];
-      
+
       jobInfo.forEach(([label, value]) => {
         doc.fontSize(10).fillColor('#6b7280').text(label, 50, yPosition, { continued: true, width: 120 });
         doc.fillColor('#000').text(value, 170, yPosition);
         yPosition += 18;
       });
-      
+
       yPosition += 20;
-      
+
       // Applications Section - supports resume or table layout
       if (applications.length === 0) {
         doc.fontSize(12).fillColor('#ef4444').text('No applications found for this job.', 50, yPosition);
@@ -1316,8 +1353,8 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
             if (isLastOnPage) {
               const footerY = doc.page.height - 60;
               doc.fontSize(8).fillColor('#9ca3af')
-                 .text('Generated by NavGurukul Placement Dashboard', 50, footerY)
-                 .text(new Date().toISOString().split('T')[0], 450, footerY);
+                .text('Generated by NavGurukul Placement Dashboard', 50, footerY)
+                .text(new Date().toISOString().split('T')[0], 450, footerY);
             }
           });
         } else {
@@ -1350,22 +1387,22 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
             if (tableY > doc.page.height - 120 || idx === applications.length - 1) {
               const footerY = doc.page.height - 60;
               doc.fontSize(8).fillColor('#9ca3af')
-                 .text('Generated by NavGurukul Placement Dashboard', 50, footerY)
-                 .text(new Date().toISOString().split('T')[0], 450, footerY);
+                .text('Generated by NavGurukul Placement Dashboard', 50, footerY)
+                .text(new Date().toISOString().split('T')[0], 450, footerY);
             }
           });
         }
       }
-      
+
       // Add footer
       doc.fontSize(8).fillColor('#9ca3af')
-         .text('Generated by NavGurukul Placement Dashboard', 50, 780)
-         .text(new Date().toISOString().split('T')[0], 450, 780);
-      
+        .text('Generated by NavGurukul Placement Dashboard', 50, 780)
+        .text(new Date().toISOString().split('T')[0], 450, 780);
+
       doc.end();
       return;
     }
-    
+
     // Generate CSV (default)
     // Generate headers
     const headers = selectedFields.map(f => {
@@ -1374,13 +1411,13 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
     });
 
     // Generate rows
-    const rows = applications.map(app => 
+    const rows = applications.map(app =>
       selectedFields.map(field => {
         const value = fieldMap[field] ? fieldMap[field](app) : '';
         // Clean and escape CSV data
         const strValue = String(value).replace(/"/g, '""').replace(/[\r\n]/g, ' ').trim();
-        return strValue.includes(',') || strValue.includes('"') || strValue.includes('\n') 
-          ? `"${strValue}"` 
+        return strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')
+          ? `"${strValue}"`
           : strValue;
       })
     );
