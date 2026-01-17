@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { settingsAPI, placementCycleAPI, campusAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert } from '../../components/common/UIComponents';
+import toast from 'react-hot-toast';
 import { Plus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -171,6 +172,25 @@ const Settings = () => {
   };
 
   const { user } = useAuth();
+
+  const copyAdminCommands = () => {
+    const text = `cd backend
+node scripts/backfill_normalized_skill_name.js
+node scripts/check_skill_duplicates.js
+node scripts/find_skill_mismatches.js
+node scripts/migrate_skill_ids.js --dry-run
+node scripts/migrate_skill_ids.js
+node scripts/promote_normalized_index_unique.js`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        toast.success('Admin commands copied to clipboard');
+      }).catch(() => {
+        toast.error('Failed to copy commands');
+      });
+    } else {
+      toast('Please copy manually from the docs (clipboard not available)');
+    }
+  };
 
   const saveSettings = async () => {
     try {
@@ -443,6 +463,23 @@ const Settings = () => {
           {success}
         </Alert>
       )}
+
+      {/* Skills admin guidance card (manager) */}
+      <div className="mb-4">
+        <Card>
+          <h3 className="text-lg font-semibold mb-2">Skills Data & Maintenance</h3>
+          <p className="text-sm text-gray-500 mb-3">Managers can review and help maintain skills data integrity. These operations are generally run by dev/ops on the server; the commands are available in the repository <code>docs/skills-manager.md</code>.</p>
+          <ul className="text-sm text-gray-700 list-disc pl-4 mb-3">
+            <li>Backfill `normalizedName` and promote unique index.</li>
+            <li>Run mismatch report to find unlinked skill names in student profiles.</li>
+            <li>Dry-run skill id migration before applying it.</li>
+          </ul>
+          <div className="flex gap-2">
+            <Button onClick={copyAdminCommands} variant="outline">Copy admin commands</Button>
+            <Button onClick={() => window.open('https://github.com/your-repo/path-to-repo/blob/main/docs/skills-manager.md', '_blank')} variant="secondary">Open docs</Button>
+          </div>
+        </Card>
+      </div>
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
