@@ -250,7 +250,25 @@ router.get('/me', auth, async (req, res) => {
       .populate('studentProfile.skills.skill')
       .populate('studentProfile.skills.approvedBy', 'firstName lastName');
 
-    res.json(user);
+    // Normalize softSkills for frontend convenience (return as object map key->rating)
+    const userObj = user.toObject ? user.toObject() : user;
+    if (Array.isArray(userObj.studentProfile?.softSkills)) {
+      const toKey = (name) => {
+        if (!name) return '';
+        return name.split(/\s+/).map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1)).join('');
+      };
+      const map = {};
+      userObj.studentProfile.softSkills.forEach(s => {
+        if (!s) return;
+        const key = s.skillName ? toKey(s.skillName) : (s.skillId ? s.skillId.toString() : '');
+        if (key) map[key] = s.selfRating || 0;
+      });
+      // Expose both representations: array stays on userObj.studentProfile.softSkillsArray, and map on softSkills
+      userObj.studentProfile.softSkillsArray = userObj.studentProfile.softSkills;
+      userObj.studentProfile.softSkills = map;
+    }
+
+    res.json(userObj);
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ message: 'Server error' });

@@ -96,6 +96,17 @@ input, select, textarea {
   animation: fadeIn 0.3s ease-out;
 }
 
+/* Celebration pop animation */
+@keyframes pop {
+  0% { transform: translateY(-6px) scale(0.9); opacity: 0; }
+  50% { transform: translateY(0) scale(1.05); opacity: 1; }
+  100% { transform: translateY(-4px) scale(1); opacity: 1; }
+}
+
+.animate-pop {
+  animation: pop 900ms ease-in-out infinite;
+}
+
 /* Mobile responsive utilities */
 @media (max-width: 768px) {
   .sidebar {
@@ -104,5 +115,51 @@ input, select, textarea {
   
   .sidebar.open {
     @apply translate-x-0;
+  }
+}
+
+/* Applicant modal helpers */
+.applicant-columns {
+  @apply grid grid-cols-1 md:grid-cols-3 gap-4;
+}
+.applicant-column {
+  @apply border rounded p-3 bg-white;
+}
+.applicant-column .column-body {
+  /* keep header + textarea fixed, list scrolls */
+  max-height: 44vh;
+  overflow-y: auto;
+  padding-top: 0.5rem;
+}
+.student-card {
+  @apply p-3 rounded border bg-white mb-3 min-w-0;
+}
+.student-email {
+  @apply text-xs text-gray-500 block truncate;
+  max-width: 28rem; /* limits width so the email truncates cleanly */
+}
+.btn-sm {
+  @apply px-3 py-1 rounded text-sm font-medium;
+}
+
+/* Compact modal header buttons */
+.modal-actions .btn {
+  @apply px-3 py-2 text-sm;
+}
+
+/* Ensure text truncation for small elements */
+.truncate-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reduce spacing on small screens inside modal */
+@media (max-width: 768px) {
+  .applicant-column {
+    @apply p-2;
+  }
+  .student-card {
+    @apply p-2;
   }
 }

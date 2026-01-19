@@ -206,6 +206,22 @@ const StudentProfile = () => {
       setProfile(data);
       setSelectedCampus(data.campus?._id || data.campus || '');
       setSelectedPlacementCycle(data.placementCycle?._id || data.placementCycle || '');
+      // Merge technicalSkills with any pending legacy skills so students see their selected levels
+      const technicalFromProfile = data.studentProfile?.technicalSkills ? [...data.studentProfile.technicalSkills] : [];
+      const pendingLegacy = (data.studentProfile?.skills || []).filter(s => s.status === 'pending');
+      pendingLegacy.forEach(ps => {
+        const key = (ps.skill && ps.skill._id) ? ps.skill._id.toString() : (ps.skillName || '');
+        const exists = technicalFromProfile.find(ts => (ts.skillId && ts.skillId.toString() === key) || ts.skillName === (ps.skill?.name || ps.skillName));
+        if (!exists) {
+          technicalFromProfile.push({
+            skillId: ps.skill?._id,
+            skillName: ps.skill?.name || ps.skillName || '',
+            selfRating: ps.selfRating || 0,
+            pendingApproval: true
+          });
+        }
+      });
+
       setFormData({
         firstName: data.firstName || '',
         lastName: data.lastName || '',
@@ -232,7 +248,7 @@ const StudentProfile = () => {
           problemSolving: 0, adaptability: 0, timeManagement: 0, leadership: 0,
           teamwork: 0, emotionalIntelligence: 0
         },
-        technicalSkills: data.studentProfile?.technicalSkills || [],
+        technicalSkills: technicalFromProfile,
         profileStatus: data.studentProfile?.profileStatus || 'draft',
         revisionNotes: data.studentProfile?.revisionNotes || '',
         resumeLink: data.studentProfile?.resumeLink || '',
@@ -468,6 +484,16 @@ const StudentProfile = () => {
   const handleSubmitForApproval = async () => {
     setSubmitting(true);
     try {
+      // Save profile first to persist any changes (e.g., soft skills) before submission
+      try {
+        await userAPI.updateProfile({ ...formData, campus: selectedCampus, gender: formData.gender });
+        toast.success('Profile saved');
+      } catch (saveErr) {
+        toast.error(saveErr.response?.data?.message || 'Error saving profile before submission');
+        setSubmitting(false);
+        return;
+      }
+
       await userAPI.submitProfile();
       toast.success('Profile submitted for approval');
       fetchProfile();
@@ -1380,7 +1406,14 @@ const StudentProfile = () => {
                               />
                               <span className={`font-medium ${isSelected ? 'text-primary-700' : 'text-gray-700'}`}>{skill.name}</span>
                             </label>
-                            {isSelected && <span className="text-sm font-medium text-primary-600">{ratingLabels[rating]}</span>}
+                            {isSelected && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-primary-600">{ratingLabels[rating]}</span>
+                                {existingSkill?.pendingApproval && (
+                                  <span className="text-xs text-yellow-600 ml-2">(pending approval)</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           {isSelected && (
                             <div className="flex gap-1 mt-2">

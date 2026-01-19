@@ -105,8 +105,9 @@ const POCSkillApprovals = () => {
                           <p className="font-medium">{skillItem.skill?.name}</p>
                           <p className="text-sm text-gray-500 capitalize">
                             {skillItem.skill?.category?.replace('_', ' ')}
-                          </p>
-                        </div>
+                          </p>                          {skillItem.selfRating > 0 && (
+                            <p className="text-xs text-gray-600 mt-1">Level: {['','Basic','Intermediate','Advanced','Expert'][skillItem.selfRating]}</p>
+                          )}                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button

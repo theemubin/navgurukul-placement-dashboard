@@ -12,8 +12,14 @@ const { auth, authorize, sameCampus } = require('../middleware/auth');
 // Get applications (filtered by role)
 router.get('/', auth, async (req, res) => {
   try {
-    const { job, status, student, page = 1, limit = 20 } = req.query;
+    const { job, status, student, page = 1, limit = 20, myLeads } = req.query;
     let query = {};
+
+    // If requesting 'myLeads' and user is coordinator, filter to jobs that this coordinator leads
+    if (myLeads === 'true' && req.user && req.user.role === 'coordinator') {
+      const coordinatorJobs = await Job.find({ coordinator: req.userId }).select('_id');
+      query.job = { $in: coordinatorJobs.map(j => j._id) };
+    }
 
     // Students can only see their own applications
     if (req.user.role === 'student') {
@@ -114,7 +120,9 @@ router.post('/', auth, authorize('student'), [
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    if (job.status !== 'active') {
+    // Accept applications for pipeline statuses that are open for applications
+    const openJobStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing'];
+    if (!openJobStatuses.includes(job.status)) {
       return res.status(400).json({ message: 'This job is not accepting applications' });
     }
 
@@ -149,13 +157,14 @@ router.post('/', auth, authorize('student'), [
       }
     }
 
-    // Validate mandatory custom requirements
-    if (job.customRequirements && job.customRequirements.length > 0) {
+    // Validate mandatory custom requirements only for regular applications (students confirm during Apply)
+    if (type === 'regular' && job.customRequirements && job.customRequirements.length > 0) {
       const mandatoryRequirements = job.customRequirements.filter(req => req.isMandatory);
       for (const req of mandatoryRequirements) {
-        const response = customResponses?.find(r => r.requirement === req.question);
+        // customResponses should contain objects like { requirement: <string>, response: true }
+        const response = customResponses?.find(r => r.requirement === req.requirement);
         if (!response || !response.response) {
-          return res.status(400).json({ message: `You must agree to: "${req.question}"` });
+          return res.status(400).json({ message: `You must agree to: "${req.requirement}"` });
         }
       }
     }

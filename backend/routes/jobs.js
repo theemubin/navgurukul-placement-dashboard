@@ -7,6 +7,7 @@ const Notification = require('../models/Notification');
 const Settings = require('../models/Settings');
 const Skill = require('../models/Skill');
 const InterestRequest = require('../models/InterestRequest');
+const Application = require('../models/Application');
 const { auth, authorize } = require('../middleware/auth');
 const AIService = require('../services/aiService');
 const { calculateMatch, getJobsWithMatch } = require('../services/matchService');
@@ -260,6 +261,16 @@ router.get('/', auth, async (req, res) => {
       query['eligibility.campuses'] = campus;
     }
 
+    // If requested, return only jobs where current user is the coordinator (My Leads)
+    if (req.query.myLeads === 'true' && req.user) {
+      query.coordinator = req.userId;
+    }
+
+    // If requested, filter jobs by a specific coordinator id (coordinator filter in UI)
+    if (req.query.coordinator) {
+      query.coordinator = req.query.coordinator;
+    }
+
     if (roleCategory) {
       query.roleCategory = roleCategory;
     }
@@ -278,8 +289,42 @@ router.get('/', auth, async (req, res) => {
 
     const total = await Job.countDocuments(query);
 
+    // Aggregate application status counts for the returned jobs (shortlisted, applied, etc.)
+    const jobIds = jobs.map(j => j._id);
+    let statusMap = {};
+    if (jobIds.length > 0) {
+      const agg = await Application.aggregate([
+        { $match: { job: { $in: jobIds } } },
+        { $group: { _id: { job: '$job', status: '$status' }, count: { $sum: 1 } } }
+      ]);
+
+      agg.forEach(a => {
+        const jobId = a._id.job.toString();
+        statusMap[jobId] = statusMap[jobId] || {};
+        statusMap[jobId][a._id.status] = a.count;
+      });
+    }
+
+    const jobsWithCounts = jobs.map(j => {
+      const jobObj = j.toObject ? j.toObject() : j;
+      jobObj.statusCounts = Object.assign({
+        applied: 0,
+        shortlisted: 0,
+        in_progress: 0,
+        selected: 0,
+        rejected: 0,
+        withdrawn: 0,
+        interested: 0
+      }, statusMap[j._id.toString()] || {});
+
+      // totalApplications: sum of all status counts (exclude withdrawn if you prefer)
+      jobObj.totalApplications = Object.values(jobObj.statusCounts || {}).reduce((a, b) => a + (b || 0), 0);
+
+      return jobObj;
+    });
+
     res.json({
-      jobs,
+      jobs: jobsWithCounts,
       pagination: {
         current: parseInt(page),
         pages: Math.ceil(total / limit),
@@ -415,6 +460,18 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
       createdBy: req.userId
     };
 
+    // If CEFR English is specified in eligibility, remove any duplicate 'English' skill from requiredSkills
+    if (jobData.eligibility && (jobData.eligibility.englishSpeaking || jobData.eligibility.englishWriting) && Array.isArray(jobData.requiredSkills)) {
+      const Skill = require('../models/Skill');
+      // Determine which skill IDs correspond to 'English'
+      const englishSkills = await Skill.find({ name: { $regex: '^English$', $options: 'i' } }).select('_id');
+      const englishIds = englishSkills.map(s => s._id.toString());
+      jobData.requiredSkills = jobData.requiredSkills.filter(rs => {
+        const sid = rs.skill?._id || rs.skill;
+        return !sid || !englishIds.includes(sid.toString());
+      });
+    }
+
     const job = new Job(jobData);
     await job.save();
 
@@ -465,6 +522,17 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
     const wasVisible = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
 
+    // If CEFR English specified, strip duplicate English skills from requiredSkills to avoid duplicates
+    if (req.body.eligibility && (req.body.eligibility.englishSpeaking || req.body.eligibility.englishWriting) && Array.isArray(req.body.requiredSkills)) {
+      const Skill = require('../models/Skill');
+      const englishSkills = await Skill.find({ name: { $regex: '^English$', $options: 'i' } }).select('_id');
+      const englishIds = englishSkills.map(s => s._id.toString());
+      req.body.requiredSkills = req.body.requiredSkills.filter(rs => {
+        const sid = rs.skill?._id || rs.skill;
+        return !sid || !englishIds.includes(sid.toString());
+      });
+    }
+
     Object.assign(job, req.body);
     await job.save();
 
@@ -493,6 +561,117 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
     res.json({ message: 'Job updated successfully', job });
   } catch (error) {
     console.error('Update job error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Bulk update applications for a job (set status, advance round, with optional general feedback)
+router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const jobId = req.params.id;
+    const { applicationIds = [], action, status, advanceBy = 1, generalFeedback, perApplicationFeedbacks = {} } = req.body;
+
+    const job = await Job.findById(jobId);
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+
+    // Only managers, job coordinator, or job creator can perform bulk updates
+    const allowed = req.user.role === 'manager' || (job.coordinator && job.coordinator.toString() === req.userId.toString()) || (job.createdBy && job.createdBy.toString() === req.userId.toString());
+    if (!allowed) return res.status(403).json({ message: 'Not authorized for this operation' });
+
+    if (!Array.isArray(applicationIds) || applicationIds.length === 0) {
+      return res.status(400).json({ message: 'No applicationIds provided' });
+    }
+
+    let updated = 0;
+
+    for (const appId of applicationIds) {
+      const application = await Application.findById(appId).populate('student', 'firstName lastName');
+      if (!application) continue;
+      if (application.job.toString() !== jobId.toString()) continue;
+
+      // Apply action
+      if (action === 'set_status') {
+        // If status provided, update it; otherwise we may only be adding feedback without changing status
+        if (status) {
+          application.status = status;
+        }
+
+        // Prefer per-application feedback when supplied, otherwise use section general feedback
+        const feedbackToApply = perApplicationFeedbacks && perApplicationFeedbacks[appId] ? perApplicationFeedbacks[appId] : generalFeedback;
+        if (feedbackToApply) {
+          application.feedback = feedbackToApply;
+          application.feedbackBy = req.userId;
+        }
+
+        // If selected, increment placementsCount for job (we will reconcile later)
+        if (status === 'selected') {
+          // Side effects handled after loop
+        }
+      } else if (action === 'advance_round') {
+        // Advance currentRound by `advanceBy` steps
+        application.currentRound = (application.currentRound || 0) + parseInt(advanceBy || 1);
+        application.status = 'in_progress';
+
+        const feedbackToApply = perApplicationFeedbacks && perApplicationFeedbacks[appId] ? perApplicationFeedbacks[appId] : generalFeedback;
+        if (feedbackToApply) {
+          application.feedback = feedbackToApply;
+          application.feedbackBy = req.userId;
+        }
+
+        // Optionally append a roundResults placeholder
+        application.roundResults = application.roundResults || [];
+        application.roundResults.push({
+          round: application.currentRound,
+          roundName: `Round ${application.currentRound + 1}`,
+          status: 'pending',
+          evaluatedBy: req.userId,
+          evaluatedAt: new Date()
+        });
+      } else {
+        continue;
+      }
+
+      await application.save();
+
+      // Notify student about bulk change
+      await Notification.create({
+        recipient: application.student._id,
+        type: 'application_update',
+        title: `Application Update for ${job.title}`,
+        message: generalFeedback ? `${generalFeedback}` : `Your application for ${job.title} has been updated to ${application.status}`,
+        link: `/applications/${application._id}`,
+        relatedEntity: { type: 'application', id: application._id }
+      });
+
+      updated++;
+    }
+
+    // Recalculate placementsCount for the job to be authoritative
+    const placementsCount = await Application.countDocuments({ job: jobId, status: 'selected' });
+    job.placementsCount = placementsCount;
+
+    // If job is fully placed, set status to 'filled'
+    if (job.placementsCount >= (job.maxPositions || 1)) {
+      job.status = 'filled';
+      job.statusHistory = job.statusHistory || [];
+      job.statusHistory.push({ status: 'filled', changedAt: new Date(), changedBy: req.userId, notes: 'Positions filled by bulk action' });
+    }
+
+    // Add a timeline event recording the bulk action
+    job.timeline = job.timeline || [];
+    job.timeline.push({
+      event: 'custom',
+      description: `Bulk update performed: action=${action}, updated=${updated}`,
+      changedBy: req.userId,
+      changedAt: new Date(),
+      metadata: { action, updated }
+    });
+
+    await job.save();
+
+    res.json({ message: 'Bulk update completed', updated });
+  } catch (error) {
+    console.error('Bulk update error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -803,6 +982,38 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
       request.rejectionReason = rejectionReason || 'Not approved by Campus PoC';
     }
 
+    // If approved, convert or create a regular application so the student has a proper application journey
+    if (status === 'approved') {
+      try {
+        // Find existing interest application
+        let interestApp = await Application.findOne({ student: request.student._id, job: request.job._id, applicationType: 'interest' });
+
+        if (interestApp) {
+          // Convert to regular application
+          interestApp.applicationType = 'regular';
+          interestApp.status = 'applied';
+          await interestApp.save();
+          request.applicationCreated = interestApp._id;
+        } else {
+          // Create a new regular application on behalf of the student
+          const student = await User.findById(request.student._id);
+          const newApp = new Application({
+            student: request.student._id,
+            job: request.job._id,
+            resume: student.studentProfile?.resume,
+            coverLetter: '',
+            customResponses: [],
+            applicationType: 'regular',
+            status: 'applied'
+          });
+          await newApp.save();
+          request.applicationCreated = newApp._id;
+        }
+      } catch (err) {
+        console.error('Error converting/creating application on interest approval:', err);
+      }
+    }
+
     await request.save();
 
     // Notify student
@@ -813,7 +1024,7 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
       message: status === 'approved'
         ? `Your interest in ${request.job.title} at ${request.job.company.name} has been approved. You can now apply!`
         : `Your interest in ${request.job.title} at ${request.job.company.name} was not approved. Reason: ${rejectionReason || 'Not specified'}`,
-      link: `/student/jobs/${request.job._id}`,
+      link: status === 'approved' && request.applicationCreated ? `/applications/${request.applicationCreated}` : `/student/jobs/${request.job._id}`,
       relatedEntity: { type: 'interest_request', id: request._id }
     });
 

@@ -76,12 +76,19 @@ const JobDetails = () => {
   const navigate = useNavigate();
   const [job, setJob] = useState(null);
   const [matchDetails, setMatchDetails] = useState(null);
+  const [matchLoading, setMatchLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [submittingInterest, setSubmittingInterest] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
   const [interestRequest, setInterestRequest] = useState(null);
   const [profileStatus, setProfileStatus] = useState('draft');
+
+  // Debug helper to log decision variables (removed in production)
+  const debugDecision = (msg, vars = {}) => {
+    // eslint-disable-next-line no-console
+    console.debug('[JobDetails Decision]', msg, vars);
+  };
   const [coverLetter, setCoverLetter] = useState('');
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [showInterestModal, setShowInterestModal] = useState(false);
@@ -155,6 +162,7 @@ const JobDetails = () => {
 
   const fetchJobWithMatch = async () => {
     try {
+      setMatchLoading(true);
       // Try to get job with match details first
       try {
         const matchResponse = await jobAPI.getJobWithMatch(id);
@@ -165,12 +173,15 @@ const JobDetails = () => {
         // Fallback to regular job fetch
         const response = await jobAPI.getJob(id);
         setJob(response.data);
+        setMatchDetails(null);
+        setInterestRequest(null);
       }
     } catch (error) {
       toast.error('Error loading job details');
       navigate('/student/jobs');
     } finally {
       setLoading(false);
+      setMatchLoading(false);
     }
   };
 
@@ -212,7 +223,19 @@ const JobDetails = () => {
       setShowApplyModal(false);
       setCustomResponses({});
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Error submitting application');
+      const msg = error.response?.data?.message || 'Error submitting application';
+
+      // If backend blocks due to readiness (403), offer the student to submit interest instead.
+      if (error.response?.status === 403 && /Job Ready|must be/i.test(msg)) {
+        const wantInterest = window.confirm(`${msg}\n\nWould you like to express interest instead?`);
+        if (wantInterest) {
+          await handleInterestExpression();
+          setApplying(false);
+          return;
+        }
+      }
+
+      toast.error(msg);
     } finally {
       setApplying(false);
     }
@@ -389,23 +412,69 @@ const JobDetails = () => {
                 const studentPct = readiness?.readinessPercentage || 0;
                 const requirement = job.eligibility?.readinessRequirement || 'yes';
 
-                let canApply = false;
+                // Readiness gate
+                let meetsReadiness = false;
                 if (requirement === 'yes') {
-                  canApply = studentPct === 100;
+                  meetsReadiness = studentPct === 100;
                 } else if (requirement === 'in_progress') {
-                  canApply = studentPct >= 30;
+                  meetsReadiness = studentPct >= 30;
                 } else {
-                  canApply = true;
+                  meetsReadiness = true;
                 }
 
-                if (canApply) {
+                // Allow applying even if overall match is low when the only unmet piece is custom requirements
+                let allowApplyEvenIfMatchLow = false;
+                if (matchDetails && !matchDetails.canApply) {
+                  const skillsOk = (matchDetails.breakdown?.skills?.percentage || 0) === 100;
+                  const eligibilityOk = (matchDetails.breakdown?.eligibility?.percentage || 0) === 100;
+                  const requirementsNotOk = (matchDetails.breakdown?.requirements?.percentage || 100) < 100;
+
+                  if (skillsOk && eligibilityOk && requirementsNotOk) {
+                    allowApplyEvenIfMatchLow = true;
+                  }
+                }
+
+                // Prefer showing Apply Now if the match engine explicitly allows it, even if readiness is not fully met.
+                const canApplyUi = (matchDetails?.canApply === true) || (meetsReadiness && allowApplyEvenIfMatchLow);
+
+                // If match details are still loading, avoid showing Show Interest prematurely
+                if (matchLoading) {
+                  debugDecision('Match still loading, showing placeholder for apply area', { matchLoading });
                   return (
-                    <button
-                      onClick={() => setShowApplyModal(true)}
-                      className="btn btn-primary"
-                    >
-                      Apply Now
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button className="btn btn-primary opacity-50" disabled>Loading…</button>
+                    </div>
+                  );
+                }
+
+                // Debug log when we choose to show Show Interest (helps reproduce issues)
+                if (!canApplyUi) {
+                  debugDecision('Deciding to show Show Interest', {
+                    canApply: matchDetails?.canApply,
+                    allowApplyEvenIfMatchLow,
+                    meetsReadiness,
+                    studentPct,
+                    matchDetailsSummary: {
+                      skillsPct: matchDetails?.breakdown?.skills?.percentage,
+                      eligibilityPct: matchDetails?.breakdown?.eligibility?.percentage,
+                      requirementsPct: matchDetails?.breakdown?.requirements?.percentage
+                    }
+                  });
+                }
+
+                if (canApplyUi) {
+                  return (
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setShowApplyModal(true)}
+                        className="btn btn-primary"
+                      >
+                        Apply Now
+                      </button>
+                      {allowApplyEvenIfMatchLow && (
+                        <span className="text-sm text-yellow-700">You will need to confirm job requirements when applying</span>
+                      )}
+                    </div>
                   );
                 } else {
                   return (
@@ -440,6 +509,17 @@ const JobDetails = () => {
                 {matchDetails.summary?.map((msg, i) => (
                   <p key={i} className="text-sm">{msg}</p>
                 ))}
+
+                {/* Missing mandatory custom requirements (surface them explicitly) */}
+                {(() => {
+                  const missing = (matchDetails?.breakdown?.requirements?.details || []).filter(d => !d.meets).map(d => d.requirement).filter(Boolean);
+                  if (missing.length > 0) {
+                    return (
+                      <p className="text-sm text-yellow-800 mt-2">⚠️ You will need to confirm: {missing.join(', ')}</p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* Breakdown */}

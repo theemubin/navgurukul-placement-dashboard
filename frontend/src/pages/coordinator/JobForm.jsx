@@ -22,6 +22,7 @@ const JobForm = () => {
   const [schoolsWithModules, setSchoolsWithModules] = useState([]);
   // const [schoolsWithTracks, setSchoolsWithTracks] = useState([]); // Unused
   const [studentCount, setStudentCount] = useState({ total: 0, eligible: 0 });
+  const [coordinators, setCoordinators] = useState([]);
   const [jdUrl, setJdUrl] = useState('');
   const [aiParseInfo, setAiParseInfo] = useState(null);
   const [parsedSuggestion, setParsedSuggestion] = useState(null); // holds parsed JD data for preview
@@ -128,8 +129,18 @@ const JobForm = () => {
     fetchLocations();
     fetchStudentLocations();
     fetchRoleCategories();
+    fetchCoordinators();
     if (isEdit) fetchJob();
   }, [id]);
+
+  const fetchCoordinators = async () => {
+    try {
+      const res = await userAPI.getCoordinators();
+      setCoordinators(res.data.coordinators || []);
+    } catch (err) {
+      console.error('Error fetching coordinators', err);
+    }
+  };
 
   // Debounce for eligibility count
   useEffect(() => {
@@ -297,7 +308,9 @@ const JobForm = () => {
 
   // Helper to add/remove list items
   const addListItem = (field) => {
-    setFormData({ ...formData, [field]: [...formData[field], ''] });
+    // For structured list types, add object defaults; otherwise add empty string
+    const defaultItem = field === 'interviewRounds' ? { name: '', type: 'other' } : '';
+    setFormData({ ...formData, [field]: [...formData[field], defaultItem] });
   };
 
   const updateListItem = (field, index, value) => {
@@ -636,6 +649,19 @@ const JobForm = () => {
                 placeholder="https://..."
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Coordinator (Lead)</label>
+              <select
+                value={formData.coordinator || ''}
+                onChange={(e) => setFormData({ ...formData, coordinator: e.target.value || null })}
+              >
+                <option value="">None (Unassigned)</option>
+                {coordinators.map(c => (
+                  <option key={c._id} value={c._id}>{c.firstName} {c.lastName} {c.email ? `(${c.email})` : ''}</option>
+                ))}
+              </select>
+            </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Company Description</label>
               <textarea
@@ -927,6 +953,13 @@ const JobForm = () => {
                 const skillId = selectedSkill.skill?._id || selectedSkill.skill;
                 const skillInfo = allSkills.find(s => s._id === skillId);
                 if (!skillInfo) return null;
+
+                // If CEFR English is set, do not show duplicate English in Selected Skills
+                const isEnglishSkill = (skillInfo.name || '').toLowerCase() === 'english';
+                if (isEnglishSkill && (formData.eligibility.englishSpeaking || formData.eligibility.englishWriting)) {
+                  return null;
+                }
+
                 return (
                   <div key={skillId} className="flex items-center gap-3 p-2 bg-primary-50 rounded-lg">
                     <span className="font-medium text-primary-800 min-w-32 text-sm">{skillInfo.name}</span>
@@ -957,6 +990,10 @@ const JobForm = () => {
           {/* Available Skills to Add */}
           <div className="flex flex-wrap gap-2">
             {allSkills.map((skill) => {
+              // Hide English as a selectable 'skill' when CEFR fields are set (we use CEFR instead)
+              const isCEFRSet = formData.eligibility.englishSpeaking || formData.eligibility.englishWriting;
+              if (isCEFRSet && (skill.name || '').toLowerCase() === 'english') return null;
+
               const isSelected = formData.requiredSkills.some(s => s.skill === skill._id || s.skill?._id === skill._id);
               if (isSelected) return null;
               return (

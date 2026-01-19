@@ -61,6 +61,8 @@ export const userAPI = {
     api.put(`/users/students/${studentId}/profile`, data),
   getEligibleCount: (params) => api.get('/users/eligible-count', { params }),
   getStudentLocations: () => api.get('/users/student-locations'),
+  // Get list of coordinators for assignment/filtering
+  getCoordinators: () => api.get('/users/coordinators'),
   // Managed campuses for Campus POCs
   getManagedCampuses: () => api.get('/users/managed-campuses'),
   updateManagedCampuses: (campusIds) => api.put('/users/managed-campuses', { campusIds }),
@@ -153,6 +155,7 @@ export const jobAPI = {
   updateExpectedDate: (jobId, expectedUpdateDate, expectedUpdateNote) => api.patch(`/jobs/${jobId}/expected-update`, { expectedUpdateDate, expectedUpdateNote }),
   // Coordinator assignment
   assignCoordinator: (jobId, coordinatorId) => api.patch(`/jobs/${jobId}/coordinator`, { coordinatorId }),
+  bulkUpdate: (jobId, data) => api.post(`/jobs/${jobId}/bulk-update`, data),
   getCoordinatorJobStats: () => api.get('/jobs/stats/coordinator-jobs')
 };
 
@@ -160,7 +163,7 @@ export const jobAPI = {
 export const applicationAPI = {
   getApplications: (params) => api.get('/applications', { params }),
   getApplication: (id) => api.get(`/applications/${id}`),
-  apply: (jobId, coverLetter, customResponses) => api.post('/applications', { jobId, coverLetter, customResponses }),
+  apply: (jobId, coverLetter, customResponses, type = 'regular') => api.post('/applications', { jobId, coverLetter, customResponses, type }),
   updateStatus: (id, status, feedback) =>
     api.put(`/applications/${id}/status`, { status, feedback }),
   updateRound: (id, roundData) => api.put(`/applications/${id}/rounds`, roundData),

@@ -206,11 +206,36 @@ router.put('/profile', auth, authorize('student'), upload.single('resume'), asyn
         };
       }
 
-      if (updates.softSkills) {
-        user.studentProfile.softSkills = {
-          ...user.studentProfile.softSkills,
-          ...updates.softSkills
-        };
+      if (updates.softSkills !== undefined) {
+        // Accept both object mapping (from frontend) and array (legacy/new clients)
+        const existing = user.studentProfile.softSkills || [];
+
+        if (Array.isArray(updates.softSkills)) {
+          // Replace or merge arrays (incoming array expected to have objects { skillName, selfRating })
+          // We'll merge by skillName to avoid duplicates
+          const map = new Map(existing.map(s => [s.skillName, s]));
+          updates.softSkills.forEach(s => {
+            if (!s) return;
+            const key = s.skillName || (s.skillId && s.skillId.toString());
+            const prev = map.get(key) || {};
+            map.set(key, { ...prev, ...s });
+          });
+          user.studentProfile.softSkills = Array.from(map.values());
+        } else if (typeof updates.softSkills === 'object' && updates.softSkills !== null) {
+          // Incoming is an object mapping keys -> rating. Convert to array entries.
+          const arr = Array.isArray(existing) ? existing.slice() : [];
+          const toLabel = (key) => key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+          for (const [k, v] of Object.entries(updates.softSkills)) {
+            const label = toLabel(k);
+            const found = arr.find(s => (s.skillName && s.skillName.toLowerCase() === label.toLowerCase()));
+            if (found) {
+              found.selfRating = Number(v) || 0;
+            } else {
+              arr.push({ skillName: label, selfRating: Number(v) || 0 });
+            }
+          }
+          user.studentProfile.softSkills = arr;
+        }
       }
 
       if (updates.technicalSkills) {
@@ -354,6 +379,8 @@ router.put('/students/:studentId/profile/approve', auth, authorize('campus_poc',
     student.studentProfile.profileStatus = status;
 
     if (status === 'approved') {
+      // Save a snapshot of this approved profile for future diffing
+      student.studentProfile.lastApprovedSnapshot = JSON.parse(JSON.stringify(student.studentProfile));
       student.studentProfile.approvedBy = req.userId;
       student.studentProfile.approvedAt = new Date();
       student.studentProfile.revisionNotes = '';
@@ -472,8 +499,21 @@ router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordi
       student.studentProfile.openForRoles = updates.openForRoles;
     }
 
-    if (updates.technicalSkills) {
-      student.studentProfile.technicalSkills = updates.technicalSkills;
+    if (Array.isArray(updates.technicalSkills)) {
+      // Merge incoming technical skills with existing ones to avoid unintentionally
+      // wiping skills approved by POCs which the client may not be aware of.
+      const existing = student.studentProfile.technicalSkills || [];
+      const map = new Map(existing.map(s => [(s.skillId && s.skillId.toString()) || s.skillName, s]));
+
+      updates.technicalSkills.forEach(s => {
+        const key = (s.skillId && s.skillId.toString()) || s.skillName;
+        const prev = map.get(key) || {};
+        // Merge fields (incoming values override previous)
+        const merged = { ...prev, ...s };
+        map.set(key, merged);
+      });
+
+      student.studentProfile.technicalSkills = Array.from(map.values());
     }
 
     if (updates.englishProficiency) {
@@ -500,7 +540,7 @@ router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordi
 // Add skill to student profile
 router.post('/profile/skills', auth, authorize('student'), async (req, res) => {
   try {
-    const { skillId } = req.body;
+    const { skillId, selfRating } = req.body;
     const user = await User.findById(req.userId);
 
     // Check if skill already exists
@@ -514,7 +554,8 @@ router.post('/profile/skills', auth, authorize('student'), async (req, res) => {
 
     user.studentProfile.skills.push({
       skill: skillId,
-      status: 'pending'
+      status: 'pending',
+      selfRating: typeof selfRating === 'number' ? selfRating : 0
     });
 
     await user.save();
@@ -535,7 +576,9 @@ router.post('/profile/skills', auth, authorize('student'), async (req, res) => {
       });
     }
 
-    res.json({ message: 'Skill added, pending approval' });
+    const added = user.studentProfile.skills.find(s => s.skill.toString() === skillId);
+
+    res.json({ message: 'Skill added, pending approval', skill: added });
   } catch (error) {
     console.error('Add skill error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -568,6 +611,22 @@ router.put('/students/:studentId/skills/:skillId', auth, authorize('campus_poc',
     student.studentProfile.skills[skillIndex].status = status;
     student.studentProfile.skills[skillIndex].approvedBy = req.userId;
     student.studentProfile.skills[skillIndex].approvedAt = new Date();
+
+    // If approved, ensure it exists (or is updated) in technicalSkills with the same rating
+    if (status === 'approved') {
+      const pendingSkill = student.studentProfile.skills[skillIndex];
+      const rating = pendingSkill.selfRating || 0;
+      const exists = student.studentProfile.technicalSkills.find(s => s.skillId?.toString() === skillId.toString());
+      if (!exists) {
+        student.studentProfile.technicalSkills.push({
+          skillId: skillId,
+          skillName: (await require('../models/Skill').findById(skillId))?.name || '',
+          selfRating: rating
+        });
+      } else {
+        exists.selfRating = rating;
+      }
+    }
 
     await student.save();
 
@@ -763,7 +822,19 @@ router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (
     res.status(500).json({ message: 'Server error' });
   }
 });
+// Get list of active coordinators (used for job assignment and filters)
+router.get('/coordinators', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const coordinators = await User.find({ role: 'coordinator', isActive: true })
+      .select('firstName lastName email _id')
+      .sort({ firstName: 1 });
 
+    res.json({ coordinators });
+  } catch (error) {
+    console.error('Get coordinators error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 // Export-presets API for saving user presets (max 2)
 router.get('/me/export-presets', auth, async (req, res) => {
   try {

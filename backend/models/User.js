@@ -305,6 +305,13 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Skill'
       },
+      // Optional self-rating provided by student at add-time (1-4)
+      selfRating: {
+        type: Number,
+        min: 0,
+        max: 4,
+        default: 0
+      },
       status: {
         type: String,
         enum: ['pending', 'approved', 'rejected'],

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { jobReadinessAPI } from '../../services/api';
-import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { Link, useNavigate } from 'react-router-dom';
 import { jobAPI, settingsAPI, applicationAPI, userAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, ConfirmModal } from '../../components/common/UIComponents';
-import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X } from 'lucide-react';
+import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import JobsKanban from './JobsKanban';
@@ -28,6 +29,181 @@ const CoordinatorJobs = () => {
   const [presets, setPresets] = useState([]);
   const [presetName, setPresetName] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState(null);
+
+  // Applicant modal state
+  const [showApplicantModal, setShowApplicantModal] = useState(false);
+  const [modalJob, setModalJob] = useState(null);
+  const [modalApplicants, setModalApplicants] = useState([]);
+
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const canManageJob = (job) => {
+    if (!user) return false;
+    if (user.role === 'manager') return true;
+    if (job.coordinator && job.coordinator.toString() === user._id.toString()) return true;
+    if (job.createdBy && job.createdBy.toString() === user._id.toString()) return true;
+    return false;
+  };
+
+  const fetchApplicantsForJob = async (jobId) => {
+    try {
+      const res = await applicationAPI.getApplications({ job: jobId, limit: 1000 });
+      setModalApplicants(res.data.applications || []);
+    } catch (err) {
+      console.error('Error fetching applicants', err);
+      toast.error('Error fetching applicants for job');
+    }
+  };
+
+  const openManageApplicants = async (job) => {
+    if (!canManageJob(job)) {
+      toast.error("Only the job's assigned coordinator or a manager may manage applicants for this job");
+      return;
+    }
+    setModalJob(job);
+    setModalNewStatus(null);
+    await fetchApplicantsForJob(job._id);
+    // initialize per-app overrides
+    setModalApplicants(prev => (prev || []).map(a => ({ ...a, _target: a._target || undefined, _comment: a._comment || '' })));
+    // reset section UI
+    setSectionComments({ selected: '', notMoving: '', noAction: '' });
+    setCollapsedSections({ selected: false, notMoving: false, noAction: false });
+    setSectionStatus({ selected: 'selected', notMoving: 'rejected', noAction: 'no_change' });
+    setShowApplicantModal(true);
+  };
+
+  // -- Modal helpers and state for managing applicants
+  const [sectionComments, setSectionComments] = useState({ selected: '', notMoving: '', noAction: '' });
+  const [collapsedSections, setCollapsedSections] = useState({ selected: false, notMoving: false, noAction: false });
+  const [sectionStatus, setSectionStatus] = useState({ selected: 'selected', notMoving: 'rejected', noAction: 'no_change' });
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [applyingModalChanges, setApplyingModalChanges] = useState(false);
+
+  const toggleSectionCollapse = (key) => setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const selectAllInSection = (sectionKey) => {
+    setModalApplicants(prev => prev.map(a => ({ ...a, _target: sectionKey })));
+  };
+
+  const copySectionComment = (sectionKey) => {
+    const comment = sectionComments[sectionKey] || '';
+    setModalApplicants(prev => prev.map(a => {
+      const inSection = a._target === sectionKey || (sectionKey === 'selected' && a.status === 'selected') || (sectionKey === 'notMoving' && ['rejected','withdrawn'].includes(a.status)) || (sectionKey === 'noAction' && !['selected','rejected','withdrawn'].includes(a.status));
+      if (inSection) return { ...a, _comment: comment };
+      return a;
+    }));
+  };
+
+  const copyRowCommentToCategory = (sectionKey, comment) => {
+    if (!comment) return;
+    setSectionComments(prev => ({ ...prev, [sectionKey]: prev[sectionKey] ? `${prev[sectionKey]}\n${comment}` : comment }));
+  };
+
+  const updateApplicantComment = (appId, value) => {
+    setModalApplicants(prev => prev.map(a => a._id === appId ? { ...a, _comment: value } : a));
+  };
+
+  const handleModalSetTarget = (appId, target) => {
+    setModalApplicants(prev => prev.map(a => a._id === appId ? { ...a, _target: target } : a));
+  };
+
+  const openPreview = () => {
+    if (!modalJob) return;
+    const groups = { selected: [], notMoving: [], feedbackOnly: [] };
+    const perAppFeedbacks = {};
+
+    modalApplicants.forEach(a => {
+      const target = a._target || 'noAction';
+      if (target === 'selected') groups.selected.push(a);
+      else if (target === 'notMoving') groups.notMoving.push(a);
+      else groups.feedbackOnly.push(a);
+
+      if (a._comment) perAppFeedbacks[a._id] = a._comment;
+    });
+
+    setPreviewData({
+      counts: { selected: groups.selected.length, notMoving: groups.notMoving.length, feedbackOnly: groups.feedbackOnly.length },
+      sectionComments,
+      perAppFeedbacks,
+      sampleStudents: {
+        selected: groups.selected.slice(0, 3),
+        notMoving: groups.notMoving.slice(0, 3),
+        feedbackOnly: groups.feedbackOnly.slice(0, 3)
+      }
+    });
+
+    setShowPreviewModal(true);
+  };
+
+  const handleModalApplyConfirmed = async () => {
+    if (!modalJob) return;
+    setApplyingModalChanges(true);
+
+    try {
+      const perAppFeedbackMap = {};
+      const groupsByStatus = {};
+
+      modalApplicants.forEach(a => {
+        const target = a._target || 'noAction';
+        let statusValue = undefined;
+        if (target === 'selected') statusValue = sectionStatus.selected === 'no_change' ? undefined : sectionStatus.selected;
+        else if (target === 'notMoving') statusValue = sectionStatus.notMoving === 'no_change' ? undefined : sectionStatus.notMoving;
+        // noAction stays undefined (feedback only)
+
+        const groupKey = statusValue || 'feedback_only';
+        groupsByStatus[groupKey] = groupsByStatus[groupKey] || [];
+        groupsByStatus[groupKey].push(a._id);
+
+        if (a._comment) perAppFeedbackMap[a._id] = a._comment;
+      });
+
+      // Execute grouped updates
+      for (const [groupKey, ids] of Object.entries(groupsByStatus)) {
+        if (ids.length === 0) continue;
+
+        const subset = ids.reduce((acc, id) => { if (perAppFeedbackMap[id]) acc[id] = perAppFeedbackMap[id]; return acc; }, {});
+
+        if (groupKey === 'feedback_only') {
+          // feedback-only group: send general feedback from noAction section
+          if (ids.length > 0 && (sectionComments.noAction || Object.keys(subset).length > 0)) {
+            const payload = { applicationIds: ids, action: 'set_status', generalFeedback: sectionComments.noAction };
+            if (Object.keys(subset).length > 0) payload.perApplicationFeedbacks = subset;
+            await jobAPI.bulkUpdate(modalJob._id, payload);
+          }
+        } else {
+          const defaultFeedback = (groupKey === sectionStatus.selected ? sectionComments.selected : (groupKey === sectionStatus.notMoving ? sectionComments.notMoving : ''));
+          const payload = { applicationIds: ids, action: 'set_status', status: groupKey, generalFeedback: defaultFeedback };
+          if (Object.keys(subset).length > 0) payload.perApplicationFeedbacks = subset;
+          await jobAPI.bulkUpdate(modalJob._id, payload);
+        }
+      }
+
+      // After bulk updates, check if the job became 'filled' due to placements
+      const latestJobRes = await jobAPI.getJob(modalJob._id);
+      const latestJob = latestJobRes.data.job;
+
+      // If backend didn't already mark job filled and caller intended a new status, apply it
+      if (modalNewStatus && latestJob.status !== 'filled') {
+        await jobAPI.updateJob(modalJob._id, { status: modalNewStatus });
+        toast.success('Job status updated');
+      }
+
+      toast.success('Applicants updated');
+      setShowPreviewModal(false);
+      setShowApplicantModal(false);
+      setModalApplicants([]);
+      setModalNewStatus(null);
+      await fetchJobs();
+    } catch (error) {
+      console.error('Modal apply error', error);
+      const msg = error?.response?.data?.message || error?.message || 'Failed to apply changes';
+      toast.error(msg);
+    } finally {
+      setApplyingModalChanges(false);
+    }
+  };
 
   useEffect(() => {
     fetchPipelineStages();
@@ -120,7 +296,31 @@ const CoordinatorJobs = () => {
     }
   };
 
+  const [modalNewStatus, setModalNewStatus] = useState(null);
+
   const handleStatusChange = async (jobId, newStatus) => {
+    // statuses that should trigger applicant review modal
+    const reviewStatuses = ['hr_shortlisting', 'interviewing', 'application_stage'];
+
+    if (reviewStatuses.includes(newStatus)) {
+      // Open modal and set up for review flow instead of directly updating the job
+      const job = jobs.find(j => j._id === jobId);
+      if (!canManageJob(job)) {
+        toast.error("Only the job's assigned coordinator or a manager may manage applicants for this job");
+        return;
+      }
+      setModalJob(job);
+      setModalNewStatus(newStatus);
+      await fetchApplicantsForJob(jobId);
+      // Only show applicants who are still 'in process' (not rejected/withdrawn/placed)
+      setModalApplicants(prev => (prev || []).filter(a => !['rejected','withdrawn','selected','placed'].includes(a.status)).map(a => ({ ...a, _target: a._target || undefined, _comment: a._comment || '' })));
+      setSectionComments({ selected: '', notMoving: '', noAction: '' });
+      setCollapsedSections({ selected: false, notMoving: false, noAction: false });
+      setSectionStatus({ selected: 'selected', notMoving: 'rejected', noAction: 'no_change' });
+      setShowApplicantModal(true);
+      return;
+    }
+
     try {
       await jobAPI.updateJob(jobId, { status: newStatus });
       toast.success('Job status updated');
@@ -394,6 +594,21 @@ const CoordinatorJobs = () => {
                           </span>
                         </div>
                       </div>
+
+                      {/* Quick 'View applicants' and 'Manage applicants' actions (responsive: below title on small screens) */}
+                      <div className="w-full lg:w-auto flex items-center gap-2 mt-2 lg:mt-0 justify-start lg:justify-end">
+                        <Link className="btn btn-outline flex items-center" to={`/coordinator/applications?job=${job._id}`} title={`View ${job.totalApplications || 0} applications`}>
+                          <span>View applicants</span>
+                          <span className="ml-2 text-sm text-gray-600 px-2 py-1 bg-gray-100 rounded-full">{job.totalApplications || 0}</span>
+                        </Link>
+                        <button
+                          className="btn"
+                          title="Change status and manage applicants"
+                          onClick={() => openManageApplicants(job)}
+                        >
+                          Manage Applicants
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -436,6 +651,9 @@ const CoordinatorJobs = () => {
                       Placements: <span className="font-medium text-green-600">{job.placementsCount || 0}</span>
                     </span>
                     <span className="text-gray-500">
+                      Applications: <span className="font-medium">{job.totalApplications || 0}</span>
+                    </span>
+                    <span className="text-gray-500">
                       Skills: <span className="font-medium">{job.requiredSkills?.length || 0}</span>
                     </span>
                     {/* Job Readiness Tooltip (School of Programming only) */}
@@ -473,6 +691,238 @@ const CoordinatorJobs = () => {
         />
       )}
         </>
+      )}
+
+      {/* Applicants Modal (opened from 'Manage Applicants' button) */}
+      {showApplicantModal && modalJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black opacity-30" onClick={() => { setShowApplicantModal(false); setModalNewStatus(null); }} />
+          <div className="bg-white rounded-lg max-w-4xl w-full p-4 z-10 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-semibold">Manage Applicants — {modalJob.title}</h3>
+                {modalNewStatus && (
+                  <div className="text-sm text-gray-500">This action will set the job status to <span className="font-medium">{modalNewStatus}</span> when applied</div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 modal-actions">
+                <button className="btn btn-secondary" onClick={() => { setShowApplicantModal(false); setModalNewStatus(null); }}>Cancel</button>
+                <button className="btn btn-primary" onClick={openPreview}>Preview & Apply</button>
+              </div>
+            </div>
+
+            <div className="applicant-columns">
+              {/* Selected Column */}
+              <div className="applicant-column">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold">Selected</h4>
+                    <button className="lg:hidden p-1 text-gray-500" title="Toggle" onClick={() => toggleSectionCollapse('selected')}>
+                      {collapsedSections.selected ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select className="text-sm border rounded px-2 py-1 hidden lg:inline" value={sectionStatus.selected} onChange={(e) => setSectionStatus(s => ({ ...s, selected: e.target.value }))}>
+                      <option value="selected">Selected</option>
+                      <option value="placed">Placed</option>
+                      <option value="no_change">No change (feedback only)</option>
+                    </select>
+                    <button className="btn btn-sm" onClick={() => selectAllInSection('selected')}>Select all</button>
+                    <button className="btn btn-sm" onClick={() => copySectionComment('selected')}>Copy comment</button>
+                  </div>
+                </div>
+
+                <p className="text-sm text-gray-500 mb-2">Students marked as selected will be moved to Selected status (or 'placed').</p>
+                <div className={`${collapsedSections.selected ? 'hidden lg:block' : 'block'}`}>
+                  <textarea rows={3} value={sectionComments.selected} onChange={(e) => setSectionComments(s => ({ ...s, selected: e.target.value }))} placeholder="General comment for selected students (visible to students)" className="w-full mb-3" />
+                  <div className="column-body">
+                    {modalApplicants.filter(a => a._target === 'selected' || a.status === 'selected').map(a => (
+                      <div key={a._id} className="student-card">
+                        <div className="flex flex-col items-start justify-between gap-4">
+                          <div>
+                            <div className="font-medium">{a.student?.firstName} {a.student?.lastName}</div>
+                            <div className="student-email truncate-ellipsis">{a.student?.email}</div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-2">
+                            <button aria-label="Selected" title="Selected" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='selected' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'selected')}><CheckCircle className="w-4 h-4" /> <span className="sr-only">Selected</span></button>
+                            <button aria-label="Not moving ahead" title="Not moving ahead" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='notMoving' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'notMoving')}><XCircle className="w-4 h-4" /> <span className="sr-only">Not moving ahead</span></button>
+                            <button aria-label="No action" title="No action" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='noAction' ? 'bg-gray-100 text-gray-900 border-gray-200' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'noAction')}><Pause className="w-4 h-4" /> <span className="sr-only">No action</span></button>
+                          </div>
+                        </div>
+
+                        <div className="mt-3">
+                          <textarea rows={2} value={a._comment || ''} onChange={(e) => updateApplicantComment(a._id, e.target.value)} placeholder="Individual comment for this student (optional)" className="w-full text-sm border rounded p-2" />
+                          <div className="flex justify-end mt-2 gap-2">
+                            <button onClick={() => copyRowCommentToCategory('selected', a._comment || '')} className="btn btn-sm">Copy to category</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Not moving ahead */}
+              <div className="applicant-column">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold">Not moving ahead</h4>
+                    <button className="lg:hidden p-1 text-gray-500" title="Toggle" onClick={() => toggleSectionCollapse('notMoving')}>
+                      {collapsedSections.notMoving ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select className="text-sm border rounded px-2 py-1 hidden lg:inline" value={sectionStatus.notMoving} onChange={(e) => setSectionStatus(s => ({ ...s, notMoving: e.target.value }))}>
+                      <option value="rejected">Rejected</option>
+                      <option value="withdrawn">Withdrawn</option>
+                      <option value="no_change">No change (feedback only)</option>
+                    </select>
+                    <button className="btn btn-sm" onClick={() => selectAllInSection('notMoving')}>Select all</button>
+                    <button className="btn btn-sm" onClick={() => copySectionComment('notMoving')}>Copy comment</button>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-500 mb-2">Students here will be marked as rejected/not moving ahead.</p>
+                <textarea rows={3} value={sectionComments.notMoving} onChange={(e) => setSectionComments(s => ({ ...s, notMoving: e.target.value }))} placeholder="General comment for not moving ahead students" className="w-full mb-3" />
+                <div className="space-y-2">
+                  {modalApplicants.filter(a => a._target === 'notMoving' || ['rejected','withdrawn'].includes(a.status)).map(a => (
+                    <div key={a._id} className="p-2 rounded hover:bg-gray-50 border">
+                      <div className="flex flex-col items-start justify-between gap-4">
+                        <div>
+                          <div className="font-medium">{a.student?.firstName} {a.student?.lastName} <span className="ml-2 px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">{a.student?.email}</span></div>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button aria-label="Selected" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='selected' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'selected')}><CheckCircle className="w-4 h-4" /><span className="sr-only">Selected</span></button>
+                          <button aria-label="Not moving ahead" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='notMoving' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'notMoving')}><XCircle className="w-4 h-4" /><span className="sr-only">Not moving ahead</span></button>
+                          <button aria-label="No action" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='noAction' ? 'bg-gray-100 text-gray-900 border-gray-200' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'noAction')}><Pause className="w-4 h-4" /><span className="sr-only">No action</span></button>
+                        </div>
+                      </div>
+
+                      <div className="mt-2">
+                        <textarea rows={2} value={a._comment || ''} onChange={(e) => updateApplicantComment(a._id, e.target.value)} placeholder="Individual comment for this student (optional)" className="w-full text-sm border rounded p-2" />
+                        <div className="flex justify-end mt-2 gap-2">
+                          <button onClick={() => copyRowCommentToCategory('notMoving', a._comment || '')} className="btn btn-sm">Copy to category</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* No action yet */}
+              <div className="applicant-column">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold">No action yet</h4>
+                    <button className="lg:hidden p-1 text-gray-500" title="Toggle" onClick={() => toggleSectionCollapse('noAction')}>
+                      {collapsedSections.noAction ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select className="text-sm border rounded px-2 py-1 hidden lg:inline" value={sectionStatus.noAction} onChange={(e) => setSectionStatus(s => ({ ...s, noAction: e.target.value }))}>
+                      <option value="no_change">No change (feedback only)</option>
+                      <option value="in_progress">Mark In Progress</option>
+                    </select>
+                    <button className="btn btn-sm" onClick={() => selectAllInSection('noAction')}>Select all</button>
+                    <button className="btn btn-sm" onClick={() => copySectionComment('noAction')}>Copy comment</button>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-500 mb-2">Students not yet acted upon. You can leave a general comment without changing their status.</p>
+                <textarea rows={3} value={sectionComments.noAction} onChange={(e) => setSectionComments(s => ({ ...s, noAction: e.target.value }))} placeholder="General comment for remaining students" className="w-full mb-3" />
+                <div className="column-body">
+                  {modalApplicants.filter(a => (!['selected','rejected','withdrawn'].includes(a.status) && a._target !== 'selected' && a._target !== 'notMoving') || a._target === 'noAction').map(a => (
+                    <div key={a._id} className="student-card">
+                      <div className="flex flex-col items-start justify-between gap-4">
+                        <div>
+                          <div className="font-medium">{a.student?.firstName} {a.student?.lastName}</div>
+                          <div className="student-email truncate-ellipsis">{a.student?.email}</div>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button aria-label="Selected" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='selected' ? 'bg-green-100 text-green-700 border' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'selected')}><CheckCircle className="w-4 h-4" /><span className="sr-only">Selected</span></button>
+                          <button aria-label="Not moving ahead" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='notMoving' ? 'bg-red-100 text-red-700 border' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'notMoving')}><XCircle className="w-4 h-4" /><span className="sr-only">Not</span></button>
+                          <button aria-label="No action" className={`w-8 h-8 flex items-center justify-center rounded border text-sm ${a._target==='noAction' ? 'bg-gray-100 text-gray-900 border' : 'bg-white text-gray-700 border'}`} onClick={() => handleModalSetTarget(a._id, 'noAction')}><Pause className="w-4 h-4" /><span className="sr-only">No action</span></button>
+                        </div>
+                      </div>
+
+                      <div className="mt-3">
+                        <textarea rows={2} value={a._comment || ''} onChange={(e) => updateApplicantComment(a._id, e.target.value)} placeholder="Individual comment for this student (optional)" className="w-full text-sm border rounded p-2" />
+                        <div className="flex justify-end mt-2 gap-2">
+                          <button onClick={() => copyRowCommentToCategory('noAction', a._comment || '')} className="btn btn-sm">Copy to category</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {showPreviewModal && previewData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black opacity-30" onClick={() => setShowPreviewModal(false)} />
+          <div className="bg-white rounded-lg max-w-xl w-full p-6 z-10 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Preview Changes</h3>
+              <div className="flex items-center gap-2">
+                <button className="btn btn-secondary" onClick={() => setShowPreviewModal(false)}>Back</button>
+                <button className="btn btn-primary" onClick={handleModalApplyConfirmed} disabled={applyingModalChanges}>{applyingModalChanges ? 'Applying...' : 'Confirm & Apply'}</button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3 border rounded">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-600">Selected</div>
+                    <div className="font-medium text-lg">{previewData.counts.selected}</div>
+                  </div>
+                  <div className="text-sm text-gray-500">Message: <span className="font-medium">{previewData.sectionComments.selected || '(none)'}</span></div>
+                </div>
+              </div>
+
+              <div className="p-3 border rounded">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-600">Not moving ahead</div>
+                    <div className="font-medium text-lg">{previewData.counts.notMoving}</div>
+                  </div>
+                  <div className="text-sm text-gray-500">Message: <span className="font-medium">{previewData.sectionComments.notMoving || '(none)'}</span></div>
+                </div>
+              </div>
+
+              <div className="p-3 border rounded">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-600">No action / Feedback only</div>
+                    <div className="font-medium text-lg">{previewData.counts.feedbackOnly}</div>
+                  </div>
+                  <div className="text-sm text-gray-500">Message: <span className="font-medium">{previewData.sectionComments.noAction || '(none)'}</span></div>
+                </div>
+              </div>
+
+              <div className="p-3 border rounded">
+                <div className="text-sm text-gray-600 mb-2">Sample individual comments (first 3 per group)</div>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <div>
+                    <div className="font-medium">Selected:</div>
+                    {previewData.sampleStudents.selected.map(s => <div key={s._id}>- {s.student?.firstName} {s.student?.lastName}: "{s._comment || previewData.sectionComments.selected || '-'}"</div>)}
+                  </div>
+                  <div>
+                    <div className="font-medium">Not moving ahead:</div>
+                    {previewData.sampleStudents.notMoving.map(s => <div key={s._id}>- {s.student?.firstName} {s.student?.lastName}: "{s._comment || previewData.sectionComments.notMoving || '-'}"</div>)}
+                  </div>
+                  <div>
+                    <div className="font-medium">Feedback only:</div>
+                    {previewData.sampleStudents.feedbackOnly.map(s => <div key={s._id}>- {s.student?.firstName} {s.student?.lastName}: "{s._comment || previewData.sectionComments.noAction || '-'}"</div>)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Delete Confirmation */}

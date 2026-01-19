@@ -12,6 +12,9 @@ const ProfileApprovals = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectComments, setRejectComments] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  // Inline editing for soft skills (POC/Manager)
+  const [editingSoftSkillKey, setEditingSoftSkillKey] = useState(null);
+  const [editingSkillName, setEditingSkillName] = useState('');
 
   useEffect(() => {
     fetchPendingProfiles();
@@ -64,9 +67,15 @@ const ProfileApprovals = () => {
     }
   };
 
-  const openDetailsModal = (student) => {
-    setSelectedStudent(student);
-    setShowDetailsModal(true);
+  const openDetailsModal = async (student) => {
+    try {
+      // Fetch fresh student data to ensure latest changes and full fields are available
+      const response = await userAPI.getStudent(student._id);
+      setSelectedStudent(response.data);
+      setShowDetailsModal(true);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to load student details');
+    }
   };
 
   const openRejectModal = () => {
@@ -95,9 +104,73 @@ const ProfileApprovals = () => {
     return colors[proficiency] || 'bg-gray-100 text-gray-800';
   };
 
+  // Convert human skill name to canonical key (same logic as backend)
+  const toKey = (name) => {
+    if (!name) return '';
+    return name.split(/\s+/).map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1)).join('');
+  };
+
+  // Save an edited soft skill (used when a soft skill has an empty name)
+  const handleSaveSoftSkillEdit = async (s) => {
+    if (!editingSkillName || !editingSkillName.trim()) {
+      setError('Please provide a valid skill name');
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      const newKey = toKey(editingSkillName.trim());
+      if (!newKey) {
+        setError('Invalid skill name');
+        return;
+      }
+
+      // Send updates as softSkills map (merge happens on backend)
+      const updates = { softSkills: { [newKey]: s.selfRating || 0 } };
+      await userAPI.updateStudentProfile(selectedStudent._id, updates);
+
+      // Refresh student data
+      const response = await userAPI.getStudent(selectedStudent._id);
+      setSelectedStudent(response.data);
+
+      // Clear editing state
+      setEditingSoftSkillKey(null);
+      setEditingSkillName('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update soft skill');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Helper to get student profile data (handles both nested and flat structures)
   const getProfileData = (student) => {
     const sp = student.studentProfile || {};
+
+    // Normalize soft skills: backend may provide array or object
+    let softSkillsArray = [];
+    let softSkillsMap = {};
+    if (Array.isArray(sp.softSkills)) {
+      // Preserve existing array entries and add a stable key
+      softSkillsArray = sp.softSkills.map(s => {
+        const skillKey = s.skillId ? (s.skillId.toString()) : toKey(s.skillName || '');
+        return { ...s, skillKey };
+      });
+      softSkillsArray.forEach(s => {
+        if (s && s.skillName) softSkillsMap[toKey(s.skillName)] = s.selfRating || 0;
+      });
+    } else if (typeof sp.softSkills === 'object' && sp.softSkills !== null) {
+      softSkillsMap = sp.softSkills;
+      for (const [k, v] of Object.entries(softSkillsMap)) {
+        const skillName = k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+        softSkillsArray.push({ skillKey: k, skillName, selfRating: v });
+      }
+    }
+
+    // Snapshot normalization
+    const snapshot = sp.lastApprovedSnapshot || {};
+    const snapshotSoftArray = Array.isArray(snapshot.softSkills) ? snapshot.softSkills : (snapshot.softSkillsArray || []);
+
     return {
       // Hometown
       hometown: sp.hometown || student.hometown || {},
@@ -113,13 +186,20 @@ const ProfileApprovals = () => {
       degree: student.degree || {},
       // Skills
       technicalSkills: sp.technicalSkills || student.technicalSkills || [],
-      softSkills: sp.softSkills || student.softSkills || {},
+      softSkillsArray,
+      softSkillsMap,
+      snapshotSoftSkillsArray: snapshotSoftArray,
       // English
       englishProficiency: sp.englishProficiency || student.englishProficiency || {},
       // Roles
       openForRoles: sp.openForRoles || student.rolePreferences || [],
       // Courses
       courses: sp.courses || [],
+      // Languages
+      languages: sp.languages || [],
+      snapshotLanguages: (sp.lastApprovedSnapshot && sp.lastApprovedSnapshot.languages) || [],
+      // Council service
+      councilService: sp.councilService || [],
       // Profile status
       profileStatus: sp.profileStatus || 'draft',
       lastSubmittedAt: sp.lastSubmittedAt,
@@ -180,16 +260,17 @@ const ProfileApprovals = () => {
   // Calculate profile completion percentage
   const calculateCompletion = (student) => {
     const data = getProfileData(student);
+    const softMap = data.softSkillsMap || {};
     const checks = [
       student.firstName && student.phone,
       data.hometown.pincode,
       data.currentSchool,
       data.tenthGrade.percentage,
       data.twelfthGrade.percentage,
-      data.technicalSkills.length > 0,
-      Object.values(data.softSkills).some(v => v > 0),
+      (data.technicalSkills || []).length > 0,
+      Object.values(softMap).some(v => v > 0),
       data.englishProficiency.speaking,
-      data.openForRoles.length > 0,
+      (data.openForRoles || []).length > 0,
     ];
     const completed = checks.filter(Boolean).length;
     return Math.round((completed / checks.length) * 100);
@@ -325,6 +406,17 @@ const ProfileApprovals = () => {
         const profileData = getProfileData(selectedStudent);
         const completionPercent = calculateCompletion(selectedStudent);
 
+        // Calculate changed sections for a short summary
+        const changedSections = [];
+        if (JSON.stringify(profileData.technicalSkills.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify((profileData.lastApprovedSnapshot?.technicalSkills || []).map(s => ({ n: s.skillName, r: s.selfRating })))) changedSections.push('Technical Skills');
+        if (JSON.stringify(profileData.softSkillsArray.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify((profileData.lastApprovedSnapshot?.softSkills || profileData.lastApprovedSnapshot?.softSkillsArray || []).map(s => ({ n: s.skillName, r: s.selfRating })))) changedSections.push('Soft Skills');
+        if (hasChanged(profileData.englishProficiency.speaking, profileData.lastApprovedSnapshot?.englishProficiency?.speaking) || hasChanged(profileData.englishProficiency.writing, profileData.lastApprovedSnapshot?.englishProficiency?.writing)) changedSections.push('English');
+        if (JSON.stringify(profileData.higherEducation) !== JSON.stringify(profileData.lastApprovedSnapshot?.higherEducation || [])) changedSections.push('Higher Education');
+        if (JSON.stringify(profileData.languages) !== JSON.stringify(profileData.snapshotLanguages || [])) changedSections.push('Languages');
+        if (JSON.stringify(profileData.courses) !== JSON.stringify(profileData.lastApprovedSnapshot?.courses || [])) changedSections.push('Courses');
+        if (JSON.stringify(profileData.councilService) !== JSON.stringify(profileData.lastApprovedSnapshot?.councilService || [])) changedSections.push('Council Service');
+        if (JSON.stringify(profileData.openForRoles) !== JSON.stringify(profileData.lastApprovedSnapshot?.openForRoles || [])) changedSections.push('Open For Roles');
+
         return (
           <Modal
             isOpen={showDetailsModal}
@@ -348,6 +440,12 @@ const ProfileApprovals = () => {
                 {profileData.lastSubmittedAt && (
                   <p className="text-xs text-gray-500 mt-2">
                     Submitted: {new Date(profileData.lastSubmittedAt).toLocaleString()}
+                  </p>
+                )}
+
+                {changedSections.length > 0 && (
+                  <p className="text-xs text-yellow-800 mt-2">
+                    <strong>Changes:</strong> {changedSections.join(', ')}
                   </p>
                 )}
               </div>
@@ -590,45 +688,69 @@ const ProfileApprovals = () => {
               )}
 
               {/* English Proficiency */}
-              {(profileData.englishProficiency.speaking || profileData.englishProficiency.writing) && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">English Proficiency (CEFR)</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <RenderField
-                      label="Speaking"
-                      value={profileData.englishProficiency.speaking ? `${profileData.englishProficiency.speaking} - ${getCEFRLabel(profileData.englishProficiency.speaking)}` : 'Not provided'}
-                      snapshotValue={profileData.lastApprovedSnapshot?.englishProficiency?.speaking ? `${profileData.lastApprovedSnapshot.englishProficiency.speaking} - ${getCEFRLabel(profileData.lastApprovedSnapshot.englishProficiency.speaking)}` : null}
-                    />
-                    <RenderField
-                      label="Writing"
-                      value={profileData.englishProficiency.writing ? `${profileData.englishProficiency.writing} - ${getCEFRLabel(profileData.englishProficiency.writing)}` : 'Not provided'}
-                      snapshotValue={profileData.lastApprovedSnapshot?.englishProficiency?.writing ? `${profileData.lastApprovedSnapshot.englishProficiency.writing} - ${getCEFRLabel(profileData.lastApprovedSnapshot.englishProficiency.writing)}` : null}
-                    />
+              {(profileData.englishProficiency.speaking || profileData.englishProficiency.writing) && (() => {
+                const changedSpeaking = hasChanged(profileData.englishProficiency.speaking, profileData.lastApprovedSnapshot?.englishProficiency?.speaking);
+                const changedWriting = hasChanged(profileData.englishProficiency.writing, profileData.lastApprovedSnapshot?.englishProficiency?.writing);
+                const anyChanged = changedSpeaking || changedWriting;
+                return (
+                  <div className={`mb-6 ${anyChanged ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">English Proficiency (CEFR){anyChanged && <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>}</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <RenderField
+                        label="Speaking"
+                        value={profileData.englishProficiency.speaking ? `${profileData.englishProficiency.speaking} - ${getCEFRLabel(profileData.englishProficiency.speaking)}` : 'Not provided'}
+                        snapshotValue={profileData.lastApprovedSnapshot?.englishProficiency?.speaking ? `${profileData.lastApprovedSnapshot.englishProficiency.speaking} - ${getCEFRLabel(profileData.lastApprovedSnapshot.englishProficiency.speaking)}` : null}
+                      />
+                      <RenderField
+                        label="Writing"
+                        value={profileData.englishProficiency.writing ? `${profileData.englishProficiency.writing} - ${getCEFRLabel(profileData.englishProficiency.writing)}` : 'Not provided'}
+                        snapshotValue={profileData.lastApprovedSnapshot?.englishProficiency?.writing ? `${profileData.lastApprovedSnapshot.englishProficiency.writing} - ${getCEFRLabel(profileData.lastApprovedSnapshot.englishProficiency.writing)}` : null}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Soft Skills */}
-              {Object.values(profileData.softSkills).some(v => v > 0) && (
-                <div className={`mb-6 ${isObjectChanged(profileData.softSkills, profileData.lastApprovedSnapshot?.softSkills, Object.keys(profileData.softSkills)) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+              {profileData.softSkillsArray.length > 0 && (
+                <div className={`mb-6 ${JSON.stringify(profileData.softSkillsArray.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify(profileData.snapshotSoftSkillsArray?.map(s => ({ n: s.skillName, r: s.selfRating })) || []) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
                   <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
                     Soft Skills
-                    {isObjectChanged(profileData.softSkills, profileData.lastApprovedSnapshot?.softSkills, Object.keys(profileData.softSkills)) && (
+                    {JSON.stringify(profileData.softSkillsArray.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify(profileData.snapshotSoftSkillsArray?.map(s => ({ n: s.skillName, r: s.selfRating })) || []) && (
                       <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
                     )}
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(profileData.softSkills).filter(([_, v]) => v > 0).map(([skill, rating]) => {
-                      const snapshotRating = profileData.lastApprovedSnapshot?.softSkills?.[skill];
-                      const changed = snapshotRating !== undefined && snapshotRating !== rating;
+                    {profileData.softSkillsArray.map((s, idx) => {
+                      const keyProp = s.skillKey || s.skillName || `soft-${idx}`;
+                      const snapshotRating = (profileData.snapshotSoftSkillsArray || []).find(ps => ps.skillName === s.skillName)?.selfRating;
+                      const changed = snapshotRating !== undefined && snapshotRating !== s.selfRating;
+                      const isEmptyName = !s.skillName || !String(s.skillName).trim();
 
                       return (
-                        <div key={skill} className={`flex items-center justify-between p-2 rounded ${changed ? 'bg-yellow-100 ring-1 ring-yellow-300' : 'bg-purple-50'}`}>
+                        <div key={`${keyProp}-${idx}`} className={`flex items-center justify-between p-2 rounded ${changed ? 'bg-yellow-100 ring-1 ring-yellow-300' : 'bg-purple-50'}`}>
                           <div className="flex flex-col">
-                            <span className="text-sm capitalize">{skill.replace(/([A-Z])/g, ' $1').trim()}</span>
-                            {changed && <span className="text-xs text-gray-500">Prev: {getRatingLabel(snapshotRating)}</span>}
+                            {isEmptyName ? (
+                              editingSoftSkillKey === keyProp ? (
+                                <div className="flex gap-2 items-center">
+                                  <input value={editingSkillName} onChange={e => setEditingSkillName(e.target.value)} className="border p-1 rounded text-sm" placeholder="Skill name" />
+                                  <Button size="sm" variant="primary" onClick={() => handleSaveSoftSkillEdit(s)}>Save</Button>
+                                  <Button size="sm" variant="secondary" onClick={() => { setEditingSoftSkillKey(null); setEditingSkillName(''); }}>Cancel</Button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-2 items-center">
+                                  <span className="text-sm italic text-gray-500">Unnamed skill</span>
+                                  <Button size="sm" variant="secondary" onClick={() => { setEditingSoftSkillKey(keyProp); setEditingSkillName(s.skillName || ''); }}>Edit</Button>
+                                </div>
+                              )
+                            ) : (
+                              <>
+                                <span className="text-sm">{s.skillName}</span>
+                                {changed && <span className="text-xs text-gray-500">Prev: {getRatingLabel(snapshotRating)}</span>}
+                              </>
+                            )}
                           </div>
-                          <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded">{getRatingLabel(rating)}</span>
+                          <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded">{getRatingLabel(s.selfRating)}</span>
                         </div>
                       );
                     })}
@@ -660,6 +782,122 @@ const ProfileApprovals = () => {
                   </div>
                 </div>
               )}
+
+              {/* Higher Education */}
+              {profileData.higherEducation?.length > 0 && (
+                <div className={`mb-6 ${JSON.stringify(profileData.higherEducation) !== JSON.stringify(profileData.lastApprovedSnapshot?.higherEducation || []) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+                    Higher Education
+                    {JSON.stringify(profileData.higherEducation) !== JSON.stringify(profileData.lastApprovedSnapshot?.higherEducation || []) && (
+                      <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                    )}
+                  </h3>
+                  <div className="space-y-2">
+                    {profileData.higherEducation.map((edu, idx) => {
+                      const snapshotEdu = (profileData.lastApprovedSnapshot?.higherEducation || []).find(h => h.institution === edu.institution && h.degree === edu.degree);
+                      const changed = !!snapshotEdu && (snapshotEdu.percentage !== edu.percentage || snapshotEdu.startYear !== edu.startYear || snapshotEdu.endYear !== edu.endYear);
+                      const isNew = !snapshotEdu;
+                      return (
+                        <div key={idx} className={`p-3 rounded ${changed || isNew ? 'bg-yellow-100' : 'bg-gray-50'}`}>
+                          <p className="font-medium">{edu.institution} - {edu.degree}</p>
+                          <p className="text-xs text-gray-500">{edu.startYear || ''} - {edu.endYear || ''} {edu.percentage ? `• ${edu.percentage}%` : ''} {isNew && <span className="text-xs text-green-700 font-bold ml-2">(New)</span>}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Languages */}
+              {profileData.languages?.length > 0 && (
+                <div className={`mb-6 ${JSON.stringify(profileData.languages) !== JSON.stringify(profileData.snapshotLanguages || []) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+                    Languages
+                    {JSON.stringify(profileData.languages) !== JSON.stringify(profileData.snapshotLanguages || []) && (
+                      <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                    )}
+                  </h3>
+                  <div className="space-y-2">
+                    {profileData.languages.map((lang, idx) => {
+                      const snapshotLang = (profileData.snapshotLanguages || []).find(l => l.language === lang.language);
+                      const changed = !!snapshotLang && (snapshotLang.speaking !== lang.speaking || snapshotLang.writing !== lang.writing);
+                      const isNew = !snapshotLang;
+                      return (
+                        <div key={idx} className={`p-3 rounded ${changed || isNew ? 'bg-yellow-100' : 'bg-gray-50'}`}>
+                          <p className="font-medium">{lang.language} <span className="text-xs text-gray-500 ml-2">S:{lang.speaking || 'N/A'} W:{lang.writing || 'N/A'}</span></p>
+                          {isNew && <p className="text-xs text-green-700 font-bold">(New)</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Courses */}
+              {profileData.courses?.length > 0 && (
+                <div className={`mb-6 ${JSON.stringify(profileData.courses) !== JSON.stringify(profileData.lastApprovedSnapshot?.courses || []) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+                    Courses
+                    {JSON.stringify(profileData.courses) !== JSON.stringify(profileData.lastApprovedSnapshot?.courses || []) && (
+                      <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                    )}
+                  </h3>
+                  <div className="space-y-2">
+                    {profileData.courses.map((course, idx) => {
+                      const snapshotCourse = (profileData.lastApprovedSnapshot?.courses || []).find(c => c.courseName === course.courseName);
+                      const changed = !!snapshotCourse && snapshotCourse.certificateUrl !== course.certificateUrl;
+                      const isNew = !snapshotCourse;
+                      return (
+                        <div key={idx} className={`p-3 rounded ${changed || isNew ? 'bg-yellow-100' : 'bg-gray-50'}`}>
+                          <p className="font-medium">{course.courseName} <span className="text-xs text-gray-500 ml-2">{course.provider}</span></p>
+                          {isNew && <p className="text-xs text-green-700 font-bold">(New)</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Council Service */}
+              {profileData.councilService?.length > 0 && (
+                <div className={`mb-6 ${JSON.stringify(profileData.councilService) !== JSON.stringify(profileData.lastApprovedSnapshot?.councilService || []) ? 'bg-yellow-50 p-3 rounded border border-yellow-200' : ''}`}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+                    Council Service
+                    {JSON.stringify(profileData.councilService) !== JSON.stringify(profileData.lastApprovedSnapshot?.councilService || []) && (
+                      <span className="ml-2 text-xs text-yellow-700 font-normal">(Changed)</span>
+                    )}
+                  </h3>
+                  <div className="space-y-2">
+                    {profileData.councilService.map((c, idx) => {
+                      const snapshotC = (profileData.lastApprovedSnapshot?.councilService || []).find(s => s.post === c.post && s.monthsServed === c.monthsServed);
+                      const isNew = !snapshotC;
+                      return (
+                        <div key={idx} className={`p-3 rounded ${isNew ? 'bg-yellow-100' : 'bg-gray-50'}`}>
+                          <p className="font-medium">{c.post} • {c.monthsServed} months {c.status ? `• ${c.status}` : ''}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Resume */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Resume</h3>
+                <div>
+                  {selectedStudent.studentProfile?.resume ? (
+                    <div className="p-3 bg-gray-50 rounded">
+                      <a href={`/${selectedStudent.studentProfile.resume}`} target="_blank" rel="noreferrer" className="text-primary-600">View Resume</a>
+                    </div>
+                  ) : selectedStudent.studentProfile?.resumeLink ? (
+                    <div className="p-3 bg-gray-50 rounded">
+                      <a href={selectedStudent.studentProfile.resumeLink} target="_blank" rel="noreferrer" className="text-primary-600">Resume Link</a>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No resume uploaded</p>
+                  )}
+                </div>
+              </div>
 
               {/* Previous Approval History */}
               {selectedStudent.approvalHistory?.length > 0 && (

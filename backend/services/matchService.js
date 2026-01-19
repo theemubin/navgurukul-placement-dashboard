@@ -68,7 +68,22 @@ function calculateSkillMatch(student, job) {
   }
 
   const studentSkills = student.studentProfile?.technicalSkills || [];
-  const studentSoftSkills = student.studentProfile?.softSkills || {};
+  let studentSoftSkills = student.studentProfile?.softSkills || {};
+
+  // If softSkills is stored as array of objects, convert to mapping { key: rating }
+  if (Array.isArray(studentSoftSkills)) {
+    const toKey = (name) => {
+      if (!name) return '';
+      return name.split(/\s+/).map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1)).join('');
+    };
+    const mapObj = {};
+    studentSoftSkills.forEach(s => {
+      if (!s) return;
+      const key = s.skillName ? toKey(s.skillName) : (s.skillId ? s.skillId.toString() : '');
+      if (key) mapObj[key] = s.selfRating || 0;
+    });
+    studentSoftSkills = mapObj;
+  }
 
   // Create map of student skills by name (case-insensitive) and by skill ID
   const studentSkillByName = new Map();
@@ -88,11 +103,22 @@ function calculateSkillMatch(student, job) {
   });
 
   // Add soft skills (from softSkills object)
-  // Soft skills are stored as: { communication: 3, collaboration: 2, ... }
+  // Soft skills may come as keys like 'communication' (camelCase) or as names like 'Problem Solving'
   Object.entries(studentSoftSkills).forEach(([skillKey, level]) => {
-    if (skillKey && typeof level === 'number') {
-      studentSkillByName.set(skillKey.toLowerCase(), level);
+    if (!skillKey || typeof level !== 'number') return;
+
+    // Add direct lowercase key (e.g., 'communication' -> 'communication')
+    studentSkillByName.set(skillKey.toLowerCase(), level);
+
+    // If the key appears to be camelCase, also add a spaced name variant (e.g., 'problemSolving' -> 'problem solving')
+    if (/[A-Z]/.test(skillKey)) {
+      const spaced = skillKey.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+      studentSkillByName.set(spaced, level);
     }
+
+    // Also add a compact no-space version (e.g., 'problem solving' -> 'problemsolving') to increase matching chances
+    const compact = skillKey.toLowerCase().replace(/\s+/g, '');
+    studentSkillByName.set(compact, level);
   });
 
   // Also check legacy skills (approved ones) - populate the maps
@@ -134,9 +160,19 @@ function calculateSkillMatch(student, job) {
       studentLevel = studentSkillById.get(skillId) || 0;
     }
 
-    // If not found by ID, try by name
+    // If not found by ID, try by name (various normalizations)
     if (studentLevel === 0 && skillName) {
-      studentLevel = studentSkillByName.get(skillName) || 0;
+      studentLevel = studentSkillByName.get(skillName) || studentSkillByName.get(skillName.toLowerCase()) || studentSkillByName.get(skillName.toLowerCase().replace(/\s+/g, '')) || 0;
+    }
+
+    // Special handling for English / language skills: use student's CEFR levels
+    const skillNameLower = (skillName || '').toLowerCase();
+    if ((skillNameLower && skillNameLower.includes('english')) || (reqSkill.skill && reqSkill.skill.category === 'language')) {
+      const cefr = student.studentProfile?.englishProficiency?.speaking || student.studentProfile?.englishProficiency?.writing || '';
+      const cefrMap = { 'A1': 1, 'A2': 1, 'B1': 2, 'B2': 3, 'C1': 4, 'C2': 4 };
+      const cefrLevel = cefrMap[cefr] || 0;
+      // Map CEFR to numeric 0-4
+      studentLevel = Math.max(studentLevel, cefrLevel);
     }
 
     const meets = studentLevel >= requiredLevel;
