@@ -28,9 +28,18 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Clear client-side auth state
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Notify app of logout (listeners can update UI without forcing navigation)
+      window.dispatchEvent(new CustomEvent('auth:logout'));
+
+      // Only redirect to login if we're not already on an auth route to avoid reload loops
+      const pathname = window.location.pathname || '';
+      if (!pathname.startsWith('/auth')) {
+        // Use replace to avoid creating history entries
+        window.location.replace('/auth/login');
+      }
     }
     return Promise.reject(error);
   }

@@ -81,8 +81,18 @@ export const AuthProvider = ({ children }) => {
     const onAuthLogin = (e) => {
       if (e?.detail) setUser(e.detail);
     };
+    const onAuthLogout = () => {
+      setUser(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+    };
+
     window.addEventListener('auth:login', onAuthLogin);
-    return () => window.removeEventListener('auth:login', onAuthLogin);
+    window.addEventListener('auth:logout', onAuthLogout);
+    return () => {
+      window.removeEventListener('auth:login', onAuthLogin);
+      window.removeEventListener('auth:logout', onAuthLogout);
+    };
   }, []);
 
   const updateUser = (updates) => {
