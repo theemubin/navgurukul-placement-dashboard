@@ -26,16 +26,42 @@ const AuthCallback = () => {
           const response = await authAPI.exchange(code);
           console.debug('AuthCallback: exchange response =>', response?.status, response?.data);
 
-          // Server sets HttpOnly cookie; response includes user info
+          // Server sets HttpOnly cookie; response includes user info and (temporary) token
           const user = response.data.user;
+          const token = response.data.token;
+
+          if (token) {
+            console.debug('AuthCallback: storing returned token for fallback auth');
+            localStorage.setItem('token', token);
+            // Also set default Authorization header for immediate API calls
+            try {
+              // import api dynamically to avoid circular imports
+              const apiModule = await import('../../services/api');
+              apiModule.default.defaults.headers.Authorization = `Bearer ${token}`;
+            } catch (e) {
+              console.warn('AuthCallback: failed to set api default header', e.message);
+            }
+          }
+
+          // Prefer using the authoritative user object from exchange response.
           if (user) {
-            // Persist minimal user info for frontend conveniences
             localStorage.setItem('user', JSON.stringify(user));
-            // Update auth context
-            window.dispatchEvent(new CustomEvent('auth:login', { detail: user }));
+            // Try to fetch full user from server (using cookie or token) to ensure consistency
+            try {
+              const meResp = await authAPI.getMe();
+              if (meResp?.data) {
+                window.dispatchEvent(new CustomEvent('auth:login', { detail: meResp.data }));
+              } else {
+                window.dispatchEvent(new CustomEvent('auth:login', { detail: user }));
+              }
+            } catch (err) {
+              // If getMe fails, still set the user returned by exchange
+              window.dispatchEvent(new CustomEvent('auth:login', { detail: user }));
+            }
 
             // Redirect based on role
-            switch (user.role) {
+            const finalRole = (user.role || response?.data?.user?.role);
+            switch (finalRole) {
               case 'student':
                 navigate('/student/dashboard');
                 break;
