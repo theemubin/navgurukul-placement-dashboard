@@ -353,6 +353,10 @@ router.get('/me', auth, async (req, res) => {
     res.json(userObj);
   } catch (error) {
     console.error('Get user error:', error);
+    if (res.headersSent) {
+      console.error('Headers already sent for /me, cannot send error response');
+      return;
+    }
     res.status(500).json({ message: 'Server error' });
   }
 });
