@@ -63,6 +63,10 @@ export const userAPI = {
   getStudentLocations: () => api.get('/users/student-locations'),
   // Get list of coordinators for assignment/filtering
   getCoordinators: () => api.get('/users/coordinators'),
+  // Admin/Manager user management
+  getUsers: (params) => api.get('/users', { params }),
+  getUser: (id) => api.get(`/users/${id}`),
+  updateUser: (id, data) => api.put(`/users/${id}`, data),
   // Managed campuses for Campus POCs
   getManagedCampuses: () => api.get('/users/managed-campuses'),
   updateManagedCampuses: (campusIds) => api.put('/users/managed-campuses', { campusIds }),

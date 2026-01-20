@@ -39,12 +39,14 @@ import CoordinatorApplications from './pages/coordinator/Applications';
 import CoordinatorSkills from './pages/coordinator/Skills';
 import CoordinatorSettings from './pages/coordinator/Settings';
 import CoordinatorInterestRequests from './pages/coordinator/InterestRequests';
+import CoordinatorInterestRequestsForManager from './pages/coordinator/InterestRequests';
 import CoordinatorForum from './pages/coordinator/Forum';
 
 // Manager Pages
 import ManagerDashboard from './pages/manager/Dashboard';
 import ManagerReports from './pages/manager/Reports';
 import ManagerSettings from './pages/manager/Settings';
+import UsersManager from './pages/manager/Users';
 
 // Common Pages
 import Notifications from './pages/common/Notifications';
@@ -168,6 +170,8 @@ function App() {
         <Route path="settings" element={<ManagerSettings />} />
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />
+        <Route path="users" element={<UsersManager />} />
       </Route>
 
       {/* Redirects */}

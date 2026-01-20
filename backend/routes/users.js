@@ -835,6 +835,90 @@ router.get('/coordinators', auth, authorize('coordinator', 'manager'), async (re
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+// === Admin / Manager User Management ===
+// List all users (manager only)
+router.get('/', auth, authorize('manager'), async (req, res) => {
+  try {
+    const { page = 1, limit = 50, search, role } = req.query;
+    let query = {};
+
+    if (role) query.role = role;
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const users = await User.find(query)
+      .select('-password')
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .sort({ role: 1, createdAt: -1 });
+
+    const total = await User.countDocuments(query);
+
+    res.json({ users, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    console.error('List users error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get user by id (manager only)
+router.get('/:userId', auth, authorize('manager'), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId).select('-password').populate('campus managedCampuses');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json({ user });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update user (manager only) - role changes, basic fields
+router.put('/:userId', auth, authorize('manager'), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { firstName, lastName, email, role, isActive, managedCampuses } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (firstName !== undefined) user.firstName = firstName;
+    if (lastName !== undefined) user.lastName = lastName;
+    if (email !== undefined) user.email = email;
+    if (isActive !== undefined) user.isActive = isActive;
+    if (managedCampuses !== undefined) user.managedCampuses = managedCampuses;
+
+    // Role change is sensitive - log timeline and notify user
+    if (role && role !== user.role) {
+      const oldRole = user.role;
+      user.role = role;
+
+      // Add notification about role change
+      await Notification.create({
+        recipient: user._id,
+        type: 'role_changed',
+        title: 'Your account role has changed',
+        message: `Your role has been updated from ${oldRole} to ${role} by an administrator.`,
+        link: '/profile',
+        relatedEntity: { type: 'user', id: user._id }
+      });
+    }
+
+    await user.save();
+
+    const updated = await User.findById(userId).select('-password').populate('campus managedCampuses');
+    res.json({ message: 'User updated', user: updated });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 // Export-presets API for saving user presets (max 2)
 router.get('/me/export-presets', auth, async (req, res) => {
   try {
