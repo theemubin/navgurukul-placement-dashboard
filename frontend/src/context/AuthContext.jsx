@@ -18,8 +18,14 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        console.debug('Auth init: document.cookie =>', document.cookie);
+        const localToken = localStorage.getItem('token');
+        console.debug('Auth init: local token present =>', !!localToken);
+
         // Prefer cookie-based session (server sets HttpOnly cookie)
+        console.debug('Auth init: calling GET /auth/me');
         const response = await authAPI.getMe();
+        console.debug('Auth init: /auth/me response =>', response?.status, response?.data);
         if (response?.data) {
           setUser(response.data);
           localStorage.setItem('user', JSON.stringify(response.data));
@@ -27,15 +33,19 @@ export const AuthProvider = ({ children }) => {
           return;
         }
       } catch (error) {
+        console.warn('Auth init: cookie-based getMe failed:', error?.response?.status, error?.response?.data || error.message);
         // If cookie-based auth fails, fall back to token in localStorage
         const token = localStorage.getItem('token');
+        console.debug('Auth init fallback: token present =>', !!token);
         if (token) {
           try {
+            console.debug('Auth init fallback: trying getMe with token');
             const response2 = await authAPI.getMe();
+            console.debug('Auth init fallback: /auth/me response =>', response2?.status, response2?.data);
             setUser(response2.data);
             localStorage.setItem('user', JSON.stringify(response2.data));
           } catch (err) {
-            console.error('Auth init fallback error:', err);
+            console.error('Auth init fallback error:', err?.response?.status, err?.response?.data || err.message);
             localStorage.removeItem('token');
             localStorage.removeItem('user');
           }

@@ -19,6 +19,12 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Debug: log outgoing request summary
+    try {
+      console.debug('API request:', config.method?.toUpperCase(), config.url, 'withCredentials=', !!config.withCredentials, 'Authorization=', !!config.headers?.Authorization, 'document.cookie=', document.cookie);
+    } catch (e) {
+      // ignore
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -28,6 +34,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    console.warn('API response error:', error?.response?.status, error?.response?.data, error?.response?.headers);
     if (error.response?.status === 401) {
       // Clear client-side auth state
       localStorage.removeItem('token');

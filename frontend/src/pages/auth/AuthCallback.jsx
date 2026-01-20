@@ -21,7 +21,10 @@ const AuthCallback = () => {
 
       if (code) {
         try {
+          console.debug('AuthCallback: code found, document.cookie:', document.cookie);
+          console.debug('AuthCallback: exchanging code:', code);
           const response = await authAPI.exchange(code);
+          console.debug('AuthCallback: exchange response =>', response?.status, response?.data);
 
           // Server sets HttpOnly cookie; response includes user info
           const user = response.data.user;
@@ -29,8 +32,6 @@ const AuthCallback = () => {
             // Persist minimal user info for frontend conveniences
             localStorage.setItem('user', JSON.stringify(user));
             // Update auth context
-            // Use updateUser to set user state
-            // (we rely on /auth/me for full user data on reload)
             window.dispatchEvent(new CustomEvent('auth:login', { detail: user }));
 
             // Redirect based on role
@@ -51,10 +52,11 @@ const AuthCallback = () => {
                 navigate('/');
             }
           } else {
+            console.warn('AuthCallback: exchange returned no user:', response?.data);
             navigate('/auth/login?error=oauth_failed');
           }
         } catch (err) {
-          console.error('Exchange error:', err);
+          console.error('Exchange error:', err?.response?.status, err?.response?.data || err.message);
           navigate('/auth/login?error=oauth_failed');
         }
       } else {
