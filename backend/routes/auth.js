@@ -24,9 +24,15 @@ router.get('/google/config', (req, res) => {
   });
 });
 
-router.get('/google/callback',
-  passport.authenticate('google', { session: false }),
-  async (req, res) => {
+router.get('/google/callback', (req, res, next) => {
+  // Guard: avoid calling passport when OAuth is not configured
+  if (!isGoogleConfigured()) {
+    console.error('Google callback hit but OAuth not configured. Returning 503.');
+    return res.status(503).json({ message: 'Google OAuth is not configured on the server.' });
+  }
+  // Delegate to passport
+  passport.authenticate('google', { session: false })(req, res, next);
+}, async (req, res) => {
     try {
       const user = req.user;
       

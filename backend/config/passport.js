@@ -11,10 +11,16 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     callbackURL: process.env.GOOGLE_REDIRECT_URI || "/api/auth/google/callback"
   }, async (accessToken, refreshToken, profile, done) => {
     try {
-      const email = profile.emails[0].value;
-      const firstName = profile.name.givenName;
-      const lastName = profile.name.familyName;
-      const avatar = profile.photos[0]?.value;
+      const email = profile.emails?.[0]?.value || '';
+      const displayName = profile.displayName || '';
+      const names = displayName.split(/\s+/).filter(Boolean);
+      const firstName = profile.name?.givenName || names[0] || email.split('@')[0] || 'User';
+      const lastName = profile.name?.familyName || names.slice(1).join(' ') || '(unknown)';
+      const avatar = profile.photos?.[0]?.value;
+
+      if (!profile.name?.givenName || !profile.name?.familyName) {
+        console.warn('Google profile missing givenName/familyName — using fallback for name fields', { email, displayName });
+      }
 
       // Check if user already exists
       let user = await User.findOne({ email: email.toLowerCase() });
