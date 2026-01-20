@@ -13,6 +13,13 @@ const auth = async (req, res, next) => {
     }
 
     try {
+      // Debug: show token summary (length and start/end) to help debug mismatches
+      if (token && process.env.NODE_ENV !== 'production') {
+        const start = token.slice(0, 8);
+        const end = token.slice(-8);
+        console.debug(`auth middleware - verifying token (len=${token.length}) start=${start} end=${end}`);
+      }
+
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       console.debug('auth middleware - token decoded for userId:', decoded.userId);
       const user = await User.findById(decoded.userId).select('-password');
@@ -30,6 +37,7 @@ const auth = async (req, res, next) => {
       next();
     } catch (err) {
       console.error('auth middleware - token verify error:', err.message);
+      console.error(err.stack);
       return res.status(401).json({ message: 'Token is invalid or expired' });
     }
     

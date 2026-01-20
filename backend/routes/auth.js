@@ -132,6 +132,20 @@ router.post('/logout', (req, res) => {
   }
 });
 
+// Temporary debug endpoint to verify a JWT token with the server's secret
+// WARNING: This is for debugging only; remove or protect before leaving in production
+router.post('/debug/verify-token', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ message: 'Token required' });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return res.json({ decoded });
+  } catch (err) {
+    console.error('Debug verify-token error:', err.message);
+    return res.status(400).json({ message: 'Invalid token', error: err.message });
+  }
+});
+
 // Manager approval endpoint
 router.post('/approve-user', auth, async (req, res) => {
   try {
