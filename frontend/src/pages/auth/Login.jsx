@@ -258,7 +258,7 @@ const Login = () => {
 
         {/* Status & Sync Section */}
         <div className="mt-4 space-y-2">
-          <div className="flex gap-2">
+            <div className="flex gap-2">
             <button
               onClick={() => setShowStatus(!showStatus)}
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors"
@@ -266,13 +266,15 @@ const Login = () => {
               <Server className="w-4 h-4" />
               {showStatus ? 'Hide Status' : 'Check Status'}
             </button>
-            <button
-              onClick={() => setShowSyncModal(true)}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Sync from Production
-            </button>
+            {isLocalHost && (
+              <button
+                onClick={() => setShowSyncModal(true)}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Sync from Production
+              </button>
+            )}
           </div>
 
           {/* Status Panel */}
@@ -365,8 +367,8 @@ const Login = () => {
           )}
         </div>
 
-        {/* Sync Modal */}
-        {showSyncModal && (
+        {/* Sync Modal (localhost only) */}
+        {isLocalHost && showSyncModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 w-full max-w-md">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Sync from Production</h3>
