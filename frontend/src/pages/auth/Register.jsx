@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { GraduationCap, Mail, Lock, User, Eye, EyeOff, Phone } from 'lucide-react';
@@ -6,6 +7,7 @@ import toast from 'react-hot-toast';
 
 const Register = () => {
   const { register } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -31,11 +33,21 @@ const Register = () => {
       return;
     }
 
+    // Enforce navgurukul-only email on the client as well
+    if (!String(formData.email || '').toLowerCase().endsWith('@navgurukul.org')) {
+      toast.error('Only @navgurukul.org email addresses are allowed to register');
+      return;
+    }
+
     setLoading(true);
-    
     try {
       const { confirmPassword, ...registerData } = formData;
-      await register(registerData);
+      const newUser = await register(registerData);
+      if (newUser && newUser.isActive === false) {
+        // Redirect to pending approval page
+        navigate(`/auth/pending-approval?email=${encodeURIComponent(newUser.email)}`);
+        return;
+      }
       toast.success('Registration successful!');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Registration failed');

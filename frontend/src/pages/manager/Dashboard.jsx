@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { statsAPI } from '../../services/api';
+import api from '../../services/api';
 import { StatsCard, LoadingSpinner } from '../../components/common/UIComponents';
 import UserApprovals from '../../components/manager/UserApprovals';
 import ManagerStudents from '../../components/manager/ManagerStudents';
@@ -15,11 +16,38 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('all');
   const [activeTab, setActiveTab] = useState('approvals');
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     fetchStats();
     fetchCoordinatorStats();
+    fetchPendingCount();
   }, [dateRange]);
+
+  // Auto-refresh pending approvals count every 30s and listen for manual events
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchPendingCount();
+    }, 30000);
+
+    const onPendingChanged = () => fetchPendingCount();
+    window.addEventListener('pending:changed', onPendingChanged);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('pending:changed', onPendingChanged);
+    };
+  }, []);
+
+  const fetchPendingCount = async () => {
+    try {
+      const resp = await api.get('/auth/pending-approvals');
+      setPendingCount(Array.isArray(resp.data) ? resp.data.length : 0);
+    } catch (err) {
+      console.error('Failed to fetch pending approvals count', err);
+      setPendingCount(0);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -242,7 +270,12 @@ const Dashboard = () => {
       <div className="card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button className={`px-3 py-2 rounded-md font-medium ${activeTab === 'approvals' ? 'bg-primary-50 text-primary-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setActiveTab('approvals')}>Pending Approvals</button>
+            <button className={`px-3 py-2 rounded-md font-medium ${activeTab === 'approvals' ? 'bg-primary-50 text-primary-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setActiveTab('approvals')}>
+              Pending Approvals
+              {pendingCount > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">{pendingCount}</span>
+              )}
+            </button>
             <button className={`px-3 py-2 rounded-md font-medium ${activeTab === 'students' ? 'bg-primary-50 text-primary-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setActiveTab('students')}>Students</button>
           </div>
         </div>

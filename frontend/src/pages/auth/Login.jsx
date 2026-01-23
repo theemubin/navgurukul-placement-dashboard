@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+// import { useSearchParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { GraduationCap, Mail, Lock, Eye, EyeOff, RefreshCw, Database, Server, Clock, AlertCircle, CheckCircle, Wifi } from 'lucide-react';
@@ -84,6 +85,27 @@ const Login = () => {
       setSyncing(false);
     }
   };
+
+  useEffect(() => {
+    // Show friendly messages for OAuth errors redirected from server
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get('error');
+      const status = params.get('status');
+      if (err) {
+        let msg = err;
+        if (err === 'domain_not_allowed') msg = 'Only @navgurukul.org emails are allowed.';
+        else if (err === 'oauth_failed') msg = 'OAuth sign-in failed. Please try again.';
+        else if (err === 'authentication_failed') msg = 'Authentication failed. Please try again.';
+        toast.error(msg + (status ? ` (status: ${status})` : ''));
+        // Remove query params so message doesn't repeat
+        const clean = window.location.pathname;
+        window.history.replaceState({}, document.title, clean);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     if (showStatus && !healthStatus && !statusLoading) {

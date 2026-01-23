@@ -36,28 +36,21 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         return done(null, user);
       }
 
-      // Determine role based on email and approval requirements
-      let role = 'student'; // Default role
+      // Enforce platform policy: only navgurukul emails allowed
+      if (!email.toLowerCase().endsWith('@navgurukul.org')) {
+        return done(null, false, { message: 'Only @navgurukul.org emails are allowed to register on this platform.' });
+      }
+
+      // Determine role and activation: default to student (auto-active).
+      // Elevated roles (coordinator, campus_poc, manager) must be granted by a manager via approval endpoint.
+      let role = 'student';
       let isActive = true;
       let needsApproval = false;
 
-      // Check if it's the manager email
+      // Manager account (pre-configured) remains active
       if (email.toLowerCase() === process.env.MANAGER_EMAIL?.toLowerCase()) {
         role = 'manager';
         isActive = true;
-        needsApproval = false;
-      }
-      // Check if it's a NavGurukul domain email
-      else if (email.toLowerCase().includes('@navgurukul.org')) {
-        // NavGurukul staff need manager approval for role assignment
-        role = 'coordinator'; // Default for staff, can be changed by manager
-        isActive = false; // Inactive until approved
-        needsApproval = true;
-      }
-      // External emails default to student
-      else {
-        role = 'student';
-        isActive = true; // Students are auto-approved
         needsApproval = false;
       }
 

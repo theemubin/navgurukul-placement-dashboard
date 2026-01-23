@@ -12,6 +12,8 @@ const UserApprovals = () => {
       setLoading(true);
       const response = await api.get('/auth/pending-approvals');
       setPendingUsers(response.data);
+      // notify other parts of the app that pending list changed
+      try { window.dispatchEvent(new CustomEvent('pending:changed')); } catch (e) { /* ignore */ }
     } catch (error) {
       toast.error('Failed to fetch pending approvals');
       console.error('Fetch error:', error);
@@ -33,7 +35,8 @@ const UserApprovals = () => {
         approvedRole: normalizedRole
       });
       toast.success('User approved successfully');
-      fetchPendingUsers(); // Refresh the list
+      await fetchPendingUsers(); // Refresh the list
+      try { window.dispatchEvent(new CustomEvent('pending:changed')); } catch (e) { /* ignore */ }
     } catch (error) {
       toast.error('Failed to approve user');
       console.error('Approval error:', error);

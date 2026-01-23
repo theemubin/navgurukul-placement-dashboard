@@ -112,17 +112,18 @@ router.get('/google/callback', (req, res, next) => {
   passport.authenticate('google', { session: false })(req, res, next);
 }, async (req, res) => {
     try {
+      // If passport rejected the user (e.g., non-navgurukul email), redirect to frontend with error
+      if (!req.user) {
+        const frontendBase = getFrontendBase();
+        return res.redirect(`${frontendBase}/login?error=domain_not_allowed`);
+      }
+
       const user = req.user;
       const frontendBase = getFrontendBase();
 
-      // Check if user needs approval
-      if (user.needsApproval && !user.isActive) {
-        return res.redirect(`${frontendBase}/auth/pending-approval?email=${encodeURIComponent(user.email)}`);
-      }
-
-      // Check if user is inactive (needs manager approval)
+      // If the account is not active, treat it as pending approval and redirect accordingly
       if (!user.isActive) {
-        return res.redirect(`${frontendBase}/auth/account-inactive`);
+        return res.redirect(`${frontendBase}/auth/pending-approval?email=${encodeURIComponent(user.email)}`);
       }
 
       // Generate JWT token
@@ -280,10 +281,22 @@ router.post('/register', registerValidation, async (req, res) => {
 
     const { email, password, firstName, lastName, role, phone, campus } = req.body;
 
+    // Enforce navgurukul-only platform policy
+    if (!String(email || '').toLowerCase().endsWith('@navgurukul.org')) {
+      return res.status(403).json({ message: 'Only @navgurukul.org email addresses are allowed to register.' });
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists with this email' });
+    }
+
+    // Determine activation: students auto-active; elevated roles require manager approval
+    let isActive = true;
+    const normalizedRole = role === 'campus_poc' ? 'campus_poc' : role;
+    if (['coordinator', 'campus_poc', 'manager'].includes(normalizedRole) && normalizedRole !== 'student') {
+      isActive = false;
     }
 
     // Create new user
@@ -292,30 +305,66 @@ router.post('/register', registerValidation, async (req, res) => {
       password,
       firstName,
       lastName,
-      role,
+      role: normalizedRole || 'student',
       phone,
       campus,
-      studentProfile: role === 'student' ? {} : undefined
+      isActive,
+      studentProfile: (normalizedRole || 'student') === 'student' ? {} : undefined
     });
 
     await user.save();
 
-    // Generate token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '7d' }
-    );
+    // If user requires approval, notify manager
+    if (!user.isActive) {
+      try {
+        const Notification = require('../models/Notification');
+        const manager = await User.findOne({ email: process.env.MANAGER_EMAIL?.toLowerCase(), role: 'manager' });
+        if (manager) {
+          await Notification.create({
+            user: manager._id,
+            type: 'user_approval_required',
+            title: 'New User Registration Requires Approval',
+            message: `${firstName} ${lastName} (${email}) has registered and needs role approval.`,
+            data: { userId: user._id, userEmail: email, userName: `${firstName} ${lastName}`, requestedRole: user.role }
+          });
+        }
+      } catch (notifyErr) {
+        console.error('Failed to create manager notification for approval:', notifyErr);
+      }
+    }
 
-    res.status(201).json({
-      message: 'User registered successfully',
-      token,
+    // Only issue a token immediately for active accounts (students and manager)
+    if (user.isActive) {
+      const token = jwt.sign(
+        { userId: user._id },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRE || '7d' }
+      );
+
+      return res.status(201).json({
+        message: 'User registered successfully',
+        token,
+        user: {
+          id: user._id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          isActive: user.isActive
+        }
+      });
+    }
+
+    // For inactive users (requires manager approval), do not return a token.
+    return res.status(201).json({
+      message: 'User registered successfully and is pending manager approval',
       user: {
         id: user._id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        role: user.role
+        role: user.role,
+        isActive: user.isActive
       }
     });
   } catch (error) {
