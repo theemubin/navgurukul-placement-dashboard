@@ -191,6 +191,14 @@ router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res
         status: 'selected'
       });
 
+      // Count job-ready students for this campus
+      let jobReadyCount = 0;
+      try {
+        jobReadyCount = await StudentJobReadiness.countDocuments({ campus: campus._id, isJobReady: true });
+      } catch (e) {
+        console.error('Error counting job ready for campus', campus._id, e);
+      }
+
       return {
         campus: {
           id: campus._id,
@@ -199,6 +207,7 @@ router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res
         },
         students,
         placements,
+        jobReadyCount,
         target: campus.placementTarget,
         progress: campus.placementTarget > 0
           ? Math.round((placements / campus.placementTarget) * 100)
@@ -431,7 +440,8 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
       'Placed': 0,
       'Dropout': 0,
       'Internship Paid': 0,
-      'Internship UnPaid': 0
+      'Internship UnPaid': 0,
+      'Paid Project': 0
     };
 
     students.forEach(s => {

@@ -431,8 +431,19 @@ const ReadinessReviewSection = () => {
                         <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                             <h5 className="text-xs font-bold text-gray-400 uppercase mb-3">Student's Input</h5>
                             <p className="text-gray-900 font-medium whitespace-pre-wrap">
-                                {reviewModal.criterion?.selfReportedValue || 'No input provided'}
+                                {reviewModal.criterion?.notes
+                                    ? reviewModal.criterion?.notes
+                                    : (reviewModal.criterion?.selfReportedValue !== undefined && reviewModal.criterion?.selfReportedValue !== null)
+                                        ? String(reviewModal.criterion?.selfReportedValue)
+                                        : 'No input provided'}
                             </p>
+                            {/* Show PoC comments/ratings if the student already has them */}
+                            {reviewModal.criterion?.pocComment && (
+                                <p className="text-sm text-gray-600 mt-2">PoC Comment: {reviewModal.criterion.pocComment}</p>
+                            )}
+                            {reviewModal.criterion?.pocRating !== undefined && (
+                                <p className="text-sm text-gray-600 mt-1">PoC Rating: {reviewModal.criterion.pocRating}/10</p>
+                            )}
                             {reviewModal.criterion?.proofUrl && (
                                 <a
                                     href={reviewModal.criterion.proofUrl}

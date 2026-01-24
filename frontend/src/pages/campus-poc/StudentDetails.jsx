@@ -236,6 +236,7 @@ const POCStudentDetails = () => {
                 <option value="Placed">Placed</option>
                 <option value="Dropout">Dropout</option>
                 <option value="Internship Paid">Internship (Paid)</option>
+                <option value="Paid Project">Paid Project</option>
                 <option value="Internship UnPaid">Internship (UnPaid)</option>
               </select>
             </div>

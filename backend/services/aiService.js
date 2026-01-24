@@ -261,7 +261,8 @@ class AIService {
       }
 
       // Detect job type
-      if (/intern|internship/i.test(text)) result.jobType = 'internship';
+      if (/paid\s*project|paid\s*projects/i.test(text)) result.jobType = 'paid_project';
+      else if (/intern|internship/i.test(text)) result.jobType = 'internship';
       else if (/part.?time|freelance/i.test(text)) result.jobType = 'part_time';
       else if (/contract/i.test(text)) result.jobType = 'contract';
 
@@ -402,7 +403,7 @@ Rules:
           requirements: Array.isArray(parsed.requirements) ? parsed.requirements.filter(r => r) : [],
           responsibilities: Array.isArray(parsed.responsibilities) ? parsed.responsibilities.filter(r => r) : [],
           location: parsed.location || '',
-          jobType: ['full_time', 'part_time', 'internship', 'contract'].includes(parsed.jobType) 
+          jobType: ['full_time', 'part_time', 'internship', 'contract', 'paid_project'].includes(parsed.jobType) 
             ? parsed.jobType 
             : 'full_time',
           duration: parsed.duration || '',
@@ -518,7 +519,8 @@ Rules:
     if (locationMatch) result.location = locationMatch[1].trim();
 
     // Detect job type
-    if (/\b(internship|intern)\b/i.test(text)) result.jobType = 'internship';
+    if (/\b(paid\s*project|paid\s*projects)\b/i.test(text)) result.jobType = 'paid_project';
+    else if (/\b(internship|intern)\b/i.test(text)) result.jobType = 'internship';
     else if (/\b(contract|freelance|contractor)\b/i.test(text)) result.jobType = 'contract';
     else if (/\b(part[\s-]?time)\b/i.test(text)) result.jobType = 'part_time';
 

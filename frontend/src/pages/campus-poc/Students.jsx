@@ -114,6 +114,12 @@ const POCStudents = () => {
             color="blue"
           />
           <StatsCard
+            icon={Briefcase}
+            label="Paid Projects"
+            value={stats.statusCounts?.['Paid Project'] || 0}
+            color="teal"
+          />
+          <StatsCard
             icon={UserX}
             label="Dropout"
             value={stats.statusCounts?.['Dropout'] || 0}
@@ -166,6 +172,7 @@ const POCStudents = () => {
             <option value="Placed">Placed</option>
             <option value="Dropout">Dropout</option>
             <option value="Internship Paid">Internship Paid</option>
+            <option value="Paid Project">Paid Project</option>
             <option value="Internship UnPaid">Internship UnPaid</option>
           </select>
         </div>
@@ -220,6 +227,7 @@ const POCStudents = () => {
                           <option value="Placed">Placed</option>
                           <option value="Dropout">Dropout</option>
                           <option value="Internship Paid">Internship (Paid)</option>
+                          <option value="Paid Project">Paid Project</option>
                           <option value="Internship UnPaid">Internship (UnPaid)</option>
                         </select>
                       </div>

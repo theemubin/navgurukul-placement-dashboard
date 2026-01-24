@@ -15,6 +15,7 @@ const POCDashboard = () => {
   const [companyTracking, setCompanyTracking] = useState([]);
   const [schoolTracking, setSchoolTracking] = useState([]);
   const [eligibleJobs, setEligibleJobs] = useState([]);
+  const [jobTypeFilter, setJobTypeFilter] = useState('all');
   const [cycles, setCycles] = useState([]);
   const [selectedCycle, setSelectedCycle] = useState('');
   const [studentSummary, setStudentSummary] = useState(null);
@@ -295,6 +296,7 @@ const POCDashboard = () => {
             <option value="Dropout">Dropout</option>
             <option value="Internship Paid">Internship Paid</option>
             <option value="Internship UnPaid">Internship UnPaid</option>
+            <option value="Paid Project">Paid Project</option>
           </select>
         </div>
 
@@ -355,6 +357,12 @@ const POCDashboard = () => {
           label="Interested"
           value={stats?.interestCount || 0}
           color="purple"
+        />
+        <StatsCard
+          icon={Briefcase}
+          label="Paid Projects"
+          value={stats?.statusCounts?.['Paid Project'] || 0}
+          color="teal"
         />
       </div>
 
@@ -527,9 +535,44 @@ const POCDashboard = () => {
             </span>
           </div>
 
+          {/* Job type tabs */}
+          <div className="flex gap-3 mt-3">
+            <button onClick={() => setJobTypeFilter('all')} className={`px-3 py-1 rounded ${jobTypeFilter === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
+              All
+            </button>
+            <button onClick={() => setJobTypeFilter('internship')} className={`px-3 py-1 rounded ${jobTypeFilter === 'internship' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
+              Internships
+            </button>
+            <button onClick={() => setJobTypeFilter('paid_project')} className={`px-3 py-1 rounded ${jobTypeFilter === 'paid_project' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
+              Paid Projects
+            </button>
+          </div>
+
+          {/* Filtered job metrics (update when jobTypeFilter or eligibleJobs change) */}
+          {eligibleJobs && (
+            (() => {
+              const filteredJobs = eligibleJobs.filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter));
+              const activeJobsCount = filteredJobs.length;
+              const totalApplications = filteredJobs.reduce((acc, j) => acc + (j.applicationCount || 0), 0);
+              const eligibleStudentsCount = filteredJobs.reduce((acc, j) => acc + (j.eligibleStudents || 0), 0);
+              const selectedCount = filteredJobs.reduce((acc, j) => acc + (j.statusCounts?.selected || 0), 0);
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                  <StatsCard icon={Users} label="Active Jobs" value={activeJobsCount} color="secondary" />
+                  <StatsCard icon={Building2} label="Eligible Students" value={eligibleStudentsCount} color="primary" />
+                  <StatsCard icon={Clock} label="Applications" value={totalApplications} color="accent" />
+                  <StatsCard icon={CheckCircle} label="Selected" value={selectedCount} color="success" />
+                </div>
+              );
+            })()
+          )}
+
           {eligibleJobs.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {eligibleJobs.map((job) => (
+              {eligibleJobs
+                .filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter))
+                .map((job) => (
                 <div key={job._id} className="card hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start gap-3">

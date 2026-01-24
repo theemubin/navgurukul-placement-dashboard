@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const { JobReadinessConfig, StudentJobReadiness, DEFAULT_CRITERIA } = require('../models/JobReadiness');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const upload = require('../middleware/upload');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 // ...existing code...
 // Add a new criterion to the config (PoC/Manager)
@@ -201,7 +202,17 @@ router.get('/my-status', auth, authorize('student'), async (req, res) => {
         campus: student.campus,
         criteriaStatus: initialStatus
       });
+      // Ensure initial readiness is calculated and stored
+      await readiness.calculateReadiness();
       await readiness.save();
+    } else {
+      // Recalculate readiness on each read to ensure latest percentage/status
+      try {
+        await readiness.calculateReadiness();
+        await readiness.save();
+      } catch (e) {
+        console.error('Failed to recalculate readiness on /my-status:', e);
+      }
     }
 
     // Get config to include criterion details
@@ -240,7 +251,17 @@ router.get('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
 
       const initialStatus = config?.criteria?.map(c => ({ criteriaId: c.criteriaId, status: 'not_started' })) || [];
       readiness = new StudentJobReadiness({ student: studentId, school: student.studentProfile?.currentSchool, campus: student.campus, criteriaStatus: initialStatus });
+      // Calculate initial readiness and persist
+      await readiness.calculateReadiness();
       await readiness.save();
+    } else {
+      // Ensure the returned readiness is up-to-date
+      try {
+        await readiness.calculateReadiness();
+        await readiness.save();
+      } catch (e) {
+        console.error('Failed to recalculate readiness on /student/:studentId:', e);
+      }
     }
 
     const config = await JobReadinessConfig.findOne({
@@ -335,7 +356,7 @@ router.put('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
 });
 
 // Update my criterion status (Student)
-router.patch('/my-status/:criteriaId', auth, authorize('student'), [
+router.patch('/my-status/:criteriaId', auth, authorize('student'), upload.single('proofFile'), [
   body('completed').optional().isBoolean(),
   body('status').optional().isString(),
   body('selfReportedValue').optional(),
@@ -343,7 +364,18 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), [
 ], async (req, res) => {
   try {
     const { criteriaId } = req.params;
-    const { completed, status, selfReportedValue, notes } = req.body;
+    // Multer may parse multipart/form-data and place values as strings
+    const raw = req.body || {};
+    const completed = raw.completed === 'true' || raw.completed === true;
+    const status = raw.status;
+    let selfReportedValue;
+    if (raw.selfReportedValue !== undefined) {
+      const parsed = Number(raw.selfReportedValue);
+      selfReportedValue = !isNaN(parsed) ? parsed : undefined;
+    } else {
+      selfReportedValue = undefined;
+    }
+    const notes = raw.notes;
 
     let readiness = await StudentJobReadiness.findOne({ student: req.userId });
 
@@ -356,12 +388,15 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), [
 
     const newStatus = status || (completed ? 'completed' : 'not_started');
 
+    const fileProofPath = req.file ? req.file.path : undefined;
+
     if (criterionIndex === -1) {
       readiness.criteriaStatus.push({
         criteriaId,
         status: newStatus,
         selfReportedValue,
         notes,
+        proofUrl: fileProofPath,
         completedAt: completed ? new Date() : null,
         updatedAt: new Date()
       });
@@ -372,6 +407,7 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), [
         status: newStatus,
         selfReportedValue: selfReportedValue !== undefined ? selfReportedValue : readiness.criteriaStatus[criterionIndex].selfReportedValue,
         notes: notes !== undefined ? notes : readiness.criteriaStatus[criterionIndex].notes,
+        proofUrl: fileProofPath || readiness.criteriaStatus[criterionIndex].proofUrl,
         completedAt: completed ? new Date() : readiness.criteriaStatus[criterionIndex].completedAt,
         updatedAt: new Date()
       };
@@ -384,6 +420,9 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), [
     res.json(readiness);
   } catch (error) {
     console.error('Update my criterion error:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      return res.status(500).json({ message: error.message || 'Server error', stack: error.stack });
+    }
     res.status(500).json({ message: 'Server error' });
   }
 });

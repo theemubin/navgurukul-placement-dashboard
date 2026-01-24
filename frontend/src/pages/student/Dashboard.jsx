@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { statsAPI, applicationAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
-import { FileText, Briefcase, CheckCircle, XCircle, Clock, TrendingUp } from 'lucide-react';
+import { FileText, Briefcase, CheckCircle, XCircle, Clock, TrendingUp, DollarSign } from 'lucide-react';
 
 const StudentDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -98,6 +98,12 @@ const StudentDashboard = () => {
           label="Rejected"
           value={stats?.rejected || 0}
           color="red"
+        />
+        <StatsCard
+          icon={DollarSign}
+          label="Paid Projects"
+          value={stats?.paidProjects || stats?.paidProjectsCount || 0}
+          color="teal"
         />
       </div>
 

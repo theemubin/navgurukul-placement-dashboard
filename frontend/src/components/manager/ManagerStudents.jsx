@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { userAPI, jobReadinessAPI, applicationAPI } from '../../services/api';
+import { userAPI, jobReadinessAPI, applicationAPI, statsAPI } from '../../services/api';
 import { LoadingSpinner, Pagination, Modal } from '../common/UIComponents';
 import toast from 'react-hot-toast';
 
@@ -52,6 +52,32 @@ const ManagerStudents = () => {
   const [readiness, setReadiness] = useState(null);
   const [readinessConfig, setReadinessConfig] = useState([]);
   const [apps, setApps] = useState([]);
+  const [campusRows, setCampusRows] = useState([]);
+  const [loadingCampusRows, setLoadingCampusRows] = useState(true);
+
+  const schoolToAcronym = (school) => {
+    if (!school) return 'Unknown';
+    const trimmed = school.trim();
+    // Known mappings
+    const map = {
+      'School of Programming': 'SoP',
+      'School of Business': 'SoB',
+      'School of Finance': 'SoF',
+      'School of Education': 'SoE',
+      'School of Second Chance': 'SoSC'
+    };
+    if (map[trimmed]) return map[trimmed];
+    // Fallback: if starts with 'School of', build So + initials of remaining words
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith('school of')) {
+      const rest = trimmed.replace(/School of\s*/i, '');
+      const initials = rest.split(/\s+/).map(w => w.charAt(0).toUpperCase()).join('');
+      return `So${initials}`;
+    }
+    // Generic fallback: initials of words
+    return trimmed.split(/\s+/).map(w => w.charAt(0).toUpperCase()).join('');
+  };
+  
 
   const fetchReadiness = async (studentId) => {
     try {
@@ -124,6 +150,52 @@ const ManagerStudents = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.current, search]);
 
+  useEffect(() => {
+    const fetchCampusRows = async () => {
+      setLoadingCampusRows(true);
+      try {
+        const [pocRes, campusStatsRes] = await Promise.all([
+          userAPI.getUsers({ role: 'campus_poc', limit: 1000 }),
+          statsAPI.getCampusStats()
+        ]);
+
+        const pocs = pocRes.data.users || [];
+        const campusStats = campusStatsRes.data || [];
+
+        const rows = campusStats.map(cs => {
+          const campusId = cs.campus.id || cs.campus._id || cs.campus;
+          // Find PoCs assigned to this campus (either campus or managedCampuses)
+          const assigned = pocs.filter(p => {
+            if (!p) return false;
+            // user's campus can be populated object
+            const userCampusId = p.campus && (p.campus._id || p.campus) ? (p.campus._id || p.campus).toString() : null;
+            if (userCampusId && userCampusId.toString() === campusId.toString()) return true;
+            if (Array.isArray(p.managedCampuses) && p.managedCampuses.map(m => (m && (m._id || m)).toString()).includes(campusId.toString())) return true;
+            return false;
+          }).map(p => `${p.firstName} ${p.lastName}`);
+
+          return {
+            campusName: cs.campus.name,
+            pocs: assigned,
+            jobReadyCount: cs.jobReadyCount || 0,
+            jobReadyBySchool: cs.jobReadyBySchool || [],
+            totalActive: cs.students || 0
+          };
+        });
+
+        setCampusRows(rows);
+      } catch (err) {
+        console.error('Error fetching campus rows:', err);
+      } finally {
+        setLoadingCampusRows(false);
+      }
+    };
+
+    fetchCampusRows();
+  }, []);
+
+  
+
   const renderStudentContent = () => {
     if (!selectedStudent) return null;
     return (
@@ -158,7 +230,7 @@ const ManagerStudents = () => {
                 <select className="w-full px-3 py-2 border rounded mt-1" value={selectedStudent.role} onChange={(e) => setSelectedStudent(prev => ({ ...prev, role: e.target.value }))}>
                   <option value="student">Student</option>
                   <option value="coordinator">Coordinator</option>
-                  <option value="campus-poc">Campus PoC</option>
+                  <option value="campus_poc">Campus PoC</option>
                   <option value="manager">Manager</option>
                 </select>
               </div>
@@ -179,6 +251,7 @@ const ManagerStudents = () => {
                   <option value="Dropout">Dropout</option>
                   <option value="Internship Paid">Internship Paid</option>
                   <option value="Internship UnPaid">Internship UnPaid</option>
+                  <option value="Paid Project">Paid Project</option>
                 </select>
               </div>
             </div>
@@ -314,6 +387,45 @@ const ManagerStudents = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+      </div>
+
+      {/* Campus PoC summary table (below coordinator) */}
+      <div className="card mb-4">
+        <h4 className="text-sm font-medium mb-2">Campus PoCs</h4>
+        {loadingCampusRows ? (
+          <div className="py-4 flex items-center justify-center"><LoadingSpinner size="md" /></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500">
+                  <th className="py-2">Campus Name</th>
+                  <th>PoC name(s)</th>
+                  <th>Job Ready by School</th>
+                  <th>Total Active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campusRows.map((r, idx) => (
+                  <tr key={idx} className="border-t">
+                      <td className="py-2">{r.campusName}</td>
+                      <td className="max-w-xl break-words">{r.pocs.length > 0 ? r.pocs.join(', ') : '—'}</td>
+                      <td>
+                        {r.jobReadyBySchool && r.jobReadyBySchool.length > 0 ? (
+                          r.jobReadyBySchool.map((s, i) => (
+                            <div key={i} className="py-1">{schoolToAcronym(s.school)}: {s.count}</div>
+                          ))
+                        ) : (
+                          <span>{r.jobReadyCount}</span>
+                        )}
+                      </td>
+                      <td>{r.totalActive}</td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {loading ? (

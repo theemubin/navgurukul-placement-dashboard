@@ -174,6 +174,8 @@ const studentJobReadinessSchema = new mongoose.Schema({
     selfReportedValue: Number,
     // Proof/evidence link if required
     proofUrl: String,
+    // Student free-text notes / reflection for this criterion
+    notes: String,
     // Verification by PoC
     verifiedBy: {
       type: mongoose.Schema.Types.ObjectId,

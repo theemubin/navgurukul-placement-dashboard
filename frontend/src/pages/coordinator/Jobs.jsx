@@ -41,8 +41,16 @@ const CoordinatorJobs = () => {
   const canManageJob = (job) => {
     if (!user) return false;
     if (user.role === 'manager') return true;
-    if (job.coordinator && job.coordinator.toString() === user._id.toString()) return true;
-    if (job.createdBy && job.createdBy.toString() === user._id.toString()) return true;
+    // guard against missing user._id or missing job fields
+    const uid = user && (user._id || user.id || null);
+    if (!uid) return false;
+    try {
+      if (job?.coordinator && job.coordinator.toString() === uid.toString()) return true;
+      if (job?.createdBy && job.createdBy.toString() === uid.toString()) return true;
+    } catch (e) {
+      // defensive: any unexpected shape, deny permission
+      return false;
+    }
     return false;
   };
 

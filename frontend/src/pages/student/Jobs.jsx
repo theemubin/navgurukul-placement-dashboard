@@ -42,7 +42,7 @@ const StudentJobs = () => {
   const [matchingJobs, setMatchingJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [profileStatus, setProfileStatus] = useState('draft');
-  const [activeCategory, setActiveCategory] = useState('jobs'); // 'jobs' or 'internships'
+  const [activeCategory, setActiveCategory] = useState('jobs'); // 'jobs', 'internships' or 'paid-projects'
   const [activeTab, setActiveTab] = useState('all'); // 'all' or 'matching'
   const [jobPagination, setJobPagination] = useState({ current: 1, pages: 1, total: 0 });
   const [internshipPagination, setInternshipPagination] = useState({ current: 1, pages: 1, total: 0 });
@@ -92,7 +92,11 @@ const StudentJobs = () => {
       if (activeCategory === 'jobs') {
         fetchJobs();
       } else {
-        fetchInternships();
+        if (activeCategory === 'internships') {
+          fetchInternships();
+        } else if (activeCategory === 'paid-projects') {
+          fetchPaidProjects();
+        }
       }
     }
   }, [activeCategory, activeTab, jobPagination.current, internshipPagination.current, filters]);
@@ -139,6 +143,25 @@ const StudentJobs = () => {
       setInternshipPagination(response.data.pagination);
     } catch (error) {
       console.error('Error fetching internships:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPaidProjects = async () => {
+    setLoading(true);
+    try {
+      const response = await jobAPI.getJobs({
+        page: internshipPagination.current,
+        limit: 10,
+        search: filters.search || undefined,
+        roleCategory: filters.roleCategory || undefined,
+        jobType: 'paid_project'
+      });
+      setInternships(response.data.jobs);
+      setInternshipPagination(response.data.pagination);
+    } catch (error) {
+      console.error('Error fetching paid projects:', error);
     } finally {
       setLoading(false);
     }
@@ -238,6 +261,16 @@ const StudentJobs = () => {
         >
           <GraduationCap className="w-5 h-5" />
           Internships
+        </button>
+        <button
+          onClick={() => { setActiveCategory('paid-projects'); setActiveTab('all'); }}
+          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${activeCategory === 'paid-projects'
+            ? 'bg-primary-600 text-white shadow-lg'
+            : 'bg-white text-gray-600 border hover:border-primary-300 hover:text-primary-600'
+            }`}
+        >
+          <DollarSign className="w-5 h-5" />
+          Paid Projects
         </button>
       </div>
 

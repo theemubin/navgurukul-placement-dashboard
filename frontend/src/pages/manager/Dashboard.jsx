@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { statsAPI } from '../../services/api';
+import { statsAPI, userAPI } from '../../services/api';
 import api from '../../services/api';
 import { StatsCard, LoadingSpinner } from '../../components/common/UIComponents';
 import UserApprovals from '../../components/manager/UserApprovals';
@@ -8,6 +8,7 @@ import {
   Users, Briefcase, Building2, Award, TrendingUp, 
   CheckCircle, Clock, BarChart3, PieChart, Download, UserCog
 } from 'lucide-react';
+import { DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Dashboard = () => {
@@ -17,12 +18,72 @@ const Dashboard = () => {
   const [dateRange, setDateRange] = useState('all');
   const [activeTab, setActiveTab] = useState('approvals');
   const [pendingCount, setPendingCount] = useState(0);
+  const [campusRows, setCampusRows] = useState([]);
+  const [loadingCampusRows, setLoadingCampusRows] = useState(true);
+  const schoolToAcronym = (school) => {
+    if (!school) return 'Unknown';
+    const trimmed = school.trim();
+    const map = {
+      'School of Programming': 'SoP',
+      'School of Business': 'SoB',
+      'School of Finance': 'SoF',
+      'School of Education': 'SoE',
+      'School of Second Chance': 'SoSC'
+    };
+    if (map[trimmed]) return map[trimmed];
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith('school of')) {
+      const rest = trimmed.replace(/School of\s*/i, '');
+      const initials = rest.split(/\s+/).map(w => w.charAt(0).toUpperCase()).join('');
+      return `So${initials}`;
+    }
+    return trimmed.split(/\s+/).map(w => w.charAt(0).toUpperCase()).join('');
+  };
 
   useEffect(() => {
     fetchStats();
     fetchCoordinatorStats();
     fetchPendingCount();
+    fetchCampusRows();
   }, [dateRange]);
+
+  const fetchCampusRows = async () => {
+    setLoadingCampusRows(true);
+    try {
+      const [pocRes, campusStatsRes] = await Promise.all([
+        userAPI.getUsers({ role: 'campus_poc', limit: 1000 }),
+        statsAPI.getCampusStats()
+      ]);
+
+      const pocs = pocRes.data.users || [];
+      const campusStats = campusStatsRes.data || [];
+
+      const rows = campusStats.map(cs => {
+        const campusId = cs.campus.id || cs.campus._id || cs.campus;
+        const assigned = pocs.filter(p => {
+          if (!p) return false;
+          const userCampusId = p.campus && (p.campus._id || p.campus) ? (p.campus._id || p.campus).toString() : null;
+          if (userCampusId && userCampusId.toString() === campusId.toString()) return true;
+          if (Array.isArray(p.managedCampuses) && p.managedCampuses.map(m => (m && (m._id || m)).toString()).includes(campusId.toString())) return true;
+          return false;
+        }).map(p => `${p.firstName} ${p.lastName}`);
+
+        return {
+          campusName: cs.campus.name,
+          pocs: assigned,
+          jobReadyCount: cs.jobReadyCount || 0,
+          jobReadyBySchool: cs.jobReadyBySchool || [],
+          totalActive: cs.students || 0
+        };
+      });
+
+      setCampusRows(rows);
+    } catch (err) {
+      console.error('Error fetching campus rows:', err);
+    } finally {
+      setLoadingCampusRows(false);
+    }
+  };
 
   // Auto-refresh pending approvals count every 30s and listen for manual events
   useEffect(() => {
@@ -133,6 +194,12 @@ const Dashboard = () => {
           value={stats?.activeJobs || 0}
           icon={Briefcase}
           color="secondary"
+        />
+        <StatsCard
+          title="Paid Projects"
+          value={stats?.paidProjects || stats?.statusCounts?.['Paid Project'] || 0}
+          icon={DollarSign}
+          color="teal"
         />
         <StatsCard
           title="Total Applications"
@@ -352,6 +419,45 @@ const Dashboard = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Campus PoC summary table placed below Coordinator Job Distribution as requested */}
+      <div className="card mt-4">
+        <h2 className="text-lg font-semibold mb-4">Campus PoCs</h2>
+        {loadingCampusRows ? (
+          <div className="py-4 flex items-center justify-center"><LoadingSpinner size="md" /></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500">
+                  <th className="py-2">Campus Name</th>
+                  <th>PoC name(s)</th>
+                  <th>Job Ready by School</th>
+                  <th>Total Active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campusRows.map((r, idx) => (
+                  <tr key={idx} className="border-t">
+                      <td className="py-2">{r.campusName}</td>
+                      <td className="max-w-xl break-words">{r.pocs.length > 0 ? r.pocs.join(', ') : '—'}</td>
+                      <td>
+                        {r.jobReadyBySchool && r.jobReadyBySchool.length > 0 ? (
+                          r.jobReadyBySchool.map((s, i) => (
+                            <div key={i} className="py-1">{schoolToAcronym(s.school)}: {s.count}</div>
+                          ))
+                        ) : (
+                          <span>{r.jobReadyCount}</span>
+                        )}
+                      </td>
+                      <td>{r.totalActive}</td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Additional Metrics Row */}

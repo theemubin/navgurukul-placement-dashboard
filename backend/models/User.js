@@ -104,7 +104,7 @@ const userSchema = new mongoose.Schema({
     },
     currentStatus: {
       type: String,
-      enum: ['Active', 'Placed', 'Dropout', 'Internship Paid', 'Internship UnPaid'],
+      enum: ['Active', 'Placed', 'Dropout', 'Internship Paid', 'Internship UnPaid', 'Paid Project'],
       default: 'Active'
     },
     revisionNotes: String,

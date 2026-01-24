@@ -157,8 +157,8 @@ const seedData = async () => {
     ]);
     debugLog('Created campuses');
 
-    // Create skills
-    const skills = await Skill.insertMany([
+    // Create skills (upsert to avoid duplicate-key issues)
+    const skillsData = [
       { name: 'JavaScript', category: 'technical', description: 'JavaScript programming language' },
       { name: 'Python', category: 'technical', description: 'Python programming language' },
       { name: 'React', category: 'technical', description: 'React.js framework' },
@@ -172,8 +172,16 @@ const seedData = async () => {
       { name: 'English', category: 'language', description: 'English language proficiency' },
       { name: 'AWS Certified', category: 'certification', description: 'AWS Cloud certification' },
       { name: 'Machine Learning', category: 'domain', description: 'Machine learning and AI' }
-    ]);
-    debugLog('Created skills');
+    ];
+
+    const skills = [];
+    for (const s of skillsData) {
+      const normalized = s.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      await Skill.updateOne({ name: s.name }, { $setOnInsert: { ...s, normalizedName: normalized } }, { upsert: true });
+      const doc = await Skill.findOne({ name: s.name });
+      skills.push(doc);
+    }
+    debugLog('Created or ensured skills exist');
 
     // Create users - pass plain password, User model will hash it
     const plainPassword = 'password123';
@@ -559,6 +567,39 @@ const seedData = async () => {
         ],
         createdBy: coordinator._id
       }
+      ,
+      {
+        title: 'Frontend Paid Project - 3 months',
+        company: {
+          name: 'Startup Labs',
+          website: 'https://startuplabs.example',
+          description: 'Early stage startup building web products'
+        },
+        description: 'Short 3-month paid project for frontend feature development.',
+        requirements: ['Familiarity with React', 'CSS and responsive design'],
+        responsibilities: ['Implement UI features', 'Collaborate with product team', 'Deliver milestone-based work'],
+        location: 'Remote',
+        jobType: 'paid_project',
+        salary: { min: 15000, max: 30000, currency: 'INR' },
+        requiredSkills: [
+          { skill: skills[0]._id, required: true },
+          { skill: skills[2]._id, required: false }
+        ],
+        eligibility: {
+          minCgpa: 6.0,
+          departments: ['Computer Science', 'Information Technology'],
+          batches: ['2023', '2024', '2025'],
+          campuses: [campuses[0]._id, campuses[1]._id]
+        },
+        applicationDeadline: new Date('2026-02-28'),
+        maxPositions: 3,
+        status: 'application_stage',
+        interviewRounds: [
+          { name: 'Short Assignment', type: 'other' },
+          { name: 'Discussion', type: 'hr' }
+        ],
+        createdBy: coordinator._id
+      }
     ]);
     debugLog('Created jobs');
 
@@ -595,7 +636,7 @@ const seedData = async () => {
         name: 'January 2026',
         month: 1,
         year: 2026,
-        status: 'application_stage',
+        status: 'active',
         description: 'Current active placement cycle',
         targetPlacements: 150,
         createdBy: manager._id
@@ -604,7 +645,7 @@ const seedData = async () => {
         name: 'February 2026',
         month: 2,
         year: 2026,
-        status: 'application_stage',
+        status: 'active',
         description: 'February 2026 placements',
         targetPlacements: 120,
         createdBy: manager._id
@@ -613,7 +654,7 @@ const seedData = async () => {
         name: 'March 2026',
         month: 3,
         year: 2026,
-        status: 'application_stage',
+        status: 'upcoming',
         description: 'March 2026 placements',
         targetPlacements: 100,
         createdBy: manager._id

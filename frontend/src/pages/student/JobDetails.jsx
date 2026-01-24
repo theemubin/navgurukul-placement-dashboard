@@ -154,7 +154,8 @@ const JobDetails = () => {
   const fetchReadiness = async () => {
     try {
       const response = await jobReadinessAPI.getMyStatus();
-      setReadiness(response.data);
+      // API returns { readiness, config, defaults } — store the readiness object itself
+      setReadiness(response.data?.readiness || response.data);
     } catch (error) {
       console.error('Error fetching readiness:', error);
     }
