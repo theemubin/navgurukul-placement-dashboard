@@ -102,8 +102,8 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
       roleCategories: settings.roleCategories || [],
       institutionOptions: Object.fromEntries(settings.institutionOptions || new Map()),
       higherEducationOptions: Object.fromEntries(settings.higherEducationOptions || new Map()),
-+      // Include discordConfig so frontend sees updated values (botToken is sensitive but returned here for UX)
-+      discordConfig: settings.discordConfig || { enabled: false, channels: {} }
+      // Include discordConfig so frontend sees updated values (botToken is sensitive but returned here for UX)
+      discordConfig: settings.discordConfig || { enabled: false, channels: {} }
     };
 
     res.json({
