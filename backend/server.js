@@ -38,8 +38,31 @@ if (process.env.NODE_ENV === 'production') {
 if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
 console.log('NODE_ENV:', process.env.NODE_ENV, 'FRONTEND_URL:', process.env.FRONTEND_URL);
 console.log('CORS allowed origins:', allowedOrigins);
+// Use a custom origin checker so we can log and allow the deployed frontend even if env isn't set properly
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    // Allow non-browser tools or same-origin requests that don't set Origin
+    if (!origin) {
+      console.log('CORS: no origin (non-browser or same-origin request)');
+      return callback(null, true);
+    }
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log('CORS: allowing origin', origin);
+      return callback(null, true);
+    }
+    // Extra safety: accept origin with the expected hostname even if scheme/port differs
+    try {
+      const url = new URL(origin);
+      if (url.hostname === 'navgurukul-placement-frontend.onrender.com') {
+        console.log('CORS: allowing origin by hostname fallback', origin);
+        return callback(null, true);
+      }
+    } catch (err) {
+      console.log('CORS: origin parse error', origin, err && err.message);
+    }
+    console.log('CORS: rejecting origin', origin);
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());
