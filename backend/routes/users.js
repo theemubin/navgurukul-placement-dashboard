@@ -164,8 +164,8 @@ router.put('/students/:studentId/status', auth, authorize('campus_poc', 'coordin
   }
 });
 
-// Update student profile (for students)
-router.put('/profile', auth, authorize('student'), upload.single('resume'), async (req, res) => {
+// Update profile (students and staff) - allow coordinators/managers/campus_poc to update their own discord and basic info
+router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'campus_poc'), upload.single('resume'), async (req, res) => {
   try {
     const updates = req.body;
     const user = await User.findById(req.userId);
@@ -301,6 +301,7 @@ router.put('/profile', auth, authorize('student'), upload.single('resume'), asyn
       .populate('campus')
       .populate('studentProfile.skills.skill');
 
+    console.log('Profile updated for user:', req.userId, 'role:', updatedUser.role);
     res.json({ message: 'Profile updated successfully', user: updatedUser });
   } catch (error) {
     console.error('Update profile error:', error);
