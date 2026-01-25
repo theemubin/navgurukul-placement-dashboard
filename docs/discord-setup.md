@@ -1,50 +1,68 @@
 # Discord Integration Setup Guide
 
-Follow these steps to set up the Discord bot for the Placement Dashboard.
+## 1. Create a Discord Bot
+1.  Go to the [Discord Developer Portal](https://discord.com/developers/applications).
+2.  Click **New Application** and give it a name (e.g., "Placement Bot").
+3.  Go to the **Bot** tab on the left sidebar.
+4.  Click **Reset Token** to generate a new token. **Copy this token**—you will need it later.
+5.  Under **Privileged Gateway Intents**, enable:
+    *   `PRESENCE INTENT`
+    *   `SERVER MEMBERS INTENT`
+    *   `MESSAGE CONTENT INTENT` (Crucial for reading commands if added later)
+6.  Click **Save Changes**.
 
-## 1. Create a Discord Application
+## 2. Invite Bot to Your Server
+1.  Go to the **OAuth2** -> **URL Generator** tab.
+2.  Under **Scopes**, select `bot`.
+3.  Under **Bot Permissions**, select:
+    *   `Send Messages`
+    *   `Create Public Threads`
+    *   `Send Messages in Threads`
+    *   `Manage Threads` (Optional, for locking old threads)
+    *   `Embed Links` (Required for rich notifications)
+    *   `Mention Everyone` (If you want @here alerts)
+    *   `View Channels`
+4.  Copy the **Generated URL** at the bottom.
+5.  Open the URL in your browser and invite the bot to your target server.
 
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Click **New Application** and give it a name (e.g., "Placement Bot").
-3. Go to the **Bot** tab on the left sidebar.
-4. Click **Reset Token** to generate a token. **Copy this Token**. You will need it for the dashboard settings.
-5. Scroll down to **Privileged Gateway Intents** and enable:
-   - **Server Members Intent**
-   - **Message Content Intent**
-6. Click **Save Changes**.
+## 3. Enable Developer Mode (to get IDs)
+1.  Open Discord User Settings (Gear icon).
+2.  Go to **Advanced**.
+3.  Toggle **Developer Mode** ON.
+4.  Now you can right-click any Server, Channel, or User and select **Copy ID**.
 
-## 2. Invite the Bot to Your Server
+## 4. Configure Dashboard (Manager)
+1.  Log in to the Placement Dashboard as a **Manager**.
+2.  Go to **Settings** -> **Discord Integration** tab.
+3.  **Enable Discord Integration**.
+4.  Fill in the details:
+    *   **Bot Token**: The token you copied in Step 1.
+    *   **Guild (Server) ID**: Right-click your server icon -> Copy Server ID.
+    *   **Jobs Channel ID**: Right-click the channel for new job posts -> Copy Channel ID.
+    *   **Updates Channel ID**: Right-click the channel for general application updates -> Copy Channel ID.
+    *   **Profiles Channel ID**: Right-click the channel for profile approvals -> Copy Channel ID.
+5.  Click **Save All Changes**.
+6.  **Restart the backend server** to initialize the bot with the new token.
 
-1. Go to the **OAuth2** tab -> **URL Generator**.
-2. Under **Scopes**, select `bot`.
-3. Under **Bot Permissions**, select:
-   - `Send Messages`
-   - `Embed Links`
-   - `Manage Threads` (if you want thread updates)
-   - `Read Message History`
-   - `Mention Everyone` (if needed)
-4. Copy the Generated URL at the bottom.
-5. Open the URL in a browser and invite the bot to your Placement Server.
+## 5. Configure Campus-Specific Channels (Optional)
+If you want notifications for specific campuses (e.g., "Pune Campus Profile Approved") to go to a separate channel:
+1.  Create the channel in Discord (e.g., `#pune-updates`).
+2.  Right-click and **Copy Channel ID**.
+3.  In Dashboard, go to **Settings** -> **Campuses**.
+4.  Click the **Edit Icon** next to the specific campus.
+5.  Paste the **Channel ID** into the notification field.
+6.  Click **Save**.
 
-## 3. Configure the Dashboard
+## 6. Job Threading Features
+The system uses Discord Threads to keep updates organized.
+*   **Automatic**: When a new job is posted, the bot creates a thread under the job posting. All status updates for that job are sent to that thread.
+*   **Manual Override**:
+    1.  Create a thread explicitly in Discord if needed.
+    2.  Right-click the thread -> **Copy Channel ID** (Threads are channels).
+    3.  In Dashboard -> **Coordinator** -> **Job Applicants (Triage)** -> Click **Review Decision**.
+    4.  Enter the ID in the **"Discord Thread ID"** field before confirming.
+    5.  Future updates for this job will now go to this manually linked thread.
 
-1. Log in to the Placement Dashboard as a **Manager**.
-2. Go to **Settings** -> **Discord Integration** tab.
-3. Enable the integration.
-4. Paste the **Bot Token** you copied in Step 1.
-5. Enter your **Server (Guild) ID**:
-   - In Discord, go to **User Settings** -> **Advanced** -> Enable **Developer Mode**.
-   - Right-click your server icon on the left -> **Copy Server ID**.
-6. Create channels in your Discord server for different notifications (e.g., `#job-postings`, `#application-updates`, `#profile-approvals`).
-7. Right-click each channel -> **Copy Channel ID** and paste them into the corresponding fields in the dashboard settings.
-8. Click **Save All Changes**.
-
-## 4. User Setup
-
-- **Students**: Can go to their Profile -> Personal tab to add their Discord User ID and Username.
-- **Coordinators**: Can go to Settings to add their Discord details.
-
-## Troubleshooting
-
-- If the bot is not sending messages, check if it has the correct permissions in the specific channels.
-- Check the server logs for any "Missing Access" errors.
+## 7. User Linking
+*   **Students/Coordinators**: Go to **Profile** settings. enter your **Discord User ID** (Right-click your profile in Discord -> Copy User ID).
+*   This allows the bot to `mention` (@User) you when sending specific updates.

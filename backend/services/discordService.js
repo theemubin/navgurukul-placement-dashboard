@@ -245,7 +245,15 @@ class DiscordService {
             if (!ready) return null;
 
             const settings = await Settings.getSettings();
-            const channelId = settings.discordConfig?.channels?.profileUpdates;
+
+
+            // Prioritize Campus specific channel
+            let channelId = null;
+            if (student.campus?.discordChannelId) {
+                channelId = student.campus.discordChannelId;
+            } else {
+                channelId = settings.discordConfig?.channels?.profileUpdates;
+            }
 
             if (!channelId) return null;
 

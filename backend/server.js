@@ -27,7 +27,25 @@ const discordRoutes = require('./routes/discord');
 
 const app = express();
 
-// ... existing middleware ...
+// Middleware
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', process.env.FRONTEND_URL].filter(Boolean),
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your_session_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -122,6 +140,18 @@ app.use((err, req, res, next) => {
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
+
+// Connect to Database
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('MongoDB Connected');
+    // Initialize Discord Bot
+    const discordService = require('./services/discordService');
+    discordService.initialize();
+  })
+  .catch(err => {
+    console.error('MongoDB Connection Error:', err);
+  });
 
 const PORT = process.env.PORT || 5001;
 

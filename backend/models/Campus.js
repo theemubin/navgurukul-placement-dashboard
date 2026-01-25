@@ -24,6 +24,10 @@ const campusSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  discordChannelId: {
+    type: String,
+    default: ''
+  },
   placementTarget: {
     type: Number,
     default: 0

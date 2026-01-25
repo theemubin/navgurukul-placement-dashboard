@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { settingsAPI, placementCycleAPI, campusAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert } from '../../components/common/UIComponents';
 import toast from 'react-hot-toast';
-import { Plus, MessageSquare } from 'lucide-react';
+import { Plus, MessageSquare, Edit, Save, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Settings = () => {
@@ -12,6 +12,21 @@ const Settings = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [activeTab, setActiveTab] = useState('modules');
+
+  // Campus Edit State
+  const [editingCampusId, setEditingCampusId] = useState(null);
+  const [tempDiscordChannelId, setTempDiscordChannelId] = useState('');
+
+  const handleSaveCampusDiscord = async (campusId) => {
+    try {
+      await campusAPI.updateCampus(campusId, { discordChannelId: tempDiscordChannelId });
+      toast.success('Campus Discord channel updated');
+      setEditingCampusId(null);
+      fetchCampuses();
+    } catch (e) {
+      toast.error('Failed to update campus');
+    }
+  };
 
   // Edit states
   const [editingSchool, setEditingSchool] = useState(null);
@@ -1223,8 +1238,38 @@ node scripts/promote_normalized_index_unique.js`;
                     )}
                   </div>
                   {campus.location && (
-                    <p className="text-sm text-gray-500 mt-1">{campus.location}</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {typeof campus.location === 'object'
+                        ? `${campus.location.city || ''}${campus.location.city && campus.location.state ? ', ' : ''}${campus.location.state || ''}`
+                        : campus.location}
+                    </p>
                   )}
+
+                  <div className="mt-2 flex items-center gap-3 text-sm text-gray-500">
+                    <div className="flex items-center gap-1 text-indigo-600">
+                      <MessageSquare className="w-4 h-4" />
+                      <span className="text-xs font-semibold">Notifications:</span>
+                    </div>
+                    {editingCampusId === campus._id ? (
+                      <div className="flex items-center gap-2 animate-fadeIn">
+                        <input
+                          type="text"
+                          value={tempDiscordChannelId}
+                          onChange={(e) => setTempDiscordChannelId(e.target.value)}
+                          placeholder="Channel ID"
+                          className="border rounded px-2 py-1 text-xs w-48 focus:ring-1 focus:ring-indigo-500"
+                          autoFocus
+                        />
+                        <button onClick={() => handleSaveCampusDiscord(campus._id)} className="p-1 hover:bg-green-100 text-green-600 rounded" title="Save"><Save className="w-3 h-3" /></button>
+                        <button onClick={() => setEditingCampusId(null)} className="p-1 hover:bg-red-100 text-red-600 rounded" title="Cancel"><X className="w-3 h-3" /></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 group cursor-pointer hover:bg-gray-50 px-2 py-0.5 rounded -ml-2" onClick={() => { setEditingCampusId(campus._id); setTempDiscordChannelId(campus.discordChannelId || ''); }}>
+                        <span className="text-xs font-mono">{campus.discordChannelId ? campus.discordChannelId : 'Global Default'}</span>
+                        <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

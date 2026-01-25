@@ -219,6 +219,11 @@ const CoordinatorJobs = () => {
     setApplyingModalChanges(true);
 
     try {
+      // 0. Update Job Metadata (Discord Thread ID) if provided
+      if (metadata.discordThreadId && metadata.discordThreadId !== modalJob.discordThreadId) {
+        await jobAPI.updateJob(modalJob._id, { discordThreadId: metadata.discordThreadId });
+      }
+
       // Group by action/status
       const grouped = {
         promote: triageApplicants.filter(a => a.bucket === 'promote'),

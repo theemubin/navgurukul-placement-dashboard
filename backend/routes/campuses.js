@@ -31,8 +31,8 @@ router.get('/:id', async (req, res) => {
 // Create campus (Manager only)
 router.post('/', auth, authorize('manager'), async (req, res) => {
   try {
-    const { name, code, location, contactEmail, contactPhone } = req.body;
-    
+    const { name, code, location, contactEmail, contactPhone, discordChannelId } = req.body;
+
     const existing = await Campus.findOne({ code: code.toUpperCase() });
     if (existing) {
       return res.status(400).json({ message: 'Campus with this code already exists' });
@@ -43,7 +43,8 @@ router.post('/', auth, authorize('manager'), async (req, res) => {
       code: code.toUpperCase(),
       location,
       contactEmail,
-      contactPhone
+      contactPhone,
+      discordChannelId
     });
 
     await campus.save();
@@ -57,8 +58,8 @@ router.post('/', auth, authorize('manager'), async (req, res) => {
 // Update campus (Manager only)
 router.put('/:id', auth, authorize('manager'), async (req, res) => {
   try {
-    const { name, location, contactEmail, contactPhone, isActive } = req.body;
-    
+    const { name, location, contactEmail, contactPhone, isActive, discordChannelId } = req.body;
+
     const campus = await Campus.findById(req.params.id);
     if (!campus) {
       return res.status(404).json({ message: 'Campus not found' });
@@ -69,6 +70,7 @@ router.put('/:id', auth, authorize('manager'), async (req, res) => {
     if (contactEmail) campus.contactEmail = contactEmail;
     if (contactPhone) campus.contactPhone = contactPhone;
     if (isActive !== undefined) campus.isActive = isActive;
+    if (discordChannelId !== undefined) campus.discordChannelId = discordChannelId;
 
     await campus.save();
     res.json(campus);

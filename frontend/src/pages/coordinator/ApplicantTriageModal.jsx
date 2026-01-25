@@ -42,6 +42,7 @@ const ApplicantTriageModal = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState('triage'); // 'triage' or 'preview'
     const [selectedRoundIndex, setSelectedRoundIndex] = useState(0);
+    const [discordThreadId, setDiscordThreadId] = useState('');
 
     // Map job status to label
     const getStatusLabel = (statusId) => {
@@ -71,8 +72,11 @@ const ApplicantTriageModal = ({
                 // If staying in current stage, maybe find the "most common" round or just default to 0
                 setSelectedRoundIndex(0);
             }
+
+            // Init Discord Thread
+            setDiscordThreadId(job?.discordThreadId || '');
         }
-    }, [isOpen, initialApplicants, targetStatus]);
+    }, [isOpen, initialApplicants, targetStatus, job]);
 
     if (!isOpen || !job) return null;
 
@@ -122,7 +126,8 @@ const ApplicantTriageModal = ({
     const handleFinalSubmit = () => {
         onConfirm(applicants, {
             roundIndex: selectedRoundIndex,
-            roundName: hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : null
+            roundName: hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : null,
+            discordThreadId
         });
     };
 
@@ -506,11 +511,27 @@ const ApplicantTriageModal = ({
                             </div>
 
                             <div className="flex justify-between items-center bg-indigo-900 text-white p-6 rounded-2xl shadow-xl mt-12">
-                                <div>
-                                    <h4 className="font-bold text-lg">Ready to commit?</h4>
-                                    <p className="text-indigo-200 text-sm">This action will trigger batch notifications to all candidates.</p>
+                                <div className="space-y-4 flex-1 mr-8">
+                                    <div>
+                                        <h4 className="font-bold text-lg">Ready to commit?</h4>
+                                        <p className="text-indigo-200 text-sm">This action will trigger batch notifications to all candidates.</p>
+                                    </div>
+                                    <div className="bg-indigo-800/50 p-3 rounded-lg border border-indigo-700/50">
+                                        <label className="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-1 block">Discord Thread ID (Optional)</label>
+                                        <div className="flex gap-2">
+                                            <MessageSquare className="w-4 h-4 text-indigo-400 mt-2" />
+                                            <input
+                                                type="text"
+                                                value={discordThreadId}
+                                                onChange={(e) => setDiscordThreadId(e.target.value)}
+                                                placeholder="Enter Discord thread ID for live updates..."
+                                                className="bg-indigo-900/50 border border-indigo-700 text-white text-sm rounded px-3 py-1.5 w-full focus:ring-1 focus:ring-white placeholder-indigo-400/50 outline-none"
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-indigo-400 mt-1 ml-6">If set, updates are posted to this specific thread.</p>
+                                    </div>
                                 </div>
-                                <div className="flex gap-4">
+                                <div className="flex gap-4 items-center">
                                     <button
                                         onClick={() => setViewMode('triage')}
                                         className="px-6 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition-colors"
