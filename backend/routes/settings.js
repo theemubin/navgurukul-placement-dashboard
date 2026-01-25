@@ -23,7 +23,9 @@ router.get('/', auth, async (req, res) => {
       proficiencyRubrics: Object.fromEntries(settings.proficiencyRubrics || new Map()),
       masterCompanies: Object.fromEntries(settings.masterCompanies || new Map()),
       institutionOptions: Object.fromEntries(settings.institutionOptions || new Map()),
-      higherEducationOptions: Object.fromEntries(settings.higherEducationOptions || new Map())
+      higherEducationOptions: Object.fromEntries(settings.higherEducationOptions || new Map()),
+      // Include discord settings so UI can display and edit them
+      discordConfig: settings.discordConfig || { enabled: false, channels: {} }
     };
 
     res.json({ success: true, data: response });
