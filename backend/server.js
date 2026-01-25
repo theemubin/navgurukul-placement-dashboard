@@ -31,7 +31,12 @@ app.set('trust proxy', 1);
 
 // Middleware
 const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+// Allow known production frontend by default so deployed site works even if env not set
+if (process.env.NODE_ENV === 'production') {
+  allowedOrigins.push('https://navgurukul-placement-frontend.onrender.com');
+}
 if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
+console.log('NODE_ENV:', process.env.NODE_ENV, 'FRONTEND_URL:', process.env.FRONTEND_URL);
 console.log('CORS allowed origins:', allowedOrigins);
 app.use(cors({
   origin: allowedOrigins,
