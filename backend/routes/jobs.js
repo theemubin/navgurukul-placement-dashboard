@@ -520,10 +520,13 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
 
       await Notification.insertMany(notifications);
       const discordResult = await discordService.sendJobPosting(job, req.user, eligibleStudents);
-      if (discordResult && discordResult.threadId) {
-        job.discordThreadId = discordResult.threadId;
-        job.discordMessageId = discordResult.messageId;
-        await job.save();
+      console.log('Discord sendJobPosting result for job', job._id, discordResult);
+      if (discordResult) {
+        if (discordResult.messageId) job.discordMessageId = discordResult.messageId;
+        if (discordResult.threadId) job.discordThreadId = discordResult.threadId;
+        if (discordResult.messageId || discordResult.threadId) {
+          await job.save();
+        }
       }
     }
 
@@ -582,10 +585,13 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
 
       await Notification.insertMany(notifications);
       const discordResult = await discordService.sendJobPosting(job, req.user, eligibleStudents);
-      if (discordResult && discordResult.threadId) {
-        job.discordThreadId = discordResult.threadId;
-        job.discordMessageId = discordResult.messageId;
-        await job.save();
+      console.log('Discord sendJobPosting result for job', job._id, discordResult);
+      if (discordResult) {
+        if (discordResult.messageId) job.discordMessageId = discordResult.messageId;
+        if (discordResult.threadId) job.discordThreadId = discordResult.threadId;
+        if (discordResult.messageId || discordResult.threadId) {
+          await job.save();
+        }
       }
     }
 
