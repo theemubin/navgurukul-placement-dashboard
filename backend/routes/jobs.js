@@ -620,9 +620,10 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
     }
 
     let updated = 0;
+    const affectedStudents = [];
 
     for (const appId of applicationIds) {
-      const application = await Application.findById(appId).populate('student', 'firstName lastName');
+      const application = await Application.findById(appId).populate('student', 'firstName lastName discord');
       if (!application) continue;
       if (application.job.toString() !== jobId.toString()) continue;
 
@@ -704,6 +705,14 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
             link: `/applications/${application._id}`,
             relatedEntity: { type: 'application', id: application._id }
           });
+
+          // Collect affected student info for summary / discord mentions
+          affectedStudents.push({
+            _id: application.student._id,
+            firstName: application.student.firstName,
+            lastName: application.student.lastName,
+            discordUserId: application.student.discord?.userId || null
+          });
         }
       } catch (notifErr) {
         console.error(`Failed to send notification for application ${appId}:`, notifErr.message);
@@ -756,7 +765,8 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
         job,
         updated,
         action === 'set_status' ? `Status: ${status}` : 'Advanced Round',
-        req.user
+        req.user,
+        affectedStudents
       );
     }
 

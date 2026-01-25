@@ -308,7 +308,7 @@ class DiscordService {
      * @param {String} action - Action performed
      * @param {Object} coordinator - User who performed the action
      */
-    async sendBulkUpdate(job, count, action, coordinator) {
+    async sendBulkUpdate(job, count, action, coordinator, affectedStudents = []) {
         try {
             const ready = await this.ensureReady();
             if (!ready) return null;
@@ -333,6 +333,33 @@ class DiscordService {
                 if (!channel) throw new Error('Application updates channel not found');
             }
 
+            // Build affected students mention/name list (limit for readability)
+            const mentionUsers = settings.discordConfig?.mentionUsers;
+            const maxList = 10;
+            const mentions = [];
+            const names = [];
+
+            for (const s of affectedStudents || []) {
+                const fullName = `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Unnamed';
+                if (mentionUsers && s.discordUserId) {
+                    mentions.push(`<@${s.discordUserId}>`);
+                } else {
+                    names.push(fullName);
+                }
+            }
+
+            const totalAffected = affectedStudents.length || 0;
+            let listDisplay = '';
+            if (mentions.length > 0) {
+                const display = mentions.slice(0, maxList).join(' ');
+                const more = mentions.length > maxList ? ` +${mentions.length - maxList} more` : '';
+                listDisplay = display + more;
+            } else if (names.length > 0) {
+                const display = names.slice(0, maxList).join(', ');
+                const more = names.length > maxList ? ` +${names.length - maxList} more` : '';
+                listDisplay = display + more;
+            }
+
             const embed = new EmbedBuilder()
                 .setColor('#8b5cf6')
                 .setTitle('📦 Bulk Action Performed')
@@ -344,7 +371,16 @@ class DiscordService {
                 )
                 .setTimestamp();
 
-            const message = await channel.send({ embeds: [embed] });
+            if (listDisplay) {
+                // Truncate to Discord field limit (1024 chars)
+                const truncated = listDisplay.substring(0, 1020) + (listDisplay.length > 1020 ? '...' : '');
+                embed.addFields({ name: '👥 Affected', value: truncated });
+            }
+
+            // If we have direct mentions to ping, include them as message content
+            const content = mentions.length > 0 ? mentions.slice(0, maxList).join(' ') : '';
+
+            const message = await channel.send({ content, embeds: [embed] });
 
             return {
                 messageId: message.id,
