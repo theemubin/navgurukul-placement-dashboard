@@ -139,6 +139,7 @@ export const settingsAPI = {
   updatePipelineStage: (stageId, updates) => api.put(`/settings/pipeline-stages/${stageId}`, updates),
   deletePipelineStage: (stageId) => api.delete(`/settings/pipeline-stages/${stageId}`),
   reorderPipelineStages: (stageIds) => api.put('/settings/pipeline-stages-order', { stageIds }),
+  getAIConfig: () => api.get('/settings/ai-config'),
   updateAIConfig: (config) => api.put('/settings/ai-config', config),
   getAIStatus: () => api.get('/settings/ai-status'),
   updateSettings: (data) => api.put('/settings', data),
