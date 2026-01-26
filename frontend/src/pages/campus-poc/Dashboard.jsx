@@ -216,8 +216,8 @@ const POCDashboard = () => {
                 <label
                   key={campus._id}
                   className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedCampuses.includes(campus._id)
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-gray-200 hover:border-gray-300'
                     }`}
                 >
                   <input
@@ -321,7 +321,7 @@ const POCDashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
         <StatsCard
           icon={Users}
           label="Total Students"
@@ -358,12 +358,6 @@ const POCDashboard = () => {
           value={stats?.interestCount || 0}
           color="purple"
         />
-        <StatsCard
-          icon={Briefcase}
-          label="Paid Projects"
-          value={stats?.statusCounts?.['Paid Project'] || 0}
-          color="teal"
-        />
       </div>
 
       {/* Tabs */}
@@ -381,8 +375,8 @@ const POCDashboard = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === tab.id
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -573,73 +567,73 @@ const POCDashboard = () => {
               {eligibleJobs
                 .filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter))
                 .map((job) => (
-                <div key={job._id} className="card hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Building2 className="w-6 h-6 text-gray-500" />
+                  <div key={job._id} className="card hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Building2 className="w-6 h-6 text-gray-500" />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{job.title}</h4>
+                          <p className="text-sm text-gray-600">{job.company?.name}</p>
+                          <p className="text-xs text-gray-500 capitalize mt-1">{job.jobType?.replace('_', ' ')}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{job.title}</h4>
-                        <p className="text-sm text-gray-600">{job.company?.name}</p>
-                        <p className="text-xs text-gray-500 capitalize mt-1">{job.jobType?.replace('_', ' ')}</p>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">Deadline</p>
+                        <p className="text-sm font-medium text-gray-700">
+                          {new Date(job.applicationDeadline).toLocaleDateString()}
+                        </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-500">Deadline</p>
-                      <p className="text-sm font-medium text-gray-700">
-                        {new Date(job.applicationDeadline).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* Stats Row */}
-                  <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3">
-                    <button
-                      className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
-                      onClick={() => fetchEligibleStudents(job)}
-                      title="Click to view eligible students"
-                    >
-                      <p className="text-lg font-bold text-indigo-600 hover:underline">{job.eligibleStudents}</p>
-                      <p className="text-xs text-gray-500">Eligible</p>
-                    </button>
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-blue-600">{job.applicationCount}</p>
-                      <p className="text-xs text-gray-500">Applied</p>
+                    {/* Stats Row */}
+                    <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3">
+                      <button
+                        className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
+                        onClick={() => fetchEligibleStudents(job)}
+                        title="Click to view eligible students"
+                      >
+                        <p className="text-lg font-bold text-indigo-600 hover:underline">{job.eligibleStudents}</p>
+                        <p className="text-xs text-gray-500">Eligible</p>
+                      </button>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-blue-600">{job.applicationCount}</p>
+                        <p className="text-xs text-gray-500">Applied</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-yellow-600">{job.statusCounts?.shortlisted + job.statusCounts?.in_progress || 0}</p>
+                        <p className="text-xs text-gray-500">In Progress</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-green-600">{job.statusCounts?.selected || 0}</p>
+                        <p className="text-xs text-gray-500">Selected</p>
+                      </div>
                     </div>
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-yellow-600">{job.statusCounts?.shortlisted + job.statusCounts?.in_progress || 0}</p>
-                      <p className="text-xs text-gray-500">In Progress</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-green-600">{job.statusCounts?.selected || 0}</p>
-                      <p className="text-xs text-gray-500">Selected</p>
-                    </div>
-                  </div>
 
-                  {/* Application Progress Bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Application Rate</span>
-                      <span>{job.eligibleStudents > 0 ? Math.round((job.applicationCount / job.eligibleStudents) * 100) : 0}%</span>
+                    {/* Application Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Application Rate</span>
+                        <span>{job.eligibleStudents > 0 ? Math.round((job.applicationCount / job.eligibleStudents) * 100) : 0}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="h-2 rounded-full bg-primary-500 transition-all"
+                          style={{ width: `${job.eligibleStudents > 0 ? (job.applicationCount / job.eligibleStudents) * 100 : 0}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full bg-primary-500 transition-all"
-                        style={{ width: `${job.eligibleStudents > 0 ? (job.applicationCount / job.eligibleStudents) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Positions */}
-                  <div className="mt-3 flex items-center justify-between text-sm">
-                    <span className="text-gray-500">{job.maxPositions} position{job.maxPositions !== 1 ? 's' : ''} available</span>
-                    {job.applicationCount === 0 && (
-                      <span className="text-orange-600 text-xs font-medium">No applications yet</span>
-                    )}
+                    {/* Positions */}
+                    <div className="mt-3 flex items-center justify-between text-sm">
+                      <span className="text-gray-500">{job.maxPositions} position{job.maxPositions !== 1 ? 's' : ''} available</span>
+                      {job.applicationCount === 0 && (
+                        <span className="text-orange-600 text-xs font-medium">No applications yet</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           ) : (
             <div className="text-center py-12 text-gray-500">
@@ -1039,8 +1033,8 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                   fetchCycleStudents(cycle.cycleId);
                 }}
                 className={`w-full text-left p-4 rounded-lg border transition-colors ${selectedCycleId === cycle.cycleId
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-gray-200 hover:border-gray-300'
                   }`}
               >
                 <div className="flex justify-between items-start">
@@ -1387,8 +1381,8 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
             <button
               onClick={() => setStudentFilter('all')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${studentFilter === 'all'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-100'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-100'
                 }`}
             >
               All ({total || 0})
@@ -1396,8 +1390,8 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
             <button
               onClick={() => setStudentFilter('applied')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${studentFilter === 'applied'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-100'
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-100'
                 }`}
             >
               Applied ({applied || 0})
@@ -1405,8 +1399,8 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
             <button
               onClick={() => setStudentFilter('not-applied')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${studentFilter === 'not-applied'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-100'
+                ? 'bg-orange-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-100'
                 }`}
             >
               Not Applied ({notApplied || 0})
@@ -1431,8 +1425,8 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
                 <div
                   key={student._id}
                   className={`p-4 rounded-lg border ${student.hasApplied
-                      ? 'bg-green-50 border-green-200'
-                      : 'bg-white border-gray-200'
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-white border-gray-200'
                     }`}
                 >
                   <div className="flex items-center justify-between">
@@ -1454,8 +1448,8 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
                     </div>
                     <div className="text-right">
                       <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${student.skillMatch >= 80 ? 'bg-green-100 text-green-700' :
-                          student.skillMatch >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
+                        student.skillMatch >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
                         }`}>
                         {student.skillMatch}% Match
                       </div>

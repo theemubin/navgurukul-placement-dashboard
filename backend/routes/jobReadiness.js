@@ -255,10 +255,26 @@ router.get('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
     const school = student.studentProfile?.currentSchool;
 
     if (!readiness) {
-      if (!school) return res.status(400).json({ message: 'Student school not set' });
+      if (!school) {
+        // Fallback for students who haven't set their school yet: don't crash the POC dashboard
+        return res.json({
+          readiness: { student: studentId, criteriaStatus: [], readinessPercentage: 0 },
+          config: [],
+          defaults: DEFAULT_CRITERIA,
+          message: 'Student has not set their school in their profile yet.'
+        });
+      }
       readiness = new StudentJobReadiness({ student: studentId, school, campus: student.campus, criteriaStatus: [] });
       await readiness.calculateReadiness();
       await readiness.save();
+    } else if (!school) {
+      // If readiness exists but school is missing (edge case), just return readiness as is
+      return res.json({
+        readiness,
+        config: [],
+        defaults: DEFAULT_CRITERIA,
+        message: 'Student school is not set in profile.'
+      });
     } else {
       try {
         await readiness.calculateReadiness();

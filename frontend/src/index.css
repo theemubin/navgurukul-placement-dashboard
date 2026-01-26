@@ -35,7 +35,9 @@ body {
 }
 
 /* Form inputs */
-input, select, textarea {
+input,
+select,
+textarea {
   @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition;
 }
 
@@ -62,7 +64,7 @@ input, select, textarea {
 
 /* Cards */
 .card {
-  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6;
 }
 
 /* Status badges */
@@ -88,8 +90,15 @@ input, select, textarea {
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fadeIn {
@@ -98,9 +107,20 @@ input, select, textarea {
 
 /* Celebration pop animation */
 @keyframes pop {
-  0% { transform: translateY(-6px) scale(0.9); opacity: 0; }
-  50% { transform: translateY(0) scale(1.05); opacity: 1; }
-  100% { transform: translateY(-4px) scale(1); opacity: 1; }
+  0% {
+    transform: translateY(-6px) scale(0.9);
+    opacity: 0;
+  }
+
+  50% {
+    transform: translateY(0) scale(1.05);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(-4px) scale(1);
+    opacity: 1;
+  }
 }
 
 .animate-pop {
@@ -112,7 +132,7 @@ input, select, textarea {
   .sidebar {
     @apply fixed inset-y-0 left-0 z-50 transform -translate-x-full transition-transform duration-300 ease-in-out;
   }
-  
+
   .sidebar.open {
     @apply translate-x-0;
   }
@@ -122,22 +142,28 @@ input, select, textarea {
 .applicant-columns {
   @apply grid grid-cols-1 md:grid-cols-3 gap-4;
 }
+
 .applicant-column {
   @apply border rounded p-3 bg-white;
 }
+
 .applicant-column .column-body {
   /* keep header + textarea fixed, list scrolls */
   max-height: 44vh;
   overflow-y: auto;
   padding-top: 0.5rem;
 }
+
 .student-card {
   @apply p-3 rounded border bg-white mb-3 min-w-0;
 }
+
 .student-email {
   @apply text-xs text-gray-500 block truncate;
-  max-width: 28rem; /* limits width so the email truncates cleanly */
+  max-width: 28rem;
+  /* limits width so the email truncates cleanly */
 }
+
 .btn-sm {
   @apply px-3 py-1 rounded text-sm font-medium;
 }

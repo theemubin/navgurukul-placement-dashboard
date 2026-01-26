@@ -81,20 +81,21 @@ const POCStudents = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Students</h1>
-          <p className="text-gray-600">View and manage students from your campus</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Students</h1>
+          <p className="text-gray-500 text-sm">View and manage students from your campus</p>
         </div>
-        <Button onClick={() => setBulkUploadModal(true)}>
-          <Upload className="w-5 h-5 mr-2" />
-          Bulk Upload Students
+        <Button onClick={() => setBulkUploadModal(true)} className="w-full md:w-auto shadow-sm">
+          <Upload className="w-4 h-4 mr-2" />
+          <span className="hidden md:inline">Bulk Upload Students</span>
+          <span className="md:hidden text-sm">Bulk Upload</span>
         </Button>
       </div>
 
       {/* Stats Dashboard */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
           <StatsCard
             icon={Users}
             label="Active"
@@ -109,13 +110,13 @@ const POCStudents = () => {
           />
           <StatsCard
             icon={Briefcase}
-            label="Internship"
+            label="Intern"
             value={(stats.statusCounts?.['Internship Paid'] || 0) + (stats.statusCounts?.['Internship UnPaid'] || 0)}
             color="blue"
           />
           <StatsCard
             icon={Briefcase}
-            label="Paid Projects"
+            label="Project"
             value={stats.statusCounts?.['Paid Project'] || 0}
             color="teal"
           />
@@ -127,7 +128,7 @@ const POCStudents = () => {
           />
           <StatsCard
             icon={Clock}
-            label="Placement Rate"
+            label="Rate"
             value={`${stats.placementRate}%`}
             color="purple"
           />
@@ -135,21 +136,22 @@ const POCStudents = () => {
       )}
 
       {/* Filters */}
-      <div className="card">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="md:col-span-2 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <div className="card !p-3 md:!p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="col-span-1 sm:col-span-2 md:col-span-2 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by name, email..."
+              placeholder="Search students..."
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="pl-10"
+              className="pl-9 text-sm"
             />
           </div>
           <select
             value={filters.school}
             onChange={(e) => setFilters({ ...filters, school: e.target.value })}
+            className="text-sm"
           >
             <option value="">All Schools</option>
             {schools.map(s => <option key={s} value={s}>{s}</option>)}
@@ -157,6 +159,7 @@ const POCStudents = () => {
           <select
             value={filters.batch}
             onChange={(e) => setFilters({ ...filters, batch: e.target.value })}
+            className="text-sm"
           >
             <option value="">All Batches</option>
             <option value="2024">2024</option>
@@ -166,6 +169,7 @@ const POCStudents = () => {
           <select
             value={filters.status}
             onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            className="text-sm"
           >
             <option value="">All Statuses</option>
             <option value="Active">Active</option>
@@ -185,67 +189,67 @@ const POCStudents = () => {
         </div>
       ) : students.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {students.map((student) => (
               <div key={student._id} className="relative group">
                 <Link
                   to={`/campus-poc/students/${student._id}`}
-                  className="card block hover:shadow-md transition-shadow h-full"
+                  className="card block hover:shadow-md transition-shadow h-full !p-3 md:!p-6"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
-                        <span className="text-primary-700 font-semibold text-lg">
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
+                        <span className="text-primary-700 font-bold text-base md:text-lg">
                           {student.firstName?.[0]}{student.lastName?.[0]}
                         </span>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-gray-900 group-hover:text-primary-600 transition-colors truncate text-sm md:text-base">
                           {student.firstName} {student.lastName}
                         </h3>
-                        <p className="text-sm text-gray-500">{student.email}</p>
+                        <p className="text-xs text-gray-500 truncate">{student.email}</p>
                       </div>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                    <ChevronRight className="w-4 h-4 text-gray-300 mt-1 shrink-0" />
                   </div>
 
-                  <div className="mt-4 pt-4 border-t">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-500 text-xs block mb-0.5">School</span>
-                        <p className="font-medium text-gray-700 truncate">{student.studentProfile?.currentSchool || '-'}</p>
+                  <div className="mt-3 pt-3 border-t">
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-3 md:gap-4 text-[11px] md:text-sm">
+                      <div className="min-w-0">
+                        <span className="text-gray-400 font-bold uppercase tracking-tighter block mb-0.5">School</span>
+                        <p className="font-semibold text-gray-700 truncate">{student.studentProfile?.currentSchool || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-gray-500 text-xs block mb-0.5">Status</span>
+                        <span className="text-gray-400 font-bold uppercase tracking-tighter block mb-0.5">Status</span>
                         <select
                           value={student.studentProfile?.currentStatus || 'Active'}
                           onChange={(e) => handleStatusChange(e, student._id, e.target.value)}
-                          className="text-xs font-semibold py-1 px-2 h-auto border-gray-200 rounded-md bg-gray-50 focus:bg-white"
+                          className="text-[10px] font-bold py-0.5 px-1.5 h-auto border-gray-200 rounded bg-gray-50 focus:bg-white"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <option value="Active">Active</option>
                           <option value="Placed">Placed</option>
                           <option value="Dropout">Dropout</option>
-                          <option value="Internship Paid">Internship (Paid)</option>
-                          <option value="Paid Project">Paid Project</option>
-                          <option value="Internship UnPaid">Internship (UnPaid)</option>
+                          <option value="Internship Paid">Paid Intern</option>
+                          <option value="Paid Project">Paid Proj</option>
+                          <option value="Internship UnPaid">Unpaid Intern</option>
                         </select>
                       </div>
                       <div>
-                        <span className="text-gray-500 text-xs block mb-0.5">Profile</span>
-                        <p className="font-medium text-gray-700 capitalize">
+                        <span className="text-gray-400 font-bold uppercase tracking-tighter block mb-0.5">Profile</span>
+                        <p className="font-semibold text-gray-700 capitalize">
                           {student.studentProfile?.profileStatus?.replace('_', ' ') || 'Draft'}
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-500 text-xs block mb-0.5">Skills</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-green-600">
+                        <span className="text-gray-400 font-bold uppercase tracking-tighter block mb-0.5">Skills</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-green-600 bg-green-50 px-1.5 rounded">
                             {getApprovedSkillsCount(student.studentProfile?.skills)}
                           </span>
                           {getPendingSkillsCount(student.studentProfile?.skills) > 0 && (
-                            <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded font-medium">
-                              {getPendingSkillsCount(student.studentProfile?.skills)} pending
+                            <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded font-extrabold uppercase animate-pulse">
+                              {getPendingSkillsCount(student.studentProfile?.skills)} Review
                             </span>
                           )}
                         </div>
