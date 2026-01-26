@@ -505,32 +505,34 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
       .populate('job', 'title company.name location jobType salary')
       .populate('feedbackBy', 'firstName lastName');
 
-    // Available fields mapping
+    // Available fields mapping (Ordered for exports)
     const fieldMap = {
-      // Basic Student Info
+      // 1. Basic Student Info
       studentName: (app) => `${app.student.firstName} ${app.student.lastName}`,
       email: (app) => app.student.email,
       phone: (app) => app.student.phone || '',
       gender: (app) => app.student.gender || '',
 
-      // Profile Links
+      // 2. Education (Navgurukul)
+      school: (app) => app.student.studentProfile?.currentSchool || '',
+      joiningDate: (app) => app.student.studentProfile?.dateOfJoining ? new Date(app.student.studentProfile.dateOfJoining).toLocaleDateString() : '',
+      currentModule: (app) => app.student.studentProfile?.currentModule || '',
+      attendance: (app) => app.student.studentProfile?.attendancePercentage || '',
+
+      // 3. Profile Links
       resume: (app) => app.student.studentProfile?.resume || '',
       github: (app) => app.student.studentProfile?.github || '',
       portfolio: (app) => app.student.studentProfile?.portfolio || '',
       linkedIn: (app) => app.student.studentProfile?.linkedIn || '',
 
-      // Education
-      school: (app) => app.student.studentProfile?.currentSchool || '',
-      joiningDate: (app) => app.student.studentProfile?.dateOfJoining ? new Date(app.student.studentProfile.dateOfJoining).toLocaleDateString() : '',
-      currentModule: (app) => app.student.studentProfile?.currentModule || '',
-      attendance: (app) => app.student.studentProfile?.attendancePercentage || '',
+      // 4. Academic Background
       higherEducation: (app) => app.student.studentProfile?.higherEducation?.map(edu =>
         `${edu.degree} in ${edu.fieldOfStudy} from ${edu.institution} (${edu.startYear}-${edu.endYear})`
       ).join('; ') || '',
       tenthPercentage: (app) => app.student.studentProfile?.tenthGrade?.percentage || '',
       twelfthPercentage: (app) => app.student.studentProfile?.twelfthGrade?.percentage || '',
 
-      // Skills & Rest
+      // 5. Skills & Rest
       jobTitle: (app) => app.job.title,
       company: (app) => app.job.company.name,
       location: (app) => app.job.location,
@@ -542,8 +544,10 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
       feedback: (app) => app.feedback || ''
     };
 
-    // Use selected fields or all fields
-    const selectedFields = fields?.length > 0 ? fields : Object.keys(fieldMap);
+    // Maintain consistent column order based on fieldMap indices
+    const fieldOrder = Object.keys(fieldMap);
+    const selectedFields = (fields?.length > 0 ? fields : fieldOrder)
+      .sort((a, b) => fieldOrder.indexOf(a) - fieldOrder.indexOf(b));
 
     // Generate headers
     const headers = selectedFields.map(f => {
@@ -586,20 +590,21 @@ router.get('/export/fields', auth, authorize('coordinator', 'manager'), async (r
     { key: 'email', label: 'Email', category: 'Student Info' },
     { key: 'phone', label: 'Phone', category: 'Student Info' },
     { key: 'gender', label: 'Gender', category: 'Student Info' },
-    { key: 'hometown', label: 'Hometown Details', category: 'Personal Info' },
-    { key: 'about', label: 'About/Bio', category: 'Personal Info' },
+    { key: 'hometown', label: 'Hometown Details', category: 'Student Info' },
+    { key: 'about', label: 'About/Bio', category: 'Student Info' },
+    // 2. Education (Navgurukul)
+    { key: 'currentSchool', label: 'Current School (Navgurukul)', category: 'Navgurukul Education' },
+    { key: 'joiningDate', label: 'Joining Date', category: 'Navgurukul Education' },
+    { key: 'currentModule', label: 'Current Module', category: 'Navgurukul Education' },
+    { key: 'attendance', label: 'Attendance %', category: 'Navgurukul Education' },
 
-    // 2. Profile Links & Documents
+    // 3. Profile Links & Documents
     { key: 'resume', label: 'Resume URL', category: 'Profile Links' },
     { key: 'github', label: 'GitHub Profile', category: 'Profile Links' },
     { key: 'portfolio', label: 'Portfolio Website', category: 'Profile Links' },
     { key: 'linkedIn', label: 'LinkedIn Profile', category: 'Profile Links' },
 
-    // 3. Education & Professional Exp
-    { key: 'currentSchool', label: 'Current School (Navgurukul)', category: 'Navgurukul Education' },
-    { key: 'joiningDate', label: 'Joining Date', category: 'Navgurukul Education' },
-    { key: 'currentModule', label: 'Current Module', category: 'Navgurukul Education' },
-    { key: 'attendance', label: 'Attendance %', category: 'Navgurukul Education' },
+    // 4. academic background & Experience
     { key: 'professionalExperience', label: 'Professional Experience', category: 'Experience' },
     { key: 'higherEducation', label: 'Higher Education Details', category: 'Academic Background' },
 

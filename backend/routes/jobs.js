@@ -1435,17 +1435,17 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
         return `${hometown.village || ''}, ${hometown.district || ''}, ${hometown.state || ''} - ${hometown.pincode || ''}`.replace(/^,\s*|,\s*$/g, '');
       },
 
-      // Profile Links
-      resume: (app) => app.student.studentProfile?.resume || '',
-      github: (app) => app.student.studentProfile?.github || '',
-      portfolio: (app) => app.student.studentProfile?.portfolio || '',
-      linkedIn: (app) => app.student.studentProfile?.linkedIn || '',
-
-      // Navgurukul Education
+      // 2. Navgurukul Education
       currentSchool: (app) => app.student.studentProfile?.currentSchool || '',
       joiningDate: (app) => app.student.studentProfile?.dateOfJoining ? new Date(app.student.studentProfile.dateOfJoining).toLocaleDateString() : '',
       currentModule: (app) => app.student.studentProfile?.currentModule || '',
       attendance: (app) => app.student.studentProfile?.attendancePercentage || '',
+
+      // 3. Profile Links
+      resume: (app) => app.student.studentProfile?.resume || '',
+      github: (app) => app.student.studentProfile?.github || '',
+      portfolio: (app) => app.student.studentProfile?.portfolio || '',
+      linkedIn: (app) => app.student.studentProfile?.linkedIn || '',
 
       // Academic Background
       higherEducation: (app) => app.student.studentProfile?.higherEducation?.map(edu =>
@@ -1516,8 +1516,10 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
       }
     };
 
-    // Use selected fields or all fields
-    const selectedFields = fields?.length > 0 ? fields : Object.keys(fieldMap);
+    // Maintain consistent column order based on fieldMap indices
+    const fieldOrder = Object.keys(fieldMap);
+    const selectedFields = (fields?.length > 0 ? fields : fieldOrder)
+      .sort((a, b) => fieldOrder.indexOf(a) - fieldOrder.indexOf(b));
     const layout = req.body.layout || 'resume'; // 'resume' or 'table'
 
     // Handle different export formats
