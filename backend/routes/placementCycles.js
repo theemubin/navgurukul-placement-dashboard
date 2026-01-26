@@ -11,7 +11,7 @@ router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager
   try {
     const { activeOnly } = req.query;
     let query = {};
-    
+
     if (activeOnly === 'true') {
       query.isActive = true;
     }
@@ -29,7 +29,7 @@ router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager
     // POC sees only their campus stats
     const cyclesWithStats = await Promise.all(cycles.map(async (cycle) => {
       let studentQuery = { role: 'student', placementCycle: cycle._id };
-      
+
       // POC only sees their campus students
       if (req.user.role === 'campus_poc') {
         studentQuery.campus = req.user.campus;
@@ -40,7 +40,7 @@ router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager
       const studentCount = await User.countDocuments(studentQuery);
 
       const studentIds = await User.find(studentQuery).select('_id').then(users => users.map(u => u._id));
-      
+
       const placedCount = await Application.countDocuments({
         student: { $in: studentIds },
         status: 'selected'
@@ -61,8 +61,8 @@ router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager
 });
 
 // Create a new placement cycle (Manager only - global cycles)
-router.post('/', 
-  auth, 
+router.post('/',
+  auth,
   authorize('manager'),
   [
     body('month').isInt({ min: 1, max: 12 }).withMessage('Month must be between 1 and 12'),
@@ -78,8 +78,8 @@ router.post('/',
       const { month, year, description, targetPlacements } = req.body;
 
       // Generate name from month and year
-      const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                      'July', 'August', 'September', 'October', 'November', 'December'];
+      const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
       const name = `${months[month - 1]} ${year}`;
 
       // Check if cycle already exists (global - no campus)
@@ -142,8 +142,8 @@ router.delete('/:cycleId', auth, authorize('manager'), async (req, res) => {
     // Check if any students are assigned to this cycle
     const assignedStudents = await User.countDocuments({ placementCycle: cycle._id });
     if (assignedStudents > 0) {
-      return res.status(400).json({ 
-        message: `Cannot delete cycle with ${assignedStudents} assigned students. Remove students first.` 
+      return res.status(400).json({
+        message: `Cannot delete cycle with ${assignedStudents} assigned students. Remove students first.`
       });
     }
 
@@ -159,7 +159,7 @@ router.delete('/:cycleId', auth, authorize('manager'), async (req, res) => {
 router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { studentIds } = req.body;
-    
+
     const cycle = await PlacementCycle.findById(req.params.cycleId);
     if (!cycle) {
       return res.status(404).json({ message: 'Placement cycle not found' });
@@ -174,7 +174,7 @@ router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', '
     // Update students
     const result = await User.updateMany(
       studentQuery,
-      { 
+      {
         placementCycle: cycle._id,
         placementCycleAssignedAt: new Date(),
         placementCycleAssignedBy: req.userId
@@ -192,7 +192,7 @@ router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', '
 router.delete('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { studentIds } = req.body;
-    
+
     const cycle = await PlacementCycle.findById(req.params.cycleId);
     if (!cycle) {
       return res.status(404).json({ message: 'Placement cycle not found' });
@@ -206,8 +206,8 @@ router.delete('/:cycleId/students', auth, authorize('campus_poc', 'coordinator',
 
     await User.updateMany(
       studentQuery,
-      { 
-        $unset: { 
+      {
+        $unset: {
           placementCycle: 1,
           placementCycleAssignedAt: 1,
           placementCycleAssignedBy: 1
@@ -222,53 +222,10 @@ router.delete('/:cycleId/students', auth, authorize('campus_poc', 'coordinator',
   }
 });
 
-// Get students in a placement cycle (with campus filter for POC)
-router.get('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
-  try {
-    const cycle = await PlacementCycle.findById(req.params.cycleId);
-    if (!cycle) {
-      return res.status(404).json({ message: 'Placement cycle not found' });
-    }
-
-    let studentQuery = { role: 'student', placementCycle: cycle._id };
-    
-    // POC only sees their campus students
-    if (req.user.role === 'campus_poc') {
-      studentQuery.campus = req.user.campus;
-    } else if (req.query.campus) {
-      studentQuery.campus = req.query.campus;
-    }
-
-    const students = await User.find(studentQuery)
-      .select('-password')
-      .populate('campus', 'name code');
-
-    // Get application stats for each student
-    const studentsWithStats = await Promise.all(students.map(async (student) => {
-      const applications = await Application.find({ student: student._id })
-        .populate('job', 'title company.name');
-      
-      const placed = applications.find(a => a.status === 'selected');
-      
-      return {
-        ...student.toJSON(),
-        applicationCount: applications.length,
-        placementStatus: placed ? 'placed' : 'not_placed',
-        placedCompany: placed ? placed.job?.company?.name : null
-      };
-    }));
-
-    res.json(studentsWithStats);
-  } catch (error) {
-    console.error('Get cycle students error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
 // Get unassigned students (POC sees their campus, others can filter)
 router.get('/unassigned/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
-    let query = { 
+    let query = {
       role: 'student',
       $or: [
         { placementCycle: null },
@@ -294,12 +251,55 @@ router.get('/unassigned/students', auth, authorize('campus_poc', 'coordinator', 
   }
 });
 
+// Get students in a placement cycle (with campus filter for POC)
+router.get('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
+  try {
+    const cycle = await PlacementCycle.findById(req.params.cycleId);
+    if (!cycle) {
+      return res.status(404).json({ message: 'Placement cycle not found' });
+    }
+
+    let studentQuery = { role: 'student', placementCycle: cycle._id };
+
+    // POC only sees their campus students
+    if (req.user.role === 'campus_poc') {
+      studentQuery.campus = req.user.campus;
+    } else if (req.query.campus) {
+      studentQuery.campus = req.query.campus;
+    }
+
+    const students = await User.find(studentQuery)
+      .select('-password')
+      .populate('campus', 'name code');
+
+    // Get application stats for each student
+    const studentsWithStats = await Promise.all(students.map(async (student) => {
+      const applications = await Application.find({ student: student._id })
+        .populate('job', 'title company.name');
+
+      const placed = applications.find(a => a.status === 'selected');
+
+      return {
+        ...student.toJSON(),
+        applicationCount: applications.length,
+        placementStatus: placed ? 'placed' : 'not_placed',
+        placedCompany: placed ? placed.job?.company?.name : null
+      };
+    }));
+
+    res.json(studentsWithStats);
+  } catch (error) {
+    console.error('Get cycle students error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Student can select their own placement cycle
 router.put('/my-cycle', auth, authorize('student'), async (req, res) => {
   try {
     console.log(`Update my-cycle request from user ${req.userId} role=${req.user?.role}`);
     const { cycleId } = req.body;
-    
+
     const cycle = await PlacementCycle.findById(cycleId);
     if (!cycle) {
       return res.status(404).json({ message: 'Placement cycle not found' });
@@ -327,7 +327,7 @@ router.put('/my-cycle', auth, authorize('student'), async (req, res) => {
     await user.save();
 
     // Notify Campus POCs who manage this campus
-    const campusPocs = await User.find({ 
+    const campusPocs = await User.find({
       role: 'campus_poc',
       $or: [
         { campus: user.campus },
@@ -357,17 +357,17 @@ router.put('/my-cycle', auth, authorize('student'), async (req, res) => {
 router.put('/student/:studentId/placement-success', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { studentId } = req.params;
-    
+
     // Find or create current month's cycle
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
-    
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                    'July', 'August', 'September', 'October', 'November', 'December'];
-    
+
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'];
+
     let cycle = await PlacementCycle.findOne({ month: currentMonth, year: currentYear });
-    
+
     if (!cycle) {
       // Create the cycle if it doesn't exist
       cycle = await PlacementCycle.create({
