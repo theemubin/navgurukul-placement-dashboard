@@ -11,8 +11,8 @@ const { auth, authorize, sameCampus } = require('../middleware/auth');
 router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { configId } = req.params;
-    const { name, description, type, pocCommentRequired, pocCommentTemplate, pocRatingRequired, pocRatingScale, link, category, isMandatory, numericTarget, weight } = req.body;
-    console.log('Adding criterion:', { name, type, pocCommentRequired, pocRatingRequired, category }); // Debug log
+    const { name, description, type, pocCommentRequired, pocCommentTemplate, pocRatingRequired, pocRatingScale, link, category, isMandatory, numericTarget, weight, targetSchools } = req.body;
+    console.log('Adding criterion:', { name, type, pocCommentRequired, pocRatingRequired, category, targetSchools }); // Debug log
     if (!name) return res.status(400).json({ message: 'Name is required' });
     const config = await JobReadinessConfig.findById(configId);
     if (!config) return res.status(404).json({ message: 'Config not found' });
@@ -30,7 +30,8 @@ router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordin
       category: category || 'other',
       isMandatory: isMandatory !== undefined ? isMandatory : true,
       numericTarget,
-      weight: weight || 1
+      weight: weight || 1,
+      targetSchools: targetSchools || []
     });
     console.log('Pushed criterion:', config.criteria[config.criteria.length - 1]);
     config.updatedBy = req.userId;
@@ -52,7 +53,7 @@ router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordin
 router.put('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { configId, criteriaId } = req.params;
-    const { name, description, type, pocCommentRequired, pocCommentTemplate, pocRatingRequired, pocRatingScale, link, category, isMandatory, numericTarget, weight } = req.body;
+    const { name, description, type, pocCommentRequired, pocCommentTemplate, pocRatingRequired, pocRatingScale, link, category, isMandatory, numericTarget, weight, targetSchools } = req.body;
     const config = await JobReadinessConfig.findById(configId);
     if (!config) return res.status(404).json({ message: 'Config not found' });
     const criterion = config.criteria.find(c => c.criteriaId === criteriaId);
@@ -70,6 +71,7 @@ router.put('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc
     if (isMandatory !== undefined) criterion.isMandatory = isMandatory;
     if (numericTarget !== undefined) criterion.numericTarget = numericTarget;
     if (weight !== undefined) criterion.weight = weight;
+    if (targetSchools !== undefined) criterion.targetSchools = targetSchools;
     config.updatedBy = req.userId;
     await config.save();
     res.json(config);

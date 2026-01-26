@@ -610,52 +610,83 @@ const CriteriaConfigSection = ({ selectedSchool, setSelectedSchool, schools }) =
             // Criteria from the selected school
             let mainConfig = configs.find(c => c.school === selectedSchool);
 
-            // Criteria from 'Common'
+            // Criteria from 'Common' track
             let commonConfig = configs.find(c => c.school === 'Common');
 
-            // Criteria from OTHER schools shared with THIS school
-            let sharedWithMe = [];
-            configs.forEach(c => {
-                if (c.school !== selectedSchool && c.school !== 'Common') {
-                    c.criteria.forEach(crit => {
-                        if (crit.targetSchools?.includes(selectedSchool)) {
-                            sharedWithMe.push({ ...crit, isSharedFrom: c.school });
-                        }
+            if (selectedSchool === 'Common') {
+                // AGGREGATED VIEW for Common:
+                // Show everything from 'Common' config 
+                // PLUS anything from other configs that has at least 1 school in targetSchools
+                const aggregated = [];
+                const seenIds = new Set();
+
+                // 1. Add everything from Common config
+                if (commonConfig) {
+                    setConfigId(commonConfig._id);
+                    (commonConfig.criteria || []).forEach(c => {
+                        aggregated.push({ ...c, isSourceCommon: true });
+                        seenIds.add(c.criteriaId);
                     });
+                } else {
+                    setConfigId(null);
                 }
-            });
 
-            if (mainConfig) {
-                setConfigId(mainConfig._id);
-                const merged = [...(mainConfig.criteria || [])];
-
-                // Add shared ones
-                sharedWithMe.forEach(swm => {
-                    if (!merged.find(m => m.criteriaId === swm.criteriaId)) {
-                        merged.push(swm);
+                // 2. Add anything from other configs that is shared (targetSchools > 0)
+                configs.forEach(conf => {
+                    if (conf.school !== 'Common') {
+                        (conf.criteria || []).forEach(crit => {
+                            if (crit.targetSchools?.length > 0 && !seenIds.has(crit.criteriaId)) {
+                                aggregated.push({ ...crit, isSharedFrom: conf.school });
+                                seenIds.add(crit.criteriaId);
+                            }
+                        });
+                    }
+                });
+                setCriteria(aggregated);
+            } else {
+                // SPECIFIC SCHOOL VIEW:
+                // Show school's own criteria + shares from others + global common tasks
+                let sharedWithMe = [];
+                configs.forEach(c => {
+                    if (c.school !== selectedSchool && c.school !== 'Common') {
+                        c.criteria.forEach(crit => {
+                            if (crit.targetSchools?.includes(selectedSchool)) {
+                                sharedWithMe.push({ ...crit, isSharedFrom: c.school });
+                            }
+                        });
                     }
                 });
 
-                // Add common ones
-                if (selectedSchool !== 'Common' && commonConfig) {
-                    commonConfig.criteria.forEach(cc => {
-                        if (!merged.find(m => m.criteriaId === cc.criteriaId)) {
-                            merged.push({ ...cc, isSharedFromCommon: true });
+                if (mainConfig) {
+                    setConfigId(mainConfig._id);
+                    const merged = [...(mainConfig.criteria || [])];
+
+                    sharedWithMe.forEach(swm => {
+                        if (!merged.find(m => m.criteriaId === swm.criteriaId)) {
+                            merged.push(swm);
                         }
                     });
+
+                    if (commonConfig) {
+                        commonConfig.criteria.forEach(cc => {
+                            if (!merged.find(m => m.criteriaId === cc.criteriaId)) {
+                                merged.push({ ...cc, isSharedFromCommon: true });
+                            }
+                        });
+                    }
+                    setCriteria(merged);
+                } else {
+                    setConfigId(null);
+                    const initial = [...sharedWithMe];
+                    if (commonConfig) {
+                        commonConfig.criteria.forEach(cc => {
+                            if (!initial.find(m => m.criteriaId === cc.criteriaId)) {
+                                initial.push({ ...cc, isSharedFromCommon: true });
+                            }
+                        });
+                    }
+                    setCriteria(initial);
                 }
-                setCriteria(merged);
-            } else {
-                setConfigId(null);
-                const initial = [...sharedWithMe];
-                if (selectedSchool !== 'Common' && commonConfig) {
-                    commonConfig.criteria.forEach(cc => {
-                        if (!initial.find(m => m.criteriaId === cc.criteriaId)) {
-                            initial.push({ ...cc, isSharedFromCommon: true });
-                        }
-                    });
-                }
-                setCriteria(initial);
             }
         } catch (err) {
             toast.error('Failed to load criteria');
@@ -685,8 +716,9 @@ const CriteriaConfigSection = ({ selectedSchool, setSelectedSchool, schools }) =
     };
 
     const handleEdit = (crit) => {
-        if (crit.isSharedFromCommon) {
-            toast.error("This is a Common criterion. Please switch to 'Common' view to edit it.");
+        if (crit.isSharedFromCommon || (selectedSchool === 'Common' && crit.isSourceCommon === false && crit.isSharedFrom)) {
+            const source = crit.isSharedFrom || 'the original school';
+            toast.error(`This is shared from ${source}. Switch to ${source} to edit it.`);
             return;
         }
         setEditingId(crit.criteriaId);
@@ -707,7 +739,10 @@ const CriteriaConfigSection = ({ selectedSchool, setSelectedSchool, schools }) =
     };
 
     const handleDelete = async (crit) => {
-        if (crit.isSharedFromCommon) return toast.error("Switch to 'Common' view to delete this.");
+        if (crit.isSharedFromCommon || (selectedSchool === 'Common' && crit.isSourceCommon === false && crit.isSharedFrom)) {
+            toast.error("Switch to the original school view to delete this.");
+            return;
+        }
         if (!window.confirm('Are you sure you want to delete this criterion? This will remove it for all students in this school.')) return;
         if (!configId) return;
 
@@ -933,7 +968,7 @@ const CriteriaConfigSection = ({ selectedSchool, setSelectedSchool, schools }) =
                                                     <div className="flex flex-wrap gap-2">
                                                         <Badge variant="outline" className="text-[9px] py-0 px-1.5 uppercase tracking-tighter">{crit.type}</Badge>
                                                         {crit.pocRatingRequired && <Badge variant="info" className="text-[9px] py-0 px-1.5 uppercase tracking-tighter">Rating Req.</Badge>}
-                                                        {crit.isSharedFromCommon && <Badge variant="warning" className="text-[9px] py-0 px-1.5 uppercase tracking-tighter">From Common</Badge>}
+                                                        {(crit.isSharedFromCommon || crit.isSourceCommon) && <Badge variant="warning" className="text-[9px] py-0 px-1.5 uppercase tracking-tighter">Direct Common</Badge>}
                                                         {crit.isSharedFrom && <Badge variant="purple" className="text-[9px] py-0 px-1.5 uppercase tracking-tighter">Shared: {crit.isSharedFrom}</Badge>}
                                                         {crit.targetSchools?.length > 0 && <Badge variant="amber" className="text-[9px] py-0 px-1.5 uppercase tracking-tighter">Shared with {crit.targetSchools.length}</Badge>}
                                                     </div>
