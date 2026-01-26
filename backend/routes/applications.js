@@ -545,9 +545,19 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
     };
 
     // Maintain consistent column order based on fieldMap indices
-    const fieldOrder = Object.keys(fieldMap);
-    const selectedFields = (fields?.length > 0 ? fields : fieldOrder)
-      .sort((a, b) => fieldOrder.indexOf(a) - fieldOrder.indexOf(b));
+    // Priority fields that must always come first if selected
+    const fixedPriority = [
+      'studentName', 'school', 'joiningDate',
+      'resume', 'github', 'portfolio', 'linkedIn'
+    ];
+
+    const incomingFields = fields?.length > 0 ? fields : Object.keys(fieldMap);
+
+    // Sort logic: priority list first, then rest in selection order
+    const prioritizedSelection = fixedPriority.filter(pk => incomingFields.includes(pk));
+    const dynamicSelection = incomingFields.filter(ik => !fixedPriority.includes(ik));
+
+    const selectedFields = [...prioritizedSelection, ...dynamicSelection];
 
     // Generate headers
     const headers = selectedFields.map(f => {

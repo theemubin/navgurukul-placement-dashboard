@@ -909,9 +909,15 @@ const CoordinatorJobs = () => {
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-gray-900 tracking-tight">Export Applications</h3>
-                    <p className="text-sm text-gray-500 font-medium">
-                      Configure your report for <span className="text-primary-600">{exportModal.jobTitle}</span>
-                    </p>
+                    <div className="mt-1 space-y-1">
+                      <p className="text-sm text-gray-500 font-medium">
+                        Configure your report for <span className="text-primary-600">{exportModal.jobTitle}</span>
+                      </p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100 font-bold uppercase tracking-wider w-fit">
+                        <AlertCircle className="w-3 h-3" />
+                        Logic: Name, School & Links are pinned first. Rest follow Selection Order.
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <button

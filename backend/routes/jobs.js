@@ -1516,10 +1516,22 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
       }
     };
 
-    // Maintain consistent column order based on fieldMap indices
-    const fieldOrder = Object.keys(fieldMap);
-    const selectedFields = (fields?.length > 0 ? fields : fieldOrder)
-      .sort((a, b) => fieldOrder.indexOf(a) - fieldOrder.indexOf(b));
+    // Priority fields that must always come first if selected
+    const fixedPriority = [
+      'studentName', 'campus', 'currentSchool', 
+      'resume', 'github', 'portfolio', 'linkedIn', 
+      'about'
+    ];
+
+    // Hybrid Sorting:
+    // 1. Extract selected fields that are in the priority list (keep priority order)
+    // 2. Extract remaining fields (keep user's selection order)
+    const incomingFields = fields?.length > 0 ? fields : Object.keys(fieldMap);
+    
+    const prioritizedSelection = fixedPriority.filter(pk => incomingFields.includes(pk));
+    const dynamicSelection = incomingFields.filter(ik => !fixedPriority.includes(ik));
+    
+    const selectedFields = [...prioritizedSelection, ...dynamicSelection];
     const layout = req.body.layout || 'resume'; // 'resume' or 'table'
 
     // Handle different export formats
