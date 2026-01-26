@@ -499,34 +499,36 @@ const POCStudentDetails = () => {
         </div>
       </div>
 
-      {/* Bottom Spacer to ensure content isn't hidden by fixed buttons */}
-      <div className="h-48" />
-
-      {/* Profile Review Actions */}
-      <div className="fixed bottom-24 left-0 right-0 px-4 md:px-0 z-40 pointer-events-none">
-        <div className="max-w-4xl mx-auto flex justify-center gap-4 pointer-events-auto">
-          {profile.profileStatus !== 'approved' && (
-            <button
-              onClick={() => {
-                if (window.confirm('Approve this profile for placements?')) {
-                  userAPI.approveProfile(id, 'approved', '').then(() => {
-                    toast.success('Profile approved');
-                    fetchStudentData();
-                  });
-                }
-              }}
-              className="flex-1 max-w-[240px] shadow-2xl bg-green-600 text-white font-black py-4 rounded-3xl uppercase tracking-[0.1em] text-sm hover:bg-green-700 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <CheckCircle className="w-5 h-5" /> Approve Profile
-            </button>
-          )}
+      {/* Profile Review Actions - Integrated into page flow */}
+      <div className="mt-12 flex flex-col md:flex-row justify-center gap-4">
+        {profile.profileStatus === 'approved' ? (
           <button
-            onClick={() => setShowDisapproveModal(true)}
-            className="flex-1 max-w-[240px] shadow-2xl bg-white text-red-600 border-2 border-red-50 text-sm font-black py-4 rounded-3xl uppercase tracking-[0.1em] hover:bg-red-50 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
+            disabled
+            className="flex-1 max-w-[240px] bg-gray-100 text-gray-400 font-black py-4 rounded-3xl uppercase tracking-[0.1em] text-sm flex items-center justify-center gap-2 cursor-not-allowed border-2 border-gray-200"
           >
-            <XCircle className="w-5 h-5" /> Request Revision
+            <CheckCircle className="w-5 h-5" /> Already Approved
           </button>
-        </div>
+        ) : (
+          <button
+            onClick={() => {
+              if (window.confirm('Approve this profile for placements?')) {
+                userAPI.approveProfile(id, 'approved', '').then(() => {
+                  toast.success('Profile approved');
+                  fetchStudentData();
+                });
+              }
+            }}
+            className="flex-1 max-w-[240px] shadow-lg bg-green-600 text-white font-black py-4 rounded-3xl uppercase tracking-[0.1em] text-sm hover:bg-green-700 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <CheckCircle className="w-5 h-5" /> Approve Profile
+          </button>
+        )}
+        <button
+          onClick={() => setShowDisapproveModal(true)}
+          className="flex-1 max-w-[240px] shadow-sm bg-white text-red-600 border-2 border-red-100 text-sm font-black py-4 rounded-3xl uppercase tracking-[0.1em] hover:bg-red-50 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
+        >
+          <XCircle className="w-5 h-5" /> Request Revision
+        </button>
       </div>
 
       {/* Disapprove Modal */}
