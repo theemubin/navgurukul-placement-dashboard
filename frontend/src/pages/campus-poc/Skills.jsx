@@ -49,7 +49,7 @@ const POCSkills = () => {
     try {
       const res = await skillAPI.getCategories();
       setCategoryOptions(res.data || []);
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const fetchSchools = async () => {
@@ -57,7 +57,7 @@ const POCSkills = () => {
       const res = await settingsAPI.getSettings();
       const list = res.data?.data?.schools || Object.keys(res.data?.data?.schoolModules || {});
       setSchools(list);
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const handleSubmit = async (e) => {
@@ -119,7 +119,7 @@ const POCSkills = () => {
 
   const filteredSkills = skills.filter(skill => {
     const matchesSearch = skill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         skill.category?.toLowerCase().includes(searchQuery.toLowerCase());
+      skill.category?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = !selectedCategory || skill.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -138,8 +138,8 @@ const POCSkills = () => {
       toast.success('School added');
       setNewSchool('');
       await fetchSchools();
-+      // Refresh skills in case UI grouping depends on updated schools
-+      await fetchSkills();
+      // Refresh skills in case UI grouping depends on updated schools
+      await fetchSkills();
     } catch (e) {
       toast.error(e.response?.data?.message || 'Error adding school');
     }

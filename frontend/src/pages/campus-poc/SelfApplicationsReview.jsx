@@ -3,9 +3,9 @@ import { useAuth } from '../../context/AuthContext';
 import { selfApplicationAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert, Modal } from '../../components/common/UIComponents';
 import { BulkUploadModal } from '../../components/common/BulkUpload';
-import { 
-  CheckCircleIcon, 
-  XCircleIcon, 
+import {
+  CheckCircleIcon,
+  XCircleIcon,
   ClockIcon,
   UserIcon,
   BuildingOfficeIcon,
@@ -16,14 +16,18 @@ import {
   EyeIcon,
   FunnelIcon,
   ArrowTopRightOnSquareIcon,
-  ArrowUpTrayIcon
+  ArrowUpTrayIcon,
+  ChevronDownIcon,
+  ChevronUpIcon
 } from '@heroicons/react/24/outline';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/solid';
 
 const STATUS_OPTIONS = [
   { value: 'applied', label: 'Applied', color: 'bg-blue-100 text-blue-800' },
+  { value: 'screening', label: 'Screening', color: 'bg-indigo-100 text-indigo-800' },
   { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-100 text-yellow-800' },
   { value: 'interview_scheduled', label: 'Interview Scheduled', color: 'bg-purple-100 text-purple-800' },
+  { value: 'interview_completed', label: 'Interview Completed', color: 'bg-pink-100 text-pink-800' },
   { value: 'offer_received', label: 'Offer Received', color: 'bg-green-100 text-green-800' },
   { value: 'offer_accepted', label: 'Offer Accepted', color: 'bg-emerald-100 text-emerald-800' },
   { value: 'offer_declined', label: 'Offer Declined', color: 'bg-orange-100 text-orange-800' },
@@ -37,12 +41,12 @@ function SelfApplicationsReview() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState({ status: 'all', verified: 'all' });
+  const [filter, setFilter] = useState({ status: 'all', verified: 'pending' }); // Default to pending
   const [searchTerm, setSearchTerm] = useState('');
-  const [verifyModal, setVerifyModal] = useState({ open: false, application: null });
-  const [bulkUploadModal, setBulkUploadModal] = useState(false);
   const [detailModal, setDetailModal] = useState({ open: false, application: null });
+  const [bulkUploadModal, setBulkUploadModal] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [expandedStudents, setExpandedStudents] = useState({});
 
   useEffect(() => {
     fetchData();
@@ -55,7 +59,7 @@ function SelfApplicationsReview() {
         selfApplicationAPI.getCampusApplications({ all: true }),
         selfApplicationAPI.getCampusStats()
       ]);
-      setApplications(appsRes.data);
+      setApplications(appsRes.data.selfApplications || []);
       setStats(statsRes.data);
       setError(null);
     } catch (err) {
@@ -65,14 +69,15 @@ function SelfApplicationsReview() {
     }
   };
 
-  const handleVerify = async (verified) => {
+  const handleVerify = async (appId, verified) => {
     try {
       setProcessing(true);
-      await selfApplicationAPI.verify(verifyModal.application._id, {
-        verified,
-        notes: document.getElementById('verificationNotes')?.value || ''
+      const notes = document.getElementById('verificationNotes')?.value || '';
+      await selfApplicationAPI.verify(appId, {
+        isVerified: verified,
+        verificationNotes: notes
       });
-      setVerifyModal({ open: false, application: null });
+      setDetailModal({ open: false, application: null });
       await fetchData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to verify application');
@@ -92,27 +97,50 @@ function SelfApplicationsReview() {
     );
   };
 
-  const filteredApplications = applications.filter(app => {
+  const filteredApplications = (Array.isArray(applications) ? applications : []).filter(app => {
     // Status filter
     if (filter.status !== 'all' && app.status !== filter.status) return false;
-    
+
     // Verification filter
-    if (filter.verified === 'verified' && !app.verified) return false;
-    if (filter.verified === 'unverified' && app.verified) return false;
-    if (filter.verified === 'pending' && app.verified !== undefined) return false;
-    
+    const isActuallyVerified = app.isVerified === true;
+    const isActuallyRejected = app.isVerified === false && app.verifiedBy;
+    const isActuallyPending = app.isVerified === undefined || app.isVerified === null || (app.isVerified === false && !app.verifiedBy);
+
+    if (filter.verified === 'verified' && !isActuallyVerified) return false;
+    if (filter.verified === 'rejected' && !isActuallyRejected) return false;
+    if (filter.verified === 'pending' && !isActuallyPending) return false;
+
     // Search
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
+      const studentName = `${app.student?.firstName || ''} ${app.student?.lastName || ''}`.toLowerCase();
       return (
-        app.student?.name?.toLowerCase().includes(search) ||
-        app.companyName?.toLowerCase().includes(search) ||
+        studentName.includes(search) ||
+        app.company?.name?.toLowerCase().includes(search) ||
         app.jobTitle?.toLowerCase().includes(search)
       );
     }
-    
+
     return true;
   });
+
+  const toggleStudent = (studentId) => {
+    setExpandedStudents(prev => ({
+      ...prev,
+      [studentId]: !prev[studentId]
+    }));
+  };
+
+  const expandAll = () => {
+    const allIds = Object.keys(groupedByStudent);
+    const newExpanded = {};
+    allIds.forEach(id => newExpanded[id] = true);
+    setExpandedStudents(newExpanded);
+  };
+
+  const collapseAll = () => {
+    setExpandedStudents({});
+  };
 
   // Group by student
   const groupedByStudent = filteredApplications.reduce((acc, app) => {
@@ -134,6 +162,13 @@ function SelfApplicationsReview() {
       </div>
     );
   }
+
+  const tabCounts = {
+    pending: (Array.isArray(applications) ? applications : []).filter(a => a.isVerified === undefined || a.isVerified === null || (a.isVerified === false && !a.verifiedBy)).length,
+    verified: (Array.isArray(applications) ? applications : []).filter(a => a.isVerified === true).length,
+    rejected: (Array.isArray(applications) ? applications : []).filter(a => a.isVerified === false && a.verifiedBy).length,
+    all: (Array.isArray(applications) ? applications : []).length
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -178,29 +213,45 @@ function SelfApplicationsReview() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Verification Tabs */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex gap-8 overflow-x-auto">
+          {[
+            { id: 'pending', label: 'Pending Verification', count: tabCounts.pending, color: 'text-yellow-600', border: 'border-yellow-500' },
+            { id: 'verified', label: 'Verified', count: tabCounts.verified, color: 'text-green-600', border: 'border-green-500' },
+            { id: 'rejected', label: 'Rejected', count: tabCounts.rejected, color: 'text-red-600', border: 'border-red-500' },
+            { id: 'all', label: 'All Applications', count: tabCounts.all, color: 'text-indigo-600', border: 'border-indigo-500' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setFilter(prev => ({ ...prev, verified: tab.id }))}
+              className={`pb-4 px-1 text-sm font-bold border-b-2 transition-all whitespace-nowrap relative ${filter.verified === tab.id
+                ? `${tab.border} ${tab.color}`
+                : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-200'
+                }`}
+            >
+              {tab.label}
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-black tracking-tighter ${filter.verified === tab.id ? `${tab.color} bg-white border border-current` : 'text-gray-500 bg-gray-100'}`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Filters & Search */}
+
       <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="flex gap-2 flex-wrap">
+        <div className="w-full md:w-64">
           <select
             value={filter.status}
             onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500 font-bold shadow-sm"
           >
-            <option value="all">All Statuses</option>
+            <option value="all">All Job Statuses</option>
             {STATUS_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
-          </select>
-          
-          <select
-            value={filter.verified}
-            onChange={(e) => setFilter(prev => ({ ...prev, verified: e.target.value }))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500"
-          >
-            <option value="all">All Verification</option>
-            <option value="pending">Pending Verification</option>
-            <option value="verified">Verified</option>
-            <option value="unverified">Rejected</option>
           </select>
         </div>
 
@@ -211,8 +262,19 @@ function SelfApplicationsReview() {
             placeholder="Search by student, company, or job title..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
           />
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold text-gray-800">
+          Students ({Object.keys(groupedByStudent).length})
+        </h2>
+        <div className="flex gap-2 text-xs">
+          <button onClick={expandAll} className="text-indigo-600 hover:text-indigo-800 font-medium">Expand All</button>
+          <span className="text-gray-300">|</span>
+          <button onClick={collapseAll} className="text-indigo-600 hover:text-indigo-800 font-medium">Collapse All</button>
         </div>
       </div>
 
@@ -226,329 +288,250 @@ function SelfApplicationsReview() {
           </p>
         </Card>
       ) : (
-        <div className="space-y-6">
-          {Object.values(groupedByStudent).map(({ student, applications: studentApps }) => (
-            <Card key={student?._id || 'unknown'}>
-              {/* Student Header */}
-              <div className="flex items-center justify-between pb-4 border-b">
-                <div className="flex items-center">
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
-                    {student?.avatar ? (
-                      <img src={student.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
-                    ) : (
-                      <UserIcon className="w-5 h-5 text-indigo-600" />
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{student?.name || 'Unknown Student'}</h3>
-                    <p className="text-sm text-gray-500">{student?.email}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-indigo-600">{studentApps.length}</div>
-                  <div className="text-xs text-gray-500">Applications</div>
-                </div>
-              </div>
-
-              {/* Student's Applications */}
-              <div className="mt-4 space-y-3">
-                {studentApps.map(app => (
-                  <div 
-                    key={app._id}
-                    className={`p-4 rounded-lg border ${
-                      app.verified === true 
-                        ? 'border-green-200 bg-green-50' 
-                        : app.verified === false
-                        ? 'border-red-200 bg-red-50'
-                        : 'border-gray-200 bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium text-gray-900">{app.jobTitle}</h4>
-                          {getStatusBadge(app.status)}
-                          {app.verified === true && (
-                            <Badge variant="success">
-                              <CheckCircleIcon className="w-3 h-3 mr-1" />
-                              Verified
-                            </Badge>
-                          )}
-                          {app.verified === false && (
-                            <Badge variant="danger">
-                              <XCircleIcon className="w-3 h-3 mr-1" />
-                              Rejected
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        <div className="flex items-center text-sm text-gray-600 mb-2">
-                          <BuildingOfficeIcon className="w-4 h-4 mr-1" />
-                          {app.companyName}
-                        </div>
-
-                        <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                          {app.location && (
-                            <span className="flex items-center">
-                              <MapPinIcon className="w-3 h-3 mr-1" />
-                              {app.location}
-                            </span>
-                          )}
-                          {app.salary && (
-                            <span className="flex items-center">
-                              <CurrencyRupeeIcon className="w-3 h-3 mr-1" />
-                              {app.salary}
-                            </span>
-                          )}
-                          <span className="flex items-center">
-                            <CalendarIcon className="w-3 h-3 mr-1" />
-                            {new Date(app.applicationDate).toLocaleDateString()}
-                          </span>
-                          {app.source && (
-                            <span>via {app.source}</span>
-                          )}
-                        </div>
-
-                        {app.jobUrl && (
-                          <a 
-                            href={app.jobUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-indigo-600 hover:underline mt-2 inline-flex items-center"
-                          >
-                            <ArrowTopRightOnSquareIcon className="w-3 h-3 mr-1" />
-                            View Job Posting
-                          </a>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 ml-4">
-                        <button
-                          onClick={() => setDetailModal({ open: true, application: app })}
-                          className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                          title="View Details"
-                        >
-                          <EyeIcon className="w-5 h-5" />
-                        </button>
-                        
-                        {app.verified === undefined && (
-                          <Button
-                            size="small"
-                            onClick={() => setVerifyModal({ open: true, application: app })}
-                          >
-                            Verify
-                          </Button>
-                        )}
-                      </div>
+        <div className="space-y-4">
+          {Object.values(groupedByStudent).map(({ student, applications: studentApps }) => {
+            const studentId = student?._id || 'unknown';
+            const isExpanded = expandedStudents[studentId];
+            return (
+              <div key={studentId} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                {/* Student Header (Accordion Toggle) */}
+                <button
+                  onClick={() => toggleStudent(studentId)}
+                  className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center mr-4">
+                      {student?.avatar ? (
+                        <img src={student.avatar} alt="" className="w-12 h-12 rounded-full object-cover" />
+                      ) : (
+                        <UserIcon className="w-6 h-6 text-indigo-500" />
+                      )}
                     </div>
-
-                    {/* Interview Rounds */}
-                    {app.interviewRounds?.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="text-xs font-medium text-gray-700 mb-2">Interview Progress</div>
-                        <div className="flex flex-wrap gap-2">
-                          {app.interviewRounds.map((round, idx) => (
-                            <span 
-                              key={idx}
-                              className={`px-2 py-1 text-xs rounded ${
-                                round.result === 'passed' ? 'bg-green-100 text-green-800' :
-                                round.result === 'failed' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}
-                            >
-                              {round.name || `Round ${idx + 1}`}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Verification Notes */}
-                    {app.verificationNotes && (
-                      <div className="mt-2 text-xs text-gray-600 bg-white p-2 rounded">
-                        <strong>Verification Notes:</strong> {app.verificationNotes}
-                      </div>
-                    )}
+                    <div className="text-left">
+                      <h3 className="font-bold text-gray-900 text-lg leading-tight">
+                        {student?.firstName} {student?.lastName}
+                      </h3>
+                      <p className="text-sm text-gray-500 flex items-center">
+                        {student?.email}
+                        {student?.studentProfile?.currentSchool && (
+                          <>
+                            <span className="mx-2 font-light text-gray-300">|</span>
+                            <span>{student.studentProfile.currentSchool}</span>
+                          </>
+                        )}
+                      </p>
+                    </div>
                   </div>
-                ))}
+                  <div className="flex items-center gap-6">
+                    <div className="text-right hidden sm:block">
+                      <div className="text-xl font-black text-indigo-600 leading-none">{studentApps.length}</div>
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-gray-400 mt-1">Applications</div>
+                    </div>
+                    <div className={`p-1.5 rounded-full transition-transform duration-200 ${isExpanded ? 'rotate-180 bg-indigo-50 text-indigo-600' : 'bg-gray-50 text-gray-400'}`}>
+                      <ChevronDownIcon className="w-5 h-5" />
+                    </div>
+                  </div>
+                </button>
+
+                {/* Sub-applications (Accordion Content) */}
+                {isExpanded && (
+                  <div className="p-4 bg-gray-50/50 border-t border-gray-100 space-y-3 animate-fadeIn">
+                    {studentApps.map(app => (
+                      <div
+                        className={`p-4 rounded-xl border-2 transition-all cursor-pointer hover:border-indigo-300 active:scale-[0.99] group ${app.isVerified === true
+                          ? 'border-green-100 bg-white/80'
+                          : app.isVerified === false
+                            ? 'border-red-100 bg-white/80'
+                            : 'border-yellow-100 bg-white shadow-sm'
+                          }`}
+                        onClick={() => setDetailModal({ open: true, application: app })}
+                      >
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <h4 className="font-bold text-gray-900 text-base group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{app.jobTitle}</h4>
+                              {getStatusBadge(app.status)}
+                              {app.isVerified === true && (
+                                <Badge variant="success">
+                                  <CheckCircleIcon className="w-3 h-3 mr-1" />
+                                  Verified
+                                </Badge>
+                              )}
+                              {app.isVerified === false && (
+                                <Badge variant="danger">
+                                  <XCircleIcon className="w-3 h-3 mr-1" />
+                                  Rejected
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-y-2 gap-x-4 mb-3">
+                              <div className="flex items-center text-sm font-medium text-gray-700">
+                                <BuildingOfficeIcon className="w-4 h-4 mr-2 text-gray-400" />
+                                {app.company?.name || app.companyName}
+                              </div>
+                              {app.company?.location && (
+                                <div className="flex items-center text-sm text-gray-500">
+                                  <MapPinIcon className="w-4 h-4 mr-2 text-gray-400" />
+                                  {app.company.location}
+                                </div>
+                              )}
+                              {app.salary?.amount && (
+                                <div className="flex items-center text-sm font-semibold text-green-700">
+                                  <CurrencyRupeeIcon className="w-4 h-4 mr-2" />
+                                  {app.salary.amount} {app.salary.currency || 'INR'}
+                                </div>
+                              )}
+                              <div className="flex items-center text-sm text-gray-500">
+                                <CalendarIcon className="w-4 h-4 mr-2 text-gray-400" />
+                                {new Date(app.applicationDate).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-end md:self-start opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="p-2 text-indigo-600 bg-indigo-50 rounded-lg font-bold text-xs uppercase">
+                              Open Details
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Verification Notes In-App View */}
+                        {app.verificationNotes && (
+                          <div className="mt-3 text-xs italic text-gray-500 bg-white/50 p-2.5 rounded-lg border border-dashed border-gray-200">
+                            <span className="font-bold text-gray-700 not-italic mr-1 text-[10px] uppercase">Review Comment:</span> {app.verificationNotes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Verify Modal */}
-      <Modal
-        isOpen={verifyModal.open}
-        onClose={() => setVerifyModal({ open: false, application: null })}
-        title="Verify Application"
-      >
-        <div className="space-y-4">
-          <div>
-            <p className="text-sm text-gray-600">
-              <strong>Student:</strong> {verifyModal.application?.student?.name}
-            </p>
-            <p className="text-sm text-gray-600">
-              <strong>Company:</strong> {verifyModal.application?.companyName}
-            </p>
-            <p className="text-sm text-gray-600">
-              <strong>Position:</strong> {verifyModal.application?.jobTitle}
-            </p>
-            <p className="text-sm text-gray-600">
-              <strong>Status:</strong> {verifyModal.application?.status}
-            </p>
-          </div>
-
-          {verifyModal.application?.jobUrl && (
-            <a 
-              href={verifyModal.application.jobUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-indigo-600 hover:underline flex items-center text-sm"
-            >
-              <ArrowTopRightOnSquareIcon className="w-4 h-4 mr-1" />
-              View Job Posting
-            </a>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Verification Notes
-            </label>
-            <textarea
-              id="verificationNotes"
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="Add notes about your verification..."
-            />
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              variant="danger"
-              className="flex-1"
-              onClick={() => handleVerify(false)}
-              disabled={processing}
-            >
-              <XMarkIcon className="w-5 h-5 mr-1" />
-              Reject
-            </Button>
-            <Button
-              className="flex-1"
-              onClick={() => handleVerify(true)}
-              disabled={processing}
-            >
-              <CheckIcon className="w-5 h-5 mr-1" />
-              Verify
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Detail Modal */}
+      {/* Detailed Review & Action Modal */}
       <Modal
         isOpen={detailModal.open}
         onClose={() => setDetailModal({ open: false, application: null })}
-        title="Application Details"
+        title="Application Review Detail"
         size="large"
       >
         {detailModal.application && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-medium text-gray-500">Company</label>
-                <p className="font-medium text-gray-900">{detailModal.application.companyName}</p>
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Left Column: Details */}
+            <div className="flex-1 space-y-6">
+              <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block mb-1">Student</label>
+                  <p className="font-bold text-gray-900">
+                    {detailModal.application.student?.firstName} {detailModal.application.student?.lastName}
+                  </p>
+                  <p className="text-sm text-gray-500">{detailModal.application.student?.email}</p>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block mb-1">Company & Title</label>
+                  <p className="font-bold text-gray-900">{detailModal.application.company?.name}</p>
+                  <p className="text-sm text-indigo-600 font-medium">{detailModal.application.jobTitle}</p>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block mb-1">Salary Package</label>
+                  <p className="font-bold text-green-700">
+                    {detailModal.application.salary?.amount
+                      ? `${detailModal.application.salary.amount} ${detailModal.application.salary.currency || 'INR'}`
+                      : 'Not specified'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block mb-1">Status</label>
+                  <div>{getStatusBadge(detailModal.application.status)}</div>
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500">Position</label>
-                <p className="font-medium text-gray-900">{detailModal.application.jobTitle}</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500">Location</label>
-                <p className="text-gray-900">{detailModal.application.location || '-'}</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500">Salary</label>
-                <p className="text-gray-900">{detailModal.application.salary || '-'}</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500">Applied On</label>
-                <p className="text-gray-900">
-                  {new Date(detailModal.application.applicationDate).toLocaleDateString()}
-                </p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500">Source</label>
-                <p className="text-gray-900">{detailModal.application.source || '-'}</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500">Status</label>
-                <p>{getStatusBadge(detailModal.application.status)}</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500">Verified</label>
-                <p>
-                  {detailModal.application.verified === true ? (
-                    <Badge variant="success">Yes</Badge>
-                  ) : detailModal.application.verified === false ? (
-                    <Badge variant="danger">Rejected</Badge>
-                  ) : (
-                    <Badge variant="warning">Pending</Badge>
-                  )}
-                </p>
-              </div>
+
+              {detailModal.application.jobUrl && (
+                <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                  <ArrowTopRightOnSquareIcon className="w-5 h-5 text-indigo-500" />
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-indigo-900">Verification Source</p>
+                    <a href={detailModal.application.jobUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 underline">
+                      View Original Job Description
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {detailModal.application.notes && (
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block mb-1">Student Remark</label>
+                  <p className="text-sm text-gray-700 bg-white border border-gray-100 p-3 rounded-lg italic">
+                    "{detailModal.application.notes}"
+                  </p>
+                </div>
+              )}
+
+              {detailModal.application.interviewRounds?.length > 0 && (
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-gray-400 block mb-1">Interview Timeline</label>
+                  <div className="mt-2 space-y-2">
+                    {detailModal.application.interviewRounds.map((round, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-white border border-gray-100 rounded-lg">
+                        <span className="text-sm font-medium text-gray-800">{round.name || `Round ${idx + 1}`}</span>
+                        <Badge variant={round.result === 'passed' ? 'success' : round.result === 'failed' ? 'danger' : 'secondary'}>
+                          {round.result || 'Ongoing'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {detailModal.application.notes && (
-              <div>
-                <label className="text-xs font-medium text-gray-500">Student Notes</label>
-                <p className="text-gray-900 bg-gray-50 p-2 rounded mt-1">
-                  {detailModal.application.notes}
-                </p>
-              </div>
-            )}
+            {/* Right Column: Verification Action */}
+            <div className="lg:w-80 space-y-4">
+              <div className={`p-5 rounded-2xl border-2 ${detailModal.application.isVerified === true ? 'border-green-200 bg-green-50' : detailModal.application.isVerified === false ? 'border-red-200 bg-red-50' : 'border-indigo-100 bg-indigo-50'}`}>
+                <h4 className="font-black text-gray-900 uppercase tracking-tighter text-lg mb-4">
+                  {detailModal.application.isVerified === true ? 'Verified Application' : detailModal.application.isVerified === false ? 'Rejected Entry' : 'Action Required'}
+                </h4>
 
-            {detailModal.application.interviewRounds?.length > 0 && (
-              <div>
-                <label className="text-xs font-medium text-gray-500">Interview Rounds</label>
-                <div className="mt-2 space-y-2">
-                  {detailModal.application.interviewRounds.map((round, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <div>
-                        <span className="font-medium">{round.name || `Round ${idx + 1}`}</span>
-                        {round.date && (
-                          <span className="text-sm text-gray-500 ml-2">
-                            {new Date(round.date).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-                      <span className={`px-2 py-1 text-xs rounded ${
-                        round.result === 'passed' ? 'bg-green-100 text-green-800' :
-                        round.result === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {round.result || 'Pending'}
-                      </span>
-                    </div>
-                  ))}
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Internal Review Notes</label>
+                <textarea
+                  id="verificationNotes"
+                  className="w-full text-sm p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all mb-4"
+                  rows={4}
+                  placeholder="Explain your decision..."
+                  defaultValue={detailModal.application.verificationNotes || ''}
+                />
+
+                <div className="space-y-3">
+                  <Button
+                    className="w-full font-bold shadow-lg shadow-indigo-200"
+                    variant="primary"
+                    disabled={processing}
+                    onClick={() => handleVerify(detailModal.application._id, true)}
+                  >
+                    <CheckCircleIcon className="w-5 h-5 mr-2" />
+                    Approve & Verify
+                  </Button>
+                  <Button
+                    className="w-full font-bold"
+                    variant="danger"
+                    disabled={processing}
+                    onClick={() => handleVerify(detailModal.application._id, false)}
+                  >
+                    <XCircleIcon className="w-5 h-5 mr-2" />
+                    Reject Application
+                  </Button>
                 </div>
               </div>
-            )}
 
-            {detailModal.application.statusHistory?.length > 0 && (
-              <div>
-                <label className="text-xs font-medium text-gray-500">Status History</label>
-                <div className="mt-2 space-y-1">
-                  {detailModal.application.statusHistory.map((history, idx) => (
-                    <div key={idx} className="text-sm text-gray-600">
-                      <span className="font-medium">{history.status}</span>
-                      <span className="text-gray-400 mx-2">•</span>
-                      <span>{new Date(history.changedAt).toLocaleString()}</span>
-                    </div>
-                  ))}
+              {detailModal.application.verifiedBy && (
+                <div className="text-[10px] text-center text-gray-400 font-medium">
+                  Last action by {detailModal.application.verifiedBy.firstName} on {new Date(detailModal.application.verifiedAt).toLocaleString()}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </Modal>

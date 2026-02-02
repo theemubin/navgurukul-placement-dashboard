@@ -91,7 +91,17 @@ class DiscordService {
             }
 
             const settings = await Settings.getSettings();
-            const channelId = settings.discordConfig?.channels?.jobPostings;
+
+            // Priority: Campus-specific channel (if job is for a single campus and it has a channel)
+            let channelId = settings.discordConfig?.channels?.jobPostings;
+
+            if (job.eligibility?.campuses?.length === 1) {
+                const campus = job.eligibility.campuses[0];
+                if (campus.discordChannelId) {
+                    channelId = campus.discordChannelId;
+                    console.log(`Using campus-specific channel ${channelId} for job posting`);
+                }
+            }
 
             if (!channelId) {
                 console.log('Job postings channel not configured');
@@ -171,7 +181,15 @@ class DiscordService {
             }
 
             if (!channel) {
-                const channelId = settings.discordConfig?.channels?.applicationUpdates;
+                // Priority: Campus-specific channel
+                let channelId = null;
+                if (student.campus?.discordChannelId) {
+                    channelId = student.campus.discordChannelId;
+                    console.log(`Using campus-specific channel ${channelId} for application update`);
+                } else {
+                    channelId = settings.discordConfig?.channels?.applicationUpdates;
+                }
+
                 if (!channelId) return null;
 
                 channel = await this.client.channels.fetch(channelId);
@@ -515,8 +533,127 @@ class DiscordService {
     }
 
     /**
-     * Gracefully shutdown Discord client
+     * Send self-application notification
+     * @param {Object} selfApplication - Self-application document
+     * @param {Object} student - Student user document
      */
+    async sendSelfApplicationNotification(selfApplication, student) {
+        try {
+            const ready = await this.ensureReady();
+            if (!ready) return null;
+
+            const settings = await Settings.getSettings();
+            let channelId = null;
+
+            // Prioritize campus-specific channel
+            if (student.campus?.discordChannelId) {
+                channelId = student.campus.discordChannelId;
+            } else {
+                channelId = settings.discordConfig?.channels?.applicationUpdates;
+            }
+
+            if (!channelId) return null;
+
+            const channel = await this.client.channels.fetch(channelId);
+            if (!channel) throw new Error('Channel not found');
+
+            const embed = new EmbedBuilder()
+                .setColor('#3b82f6')
+                .setTitle(`🏠 New Self-Application: ${selfApplication.jobTitle}`)
+                .setDescription(`**${student.firstName} ${student.lastName}** applied externally`)
+                .addFields(
+                    { name: '🏢 Company', value: selfApplication.company.name, inline: true },
+                    { name: '📍 Location', value: selfApplication.location || 'N/A', inline: true },
+                    { name: '📅 Date', value: new Date(selfApplication.applicationDate).toLocaleDateString('en-IN'), inline: true }
+                )
+                .setTimestamp();
+
+            const message = await channel.send({ embeds: [embed] });
+
+            let threadId = null;
+            if (settings.discordConfig?.useThreads) {
+                const thread = await message.startThread({
+                    name: `App: ${student.firstName} - ${selfApplication.company.name}`.substring(0, 100),
+                    autoArchiveDuration: 1440,
+                    reason: 'Self-application tracking thread'
+                });
+                threadId = thread.id;
+                await thread.send(`📝 Thread for status updates on ${student.firstName}'s application to ${selfApplication.company.name}.`);
+            }
+
+            return {
+                messageId: message.id,
+                channelId: channel.id,
+                threadId
+            };
+        } catch (error) {
+            console.error('Error sending self-application to Discord:', error);
+            return { error: error.message };
+        }
+    }
+
+    /**
+     * Send self-application status update
+     */
+    async sendSelfApplicationUpdate(selfApplication, student, updatedBy) {
+        try {
+            const ready = await this.ensureReady();
+            if (!ready) return null;
+
+            const settings = await Settings.getSettings();
+            let channel = null;
+
+            if (selfApplication.discordThreadId) {
+                try {
+                    channel = await this.client.channels.fetch(selfApplication.discordThreadId);
+                } catch (e) {
+                    console.warn('Failed to fetch self-app thread, falling back');
+                }
+            }
+
+            if (!channel) {
+                let channelId = student.campus?.discordChannelId || settings.discordConfig?.channels?.applicationUpdates;
+                if (!channelId) return null;
+                channel = await this.client.channels.fetch(channelId);
+            }
+
+            if (!channel) return null;
+
+            const statusEmoji = {
+                applied: '📝',
+                screening: '🔍',
+                in_progress: '🔄',
+                interview_scheduled: '📅',
+                interview_completed: '✅',
+                offer_received: '🎉',
+                offer_accepted: '🤝',
+                offer_declined: '🚫',
+                rejected: '❌',
+                withdrawn: '↩️'
+            };
+
+            const embed = new EmbedBuilder()
+                .setColor('#f59e0b')
+                .setTitle(`${statusEmoji[selfApplication.status] || '🔔'} Status Update: ${selfApplication.status.replace('_', ' ').toUpperCase()}`)
+                .setDescription(`**${student.firstName} ${student.lastName}**'s external application to **${selfApplication.company.name}** has changed.`)
+                .addFields(
+                    { name: '💼 Position', value: selfApplication.jobTitle, inline: true },
+                    { name: '👤 Updated By', value: `${updatedBy.firstName} ${updatedBy.lastName}`, inline: true }
+                )
+                .setTimestamp();
+
+            if (selfApplication.notes) {
+                embed.addFields({ name: '💬 Notes', value: selfApplication.notes.substring(0, 500) });
+            }
+
+            const message = await channel.send({ embeds: [embed] });
+            return { messageId: message.id };
+        } catch (error) {
+            console.error('Error sending self-app update to Discord:', error);
+            return null;
+        }
+    }
+
     async shutdown() {
         if (this.client) {
             await this.client.destroy();

@@ -251,7 +251,10 @@ router.get('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
     const student = await User.findById(studentId);
     if (!student) return res.status(404).json({ message: 'Student not found' });
 
-    let readiness = await StudentJobReadiness.findOne({ student: studentId });
+    let readiness = await StudentJobReadiness.findOne({ student: studentId })
+      .populate('student', 'firstName lastName email campus studentProfile')
+      .populate('approvedBy', 'firstName lastName');
+
     const school = student.studentProfile?.currentSchool;
 
     if (!readiness) {
@@ -267,6 +270,10 @@ router.get('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
       readiness = new StudentJobReadiness({ student: studentId, school, campus: student.campus, criteriaStatus: [] });
       await readiness.calculateReadiness();
       await readiness.save();
+      // Refetch to get populated fields
+      readiness = await StudentJobReadiness.findById(readiness._id)
+        .populate('student', 'firstName lastName email campus studentProfile')
+        .populate('approvedBy', 'firstName lastName');
     } else if (!school) {
       // If readiness exists but school is missing (edge case), just return readiness as is
       return res.json({
@@ -506,45 +513,6 @@ router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'man
   }
 });
 
-// Get single student's readiness detail (Campus PoC)
-router.get('/student/:studentId', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
-  try {
-    const readiness = await StudentJobReadiness.findOne({ student: req.params.studentId })
-      .populate('student', 'firstName lastName email campus studentProfile')
-      .populate('approvedBy', 'firstName lastName');
-
-    if (!readiness) {
-      return res.status(404).json({ message: 'Student readiness record not found' });
-    }
-
-    // Authorization check for campus PoC
-    if (req.user.role === 'campus_poc') {
-      const managedCampuses = req.user.managedCampuses?.length > 0
-        ? req.user.managedCampuses.map(c => c.toString())
-        : (req.user.campus ? [req.user.campus.toString()] : []);
-
-      const studentCampus = readiness.campus?.toString();
-      if (studentCampus && !managedCampuses.includes(studentCampus)) {
-        return res.status(403).json({ message: 'Not authorized for this student\'s campus' });
-      }
-    }
-
-    // Get config for this student
-    const config = await JobReadinessConfig.findOne({
-      school: readiness.school,
-      $or: [{ campus: readiness.campus }, { campus: null }],
-      isActive: true
-    }).sort({ campus: -1 });
-
-    res.json({
-      readiness,
-      config: config?.criteria || []
-    });
-  } catch (error) {
-    console.error('Get student readiness error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
 
 // Verify criterion (Campus PoC)
 router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), [

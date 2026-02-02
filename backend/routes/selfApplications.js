@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const SelfApplication = require('../models/SelfApplication');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const discordService = require('../services/discordService');
 const { auth, authorize } = require('../middleware/auth');
 
 // Get all self-applications (filtered by role)
@@ -16,10 +17,14 @@ router.get('/', auth, async (req, res) => {
       // Students can only see their own self-applications
       query.student = req.userId;
     } else if (req.user.role === 'campus_poc') {
-      // Campus PoCs see self-applications from their campus students
+      // Campus PoCs see self-applications from their managed campuses
+      const managedCampuses = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses
+        : (req.user.campus ? [req.user.campus] : []);
+
       const campusStudents = await User.find({
         role: 'student',
-        campus: req.user.campus
+        campus: { $in: managedCampuses }
       }).select('_id');
       query.student = { $in: campusStudents.map(s => s._id) };
     }
@@ -66,7 +71,7 @@ router.get('/:id', auth, async (req, res) => {
     }
 
     // Authorization check
-    if (req.user.role === 'student' && selfApplication.student._id.toString() !== req.userId) {
+    if (req.user.role === 'student' && selfApplication.student._id.toString() !== req.userId.toString()) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -119,6 +124,19 @@ router.post('/', auth, authorize('student'), [
       await Notification.insertMany(notifications);
     }
 
+    // Trigger Discord Notification
+    try {
+      const studentWithCampus = await User.findById(req.userId).populate('campus');
+      const discordResult = await discordService.sendSelfApplicationNotification(selfApplication, studentWithCampus);
+      if (discordResult && !discordResult.error) {
+        selfApplication.discordMessageId = discordResult.messageId;
+        selfApplication.discordThreadId = discordResult.threadId;
+        await selfApplication.save();
+      }
+    } catch (discordError) {
+      console.error('Failed to send self-application notification to Discord:', discordError);
+    }
+
     res.status(201).json(selfApplication);
   } catch (error) {
     console.error('Create self-application error:', error);
@@ -135,7 +153,7 @@ router.put('/:id', auth, authorize('student'), async (req, res) => {
       return res.status(404).json({ message: 'Self-application not found' });
     }
 
-    if (selfApplication.student.toString() !== req.userId) {
+    if (selfApplication.student.toString() !== req.userId.toString()) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -170,7 +188,7 @@ router.patch('/:id/status', auth, authorize('student'), async (req, res) => {
       return res.status(404).json({ message: 'Self-application not found' });
     }
 
-    if (selfApplication.student.toString() !== req.userId) {
+    if (selfApplication.student.toString() !== req.userId.toString()) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -182,7 +200,7 @@ router.patch('/:id/status', auth, authorize('student'), async (req, res) => {
     await selfApplication.save();
 
     // Notify Campus PoC on significant status changes
-    if (['offer_received', 'offer_accepted', 'rejected'].includes(status)) {
+    if (['offer_received', 'offer_accepted', 'offer_declined', 'rejected'].includes(status)) {
       const student = await User.findById(req.userId);
       const campusPoCs = await User.find({
         role: 'campus_poc',
@@ -193,6 +211,7 @@ router.patch('/:id/status', auth, authorize('student'), async (req, res) => {
       const statusMessages = {
         offer_received: 'received an offer from',
         offer_accepted: 'accepted an offer from',
+        offer_declined: 'declined an offer from',
         rejected: 'was rejected by'
       };
 
@@ -208,6 +227,14 @@ router.patch('/:id/status', auth, authorize('student'), async (req, res) => {
       if (notifications.length > 0) {
         await Notification.insertMany(notifications);
       }
+    }
+
+    // Trigger Discord status update in thread
+    try {
+      const studentWithCampus = await User.findById(req.userId).populate('campus');
+      await discordService.sendSelfApplicationUpdate(selfApplication, studentWithCampus, req.user);
+    } catch (discordError) {
+      console.error('Failed to send status update to Discord thread:', discordError);
     }
 
     res.json(selfApplication);
@@ -231,10 +258,14 @@ router.patch('/:id/verify', auth, authorize('campus_poc', 'coordinator', 'manage
       return res.status(404).json({ message: 'Self-application not found' });
     }
 
-    // Campus PoC can only verify their campus students
+    // Campus PoC can only verify their managed campus students
     if (req.user.role === 'campus_poc') {
-      if (selfApplication.student.campus?.toString() !== req.user.campus?.toString()) {
-        return res.status(403).json({ message: 'Not authorized' });
+      const managedCampuses = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses.map(c => c.toString())
+        : (req.user.campus ? [req.user.campus.toString()] : []);
+
+      if (!managedCampuses.includes(selfApplication.student.campus?.toString())) {
+        return res.status(403).json({ message: 'Not authorized for this campus' });
       }
     }
 
@@ -250,7 +281,7 @@ router.patch('/:id/verify', auth, authorize('campus_poc', 'coordinator', 'manage
       recipient: selfApplication.student._id,
       type: 'self_application_verified',
       title: isVerified ? 'Self-Application Verified!' : 'Self-Application Review',
-      message: isVerified 
+      message: isVerified
         ? `Your application to ${selfApplication.company.name} has been verified by Campus PoC.`
         : `Your application to ${selfApplication.company.name} needs attention. ${verificationNotes || ''}`,
       link: `/student/self-applications/${selfApplication._id}`,
@@ -275,7 +306,7 @@ router.delete('/:id', auth, authorize('student'), async (req, res) => {
       return res.status(404).json({ message: 'Self-application not found' });
     }
 
-    if (selfApplication.student.toString() !== req.userId) {
+    if (selfApplication.student.toString() !== req.userId.toString()) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -291,9 +322,13 @@ router.delete('/:id', auth, authorize('student'), async (req, res) => {
 // Get stats for campus (Campus PoC)
 router.get('/stats/campus', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
-    let campusId = req.user.campus;
-    if (req.user.role !== 'campus_poc' && req.query.campusId) {
-      campusId = req.query.campusId;
+    let campusId;
+    if (req.user.role === 'campus_poc') {
+      campusId = req.user.managedCampuses?.length > 0
+        ? req.user.managedCampuses
+        : (req.user.campus ? [req.user.campus] : []);
+    } else {
+      campusId = req.query.campusId || req.user.campus;
     }
 
     const stats = await SelfApplication.getCampusStats(campusId);

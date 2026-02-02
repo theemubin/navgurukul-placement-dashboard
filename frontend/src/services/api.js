@@ -40,15 +40,15 @@ api.interceptors.response.use(
       console.warn('API response error:', error?.response?.status, error?.response?.data, error?.response?.headers);
     }
     if (error.response?.status === 401) {
-      // Clear client-side auth state
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      // Notify app of logout (listeners can update UI without forcing navigation)
-      window.dispatchEvent(new CustomEvent('auth:logout'));
-
-      // Only redirect to login if we're not already on an auth/login route to avoid reload loops
+      // Only redirect to login and clear state if we're not already on an auth/login route 
+      // to avoid reload loops or wiping state during AuthCallback's initialization.
       const pathname = window.location.pathname || '';
       if (!pathname.startsWith('/auth') && !pathname.startsWith('/login')) {
+        // Clear client-side auth state
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        // Notify app of logout
+        window.dispatchEvent(new CustomEvent('auth:logout'));
         // Use replace to avoid creating history entries
         window.location.replace('/login');
       }

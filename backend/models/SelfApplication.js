@@ -56,15 +56,16 @@ const selfApplicationSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      'applied',           // Just applied
-      'screening',         // Under initial screening
-      'interview_scheduled', // Interview scheduled
-      'interview_completed', // Interview done, awaiting result
-      'offer_received',    // Got an offer
-      'offer_accepted',    // Accepted the offer
-      'offer_rejected',    // Rejected the offer
-      'rejected',          // Application rejected by company
-      'withdrawn'          // Student withdrew application
+      'applied',
+      'screening',
+      'in_progress',
+      'interview_scheduled',
+      'interview_completed',
+      'offer_received',
+      'offer_accepted',
+      'offer_declined',
+      'rejected',
+      'withdrawn'
     ],
     default: 'applied'
   },
@@ -118,8 +119,7 @@ const selfApplicationSchema = new mongoose.Schema({
   }],
   // PoC verification
   isVerified: {
-    type: Boolean,
-    default: false
+    type: Boolean
   },
   verifiedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -133,7 +133,10 @@ const selfApplicationSchema = new mongoose.Schema({
   relevantSkills: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Skill'
-  }]
+  }],
+  // Discord tracking
+  discordThreadId: String,
+  discordMessageId: String
 }, {
   timestamps: true
 });
@@ -144,7 +147,7 @@ selfApplicationSchema.index({ status: 1 });
 selfApplicationSchema.index({ 'company.name': 'text', jobTitle: 'text' });
 
 // Pre-save middleware to track status history
-selfApplicationSchema.pre('save', function(next) {
+selfApplicationSchema.pre('save', function (next) {
   if (this.isModified('status')) {
     this.statusHistory.push({
       status: this.status,
@@ -163,7 +166,9 @@ selfApplicationSchema.virtual('campus', {
 });
 
 // Static method to get stats for a campus
-selfApplicationSchema.statics.getCampusStats = async function(campusId) {
+selfApplicationSchema.statics.getCampusStats = async function (campusId) {
+  const managedCampuses = Array.isArray(campusId) ? campusId : [campusId];
+
   const stats = await this.aggregate([
     {
       $lookup: {
@@ -174,19 +179,58 @@ selfApplicationSchema.statics.getCampusStats = async function(campusId) {
       }
     },
     { $unwind: '$studentInfo' },
-    { $match: { 'studentInfo.campus': campusId } },
     {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 }
+      $match: {
+        'studentInfo.campus': { $in: managedCampuses.map(id => new mongoose.Types.ObjectId(id)) }
+      }
+    },
+    {
+      $facet: {
+        byStatus: [
+          { $group: { _id: '$status', count: { $sum: 1 } } }
+        ],
+        byVerification: [
+          { $group: { _id: '$isVerified', count: { $sum: 1 } } }
+        ]
       }
     }
   ]);
-  
-  return stats.reduce((acc, item) => {
-    acc[item._id] = item.count;
-    return acc;
-  }, {});
+
+  const result = {
+    total: 0,
+    active: 0,
+    offers: 0,
+    placed: 0,
+    unverified: 0
+  };
+
+  if (stats.length > 0) {
+    const data = stats[0];
+
+    data.byStatus.forEach(item => {
+      result.total += item.count;
+
+      if (['offer_received', 'offer_accepted', 'offer_declined'].includes(item._id)) {
+        result.offers += item.count;
+      }
+
+      if (item._id === 'offer_accepted') {
+        result.placed += item.count;
+      }
+
+      if (!['withdrawn', 'rejected', 'offer_accepted'].includes(item._id)) {
+        result.active += item.count;
+      }
+    });
+
+    data.byVerification.forEach(item => {
+      if (item._id !== true) {
+        result.unverified += item.count;
+      }
+    });
+  }
+
+  return result;
 };
 
 module.exports = mongoose.model('SelfApplication', selfApplicationSchema);

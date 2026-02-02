@@ -23,6 +23,9 @@ const notificationSchema = new mongoose.Schema({
       'profile_approval_needed',
       'profile_approved',
       'profile_needs_revision',
+      'self_application',
+      'self_application_update',
+      'self_application_verified',
       'job_question',
       'question_answered',
       'general'
@@ -41,7 +44,7 @@ const notificationSchema = new mongoose.Schema({
   relatedEntity: {
     type: {
       type: String,
-      enum: ['job', 'application', 'user', 'skill']
+      enum: ['job', 'application', 'user', 'skill', 'self_application']
     },
     id: mongoose.Schema.Types.ObjectId
   },

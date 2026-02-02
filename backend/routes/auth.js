@@ -33,15 +33,18 @@ router.get('/google/config', (req, res) => {
 // Modern browsers require `Secure` when `SameSite=None` — ensure we set it in development when using localhost
 // or when explicitly forcing secure cookies via environment.
 const cookieOptionsForToken = (ttlMs = 7 * 24 * 60 * 60 * 1000) => {
-  const frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173';
-  const isLocalhostFront = frontendBase.includes('localhost');
+  const isProd = process.env.NODE_ENV === 'production';
   const forceSecure = process.env.FORCE_SECURE_COOKIES === 'true';
-  const secureFlag = process.env.NODE_ENV === 'production' || isLocalhostFront || forceSecure;
+
+  // Requirement: sameSite: 'None' requires Secure: true.
+  // In development (non-SSL), we should use Lax or Strict to allow cookies over http.
+  const secure = isProd || forceSecure;
+  const sameSite = secure ? 'None' : 'Lax';
 
   return {
     httpOnly: true,
-    secure: secureFlag,
-    sameSite: 'None',
+    secure: secure,
+    sameSite: sameSite,
     maxAge: ttlMs,
     path: '/',
     domain: process.env.COOKIE_DOMAIN || undefined

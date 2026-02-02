@@ -40,8 +40,8 @@ const POCStudentDetails = () => {
         jobReadinessAPI.getConfig()
       ]);
       setStudent(studentRes.data);
-      setApplications(appsRes.data.applications);
-      setJobReadiness(readinessRes.data);
+      setApplications(appsRes.data.applications || []);
+      setJobReadiness(readinessRes.data.readiness);
       setJobReadinessConfig(configRes.data || []);
     } catch (error) {
       toast.error('Error loading student data');
@@ -143,7 +143,8 @@ const POCStudentDetails = () => {
     const categories = {};
     if (!jobReadinessConfig.length || !jobReadiness) return categories;
 
-    const config = jobReadinessConfig.find(c => c.school === jobReadiness.school);
+    const school = jobReadiness.school;
+    const config = jobReadinessConfig.find(c => c.school === school);
     if (!config) return categories;
 
     config.criteria.forEach(criterion => {

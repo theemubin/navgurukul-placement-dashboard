@@ -1283,7 +1283,11 @@ node scripts/promote_normalized_index_unique.js`;
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 group cursor-pointer hover:bg-gray-50 px-2 py-0.5 rounded -ml-2" onClick={() => { setEditingCampusId(campus._id); setTempDiscordChannelId(campus.discordChannelId || ''); }}>
-                        <span className="text-xs font-mono">{campus.discordChannelId ? campus.discordChannelId : 'Global Default'}</span>
+                        <span className="text-xs font-mono">
+                          {campus.discordChannelId
+                            ? campus.discordChannelId
+                            : `Global (${settings.discordConfig?.channels?.jobPostings || 'None'})`}
+                        </span>
                         <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 text-gray-400" />
                       </div>
                     )}

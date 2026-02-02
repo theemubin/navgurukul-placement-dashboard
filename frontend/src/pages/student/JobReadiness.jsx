@@ -95,7 +95,12 @@ function JobReadiness() {
       setError(null);
     } catch (err) {
       console.error('Fetch error:', err);
-      setError(err.response?.data?.message || 'Failed to load job readiness status');
+      const message = err.response?.data?.message || '';
+      if (message.includes('school not set') || message.includes('profile or school')) {
+        setError('profile_incomplete');
+      } else {
+        setError(message || 'Failed to load job readiness status');
+      }
     } finally {
       setLoading(false);
     }
@@ -190,6 +195,31 @@ function JobReadiness() {
     return (
       <div className="flex justify-center items-center h-64">
         <LoadingSpinner size="large" />
+      </div>
+    );
+  }
+
+  if (error === 'profile_incomplete') {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8 text-center">
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-3xl p-8 shadow-sm">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AcademicCapIcon className="w-10 h-10 text-amber-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Complete Your Profile first!</h2>
+          <p className="text-gray-600 mb-8 max-w-md mx-auto">
+            To view your job readiness criteria, you need to set your <b>Campus/School</b> in your profile.
+            This helps us show you the specific requirements for your campus.
+          </p>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => window.location.href = '/student/profile'}
+            className="font-bold px-8 shadow-lg shadow-indigo-100"
+          >
+            Go to Profile
+          </Button>
+        </div>
       </div>
     );
   }
@@ -355,12 +385,12 @@ function JobReadiness() {
                   <div
                     key={criterion.criteriaId}
                     className={`p-6 rounded-2xl border-2 transition-all ${isVerified
-                        ? 'border-green-400 bg-gradient-to-br from-green-50 to-emerald-50 shadow-md'
-                        : isPending
-                          ? 'border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-50 shadow-md'
-                          : isEditing
-                            ? 'border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-lg'
-                            : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                      ? 'border-green-400 bg-gradient-to-br from-green-50 to-emerald-50 shadow-md'
+                      : isPending
+                        ? 'border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-50 shadow-md'
+                        : isEditing
+                          ? 'border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-lg'
+                          : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
                       }`}
                   >
                     <div className="flex items-start justify-between mb-4">
@@ -462,8 +492,8 @@ function JobReadiness() {
                                   [criterion.criteriaId]: 'yes'
                                 })}
                                 className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 ${formValues[criterion.criteriaId] === 'yes'
-                                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-xl scale-105'
-                                    : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-green-500'
+                                  ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-xl scale-105'
+                                  : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-green-500'
                                   }`}
                               >
                                 👍 Yes
@@ -474,8 +504,8 @@ function JobReadiness() {
                                   [criterion.criteriaId]: 'no'
                                 })}
                                 className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 ${formValues[criterion.criteriaId] === 'no'
-                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-xl scale-105'
-                                    : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-red-500'
+                                  ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-xl scale-105'
+                                  : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-red-500'
                                   }`}
                               >
                                 👎 No
