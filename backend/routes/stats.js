@@ -193,8 +193,16 @@ router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res
 
       // Count job-ready students for this campus
       let jobReadyCount = 0;
+      let jobReadyBySchool = [];
       try {
         jobReadyCount = await StudentJobReadiness.countDocuments({ campus: campus._id, isJobReady: true });
+
+        // Count job-ready students per school for this campus
+        jobReadyBySchool = await StudentJobReadiness.aggregate([
+          { $match: { campus: campus._id, isJobReady: true } },
+          { $group: { _id: '$school', count: { $sum: 1 } } },
+          { $project: { school: '$_id', count: 1, _id: 0 } }
+        ]);
       } catch (e) {
         console.error('Error counting job ready for campus', campus._id, e);
       }
@@ -208,6 +216,7 @@ router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res
         students,
         placements,
         jobReadyCount,
+        jobReadyBySchool,
         target: campus.placementTarget,
         progress: campus.placementTarget > 0
           ? Math.round((placements / campus.placementTarget) * 100)

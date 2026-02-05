@@ -4,8 +4,9 @@ import api from '../../services/api';
 import { StatsCard, LoadingSpinner } from '../../components/common/UIComponents';
 import UserApprovals from '../../components/manager/UserApprovals';
 import ManagerStudents from '../../components/manager/ManagerStudents';
-import { 
-  Users, Briefcase, Building2, Award, TrendingUp, 
+import ManagerStaff from '../../components/manager/ManagerStaff';
+import {
+  Users, Briefcase, Building2, Award, TrendingUp,
   CheckCircle, Clock, BarChart3, PieChart, Download, UserCog
 } from 'lucide-react';
 import { DollarSign } from 'lucide-react';
@@ -145,10 +146,10 @@ const Dashboard = () => {
   }
 
   // Calculate derived metrics
-  const placementRate = stats?.totalStudents > 0 
-    ? ((stats?.placedStudents || 0) / stats.totalStudents * 100).toFixed(1) 
+  const placementRate = stats?.totalStudents > 0
+    ? ((stats?.placedStudents || 0) / stats.totalStudents * 100).toFixed(1)
     : 0;
-  
+
   const applicationSuccessRate = stats?.totalApplications > 0
     ? ((stats?.selectedApplications || 0) / stats.totalApplications * 100).toFixed(1)
     : 0;
@@ -230,7 +231,7 @@ const Dashboard = () => {
             </div>
           </div>
           <div className="mt-4 h-4 bg-gray-100 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-gradient-to-r from-primary-500 to-primary-600 rounded-full transition-all duration-1000"
               style={{ width: `${placementRate}%` }}
             />
@@ -249,7 +250,7 @@ const Dashboard = () => {
             </div>
           </div>
           <div className="mt-4 h-4 bg-gray-100 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-1000"
               style={{ width: `${applicationSuccessRate}%` }}
             />
@@ -343,12 +344,77 @@ const Dashboard = () => {
                 <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">{pendingCount}</span>
               )}
             </button>
+            <button className={`px-3 py-2 rounded-md font-medium ${activeTab === 'staff' ? 'bg-primary-50 text-primary-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setActiveTab('staff')}>Staff</button>
             <button className={`px-3 py-2 rounded-md font-medium ${activeTab === 'students' ? 'bg-primary-50 text-primary-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setActiveTab('students')}>Students</button>
           </div>
         </div>
 
         <div className="mt-4">
-          {activeTab === 'approvals' ? <UserApprovals /> : <ManagerStudents />}
+          {activeTab === 'approvals' && <UserApprovals />}
+          {activeTab === 'staff' && (
+            <div className="space-y-8">
+              <ManagerStaff />
+
+              <div className="pt-6 border-t">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-gray-600" />
+                  Campus PoC Summary
+                </h3>
+                {loadingCampusRows ? (
+                  <div className="py-4 flex items-center justify-center"><LoadingSpinner size="md" /></div>
+                ) : (
+                  <div className="overflow-x-auto bg-white rounded-lg border">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-gray-50 border-b">
+                        <tr className="text-xs text-gray-500 uppercase font-semibold">
+                          <th className="px-6 py-3">Campus Name</th>
+                          <th className="px-6 py-3">Assigned PoC(s)</th>
+                          <th className="px-6 py-3">Job Ready (by School)</th>
+                          <th className="px-6 py-3">Total Active</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {campusRows.map((r, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 font-medium text-gray-900">{r.campusName}</td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-wrap gap-1">
+                                {r.pocs.length > 0 ? r.pocs.map((poc, i) => (
+                                  <span key={i} className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-full text-xs font-medium border border-teal-100">
+                                    {poc}
+                                  </span>
+                                )) : <span className="text-gray-400 italic">Unassigned</span>}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col gap-1">
+                                {r.jobReadyBySchool && r.jobReadyBySchool.length > 0 ? (
+                                  r.jobReadyBySchool.map((s, i) => (
+                                    <div key={i} className="text-xs flex items-center gap-2">
+                                      <span className="w-12 font-semibold text-gray-500">{schoolToAcronym(s.school)}:</span>
+                                      <span className="text-primary-600 font-bold">{s.count}</span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <span className="font-semibold">{r.jobReadyCount}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                {r.totalActive}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {activeTab === 'students' && <ManagerStudents />}
         </div>
       </div>
 
@@ -399,11 +465,10 @@ const Dashboard = () => {
                     <span className="font-semibold text-primary-600">{coord.placements}</span>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-1 rounded-full text-sm ${
-                      coord.conversionRate >= 20 ? 'bg-green-100 text-green-700' :
-                      coord.conversionRate >= 10 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
+                    <span className={`px-2 py-1 rounded-full text-sm ${coord.conversionRate >= 20 ? 'bg-green-100 text-green-700' :
+                        coord.conversionRate >= 10 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-600'
+                      }`}>
                       {coord.conversionRate}%
                     </span>
                   </td>
@@ -421,44 +486,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Campus PoC summary table placed below Coordinator Job Distribution as requested */}
-      <div className="card mt-4">
-        <h2 className="text-lg font-semibold mb-4">Campus PoCs</h2>
-        {loadingCampusRows ? (
-          <div className="py-4 flex items-center justify-center"><LoadingSpinner size="md" /></div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs text-gray-500">
-                  <th className="py-2">Campus Name</th>
-                  <th>PoC name(s)</th>
-                  <th>Job Ready by School</th>
-                  <th>Total Active</th>
-                </tr>
-              </thead>
-              <tbody>
-                {campusRows.map((r, idx) => (
-                  <tr key={idx} className="border-t">
-                      <td className="py-2">{r.campusName}</td>
-                      <td className="max-w-xl break-words">{r.pocs.length > 0 ? r.pocs.join(', ') : '—'}</td>
-                      <td>
-                        {r.jobReadyBySchool && r.jobReadyBySchool.length > 0 ? (
-                          r.jobReadyBySchool.map((s, i) => (
-                            <div key={i} className="py-1">{schoolToAcronym(s.school)}: {s.count}</div>
-                          ))
-                        ) : (
-                          <span>{r.jobReadyCount}</span>
-                        )}
-                      </td>
-                      <td>{r.totalActive}</td>
-                    </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
 
       {/* Additional Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

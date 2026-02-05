@@ -52,8 +52,6 @@ const ManagerStudents = () => {
   const [readiness, setReadiness] = useState(null);
   const [readinessConfig, setReadinessConfig] = useState([]);
   const [apps, setApps] = useState([]);
-  const [campusRows, setCampusRows] = useState([]);
-  const [loadingCampusRows, setLoadingCampusRows] = useState(true);
 
   const schoolToAcronym = (school) => {
     if (!school) return 'Unknown';
@@ -77,7 +75,7 @@ const ManagerStudents = () => {
     // Generic fallback: initials of words
     return trimmed.split(/\s+/).map(w => w.charAt(0).toUpperCase()).join('');
   };
-  
+
 
   const fetchReadiness = async (studentId) => {
     try {
@@ -150,51 +148,7 @@ const ManagerStudents = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.current, search]);
 
-  useEffect(() => {
-    const fetchCampusRows = async () => {
-      setLoadingCampusRows(true);
-      try {
-        const [pocRes, campusStatsRes] = await Promise.all([
-          userAPI.getUsers({ role: 'campus_poc', limit: 1000 }),
-          statsAPI.getCampusStats()
-        ]);
 
-        const pocs = pocRes.data.users || [];
-        const campusStats = campusStatsRes.data || [];
-
-        const rows = campusStats.map(cs => {
-          const campusId = cs.campus.id || cs.campus._id || cs.campus;
-          // Find PoCs assigned to this campus (either campus or managedCampuses)
-          const assigned = pocs.filter(p => {
-            if (!p) return false;
-            // user's campus can be populated object
-            const userCampusId = p.campus && (p.campus._id || p.campus) ? (p.campus._id || p.campus).toString() : null;
-            if (userCampusId && userCampusId.toString() === campusId.toString()) return true;
-            if (Array.isArray(p.managedCampuses) && p.managedCampuses.map(m => (m && (m._id || m)).toString()).includes(campusId.toString())) return true;
-            return false;
-          }).map(p => `${p.firstName} ${p.lastName}`);
-
-          return {
-            campusName: cs.campus.name,
-            pocs: assigned,
-            jobReadyCount: cs.jobReadyCount || 0,
-            jobReadyBySchool: cs.jobReadyBySchool || [],
-            totalActive: cs.students || 0
-          };
-        });
-
-        setCampusRows(rows);
-      } catch (err) {
-        console.error('Error fetching campus rows:', err);
-      } finally {
-        setLoadingCampusRows(false);
-      }
-    };
-
-    fetchCampusRows();
-  }, []);
-
-  
 
   const renderStudentContent = () => {
     if (!selectedStudent) return null;
@@ -259,7 +213,7 @@ const ManagerStudents = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-xs text-gray-500">Joining Date</label>
-                <input type="date" className="w-full px-3 py-2 border rounded mt-1" value={selectedStudent.studentProfile?.joiningDate ? new Date(selectedStudent.studentProfile.joiningDate).toISOString().slice(0,10) : ''} onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), joiningDate: e.target.value } }))} />
+                <input type="date" className="w-full px-3 py-2 border rounded mt-1" value={selectedStudent.studentProfile?.joiningDate ? new Date(selectedStudent.studentProfile.joiningDate).toISOString().slice(0, 10) : ''} onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), joiningDate: e.target.value } }))} />
               </div>
 
               <div>
@@ -374,7 +328,7 @@ const ManagerStudents = () => {
 
   const studentContent = renderStudentContent();
 
-  
+
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
@@ -389,45 +343,7 @@ const ManagerStudents = () => {
         </div>
       </div>
 
-      {/* Campus PoC summary table (below coordinator) */}
-      <div className="card mb-4">
-        <h4 className="text-sm font-medium mb-2">Campus PoCs</h4>
-        {loadingCampusRows ? (
-          <div className="py-4 flex items-center justify-center"><LoadingSpinner size="md" /></div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs text-gray-500">
-                  <th className="py-2">Campus Name</th>
-                  <th>PoC name(s)</th>
-                  <th>Job Ready by School</th>
-                  <th>Total Active</th>
-                </tr>
-              </thead>
-              <tbody>
-                {campusRows.map((r, idx) => (
-                  <tr key={idx} className="border-t">
-                      <td className="py-2">{r.campusName}</td>
-                      <td className="max-w-xl break-words">{r.pocs.length > 0 ? r.pocs.join(', ') : '—'}</td>
-                      <td>
-                        {r.jobReadyBySchool && r.jobReadyBySchool.length > 0 ? (
-                          r.jobReadyBySchool.map((s, i) => (
-                            <div key={i} className="py-1">{schoolToAcronym(s.school)}: {s.count}</div>
-                          ))
-                        ) : (
-                          <span>{r.jobReadyCount}</span>
-                        )}
-                      </td>
-                      <td>{r.totalActive}</td>
-                    </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
+      {/* Students List */}
       {loading ? (
         <div className="py-8 flex items-center justify-center"><LoadingSpinner size="lg" /></div>
       ) : (
@@ -443,15 +359,25 @@ const ManagerStudents = () => {
               </tr>
             </thead>
             <tbody>
-              {students.map(s => (
-                <tr key={s._id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => openEdit(s._id)}>
-                  <td className="py-3">{s.firstName} {s.lastName}</td>
-                  <td>{s.email}</td>
-                  <td>{s.campus?.name || ''}</td>
-                  <td>{s.studentProfile?.currentStatus || 'N/A'}</td>
-                  <td className="text-sm text-gray-500">{s.studentProfile?.joiningDate ? new Date(s.studentProfile.joiningDate).toLocaleDateString() : '—'}</td>
-                </tr>
-              ))}
+              {students.map(s => {
+                const joinDate = s.studentProfile?.joiningDate || s.studentProfile?.dateOfJoining;
+                return (
+                  <tr key={s._id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => openEdit(s._id)}>
+                    <td className="py-3">{s.firstName} {s.lastName}</td>
+                    <td>{s.email}</td>
+                    <td>{s.campus?.name || s.campus || '—'}</td>
+                    <td>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.studentProfile?.currentStatus === 'Placed' ? 'bg-green-100 text-green-800' :
+                        s.studentProfile?.currentStatus === 'Active' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                        {s.studentProfile?.currentStatus || 'Active'}
+                      </span>
+                    </td>
+                    <td className="text-sm text-gray-500">{joinDate ? new Date(joinDate).toLocaleDateString() : '—'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 

@@ -1088,6 +1088,8 @@ router.put('/:userId', auth, authorize('manager'), async (req, res) => {
       });
     }
 
+    await user.save();
+
     // Build audit record by comparing saved user with previous snapshot
     const updated = await User.findById(userId).select('-password').populate('campus managedCampuses');
 

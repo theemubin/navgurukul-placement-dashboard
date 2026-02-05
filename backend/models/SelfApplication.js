@@ -58,9 +58,11 @@ const selfApplicationSchema = new mongoose.Schema({
     enum: [
       'applied',
       'screening',
-      'in_progress',
+      'screening_failed',
+      'assessment_scheduled',
       'interview_scheduled',
       'interview_completed',
+      'on_hold',
       'offer_received',
       'offer_accepted',
       'offer_declined',
@@ -74,31 +76,39 @@ const selfApplicationSchema = new mongoose.Schema({
     roundNumber: Number,
     type: {
       type: String,
-      enum: ['phone_screening', 'technical', 'hr', 'managerial', 'group_discussion', 'coding', 'other']
+      enum: ['phone_screening', 'assessment', 'technical', 'hr', 'managerial', 'group_discussion', 'coding', 'other']
     },
     scheduledDate: Date,
     status: {
       type: String,
-      enum: ['scheduled', 'completed', 'cancelled', 'cleared', 'not_cleared'],
+      enum: ['scheduled', 'completed', 'cancelled', 'cleared', 'not_cleared', 'rescheduled'],
       default: 'scheduled'
     },
     feedback: String
   }],
   // Offer details (if received)
   offer: {
-    salary: Number,
+    salary: {
+      amount: Number,
+      currency: { type: String, default: 'INR' },
+      frequency: { type: String, enum: ['monthly', 'annually'], default: 'annually' }
+    },
     joiningDate: Date,
     position: String,
     location: String,
     offerLetterUrl: String,
     responseDeadline: Date
   },
-  // Status history
+  // Status history with user tracking
   statusHistory: [{
     status: String,
     changedAt: {
       type: Date,
       default: Date.now
+    },
+    changedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
     },
     notes: String
   }],
@@ -110,7 +120,7 @@ const selfApplicationSchema = new mongoose.Schema({
     url: String,
     type: {
       type: String,
-      enum: ['offer_letter', 'appointment_letter', 'screenshot', 'email', 'other']
+      enum: ['job_description', 'application_acknowledgment', 'interview_invite', 'offer_letter', 'appointment_letter', 'screenshot', 'email', 'other']
     },
     uploadedAt: {
       type: Date,
@@ -119,16 +129,32 @@ const selfApplicationSchema = new mongoose.Schema({
   }],
   // PoC verification
   isVerified: {
-    type: Boolean
+    type: Boolean,
+    default: false
+  },
+  verificationStatus: {
+    type: String,
+    enum: ['pending', 'verified', 'rejected'],
+    default: 'pending'
   },
   verifiedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
   verifiedAt: Date,
+  rejectionReason: String,
   verificationNotes: String,
+  // Lead POC responsible for this specific follow-up
+  assignedPoc: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
   // For tracking referrals
-  referredBy: String, // Name of referrer if applicable
+  referralDetails: {
+    referredBy: String,
+    referralType: { type: String, enum: ['employee', 'external', 'alumni', 'none'], default: 'none' },
+    referrerContact: String
+  },
   // Skills used/relevant for this application
   relevantSkills: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -190,7 +216,7 @@ selfApplicationSchema.statics.getCampusStats = async function (campusId) {
           { $group: { _id: '$status', count: { $sum: 1 } } }
         ],
         byVerification: [
-          { $group: { _id: '$isVerified', count: { $sum: 1 } } }
+          { $group: { _id: '$verificationStatus', count: { $sum: 1 } } }
         ]
       }
     }
@@ -224,7 +250,7 @@ selfApplicationSchema.statics.getCampusStats = async function (campusId) {
     });
 
     data.byVerification.forEach(item => {
-      if (item._id !== true) {
+      if (item._id !== 'verified') {
         result.unverified += item.count;
       }
     });
