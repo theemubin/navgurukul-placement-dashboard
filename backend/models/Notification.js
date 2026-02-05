@@ -28,6 +28,8 @@ const notificationSchema = new mongoose.Schema({
       'self_application_verified',
       'job_question',
       'question_answered',
+      'role_changed',
+      'status_update',
       'general'
     ],
     required: true
