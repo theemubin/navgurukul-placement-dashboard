@@ -996,6 +996,7 @@ router.get('/', auth, authorize('manager'), async (req, res) => {
 
     const users = await User.find(query)
       .select('-password')
+      .populate('managedCampuses', 'name')
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .sort({ role: 1, createdAt: -1 });
