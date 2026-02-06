@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
 import {
-  ArrowLeft, Briefcase, MapPin, DollarSign, Calendar, Clock,
+  ArrowLeft, Briefcase, MapPin, IndianRupee, Calendar, Clock,
   Users, Building, Globe, CheckCircle, AlertCircle, Heart, XCircle,
   TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History, Check, Trash
 } from 'lucide-react';
@@ -280,7 +280,7 @@ const JobDetails = () => {
 
   const formatSalary = (salary) => {
     if (!salary?.min && !salary?.max) return 'Not disclosed';
-    const format = (num) => (num / 100000).toFixed(1) + ' LPA';
+    const format = (num) => '₹' + (num / 100000).toFixed(1) + ' LPA';
     if (salary.min && salary.max) return `${format(salary.min)} - ${format(salary.max)}`;
     if (salary.min) return `${format(salary.min)}+`;
     return `Up to ${format(salary.max)}`;
@@ -329,7 +329,7 @@ const JobDetails = () => {
                   {job.location}
                 </span>
                 <span className="flex items-center gap-1">
-                  <DollarSign className="w-4 h-4" />
+                  <IndianRupee className="w-4 h-4" />
                   {formatSalary(job.salary)}
                 </span>
                 <span className="flex items-center gap-1">

@@ -3,7 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { jobAPI, skillAPI, campusAPI, userAPI, settingsAPI } from '../../services/api';
 import { LoadingSpinner } from '../../components/common/UIComponents';
 import SearchableSelect from '../../components/common/SearchableSelect.jsx';
-import { ArrowLeft, Save, Plus, X, Sparkles, Upload, Link, FileText, AlertCircle, Users, CheckCircle, Search, Building, MapPin, Home } from 'lucide-react';
+import {
+  ArrowLeft, Save, Plus, X, Sparkles, Upload, Link, FileText,
+  AlertCircle, Users, CheckCircle, Search, Building, MapPin,
+  Home, Briefcase, IndianRupee, ExternalLink, Calendar, Clock,
+  History, Download, Settings, Trash2, Edit
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const JobForm = () => {
@@ -78,6 +83,7 @@ const JobForm = () => {
     status: 'draft',
     interviewRounds: [{ name: 'Round 1', type: 'other' }] // Initialize with one round
   });
+  const [salaryPeriod, setSalaryPeriod] = useState('yearly'); // 'yearly' or 'monthly'
 
   const [settings, setSettings] = useState({
     jobLocations: [],
@@ -92,7 +98,7 @@ const JobForm = () => {
 
   const proficiencyLevels = [1, 2, 3, 4].map(l => ({
     value: l,
-    label: settings.proficiencyRubrics?.[l]?.label || `Level ${l}`,
+    label: settings.proficiencyRubrics?.[l]?.label || `Level ${l} `,
     description: settings.proficiencyRubrics?.[l]?.description || ''
   }));
 
@@ -370,8 +376,29 @@ const JobForm = () => {
     try {
       const payload = { ...formData };
 
+      // Convert monthly salary to annual before saving to database
+      if (salaryPeriod === 'monthly') {
+        if (payload.salary.min) payload.salary.min = Number(payload.salary.min) * 12;
+        if (payload.salary.max) payload.salary.max = Number(payload.salary.max) * 12;
+      }
+
       if (!payload.salary.min) delete payload.salary.min;
       if (!payload.salary.max) delete payload.salary.max;
+
+      // Sync company details back to master list so they are available for future jobs
+      if (formData.company.name) {
+        try {
+          await settingsAPI.addCompanyOption({
+            name: formData.company.name,
+            website: formData.company.website || '',
+            description: formData.company.description || '',
+            logo: formData.company.logo || ''
+          });
+        } catch (err) {
+          console.error('Failed to sync company details to master list', err);
+          // Don't block job saving if master list sync fails
+        }
+      }
 
       if (isEdit) {
         await jobAPI.updateJob(id, payload);
@@ -397,6 +424,22 @@ const JobForm = () => {
 
   const updateListItem = (field, index, value) => {
     const list = [...formData[field]];
+
+    // Check if value contains newlines (from paste)
+    if (typeof value === 'string' && (value.includes('\n') || value.includes('\r'))) {
+      const parts = value.split(/\r?\n/)
+        .map(p => p.trim())
+        // Clean up common bullet points: •, -, *, 1. etc
+        .map(p => p.replace(/^[•\-\*\d+\.]\s*/, ''))
+        .filter(p => p !== '');
+
+      if (parts.length > 1) {
+        list.splice(index, 1, ...parts);
+        setFormData({ ...formData, [field]: list });
+        return;
+      }
+    }
+
     list[index] = value;
     setFormData({ ...formData, [field]: list });
   };
@@ -522,6 +565,23 @@ const JobForm = () => {
 
   const updateCustomRequirement = (index, field, value) => {
     const updated = [...(formData.customRequirements || [])];
+
+    // Check if value contains newlines (from paste)
+    if (field === 'requirement' && typeof value === 'string' && (value.includes('\n') || value.includes('\r'))) {
+      const parts = value.split(/\r?\n/)
+        .map(p => p.trim())
+        .map(p => p.replace(/^[•\-\*\d+\.]\s*/, ''))
+        .filter(p => p !== '');
+
+      if (parts.length > 1) {
+        const isMandatory = updated[index]?.isMandatory ?? true;
+        const newReqs = parts.map(p => ({ requirement: p, isMandatory }));
+        updated.splice(index, 1, ...newReqs);
+        setFormData(prev => ({ ...prev, customRequirements: updated }));
+        return;
+      }
+    }
+
     updated[index] = { ...updated[index], [field]: value };
     setFormData(prev => ({ ...prev, customRequirements: updated }));
   };
@@ -579,7 +639,7 @@ const JobForm = () => {
         <div className="flex gap-3">
           <button
             onClick={() => setFormData({ ...formData, status: formData.status === 'published' ? 'draft' : 'published' })}
-            className={`btn ${formData.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}
+            className={`btn ${formData.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} `}
           >
             {formData.status === 'published' ? 'Published' : 'Draft'}
           </button>
@@ -683,9 +743,9 @@ const JobForm = () => {
                     ...prev,
                     company: {
                       name: val,
-                      website: company?.website || prev.company.website || '',
-                      description: company?.description || prev.company.description || '',
-                      logo: company?.logo || prev.company.logo || ''
+                      website: company?.website || '',
+                      description: company?.description || '',
+                      logo: company?.logo || ''
                     }
                   }));
                 }}
@@ -717,7 +777,7 @@ const JobForm = () => {
                   }}
                   placeholder="https://..."
                 />
-              </div>
+              </div >
               <div className="w-20">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
                 <div className="w-full h-[38px] flex items-center justify-center bg-gray-50 border rounded-lg overflow-hidden">
@@ -728,7 +788,7 @@ const JobForm = () => {
                   )}
                 </div>
               </div>
-            </div>
+            </div >
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Coordinator (Lead)</label>
@@ -751,11 +811,11 @@ const JobForm = () => {
                 placeholder="Brief description of the company"
               />
             </div>
-          </div>
-        </div>
+          </div >
+        </div >
 
         {/* Job Details */}
-        <div className="card">
+        < div className="card" >
           <h2 className="text-lg font-semibold mb-4">Job Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -813,27 +873,56 @@ const JobForm = () => {
                 </select>
               </div>
             )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {formData.jobType === 'internship' ? 'Min Stipend (Monthly)' : 'Min Salary (Annual)'}
-              </label>
-              <input
-                type="number"
-                value={formData.salary.min}
-                onChange={(e) => setFormData({ ...formData, salary: { ...formData.salary, min: e.target.value } })}
-                placeholder={formData.jobType === 'internship' ? 'e.g., 10000' : 'e.g., 600000'}
-              />
+            <div className="md:col-span-2">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">Salary Details ({formData.salary.currency || 'INR'})</label>
+                <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setSalaryPeriod('monthly')}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${salaryPeriod === 'monthly' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSalaryPeriod('yearly')}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${salaryPeriod === 'yearly' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Yearly
+                  </button>
+                </div>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {formData.jobType === 'internship' ? 'Max Stipend (Monthly)' : 'Max Salary (Annual)'}
+                Min {salaryPeriod === 'monthly' ? 'Monthly' : 'Annual'} {formData.jobType === 'internship' ? 'Stipend' : 'Salary'}
               </label>
-              <input
-                type="number"
-                value={formData.salary.max}
-                onChange={(e) => setFormData({ ...formData, salary: { ...formData.salary, max: e.target.value } })}
-                placeholder={formData.jobType === 'internship' ? 'e.g., 25000' : 'e.g., 1000000'}
-              />
+              <div className="relative group">
+                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                <input
+                  type="number"
+                  className="pl-7"
+                  value={formData.salary.min}
+                  onChange={(e) => setFormData({ ...formData, salary: { ...formData.salary, min: e.target.value } })}
+                  placeholder={salaryPeriod === 'monthly' ? 'e.g., 25000' : 'e.g., 300000'}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Max {salaryPeriod === 'monthly' ? 'Monthly' : 'Annual'} {formData.jobType === 'internship' ? 'Stipend' : 'Salary'}
+              </label>
+              <div className="relative group">
+                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                <input
+                  type="number"
+                  className="pl-7"
+                  value={formData.salary.max}
+                  onChange={(e) => setFormData({ ...formData, salary: { ...formData.salary, max: e.target.value } })}
+                  placeholder={salaryPeriod === 'monthly' ? 'e.g., 50000' : 'e.g., 600000'}
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Application Deadline *</label>
@@ -864,10 +953,10 @@ const JobForm = () => {
               />
             </div>
           </div>
-        </div>
+        </div >
 
         {/* Requirements */}
-        <div className="card">
+        < div className="card" >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Requirements</h2>
             <button type="button" onClick={() => addListItem('requirements')} className="text-primary-600 text-sm">
@@ -876,25 +965,55 @@ const JobForm = () => {
           </div>
           <div className="space-y-2">
             {formData.requirements.map((req, index) => (
-              <div key={index} className="flex gap-2">
-                <input
-                  type="text"
-                  value={req}
-                  onChange={(e) => updateListItem('requirements', index, e.target.value)}
-                  placeholder="e.g., BS in Computer Science"
-                />
+              <div key={index} className="flex gap-3 items-start group">
+                <div className="flex-1 relative">
+                  <textarea
+                    rows={1}
+                    value={req}
+                    ref={el => {
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = el.scrollHeight + 'px';
+                      }
+                    }}
+                    onChange={(e) => updateListItem('requirements', index, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        const newList = [...formData.requirements];
+                        newList.splice(index + 1, 0, '');
+                        setFormData({ ...formData, requirements: newList });
+                        setTimeout(() => {
+                          const inputs = document.querySelectorAll('textarea[placeholder="e.g., BS in Computer Science"]');
+                          if (inputs[index + 1]) inputs[index + 1].focus();
+                        }, 0);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none overflow-hidden text-sm bg-white hover:border-gray-300 transition-colors"
+                    placeholder="e.g., BS in Computer Science"
+                    onInput={(e) => {
+                      e.target.style.height = 'auto';
+                      e.target.style.height = e.target.scrollHeight + 'px';
+                    }}
+                  />
+                </div>
                 {formData.requirements.length > 1 && (
-                  <button type="button" onClick={() => removeListItem('requirements', index)} className="p-2 text-red-500">
+                  <button
+                    type="button"
+                    onClick={() => removeListItem('requirements', index)}
+                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    title="Remove requirement"
+                  >
                     <X className="w-5 h-5" />
                   </button>
                 )}
               </div>
             ))}
           </div>
-        </div>
+        </div >
 
         {/* Custom Requirements for Students */}
-        <div className="card">
+        < div className="card" >
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold">Custom Requirements</h2>
@@ -906,39 +1025,67 @@ const JobForm = () => {
           </div>
           <div className="space-y-3">
             {(formData.customRequirements || []).map((req, index) => (
-              <div key={index} className="flex gap-3 items-center p-3 bg-gray-50 rounded-lg">
-                <input
-                  type="text"
-                  value={req.requirement}
-                  onChange={(e) => updateCustomRequirement(index, 'requirement', e.target.value)}
-                  placeholder="e.g., Willing to relocate to Bangalore?"
-                  className="flex-1"
-                />
-                <label className="flex items-center gap-2 text-sm whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={req.isMandatory}
-                    onChange={(e) => updateCustomRequirement(index, 'isMandatory', e.target.checked)}
+              <div key={index} className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg group">
+                <div className="flex-1 relative">
+                  <textarea
+                    rows={1}
+                    value={req.requirement}
+                    ref={el => {
+                      if (el) {
+                        el.style.height = 'auto';
+                        el.style.height = el.scrollHeight + 'px';
+                      }
+                    }}
+                    onChange={(e) => updateCustomRequirement(index, 'requirement', e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        const updated = [...(formData.customRequirements || [])];
+                        updated.splice(index + 1, 0, { requirement: '', isMandatory: true });
+                        setFormData(prev => ({ ...prev, customRequirements: updated }));
+                        setTimeout(() => {
+                          const inputs = document.querySelectorAll('textarea[placeholder="e.g., Willing to relocate to Bangalore?"]');
+                          if (inputs[index + 1]) inputs[index + 1].focus();
+                        }, 0);
+                      }
+                    }}
+                    placeholder="e.g., Willing to relocate to Bangalore?"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none overflow-hidden text-sm bg-white hover:border-gray-300 transition-colors"
+                    onInput={(e) => {
+                      e.target.style.height = 'auto';
+                      e.target.style.height = e.target.scrollHeight + 'px';
+                    }}
                   />
-                  Mandatory
-                </label>
-                <button
-                  type="button"
-                  onClick={() => removeCustomRequirement(index)}
-                  className="p-2 text-red-500 hover:bg-red-50 rounded"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0 pt-1">
+                  <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded text-primary-600 focus:ring-primary-500"
+                      checked={req.isMandatory}
+                      onChange={(e) => updateCustomRequirement(index, 'isMandatory', e.target.checked)}
+                    />
+                    <span className="text-gray-600">Mandatory</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeCustomRequirement(index)}
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                    Remove
+                  </button>
+                </div>
               </div>
             ))}
             {(!formData.customRequirements || formData.customRequirements.length === 0) && (
               <p className="text-gray-500 text-sm italic">No custom requirements added yet</p>
             )}
           </div>
-        </div>
+        </div >
 
         {/* Required Skills */}
-        <div className="card">
+        < div className="card" >
           <div className="mb-4">
             <h2 className="text-lg font-semibold">Required Skills</h2>
             <p className="text-sm text-gray-500">Select skills and set the minimum proficiency level required</p>
@@ -983,46 +1130,48 @@ const JobForm = () => {
           </div>
 
           {/* Selected Skills with Proficiency */}
-          {formData.requiredSkills.length > 0 && (
-            <div className="mb-4 space-y-2">
-              <p className="text-sm font-medium text-gray-700">Selected Skills:</p>
-              {formData.requiredSkills.map((selectedSkill) => {
-                const skillId = selectedSkill.skill?._id || selectedSkill.skill;
-                const skillInfo = allSkills.find(s => s._id === skillId);
-                if (!skillInfo) return null;
+          {
+            formData.requiredSkills.length > 0 && (
+              <div className="mb-4 space-y-2">
+                <p className="text-sm font-medium text-gray-700">Selected Skills:</p>
+                {formData.requiredSkills.map((selectedSkill) => {
+                  const skillId = selectedSkill.skill?._id || selectedSkill.skill;
+                  const skillInfo = allSkills.find(s => s._id === skillId);
+                  if (!skillInfo) return null;
 
-                // If CEFR English is set, do not show duplicate English in Selected Skills
-                const isEnglishSkill = (skillInfo.name || '').toLowerCase() === 'english';
-                if (isEnglishSkill && (formData.eligibility.englishSpeaking || formData.eligibility.englishWriting)) {
-                  return null;
-                }
+                  // If CEFR English is set, do not show duplicate English in Selected Skills
+                  const isEnglishSkill = (skillInfo.name || '').toLowerCase() === 'english';
+                  if (isEnglishSkill && (formData.eligibility.englishSpeaking || formData.eligibility.englishWriting)) {
+                    return null;
+                  }
 
-                return (
-                  <div key={skillId} className="flex items-center gap-3 p-2 bg-primary-50 rounded-lg">
-                    <span className="font-medium text-primary-800 min-w-32 text-sm">{skillInfo.name}</span>
-                    <select
-                      value={selectedSkill.proficiencyLevel || 1}
-                      onChange={(e) => updateSkillProficiency(skillId, parseInt(e.target.value))}
-                      className="text-sm"
-                    >
-                      {proficiencyLevels.map(level => (
-                        <option key={level.value} value={level.value}>
-                          {level.label} - {level.description}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => toggleSkill(skillId)}
-                      className="ml-auto text-red-500 hover:text-red-700"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  return (
+                    <div key={skillId} className="flex items-center gap-3 p-2 bg-primary-50 rounded-lg">
+                      <span className="font-medium text-primary-800 min-w-32 text-sm">{skillInfo.name}</span>
+                      <select
+                        value={selectedSkill.proficiencyLevel || 1}
+                        onChange={(e) => updateSkillProficiency(skillId, parseInt(e.target.value))}
+                        className="text-sm"
+                      >
+                        {proficiencyLevels.map(level => (
+                          <option key={level.value} value={level.value}>
+                            {level.label} - {level.description}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => toggleSkill(skillId)}
+                        className="ml-auto text-red-500 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          }
 
           {/* Available Skills to Add */}
           <div className="flex flex-wrap gap-2">
@@ -1045,10 +1194,10 @@ const JobForm = () => {
               );
             })}
           </div>
-        </div>
+        </div >
 
         {/* Eligibility Criteria */}
-        <div className="card">
+        < div className="card" >
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-lg font-semibold">Eligibility Criteria</h2>
           </div>
@@ -1496,10 +1645,10 @@ const JobForm = () => {
             </div>
           </div>
 
-        </div>
+        </div >
 
         {/* Interview Rounds */}
-        <div className="card">
+        < div className="card" >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Interview Rounds</h2>
             <button type="button" onClick={() => addListItem('interviewRounds')} className="text-primary-600 text-sm">+ Add Round</button>
@@ -1537,10 +1686,10 @@ const JobForm = () => {
               </div>
             ))}
           </div>
-        </div>
+        </div >
 
         {/* Submit */}
-        <div className="card">
+        < div className="card" >
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -1561,10 +1710,10 @@ const JobForm = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div >
 
-      </form>
-    </div>
+      </form >
+    </div >
   );
 };
 

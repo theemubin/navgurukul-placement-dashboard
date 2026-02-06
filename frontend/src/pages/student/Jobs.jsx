@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { jobAPI, authAPI, settingsAPI, jobReadinessAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Badge } from '../../components/common/UIComponents';
-import { Briefcase, MapPin, DollarSign, Calendar, Search, Filter, Star, AlertCircle, GraduationCap, Clock, CheckCircle, Users, TrendingUp, XCircle, Heart } from 'lucide-react';
+import { Briefcase, MapPin, IndianRupee, Calendar, Search, Filter, Star, AlertCircle, GraduationCap, Clock, CheckCircle, Users, TrendingUp, XCircle, Heart, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 
 // Color variant mapping for stage colors
@@ -187,15 +187,7 @@ const StudentJobs = () => {
 
   const formatSalary = (salary) => {
     if (!salary?.min && !salary?.max) return 'Not disclosed';
-    const format = (num) => (num / 100000).toFixed(1) + ' LPA';
-    if (salary.min && salary.max) return `${format(salary.min)} - ${format(salary.max)}`;
-    if (salary.min) return `${format(salary.min)}+`;
-    return `Up to ${format(salary.max)}`;
-  };
-
-  const formatStipend = (salary) => {
-    if (!salary?.min && !salary?.max) return 'Not disclosed';
-    const format = (num) => '₹' + num.toLocaleString('en-IN') + '/month';
+    const format = (num) => '₹' + (num / 100000).toFixed(1) + ' LPA';
     if (salary.min && salary.max) return `${format(salary.min)} - ${format(salary.max)}`;
     if (salary.min) return `${format(salary.min)}+`;
     return `Up to ${format(salary.max)}`;
@@ -377,8 +369,8 @@ const StudentJobs = () => {
                           {job.location}
                         </span>
                         <span className="flex items-center gap-1">
-                          <DollarSign className="w-4 h-4" />
-                          {job.jobType === 'internship' ? formatStipend(job.salary) : formatSalary(job.salary)}
+                          <IndianRupee className="w-4 h-4" />
+                          {formatSalary(job.salary)}
                         </span>
                         {job.jobType === 'internship' && job.duration && (
                           <span className="flex items-center gap-1">
