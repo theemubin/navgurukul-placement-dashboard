@@ -16,11 +16,14 @@ const Navbar = ({ onMenuClick }) => {
   const notifRef = useRef(null);
 
   useEffect(() => {
-    fetchNotifications();
-    fetchUnreadCount();
-    if (user?.role === 'coordinator') {
-      fetchForumCount();
-    }
+    const initNavbar = async () => {
+      await fetchNotifications();
+      if (user?.role === 'coordinator') {
+        await fetchForumCount();
+      }
+    };
+    initNavbar();
+
     const interval = setInterval(() => {
       fetchUnreadCount();
       if (user?.role === 'coordinator') fetchForumCount();

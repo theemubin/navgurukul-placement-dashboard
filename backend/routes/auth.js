@@ -218,7 +218,7 @@ router.post('/approve-user', auth, async (req, res) => {
     // Create notification for approved user
     const Notification = require('../models/Notification');
     await Notification.create({
-      user: user._id,
+      recipient: user._id,
       type: 'account_approved',
       title: 'Account Approved',
       message: `Your account has been approved with ${user.role} role. You can now access the platform.`,

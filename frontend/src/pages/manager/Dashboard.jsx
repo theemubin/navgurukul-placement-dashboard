@@ -42,10 +42,17 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchStats();
-    fetchCoordinatorStats();
-    fetchPendingCount();
-    fetchCampusRows();
+    const loadDashboardData = async () => {
+      try {
+        await fetchStats();
+        await fetchCoordinatorStats();
+        await fetchPendingCount();
+        await fetchCampusRows();
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+      }
+    };
+    loadDashboardData();
   }, [dateRange]);
 
   const fetchCampusRows = async () => {
@@ -466,8 +473,8 @@ const Dashboard = () => {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-1 rounded-full text-sm ${coord.conversionRate >= 20 ? 'bg-green-100 text-green-700' :
-                        coord.conversionRate >= 10 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-gray-100 text-gray-600'
+                      coord.conversionRate >= 10 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-600'
                       }`}>
                       {coord.conversionRate}%
                     </span>

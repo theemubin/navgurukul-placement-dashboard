@@ -82,7 +82,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 
         if (manager) {
           await Notification.create({
-            user: manager._id,
+            recipient: manager._id,
             type: 'user_approval_required',
             title: 'New User Registration Requires Approval',
             message: `${firstName} ${lastName} (${email}) has registered and needs role approval.`,
