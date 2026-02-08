@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { statsAPI } from '../../services/api';
 import { LoadingSpinner } from '../../components/common/UIComponents';
-import { 
-  BarChart3, TrendingUp, TrendingDown, Download, 
+import {
+  BarChart3, TrendingUp, TrendingDown, Download,
   Users, Briefcase, Building2, Award, Calendar
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -20,8 +20,8 @@ const Reports = () => {
   const fetchReportData = async () => {
     try {
       setLoading(true);
-      const response = await statsAPI.getDashboardStats();
-      setReportData(response.data);
+      const response = await statsAPI.getReports({ dateRange });
+      setReportData(response.data.data);
     } catch (error) {
       toast.error('Error fetching report data');
     } finally {
@@ -30,26 +30,18 @@ const Reports = () => {
   };
 
   const exportReport = (format) => {
-    toast.success(`Generating ${reportType} report as ${format.toUpperCase()}...`);
+    if (format === 'pdf') {
+      window.print();
+    } else if (format === 'excel') {
+      window.open(`${import.meta.env.VITE_API_URL}/stats/export?type=placements&token=${localStorage.getItem('token')}`, '_blank');
+    } else {
+      toast.success(`Generating ${reportType} report as ${format.toUpperCase()}...`);
+    }
   };
 
-  // Mock monthly data for charts
-  const monthlyData = [
-    { month: 'Jan', applications: 45, placements: 12 },
-    { month: 'Feb', applications: 52, placements: 15 },
-    { month: 'Mar', applications: 78, placements: 22 },
-    { month: 'Apr', applications: 65, placements: 18 },
-    { month: 'May', applications: 89, placements: 28 },
-    { month: 'Jun', applications: 95, placements: 32 },
-    { month: 'Jul', applications: 72, placements: 20 },
-    { month: 'Aug', applications: 68, placements: 19 },
-    { month: 'Sep', applications: 110, placements: 35 },
-    { month: 'Oct', applications: 125, placements: 42 },
-    { month: 'Nov', applications: 98, placements: 30 },
-    { month: 'Dec', applications: 82, placements: 25 }
-  ];
-
-  const maxValue = Math.max(...monthlyData.map(d => d.applications));
+  // Use real data or fallback to empty array
+  const monthlyData = reportData?.monthlyTrend || [];
+  const maxValue = Math.max(...monthlyData.map(d => Math.max(d.applications || 0, d.placements || 0)), 10);
 
   if (loading) {
     return (
@@ -88,14 +80,14 @@ const Reports = () => {
             <option value="all">All Time</option>
           </select>
           <div className="flex gap-2">
-            <button 
+            <button
               onClick={() => exportReport('pdf')}
               className="btn btn-secondary flex items-center gap-2"
             >
               <Download className="w-4 h-4" />
               PDF
             </button>
-            <button 
+            <button
               onClick={() => exportReport('excel')}
               className="btn btn-primary flex items-center gap-2"
             >
@@ -107,58 +99,58 @@ const Reports = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card bg-gradient-to-br from-primary-500 to-primary-600 text-white">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:grid-cols-4">
+        <div className="card bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-lg">
           <div className="flex items-center gap-3">
             <Users className="w-8 h-8 opacity-80" />
             <div>
               <p className="text-2xl font-bold">{reportData?.totalStudents || 0}</p>
-              <p className="text-sm opacity-80">Total Students</p>
+              <p className="text-sm opacity-80 uppercase tracking-wider font-semibold">Total Students</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-1 text-sm">
+          <div className="mt-3 flex items-center gap-1 text-sm border-t border-white/20 pt-2">
             <TrendingUp className="w-4 h-4" />
             <span>+12% from last year</span>
           </div>
         </div>
 
-        <div className="card bg-gradient-to-br from-secondary-500 to-secondary-600 text-white">
+        <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg">
           <div className="flex items-center gap-3">
             <Award className="w-8 h-8 opacity-80" />
             <div>
               <p className="text-2xl font-bold">{reportData?.placedStudents || 0}</p>
-              <p className="text-sm opacity-80">Placements</p>
+              <p className="text-sm opacity-80 uppercase tracking-wider font-semibold">Placements</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-1 text-sm">
+          <div className="mt-3 flex items-center gap-1 text-sm border-t border-white/20 pt-2">
             <TrendingUp className="w-4 h-4" />
             <span>+8% from last year</span>
           </div>
         </div>
 
-        <div className="card bg-gradient-to-br from-accent-500 to-accent-600 text-white">
+        <div className="card bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-lg">
           <div className="flex items-center gap-3">
             <Briefcase className="w-8 h-8 opacity-80" />
             <div>
               <p className="text-2xl font-bold">{reportData?.totalJobs || 0}</p>
-              <p className="text-sm opacity-80">Job Postings</p>
+              <p className="text-sm opacity-80 uppercase tracking-wider font-semibold">Job Postings</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-1 text-sm">
+          <div className="mt-3 flex items-center gap-1 text-sm border-t border-white/20 pt-2">
             <TrendingUp className="w-4 h-4" />
             <span>+15% from last year</span>
           </div>
         </div>
 
-        <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
+        <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white shadow-lg">
           <div className="flex items-center gap-3">
             <Building2 className="w-8 h-8 opacity-80" />
             <div>
-              <p className="text-2xl font-bold">{reportData?.topCompanies?.length || 0}</p>
-              <p className="text-sm opacity-80">Companies</p>
+              <p className="text-2xl font-bold">{reportData?.totalCompaniesCount || 0}</p>
+              <p className="text-sm opacity-80 uppercase tracking-wider font-semibold">Companies</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-1 text-sm">
+          <div className="mt-3 flex items-center gap-1 text-sm border-t border-white/20 pt-2">
             <TrendingUp className="w-4 h-4" />
             <span>+5 new this year</span>
           </div>
@@ -176,15 +168,15 @@ const Reports = () => {
           <div className="h-64 flex items-end gap-2">
             {monthlyData.map((data, index) => (
               <div key={index} className="flex-1 flex flex-col items-center gap-1">
-                <div className="w-full flex flex-col gap-1">
-                  <div 
-                    className="w-full bg-primary-500 rounded-t transition-all duration-500"
-                    style={{ height: `${(data.applications / maxValue) * 180}px` }}
+                <div className="w-full flex items-end gap-0.5 h-full">
+                  <div
+                    className="flex-1 bg-primary-500 rounded-t transition-all duration-500"
+                    style={{ height: `${(data.applications / maxValue) * 100}%` }}
                     title={`Applications: ${data.applications}`}
                   />
-                  <div 
-                    className="w-full bg-green-500 rounded-t transition-all duration-500"
-                    style={{ height: `${(data.placements / maxValue) * 180}px` }}
+                  <div
+                    className="flex-1 bg-green-500 rounded-t transition-all duration-500"
+                    style={{ height: `${(data.placements / maxValue) * 100}%` }}
                     title={`Placements: ${data.placements}`}
                   />
                 </div>
@@ -211,29 +203,25 @@ const Reports = () => {
             Placement Rate by School
           </h2>
           <div className="space-y-4">
-            {[
-              { school: 'School of Programming', rate: 92, students: 120 },
-              { school: 'School of Business', rate: 85, students: 65 },
-              { school: 'School of Finance', rate: 78, students: 40 },
-              { school: 'School of Education', rate: 72, students: 35 },
-              { school: 'School of Second Chance', rate: 65, students: 25 }
-            ].map((item, index) => (
+            {(reportData?.schoolPerformance || []).map((item, index) => (
               <div key={index}>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="font-medium">{item.school}</span>
+                  <span className="font-medium">{item.school || 'Unknown School'}</span>
                   <span className="text-gray-500">{item.rate}% ({item.students} students)</span>
                 </div>
                 <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-1000 ${
-                      item.rate >= 80 ? 'bg-green-500' :
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ${item.rate >= 80 ? 'bg-green-500' :
                       item.rate >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
+                      }`}
                     style={{ width: `${item.rate}%` }}
                   />
                 </div>
               </div>
             ))}
+            {(!reportData?.schoolPerformance || reportData.schoolPerformance.length === 0) && (
+              <p className="text-sm text-gray-500 text-center py-4">No data available</p>
+            )}
           </div>
         </div>
       </div>
@@ -254,20 +242,13 @@ const Reports = () => {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {[
-                  { name: 'Google', hires: 15, package: '25 LPA' },
-                  { name: 'Microsoft', hires: 12, package: '22 LPA' },
-                  { name: 'Amazon', hires: 18, package: '20 LPA' },
-                  { name: 'Infosys', hires: 45, package: '6 LPA' },
-                  { name: 'TCS', hires: 60, package: '5 LPA' }
-                ].map((company, index) => (
+                {(reportData?.topCompanies || []).map((company, index) => (
                   <tr key={index} className="hover:bg-gray-50">
                     <td className="px-3 py-2">
-                      <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold ${
-                        index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                      <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' :
                         index === 1 ? 'bg-gray-100 text-gray-700' :
-                        index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-50 text-gray-600'
-                      }`}>
+                          index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-50 text-gray-600'
+                        }`}>
                         {index + 1}
                       </span>
                     </td>
@@ -295,12 +276,7 @@ const Reports = () => {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {(reportData?.campusStats || [
-                  { name: 'Main Campus', students: 500, placements: 420 },
-                  { name: 'North Campus', students: 300, placements: 240 },
-                  { name: 'South Campus', students: 250, placements: 180 },
-                  { name: 'East Campus', students: 200, placements: 150 }
-                ]).map((campus, index) => {
+                {(reportData?.campusStats || []).map((campus, index) => {
                   const rate = campus.students > 0 ? Math.round((campus.placements / campus.students) * 100) : 0;
                   return (
                     <tr key={index} className="hover:bg-gray-50">
@@ -308,10 +284,9 @@ const Reports = () => {
                       <td className="px-3 py-2">{campus.students}</td>
                       <td className="px-3 py-2">{campus.placements}</td>
                       <td className="px-3 py-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          rate >= 80 ? 'bg-green-100 text-green-700' :
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${rate >= 80 ? 'bg-green-100 text-green-700' :
                           rate >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                        }`}>
+                          }`}>
                           {rate}%
                         </span>
                       </td>
@@ -332,12 +307,12 @@ const Reports = () => {
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {[
-            { label: 'Highest Package', value: '45 LPA', color: 'text-green-600' },
-            { label: 'Average Package', value: '12 LPA', color: 'text-blue-600' },
-            { label: 'Lowest Package', value: '4 LPA', color: 'text-gray-600' },
-            { label: 'Total Offers', value: '450', color: 'text-purple-600' },
-            { label: 'Pre-Placement Offers', value: '35', color: 'text-orange-600' },
-            { label: 'Dream Companies', value: '12', color: 'text-primary-600' }
+            { label: 'Highest Package', value: reportData?.quickStats?.highestPackage || 'N/A', color: 'text-green-600' },
+            { label: 'Average Package', value: reportData?.quickStats?.averagePackage || 'N/A', color: 'text-blue-600' },
+            { label: 'Lowest Package', value: reportData?.quickStats?.lowestPackage || 'N/A', color: 'text-gray-600' },
+            { label: 'Total Offers', value: reportData?.quickStats?.totalOffers || '0', color: 'text-purple-600' },
+            { label: 'PPO Offers', value: reportData?.quickStats?.ppoOffers || '0', color: 'text-orange-600' },
+            { label: 'Dream Companies', value: reportData?.quickStats?.dreamCompanies || '0', color: 'text-primary-600' }
           ].map((stat, index) => (
             <div key={index} className="text-center p-4 bg-gray-50 rounded-lg">
               <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>

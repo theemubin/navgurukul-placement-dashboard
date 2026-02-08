@@ -92,25 +92,30 @@ class DiscordService {
 
             const settings = await Settings.getSettings();
 
-            // Priority: Campus-specific channel (if job is for a single campus and it has a channel)
-            let channelId = settings.discordConfig?.channels?.jobPostings;
+            // Priority: Campus-specific channel (if job is for a single campus)
+            let channelId = null;
 
             if (job.eligibility?.campuses?.length === 1) {
                 const campus = job.eligibility.campuses[0];
                 if (campus.discordChannelId) {
                     channelId = campus.discordChannelId;
                     console.log(`Using campus-specific channel ${channelId} for job posting`);
+                } else {
+                    console.log(`Job is for single campus but no campus Discord channel configured. Skipping notification.`);
+                    return null;
                 }
+            } else {
+                channelId = settings.discordConfig?.channels?.jobPostings;
             }
 
             if (!channelId) {
-                console.log('Job postings channel not configured');
+                console.log('Target channel not configured for job posting');
                 return null;
             }
 
             const channel = await this.client.channels.fetch(channelId);
             if (!channel) {
-                throw new Error('Job postings channel not found');
+                throw new Error('Target channel for job posting not found');
             }
 
             // Create embed
@@ -181,16 +186,15 @@ class DiscordService {
             }
 
             if (!channel) {
-                // Priority: Campus-specific channel
+                // Priority: Campus-specific channel (Mandatory for campus-specific updates)
                 let channelId = null;
                 if (student.campus?.discordChannelId) {
                     channelId = student.campus.discordChannelId;
                     console.log(`Using campus-specific channel ${channelId} for application update`);
                 } else {
-                    channelId = settings.discordConfig?.channels?.applicationUpdates;
+                    console.log(`Application update for student with no campus Discord channel. Skipping notification to avoid global posting.`);
+                    return null;
                 }
-
-                if (!channelId) return null;
 
                 channel = await this.client.channels.fetch(channelId);
                 if (!channel) throw new Error('Application updates channel not found');
@@ -265,15 +269,14 @@ class DiscordService {
             const settings = await Settings.getSettings();
 
 
-            // Prioritize Campus specific channel
+            // Prioritize Campus specific channel (Mandatory)
             let channelId = null;
             if (student.campus?.discordChannelId) {
                 channelId = student.campus.discordChannelId;
             } else {
-                channelId = settings.discordConfig?.channels?.profileUpdates;
+                console.log(`Profile update for student with no campus Discord channel. Skipping notification.`);
+                return null;
             }
-
-            if (!channelId) return null;
 
             const channel = await this.client.channels.fetch(channelId);
             if (!channel) throw new Error('Profile updates channel not found');
@@ -545,14 +548,13 @@ class DiscordService {
             const settings = await Settings.getSettings();
             let channelId = null;
 
-            // Prioritize campus-specific channel
+            // Prioritize campus-specific channel (Mandatory for self-applications)
             if (student.campus?.discordChannelId) {
                 channelId = student.campus.discordChannelId;
             } else {
-                channelId = settings.discordConfig?.channels?.applicationUpdates;
+                console.log(`Self-application for student with no campus Discord channel. Skipping notification.`);
+                return null;
             }
-
-            if (!channelId) return null;
 
             const channel = await this.client.channels.fetch(channelId);
             if (!channel) throw new Error('Channel not found');
@@ -612,8 +614,11 @@ class DiscordService {
             }
 
             if (!channel) {
-                let channelId = student.campus?.discordChannelId || settings.discordConfig?.channels?.applicationUpdates;
-                if (!channelId) return null;
+                let channelId = student.campus?.discordChannelId;
+                if (!channelId) {
+                    console.log('No campus channel for self-app update, skipping');
+                    return null;
+                }
                 channel = await this.client.channels.fetch(channelId);
             }
 

@@ -140,8 +140,13 @@ const Dashboard = () => {
   };
 
   const exportData = (format) => {
-    toast.success(`Exporting data as ${format.toUpperCase()}...`);
-    // In real implementation, call API to generate export
+    if (format === 'pdf') {
+      window.print();
+    } else if (format === 'excel' || format === 'csv') {
+      window.open(`${import.meta.env.VITE_API_URL}/stats/export?type=placements&token=${localStorage.getItem('token')}`, '_blank');
+    } else {
+      toast.success(`Exporting data as ${format.toUpperCase()}...`);
+    }
   };
 
   if (loading) {
@@ -179,10 +184,20 @@ const Dashboard = () => {
             <option value="month">This Month</option>
             <option value="week">This Week</option>
           </select>
-          <div className="relative">
-            <button className="btn btn-secondary flex items-center gap-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => exportData('pdf')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
               <Download className="w-4 h-4" />
-              Export
+              PDF
+            </button>
+            <button
+              onClick={() => exportData('excel')}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Excel
             </button>
           </div>
         </div>

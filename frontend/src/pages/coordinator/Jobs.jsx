@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { jobAPI, settingsAPI, applicationAPI, userAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, ConfirmModal } from '../../components/common/UIComponents';
-import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import JobsKanban from './JobsKanban';
@@ -398,6 +398,23 @@ const CoordinatorJobs = () => {
 
   const [modalNewStatus, setModalNewStatus] = useState(null);
 
+  const handleCopyLink = (jobId) => {
+    const baseUrl = window.location.origin;
+    const shareUrl = `${baseUrl}/student/jobs/${jobId}`;
+    navigator.clipboard.writeText(shareUrl);
+    toast.success('Shareable student link copied to clipboard!');
+  };
+
+  const handleBroadcast = async (jobId) => {
+    try {
+      await jobAPI.broadcastJob(jobId);
+      toast.success('Job broadcasted to Discord!');
+    } catch (err) {
+      toast.error('Failed to broadcast job');
+      console.error(err);
+    }
+  };
+
   const handleStatusChange = async (jobId, newStatus) => {
     // statuses that should trigger applicant review modal
     const reviewStatuses = ['hr_shortlisting', 'interviewing', 'application_stage'];
@@ -733,6 +750,20 @@ const CoordinatorJobs = () => {
                             ))}
                           </select>
                           <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleCopyLink(job._id)}
+                              className="job-action-btn bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                              title="Copy Shareable Link"
+                            >
+                              <Share2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleBroadcast(job._id)}
+                              className="job-action-btn bg-purple-50 text-purple-600 hover:bg-purple-100"
+                              title="Broadcast to Discord"
+                            >
+                              <Sparkles className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => openExportModal(job._id, job.title)}
                               className="job-action-btn bg-green-50 text-green-600 hover:bg-green-100"

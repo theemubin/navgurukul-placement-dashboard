@@ -12,7 +12,7 @@ class DiscordMessageTemplates {
         return new EmbedBuilder()
             .setColor('#3b82f6') // Blue
             .setTitle(`🆕 New Job Opportunity: ${job.title}`)
-            .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/jobs/${job._id}`)
+            .setURL(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/student/jobs/${job._id}`)
             .setDescription(job.description.substring(0, 300) + (job.description.length > 300 ? '...' : ''))
             .addFields(
                 { name: '🏢 Company', value: job.company.name, inline: true },

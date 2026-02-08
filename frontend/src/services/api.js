@@ -176,6 +176,7 @@ export const jobAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+  parseJDFromText: (text) => api.post('/jobs/parse-jd', { text }),
   // Interest requests (for <60% match students)
   submitInterest: (jobId, data) => api.post(`/jobs/${jobId}/interest`, data),
   getInterestRequests: (jobId, params) => api.get(`/jobs/${jobId}/interest-requests`, { params }),
@@ -191,6 +192,7 @@ export const jobAPI = {
   updateExpectedDate: (jobId, expectedUpdateDate, expectedUpdateNote) => api.patch(`/jobs/${jobId}/expected-update`, { expectedUpdateDate, expectedUpdateNote }),
   // Coordinator assignment
   assignCoordinator: (jobId, coordinatorId) => api.patch(`/jobs/${jobId}/coordinator`, { coordinatorId }),
+  broadcastJob: (jobId) => api.post(`/jobs/${jobId}/broadcast`),
   bulkUpdate: (jobId, data) => api.post(`/jobs/${jobId}/bulk-update`, data),
   getCoordinatorJobStats: () => api.get('/jobs/stats/coordinator-jobs')
 };
@@ -243,6 +245,7 @@ export const notificationAPI = {
 export const statsAPI = {
   getDashboard: (params) => api.get('/stats/dashboard', { params }),
   getDashboardStats: (params) => api.get('/stats/dashboard', { params }), // Alias for Manager Dashboard
+  getReports: (params) => api.get('/stats/reports', { params }),
   getCampusStats: () => api.get('/stats/campus'),
   getStudentStats: () => api.get('/stats/student'),
   getCampusPocStats: (status) => api.get('/stats/campus-poc', { params: { status } }),

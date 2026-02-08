@@ -66,3 +66,49 @@ The system uses Discord Threads to keep updates organized.
 ## 7. User Linking
 *   **Students/Coordinators**: Go to **Profile** settings. enter your **Discord User ID** (Right-click your profile in Discord -> Copy User ID).
 *   This allows the bot to `mention` (@User) you when sending specific updates.
+
+## 8. Notification Rules & Content
+Below is the definitive logic for which activities trigger notifications and what information is shared.
+
+### A. Job Postings
+*   **Trigger**: When a coordinator creates or activates a job posting.
+*   **Channel**: Global `Job Postings` channel.
+*   **Campus Routing**: If the job is assigned to EXACTLY one campus, it will be sent to that campus's specific channel instead.
+*   **Information Shared**:
+    *   Job Title & Role
+    *   Company Name & Logo
+    *   Location & Job Type (Full-time, Internship, etc.)
+    *   Salary Range (Rupees)
+    *   Application Deadline
+    *   Quick link to apply on the dashboard.
+*   **Threading**: A management thread is automatically created for every job posting (if enabled).
+
+### B. Application Status Updates
+*   **Trigger**: When a coordinator changes a student's status (e.g., Shortlisted, Selected, Rejected).
+*   **Channel**: Current `Job Thread` (if exists) or the `Updates Channel`.
+*   **Campus Routing**: Preference is given to the student's campus-specific channel.
+*   **Information Shared**:
+    *   Student Name
+    *   Job Role & Company
+    *   New Status (with color-coded icons)
+    *   Coordinator's Name who made the change
+    *   Feedback/Comments (if provided)
+*   **Mentions**: If the student has linked their Discord ID, they will be `@mentioned`.
+
+### C. Profile & Verification
+*   **Trigger**: When a manager approves a profile, marks it for revision, or when a student submits their profile.
+*   **Channel**: `Profiles Channel` or Campus-specific channel.
+*   **Information Shared**:
+    *   Student Name & Photo
+    *   Target Batch/Year
+    *   Action taken (Approved/Revision Needed)
+    *   Revision Notes (visible only in the notification)
+*   **Mentions**: Direct `@mention` to the student for faster correction.
+
+### D. Bulk Actions
+*   **Trigger**: When a coordinator updates multiple students (e.g., "Shortlist all from Round 1").
+*   **Channel**: Current `Job Thread`.
+*   **Information Shared**:
+    *   Total count of affected students
+    *   The specific action performed
+    *   List of student names (mentions are limited to 10 for readability).

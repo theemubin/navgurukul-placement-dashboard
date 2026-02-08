@@ -1,24 +1,38 @@
-// Stats Card Component
-export const StatsCard = ({ icon: Icon, label, value, subValue, color = 'primary' }) => {
+export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = 'primary', trend }) => {
   const colorClasses = {
-    primary: 'bg-primary-100 text-primary-600',
+    primary: 'bg-blue-100 text-blue-600',
+    secondary: 'bg-purple-100 text-purple-600',
+    success: 'bg-green-100 text-green-600',
     green: 'bg-green-100 text-green-600',
     yellow: 'bg-yellow-100 text-yellow-600',
+    amber: 'bg-amber-100 text-amber-600',
     red: 'bg-red-100 text-red-600',
     purple: 'bg-purple-100 text-purple-600',
-    blue: 'bg-blue-100 text-blue-600'
+    blue: 'bg-blue-100 text-blue-600',
+    teal: 'bg-teal-100 text-teal-600',
+    accent: 'bg-indigo-100 text-indigo-600',
+    indigo: 'bg-indigo-100 text-indigo-600'
   };
 
+  const displayLabel = title || label;
+
   return (
-    <div className="card">
+    <div className="card hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{displayLabel}</p>
+          <div className="flex items-baseline gap-2 mt-2">
+            <p className="text-2xl font-bold text-gray-900">{value}</p>
+            {trend && (
+              <span className={`text-xs font-bold flex items-center gap-0.5 ${trend.isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                {trend.isPositive ? '↑' : '↓'}{Math.abs(trend.value)}%
+              </span>
+            )}
+          </div>
           {subValue && <p className="text-sm text-gray-500 mt-1">{subValue}</p>}
         </div>
         {Icon && (
-          <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
+          <div className={`p-3 rounded-xl ${colorClasses[color] || colorClasses.primary} flex-shrink-0`}>
             <Icon className="w-6 h-6" />
           </div>
         )}
@@ -207,13 +221,12 @@ export const Pagination = ({ current, total, onPageChange }) => {
           key={index}
           onClick={() => typeof page === 'number' && onPageChange(page)}
           disabled={page === '...'}
-          className={`px-3 py-1 rounded ${
-            page === current 
-              ? 'bg-primary-600 text-white' 
-              : page === '...' 
-                ? 'cursor-default' 
+          className={`px-3 py-1 rounded ${page === current
+              ? 'bg-primary-600 text-white'
+              : page === '...'
+                ? 'cursor-default'
                 : 'border hover:bg-gray-100'
-          }`}
+            }`}
         >
           {page}
         </button>
@@ -245,8 +258,8 @@ export const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
       <div className={`bg-white rounded-lg w-full ${sizeClasses[size]} animate-fadeIn max-h-[90vh] overflow-y-auto`}>
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold">{title}</h3>
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="p-1 hover:bg-gray-100 rounded-full transition"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -275,8 +288,8 @@ export const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, conf
           <button onClick={onClose} className="btn btn-secondary">
             Cancel
           </button>
-          <button 
-            onClick={onConfirm} 
+          <button
+            onClick={onConfirm}
             className={`btn ${type === 'danger' ? 'bg-red-600 hover:bg-red-700 text-white' : 'btn-primary'}`}
           >
             {confirmLabel}
@@ -300,8 +313,8 @@ export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, conf
           <button onClick={onCancel} className="btn btn-secondary">
             {cancelText}
           </button>
-          <button 
-            onClick={onConfirm} 
+          <button
+            onClick={onConfirm}
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
           >
             {confirmText}

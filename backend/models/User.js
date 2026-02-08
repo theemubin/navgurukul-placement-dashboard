@@ -127,8 +127,21 @@ const userSchema = new mongoose.Schema({
     },
     currentStatus: {
       type: String,
-      enum: ['Active', 'Placed', 'Dropout', 'Internship Paid', 'Internship UnPaid', 'Paid Project'],
+      enum: ['Active', 'In active', 'Long Leave', 'Dropout', 'Placed'],
       default: 'Active'
+    },
+    isPaidProject: {
+      type: Boolean,
+      default: false
+    },
+    onInternship: {
+      type: Boolean,
+      default: false
+    },
+    internshipType: {
+      type: String,
+      enum: ['', 'Paid', 'Unpaid'],
+      default: ''
     },
     revisionNotes: String,
     approvedBy: {

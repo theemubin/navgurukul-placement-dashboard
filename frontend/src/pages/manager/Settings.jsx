@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { settingsAPI, placementCycleAPI, campusAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert } from '../../components/common/UIComponents';
 import toast from 'react-hot-toast';
-import { Plus, MessageSquare, Edit, Save, X } from 'lucide-react';
+import { Plus, MessageSquare, Edit, Save, X, BookOpen, Globe, Building2, ExternalLink, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Settings = () => {
@@ -12,6 +12,7 @@ const Settings = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [activeCategory, setActiveCategory] = useState('curriculum');
   const [activeTab, setActiveTab] = useState('modules');
 
   // Campus Edit State
@@ -57,7 +58,11 @@ const Settings = () => {
   // New Dynamic Lists states
   const [newLocation, setNewLocation] = useState('');
   const [editingRubric, setEditingRubric] = useState({}); // Stores local edits before save
+  const [selectedRegistryDegree, setSelectedRegistryDegree] = useState(null);
   const [companyFilters, setCompanyFilters] = useState({ search: '' });
+  const [selectedCompany, setSelectedCompany] = useState(null);
+  const [isAddingCompany, setIsAddingCompany] = useState(false);
+  const [newCompany, setNewCompany] = useState({ name: '', website: '', description: '', logo: '' });
 
   useEffect(() => {
     fetchSettings();
@@ -68,7 +73,33 @@ const Settings = () => {
     fetchEducationAnalytics();
   }, []);
 
+  useEffect(() => {
+    if (settings?.degreeOptions?.length > 0 && !selectedRegistryDegree) {
+      setSelectedRegistryDegree(settings.degreeOptions[0]);
+    }
+  }, [settings?.degreeOptions]);
+
   const [aiStatus, setAiStatus] = useState(null);  // runtime status (working/quota/etc)
+
+  const handleAddCompany = async () => {
+    if (!newCompany.name.trim()) {
+      toast.error('Company name is required');
+      return;
+    }
+
+    try {
+      const response = await settingsAPI.addCompanyOption(newCompany);
+      if (response.data.success) {
+        setSettings({ ...settings, masterCompanies: response.data.data });
+        setNewCompany({ name: '', website: '', description: '', logo: '' });
+        setIsAddingCompany(false);
+        toast.success('Company added to registry');
+      }
+    } catch (err) {
+      toast.error('Failed to add company');
+      console.error(err);
+    }
+  };
 
   const fetchAiConfig = async () => {
     try {
@@ -315,14 +346,19 @@ node scripts/promote_normalized_index_unique.js`;
   };
 
   const removeDegree = (degree) => {
-    const higherEdu = { ...(settings.higherEducationOptions || {}) };
-    delete higherEdu[degree];
+    const updatedOptions = settings.degreeOptions.filter(d => d !== degree);
+    const updatedHigherEd = { ...settings.higherEducationOptions };
+    delete updatedHigherEd[degree];
 
     setSettings({
       ...settings,
-      degreeOptions: (settings.degreeOptions || []).filter(d => d !== degree),
-      higherEducationOptions: higherEdu
+      degreeOptions: updatedOptions,
+      higherEducationOptions: updatedHigherEd
     });
+
+    if (selectedRegistryDegree === degree) {
+      setSelectedRegistryDegree(updatedOptions.length > 0 ? updatedOptions[0] : null);
+    }
   };
 
   const addSpecialization = (degree) => {
@@ -444,23 +480,19 @@ node scripts/promote_normalized_index_unique.js`;
     }
   }, [settings]);
 
-  const tabs = [
-    { id: 'modules', label: 'School Modules', icon: '📚' },
-    { id: 'roleCategories', label: 'Role Categories', icon: '🏷️' },
-    { id: 'roles', label: 'Role Preferences', icon: '💼' },
-    { id: 'skills', label: 'Technical Skills', icon: '🔧' },
-    { id: 'degrees', label: 'Departments', icon: '🎓' },
-    { id: 'institutions', label: 'Institutions', icon: '🏛️' },
-    { id: 'analytics', label: 'Education Analytics', icon: '📊' },
-    { id: 'softskills', label: 'Soft Skills', icon: '🤝' },
-    { id: 'rubrics', label: 'Proficiency Rubrics', icon: '💎' },
-    { id: 'locations', label: 'Locations', icon: '📍' },
-    { id: 'companies', label: 'Company Registry', icon: '🏢' },
-    { id: 'cycles', label: 'Placement Cycles', icon: '📅' },
-    { id: 'campuses', label: 'Campuses', icon: '🏫' },
-    { id: 'ai', label: 'AI Integration', icon: '🤖' },
-    { id: 'discord', label: 'Discord Integration', icon: <MessageSquare className="w-4 h-4" /> }
+  const categories = [
+    { id: 'curriculum', label: 'Curriculum & Schools', icon: '🎓', description: 'Modules, Soft Skills, Stats' },
+    { id: 'career', label: 'Career & Skills', icon: '💼', description: 'Roles, Skills, Rubrics' },
+    { id: 'directory', label: 'Registry & Data', icon: '🏛️', description: 'Degrees, Colleges, Cities' },
+    { id: 'platform', label: 'Settings & AI', icon: '⚙️', description: 'AI, Discord, Campuses' }
   ];
+
+  const categoryTabMap = {
+    curriculum: ['modules', 'softskills', 'analytics'],
+    career: ['roleCategories', 'roles', 'skills', 'rubrics'],
+    directory: ['degrees', 'institutions', 'locations', 'companies'],
+    platform: ['campuses', 'cycles', 'ai', 'discord']
+  };
 
   if (loading) {
     return (
@@ -523,20 +555,26 @@ node scripts/promote_normalized_index_unique.js`;
         </Card>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="flex space-x-8">
-          {tabs.map((tab) => (
+      {/* Categories */}
+      <div className="border-b border-gray-100 mb-8 bg-white z-10 -mx-6 px-6 sticky top-0 backdrop-blur-md bg-white/90">
+        <nav className="flex space-x-2 py-2">
+          {categories.map((cat) => (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${activeTab === tab.id
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={`flex flex-col items-start py-3 px-5 rounded-xl transition-all duration-300 ${activeCategory === cat.id
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-100 transform -translate-y-0.5'
+                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                 }`}
             >
-              <span className="mr-2">{tab.icon}</span>
-              {tab.label}
+              <div className="flex items-center space-x-2">
+                <span className="text-xl">{cat.icon}</span>
+                <span className="font-bold text-sm whitespace-nowrap">{cat.label}</span>
+              </div>
+              <span className={`text-[10px] mt-0.5 font-medium uppercase tracking-wider ${activeCategory === cat.id ? 'text-blue-100' : 'text-gray-400'
+                }`}>
+                {cat.description}
+              </span>
             </button>
           ))}
         </nav>
@@ -563,1232 +601,842 @@ node scripts/promote_normalized_index_unique.js`;
         </div>
       )}
 
-      {/* School Modules Tab */}
-      {activeTab === 'modules' && (
-        <div className="space-y-6">
-          <p className="text-gray-600">
-            Manage the modules/phases for each Navgurukul school. The order of modules represents the learning progression.
-          </p>
-
-          {schools.map((school) => (
-            <Card key={school} className="overflow-hidden">
-              <div
-                className="flex items-center justify-between cursor-pointer"
-                onClick={() => setEditingSchool(editingSchool === school ? null : school)}
-              >
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-semibold text-gray-900">{school}</h3>
-                    <Badge variant={settings.inactiveSchools?.includes(school) ? 'danger' : 'success'}>
-                      {settings.inactiveSchools?.includes(school) ? 'Inactive' : 'Active'}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    {settings.schoolModules?.[school]?.length || 0} modules
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const isInactive = settings.inactiveSchools?.includes(school);
-                      const updatedInactive = isInactive
-                        ? settings.inactiveSchools.filter(s => s !== school)
-                        : [...(settings.inactiveSchools || []), school];
-                      setSettings({ ...settings, inactiveSchools: updatedInactive });
-                    }}
-                  >
-                    {settings.inactiveSchools?.includes(school) ? 'Activate' : 'Deactivate'}
-                  </Button>
-                  <svg
-                    className={`w-5 h-5 transform transition-transform ${editingSchool === school ? 'rotate-180' : ''}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-
-              {editingSchool === school && (
-                <div className="mt-4 pt-4 border-t">
-                  {/* Add new module */}
-                  <div className="flex gap-2 mb-4">
-                    <input
-                      type="text"
-                      value={newModule}
-                      onChange={(e) => setNewModule(e.target.value)}
-                      placeholder="Add new module..."
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      onKeyPress={(e) => e.key === 'Enter' && addModule(school)}
-                    />
-                    <Button variant="primary" onClick={() => addModule(school)}>
-                      Add
-                    </Button>
-                  </div>
-
-                  {/* Module list */}
-                  <div className="space-y-2">
-                    {(settings.schoolModules?.[school] || []).map((module, index) => (
-                      <div
-                        key={module}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                      >
-                        <div className="flex items-center">
-                          <span className="text-gray-400 mr-3 font-mono text-sm">{index + 1}.</span>
-                          <span className="text-gray-900">{module}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => moveModule(school, index, 'up')}
-                            disabled={index === 0}
-                            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => moveModule(school, index, 'down')}
-                            disabled={index === settings.schoolModules[school].length - 1}
-                            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => removeModule(school, module)}
-                            className="p-1 text-red-400 hover:text-red-600 ml-2"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {(!settings.schoolModules?.[school] || settings.schoolModules[school].length === 0) && (
-                      <p className="text-gray-500 text-center py-4">No modules added yet</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Role Categories Tab */}
-      {activeTab === 'roleCategories' && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Job Role Categories</h3>
-          <p className="text-gray-600 mb-4">
-            These categories are used to classify job and internship postings for better student filtering.
-          </p>
-
-          {/* Add new category */}
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newRoleCategory}
-              onChange={(e) => setNewRoleCategory(e.target.value)}
-              placeholder="Add new role category (e.g. Full Stack Developer)..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              onKeyPress={(e) => e.key === 'Enter' && addRoleCategory()}
-            />
-            <Button variant="primary" onClick={addRoleCategory}>
-              Add Category
-            </Button>
-          </div>
-
-          {/* Category list */}
-          <div className="flex flex-wrap gap-2">
-            {settings.roleCategories?.map((category) => (
-              <span
-                key={category}
-                className="inline-flex items-center px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-full text-sm"
-              >
-                {category}
-                <button
-                  onClick={() => removeRoleCategory(category)}
-                  className="ml-2 text-indigo-600 hover:text-indigo-800"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </span>
-            ))}
-          </div>
-
-          {(!settings.roleCategories || settings.roleCategories.length === 0) && (
-            <p className="text-gray-500 text-center py-4">No role categories added yet</p>
-          )}
-        </Card>
-      )}
-
-      {/* Role Preferences Tab */}
-      {activeTab === 'roles' && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Placement Role Options</h3>
-          <p className="text-gray-600 mb-4">
-            These roles will be available for students to select as their placement preferences.
-          </p>
-
-          {/* Add new role */}
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value)}
-              placeholder="Add new role..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              onKeyPress={(e) => e.key === 'Enter' && addRole()}
-            />
-            <Button variant="primary" onClick={addRole}>
-              Add Role
-            </Button>
-          </div>
-
-          {/* Role list */}
-          <div className="flex flex-wrap gap-2">
-            {settings.rolePreferences?.map((role) => (
-              <span
-                key={role}
-                className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm"
-              >
-                {role}
-                <button
-                  onClick={() => removeRole(role)}
-                  className="ml-2 text-blue-600 hover:text-blue-800"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </span>
-            ))}
-          </div>
-
-          {(!settings.rolePreferences || settings.rolePreferences.length === 0) && (
-            <p className="text-gray-500 text-center py-4">No roles added yet</p>
-          )}
-        </Card>
-      )}
-
-      {/* Institutions Tab */}
-      {activeTab === 'institutions' && (
-        <Card>
-          <div className="flex items-center justify-between mb-4">
+      <div className="space-y-8">
+        {/* Curriculum Category */}
+        {activeCategory === 'curriculum' && (
+          <div className="space-y-8 animate-fadeIn">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Education Institutions</h3>
-              <p className="text-sm text-gray-600">Manage the master list of universities and colleges available to students.</p>
-            </div>
-          </div>
-
-          <div className="flex gap-2 mb-6">
-            <input
-              type="text"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter institution name..."
-              value={newInstitution}
-              onChange={(e) => setNewInstitution(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && addInstitution()}
-            />
-            <input
-              type="text"
-              className="w-32 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Pincode"
-              value={newInstitutionPincode}
-              onChange={(e) => setNewInstitutionPincode(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && addInstitution()}
-            />
-            <Button
-              variant="primary"
-              onClick={addInstitution}
-              disabled={!newInstitution.trim()}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(settings.institutionOptions || {}).sort((a, b) => a[0].localeCompare(b[0])).map(([name, pincode], index) => (
-              <div
-                key={index}
-                className="flex flex-col p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-200 transition-colors"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-900 font-bold truncate pr-2 uppercase text-xs tracking-wider">{name}</span>
-                  <button
-                    onClick={() => removeInstitution(name)}
-                    className="text-red-500 hover:text-red-700 p-1"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 font-medium">PIN:</span>
-                  <input
-                    type="text"
-                    value={pincode || ''}
-                    onChange={(e) => updateInstitutionPincode(name, e.target.value)}
-                    className="text-xs bg-gray-50 border-none rounded px-1.5 py-0.5 focus:ring-1 focus:ring-blue-400 w-20"
-                    placeholder="Not set"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {Object.keys(settings.institutionOptions || {}).length === 0 && (
-            <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
-              No institutions added to the list yet.
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Education Analytics Tab */}
-      {activeTab === 'analytics' && (
-        <div className="space-y-6">
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Institute Distribution</h3>
-                <p className="text-sm text-gray-600">Total students per institute. Use edit to rename or merge duplicate entries.</p>
-              </div>
-              <Button variant="secondary" size="sm" onClick={fetchEducationAnalytics} disabled={loadingStats}>
-                {loadingStats ? 'Loading...' : 'Refresh'}
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries(educationStats.institutes || {}).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
-                <div key={name} className="p-4 bg-white border border-gray-200 rounded-lg flex justify-between items-center hover:shadow-sm transition-shadow">
-                  <div>
-                    <span className="block font-medium text-gray-900 truncate max-w-[200px]" title={name}>{name}</span>
-                    <span className="text-sm text-gray-500 font-semibold">{count} students</span>
-                  </div>
-                  <button
-                    onClick={() => handleRename('institution', name)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                    title="Rename / Merge"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-              {Object.keys(educationStats.institutes || {}).length === 0 && !loadingStats && (
-                <div className="col-span-full text-center py-8 text-gray-500">No institute data available.</div>
-              )}
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Department Distribution</h3>
-                <p className="text-sm text-gray-600">Total students per department globally across all institutes.</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries(educationStats.departments || {}).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
-                <div key={name} className="p-4 bg-white border border-gray-200 rounded-lg flex justify-between items-center hover:shadow-sm transition-shadow">
-                  <div>
-                    <span className="block font-medium text-gray-900 truncate max-w-[200px]" title={name}>{name}</span>
-                    <span className="text-sm text-gray-500 font-semibold">{count} students</span>
-                  </div>
-                  <button
-                    onClick={() => handleRename('department', name)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                    title="Rename / Merge"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-              {Object.keys(educationStats.departments || {}).length === 0 && !loadingStats && (
-                <div className="col-span-full text-center py-8 text-gray-500">No department data available.</div>
-              )}
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Technical Skills Tab */}
-      {activeTab === 'skills' && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Technical Skills</h3>
-          <p className="text-gray-600 mb-4">
-            Skills that students can add to their profile with self-assessed proficiency levels.
-          </p>
-
-          {/* Add new skill */}
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newSkill}
-              onChange={(e) => setNewSkill(e.target.value)}
-              placeholder="Add new skill..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              onKeyPress={(e) => e.key === 'Enter' && addSkill()}
-            />
-            <Button variant="primary" onClick={addSkill}>
-              Add Skill
-            </Button>
-          </div>
-
-          {/* Skill list */}
-          <div className="flex flex-wrap gap-2">
-            {settings.technicalSkills?.map((skill) => (
-              <span
-                key={skill}
-                className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-sm"
-              >
-                {skill}
-                <button
-                  onClick={() => removeSkill(skill)}
-                  className="ml-2 text-green-600 hover:text-green-800"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </span>
-            ))}
-          </div>
-
-          {(!settings.technicalSkills || settings.technicalSkills.length === 0) && (
-            <p className="text-gray-500 text-center py-4">No skills added yet</p>
-          )}
-        </Card>
-      )}
-
-      {/* Higher Education Options Tab */}
-      {activeTab === 'degrees' && (
-        <div className="space-y-6">
-          <Card>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Departments & Specializations</h3>
-            <p className="text-gray-600 mb-4">
-              Add departments and their corresponding specializations that students can select in their profiles.
-            </p>
-
-            {/* Add new department */}
-            <div className="flex gap-2 mb-4">
-              <input
-                type="text"
-                value={newDegree}
-                onChange={(e) => setNewDegree(e.target.value)}
-                placeholder="Add new department (e.g., Computer Science, Commerce, Science)..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                onKeyPress={(e) => e.key === 'Enter' && addDegree()}
-              />
-              <Button variant="primary" onClick={addDegree}>
-                <Plus className="w-5 h-5 mr-2" />
-                Add Department
-              </Button>
-            </div>
-          </Card>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {Object.keys(settings.higherEducationOptions || {}).sort().map((degree) => (
-              <Card key={degree} className="flex flex-col h-full">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b">
-                  <h4 className="font-bold text-gray-900 text-lg">{degree}</h4>
-                  <button
-                    onClick={() => removeDegree(degree)}
-                    className="p-1 text-red-400 hover:text-red-600 transition-colors"
-                    title={`Remove ${degree}`}
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="flex-1">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Specializations</p>
-
-                  {/* Add Specialization */}
-                  <div className="flex gap-2 mb-4">
-                    <input
-                      type="text"
-                      value={newSpecialization[degree] || ''}
-                      onChange={(e) => setNewSpecialization({ ...newSpecialization, [degree]: e.target.value })}
-                      placeholder={`Add specialization for ${degree}...`}
-                      className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
-                      onKeyPress={(e) => e.key === 'Enter' && addSpecialization(degree)}
-                    />
-                    <button
-                      onClick={() => addSpecialization(degree)}
-                      className="p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {settings.higherEducationOptions[degree]?.map((spec) => (
-                      <span
-                        key={spec}
-                        className="inline-flex items-center px-2.5 py-1 bg-gray-100 text-gray-700 rounded-md text-xs font-medium border border-gray-200"
-                      >
-                        {spec}
-                        <button
-                          onClick={() => removeSpecialization(degree, spec)}
-                          className="ml-1.5 text-gray-400 hover:text-red-500"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      </span>
-                    ))}
-                    {(settings.higherEducationOptions[degree]?.length === 0 || !settings.higherEducationOptions[degree]) && (
-                      <p className="text-gray-400 text-xs italic">No specializations added yet</p>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          {(!settings.higherEducationOptions || Object.keys(settings.higherEducationOptions).length === 0) && (
-            <Card className="text-center py-12">
-              <p className="text-gray-500">No degree options added yet. Add your first degree above.</p>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Soft Skills Tab */}
-      {activeTab === 'softskills' && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Soft Skills</h3>
-          <p className="text-gray-600 mb-4">
-            Interpersonal and professional skills that students can select for their profile.
-          </p>
-
-          {/* Add new soft skill */}
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newSoftSkill}
-              onChange={(e) => setNewSoftSkill(e.target.value)}
-              placeholder="Add new soft skill..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              onKeyPress={(e) => e.key === 'Enter' && addSoftSkill()}
-            />
-            <Button variant="primary" onClick={addSoftSkill}>
-              Add Skill
-            </Button>
-          </div>
-
-          {/* Soft skill list */}
-          <div className="flex flex-wrap gap-2">
-            {settings.softSkills?.map((skill) => (
-              <span
-                key={skill}
-                className="inline-flex items-center px-3 py-1.5 bg-purple-100 text-purple-800 rounded-full text-sm"
-              >
-                {skill}
-                <button
-                  onClick={() => removeSoftSkill(skill)}
-                  className="ml-2 text-purple-600 hover:text-purple-800"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </span>
-            ))}
-          </div>
-
-          {(!settings.softSkills || settings.softSkills.length === 0) && (
-            <p className="text-gray-500 text-center py-4">No soft skills added yet</p>
-          )}
-        </Card>
-      )}
-
-      {/* Placement Cycles Tab */}
-      {activeTab === 'cycles' && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Placement Cycles</h3>
-          <p className="text-gray-600 mb-4">
-            Manage monthly placement cycles. Each month is counted as one cycle for tracking placements.
-          </p>
-
-          {/* Add new cycle */}
-          <div className="bg-gray-50 p-4 rounded-lg mb-6">
-            <h4 className="font-medium text-gray-900 mb-3">Create New Cycle</h4>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
-                <select
-                  value={newCycle.month}
-                  onChange={(e) => setNewCycle({ ...newCycle, month: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Month</option>
-                  {['January', 'February', 'March', 'April', 'May', 'June',
-                    'July', 'August', 'September', 'October', 'November', 'December'].map((m, i) => (
-                      <option key={m} value={i + 1}>{m}</option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                <select
-                  value={newCycle.year}
-                  onChange={(e) => setNewCycle({ ...newCycle, year: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Year</option>
-                  {[2024, 2025, 2026, 2027].map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
-                <input
-                  type="text"
-                  value={newCycle.description}
-                  onChange={(e) => setNewCycle({ ...newCycle, description: e.target.value })}
-                  placeholder="E.g., Summer hiring drive"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            <Button
-              variant="primary"
-              onClick={createPlacementCycle}
-              disabled={creatingCycle}
-              className="mt-4"
-            >
-              {creatingCycle ? 'Creating...' : 'Create Cycle'}
-            </Button>
-          </div>
-
-          {/* Cycles list */}
-          <div className="space-y-3">
-            {placementCycles.map((cycle) => (
-              <div
-                key={cycle._id}
-                className="flex items-center justify-between p-4 bg-white border rounded-lg"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{cycle.name}</span>
-                    <Badge variant={cycle.isActive ? 'success' : 'secondary'}>
-                      {cycle.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
-                    {cycle.status === 'completed' && (
-                      <Badge variant="primary">Completed</Badge>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {cycle.studentCount || 0} students | {cycle.placedCount || 0} placed
-                    {cycle.description && ` | ${cycle.description}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={cycle.isActive ? 'secondary' : 'primary'}
-                    size="sm"
-                    onClick={() => toggleCycleActive(cycle._id, cycle.isActive)}
-                  >
-                    {cycle.isActive ? 'Deactivate' : 'Activate'}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => deletePlacementCycle(cycle._id)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {placementCycles.length === 0 && (
-            <p className="text-gray-500 text-center py-4">No placement cycles created yet</p>
-          )}
-        </Card>
-      )}
-
-      {/* Campuses Tab */}
-      {activeTab === 'campuses' && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Navgurukul Campuses</h3>
-          <p className="text-gray-600 mb-4">
-            View and manage campus locations. Students select their campus from this list.
-          </p>
-
-          {/* Campus list */}
-          <div className="space-y-3">
-            {campuses.map((campus) => (
-              <div
-                key={campus._id}
-                className="flex items-center justify-between p-4 bg-white border rounded-lg"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{campus.name}</span>
-                    <Badge variant="secondary">{campus.code}</Badge>
-                    {campus.isActive ? (
-                      <Badge variant="success">Active</Badge>
-                    ) : (
-                      <Badge variant="danger">Inactive</Badge>
-                    )}
-                  </div>
-                  {campus.location && (
-                    <p className="text-sm text-gray-500 mt-1">
-                      {typeof campus.location === 'object'
-                        ? `${campus.location.city || ''}${campus.location.city && campus.location.state ? ', ' : ''}${campus.location.state || ''}`
-                        : campus.location}
-                    </p>
-                  )}
-
-                  <div className="mt-2 flex items-center gap-3 text-sm text-gray-500">
-                    <div className="flex items-center gap-1 text-indigo-600">
-                      <MessageSquare className="w-4 h-4" />
-                      <span className="text-xs font-semibold">Notifications:</span>
-                    </div>
-                    {editingCampusId === campus._id ? (
-                      <div className="flex items-center gap-2 animate-fadeIn">
-                        <input
-                          type="text"
-                          value={tempDiscordChannelId}
-                          onChange={(e) => setTempDiscordChannelId(e.target.value)}
-                          placeholder="Channel ID"
-                          className="border rounded px-2 py-1 text-xs w-48 focus:ring-1 focus:ring-indigo-500"
-                          autoFocus
-                        />
-                        <button onClick={() => handleSaveCampusDiscord(campus._id)} className="p-1 hover:bg-green-100 text-green-600 rounded" title="Save"><Save className="w-3 h-3" /></button>
-                        <button onClick={() => setEditingCampusId(null)} className="p-1 hover:bg-red-100 text-red-600 rounded" title="Cancel"><X className="w-3 h-3" /></button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 group cursor-pointer hover:bg-gray-50 px-2 py-0.5 rounded -ml-2" onClick={() => { setEditingCampusId(campus._id); setTempDiscordChannelId(campus.discordChannelId || ''); }}>
-                        <span className="text-xs font-mono">
-                          {campus.discordChannelId
-                            ? campus.discordChannelId
-                            : `Global (${settings.discordConfig?.channels?.jobPostings || 'None'})`}
-                        </span>
-                        <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 text-gray-400" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {campuses.length === 0 && (
-            <p className="text-gray-500 text-center py-4">No campuses found</p>
-          )}
-
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-blue-800 text-sm">
-              <strong>Note:</strong> Campus management is configured during initial setup.
-              Contact the system administrator to add or modify campuses.
-            </p>
-          </div>
-        </Card>
-      )}
-
-      {/* AI Integration Tab */}
-      {activeTab === 'ai' && (
-        <div className="space-y-6">
-          <Card>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">AI-Powered Job Description Parsing</h3>
-            <p className="text-gray-600 mb-4">
-              Enable AI to automatically extract job details from PDFs and URLs when creating new jobs.
-            </p>
-
-            {/* Status */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg mb-4">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🤖</span>
-                <div>
-                  <p className="font-medium text-gray-900">AI Auto-Fill</p>
-                  <p className="text-sm text-gray-500">
-                    {aiConfig.hasApiKey
-                      ? `API Key: ${aiConfig.apiKeyPreview}`
-                      : 'No API key configured'
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Schools & Learning Pathway</h3>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const name = prompt('Enter new school name:');
+                    if (name) {
+                      const updated = { ...settings.schoolModules };
+                      updated[name] = [];
+                      setSettings({ ...settings, schoolModules: updated });
                     }
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge variant={aiConfig.enabled ? 'success' : 'danger'}>
-                  {aiConfig.enabled ? 'Enabled' : 'Disabled'}
-                </Badge>
-                <button
-                  onClick={toggleAiEnabled}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${aiConfig.enabled ? 'bg-green-500' : 'bg-gray-200'
-                    }`}
+                  }}
+                  className="flex items-center gap-2"
                 >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${aiConfig.enabled ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                  />
-                </button>
+                  <Plus className="w-4 h-4" />
+                  Add New School
+                </Button>
               </div>
-            </div>
+              <div className="space-y-6">
+                {schools.map((school) => (
+                  <Card key={school} className="overflow-hidden">
+                    <div
+                      className="flex items-center justify-between cursor-pointer"
+                      onClick={() => setEditingSchool(editingSchool === school ? null : school)}
+                    >
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold text-gray-900">{school}</h3>
+                          <Badge variant={settings.inactiveSchools?.includes(school) ? 'danger' : 'success'}>
+                            {settings.inactiveSchools?.includes(school) ? 'Inactive' : 'Active'}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          {settings.schoolModules?.[school]?.length || 0} modules
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const isInactive = settings.inactiveSchools?.includes(school);
+                            const updatedInactive = isInactive
+                              ? settings.inactiveSchools.filter(s => s !== school)
+                              : [...(settings.inactiveSchools || []), school];
+                            setSettings({ ...settings, inactiveSchools: updatedInactive });
+                          }}
+                        >
+                          {settings.inactiveSchools?.includes(school) ? 'Activate' : 'Deactivate'}
+                        </Button>
+                        <svg
+                          className={`w-5 h-5 transform transition-transform ${editingSchool === school ? 'rotate-180' : ''}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
 
-            {/* AI Runtime Status (operational / quota / errors) */}
-            <div className="mt-4 p-4 bg-white border rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium">AI Runtime Status</div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    {aiStatus ? (
-                      aiStatus.configured ? (
-                        aiStatus.working ? 'Operational' : `Configured but not operational: ${aiStatus.message || 'unknown'}`
-                      ) : 'Not configured'
-                    ) : 'Unknown - click Refresh to check'}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={fetchAiStatus}
-                    className="px-3 py-1 rounded bg-gray-100 text-sm"
-                  >
-                    Refresh
-                  </button>
-                </div>
-              </div>
-              {aiStatus?.message && (
-                <div className="text-xs text-yellow-700 mt-2">Details: {aiStatus.message}</div>
-              )}
-            </div>
+                    {editingSchool === school && (
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="flex gap-2 mb-4">
+                          <input
+                            type="text"
+                            value={newModule}
+                            onChange={(e) => setNewModule(e.target.value)}
+                            placeholder="Add new module..."
+                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            onKeyPress={(e) => e.key === 'Enter' && addModule(school)}
+                          />
+                          <Button variant="primary" onClick={() => addModule(school)}>
+                            Add
+                          </Button>
+                        </div>
 
-            {/* API Key Input */}
-            <div className="space-y-4">
-              <form onSubmit={(e) => { e.preventDefault(); saveAiConfig(); }}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Google AI Studio API Key
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={newApiKey}
-                    onChange={(e) => setNewApiKey(e.target.value)}
-                    placeholder={aiConfig.hasApiKey ? 'Enter new key to replace' : 'Enter your API key'}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={savingAiConfig || !newApiKey.trim()}
-                  >
-                    {savingAiConfig ? 'Saving...' : 'Save Key'}
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Get your free API key from{' '}
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    Google AI Studio
-                  </a>
-                </p>
-              </form>
-            </div>
-
-            {/* Features */}
-            <div className="mt-6 border-t pt-4">
-              <h4 className="font-medium text-gray-900 mb-3">What AI can extract:</h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {[
-                  'Job Title', 'Company Name', 'Location', 'Job Type',
-                  'Salary Range', 'Requirements', 'Responsibilities',
-                  'Skills', 'Experience Level', 'No. of Positions'
-                ].map(feature => (
-                  <div key={feature} className="flex items-center gap-2 text-sm text-gray-600">
-                    <span className="text-green-500">✓</span>
-                    {feature}
-                  </div>
+                        <div className="space-y-2">
+                          {(settings.schoolModules?.[school] || []).map((module, index) => (
+                            <div
+                              key={module}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                            >
+                              <div className="flex items-center">
+                                <span className="text-gray-400 mr-3 font-mono text-sm">{index + 1}.</span>
+                                <span className="text-gray-900">{module}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => moveModule(school, index, 'up')}
+                                  disabled={index === 0}
+                                  className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                                >
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => moveModule(school, index, 'down')}
+                                  disabled={index === settings.schoolModules[school].length - 1}
+                                  className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                                >
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => removeModule(school, module)}
+                                  className="p-1 text-red-400 hover:text-red-600 ml-2"
+                                >
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </Card>
                 ))}
               </div>
             </div>
 
-            {/* Fallback Info */}
-            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-blue-800 text-sm">
-                <strong>Fallback Mode:</strong> If AI is disabled or API key is not set,
-                the system will use basic text extraction (regex-based) which provides
-                limited but still useful auto-fill functionality.
-              </p>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Proficiency Rubrics Tab */}
-      {activeTab === 'rubrics' && (
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Skill Proficiency Rubrics</h3>
-              <p className="text-sm text-gray-600">Define what each level (1-4) means for student self-assessments.</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                const rubrics = settings.proficiencyRubrics || {};
-                settingsAPI.updateProficiencyRubrics(rubrics)
-                  .then(() => toast.success('Rubrics updated'))
-                  .catch(() => toast.error('Failed to update'));
-              }}
-            >
-              Update Mastery Labels
-            </Button>
-          </div>
-
-          <div className="space-y-6">
-            {[1, 2, 3, 4].map(level => {
-              const rubric = settings.proficiencyRubrics?.[level.toString()] || { label: '', description: '' };
-              return (
-                <div key={level} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="flex items-center">
-                      <span className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-lg mr-3">
-                        {level}
-                      </span>
-                      <input
-                        type="text"
-                        className="flex-1 font-semibold text-gray-900 bg-transparent border-b border-transparent focus:border-blue-500 outline-none"
-                        value={rubric.label}
-                        onChange={(e) => {
-                          const updated = { ...settings.proficiencyRubrics };
-                          updated[level.toString()] = { ...rubric, label: e.target.value };
-                          setSettings({ ...settings, proficiencyRubrics: updated });
-                        }}
-                        placeholder={`Label for Level ${level}`}
-                      />
-                    </div>
-                    <div className="md:col-span-3">
-                      <textarea
-                        className="w-full text-sm text-gray-600 border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 outline-none"
-                        rows={2}
-                        value={rubric.description}
-                        onChange={(e) => {
-                          const updated = { ...settings.proficiencyRubrics };
-                          updated[level.toString()] = { ...rubric, description: e.target.value };
-                          setSettings({ ...settings, proficiencyRubrics: updated });
-                        }}
-                        placeholder={`Detailed description of what Level ${level} expertise looks like...`}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      {/* Locations Tab */}
-      {activeTab === 'locations' && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Job Locations</h3>
-          <p className="text-sm text-gray-600 mb-4">Manage the master list of cities and regions available for job postings.</p>
-
-          <div className="flex gap-2 mb-6">
-            <input
-              type="text"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. Noida, Gurgaon, London..."
-              value={newLocation}
-              onChange={(e) => setNewLocation(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && (async () => {
-                if (!newLocation.trim()) return;
-                const updated = [...(settings.jobLocations || []), newLocation.trim().split(',')[0].trim()];
-                setSettings({ ...settings, jobLocations: [...new Set(updated)] });
-                setNewLocation('');
-              })()}
-            />
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (!newLocation.trim()) return;
-                const updated = [...(settings.jobLocations || []), newLocation.trim().split(',')[0].trim()];
-                setSettings({ ...settings, jobLocations: [...new Set(updated)] });
-                setNewLocation('');
-              }}
-            >
-              Add Location
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {(settings.jobLocations || []).sort().map((loc) => (
-              <span
-                key={loc}
-                className="inline-flex items-center px-3 py-1.5 bg-teal-100 text-teal-800 rounded-full text-sm"
-              >
-                {loc}
-                <button
-                  onClick={() => {
-                    const updated = settings.jobLocations.filter(l => l !== loc);
-                    setSettings({ ...settings, jobLocations: updated });
-                  }}
-                  className="ml-2 text-teal-600 hover:text-teal-800"
-                >
-                  <Plus className="w-4 h-4 rotate-45" />
-                </button>
-              </span>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Companies Tab */}
-      {activeTab === 'companies' && (
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Company Registry</h3>
-              <p className="text-sm text-gray-600">Master list of registered hiring partners.</p>
-            </div>
-            <div className="w-64">
-              <input
-                type="text"
-                placeholder="Search companies..."
-                className="w-full text-sm px-3 py-1.5 border border-gray-300 rounded"
-                value={companyFilters.search}
-                onChange={(e) => setCompanyFilters({ ...companyFilters, search: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Object.entries(settings.masterCompanies || {})
-              .filter(([name]) => name.toLowerCase().includes((companyFilters.search || '').toLowerCase()))
-              .map(([name, data]) => (
-                <div key={name} className="p-4 border border-gray-200 rounded-lg flex items-start gap-4 hover:shadow-sm transition">
-                  <div className="flex-shrink-0 w-12 h-12 rounded border bg-gray-50 flex items-center justify-center overflow-hidden">
-                    {data.logo ? (
-                      <img src={data.logo} alt={name} className="w-8 h-8 object-contain" />
-                    ) : (
-                      <span className="text-gray-400 font-bold text-xl">{name[0]}</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-gray-900 truncate">{name}</h4>
-                    {data.website && (
-                      <a href={data.website} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline truncate block">
-                        {data.website.replace(/^https?:\/\//, '')}
-                      </a>
-                    )}
-                    <button
-                      onClick={() => {
-                        if (confirm(`Remove "${name}" from registry?`)) {
-                          const updated = { ...settings.masterCompanies };
-                          delete updated[name];
-                          setSettings({ ...settings, masterCompanies: updated });
-                        }
-                      }}
-                      className="mt-2 text-xs text-red-500 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-          </div>
-          {Object.keys(settings.masterCompanies || {}).length === 0 && (
-            <p className="text-center py-12 text-gray-500 italic">No companies registered yet. They will appear here when added via Job Forms.</p>
-          )}
-        </Card>
-      )}
-
-      {/* Discord Integration Tab */}
-      {activeTab === 'discord' && (
-        <Card>
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-indigo-600" />
-              Discord Integration
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Configure the Discord bot for notifications and automation.
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div>
-                <h4 className="font-medium text-gray-900">Enable Discord Integration</h4>
-                <p className="text-sm text-gray-500">Send notifications to Discord channels.</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.discordConfig?.enabled || false}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    discordConfig: { ...settings.discordConfig, enabled: e.target.checked }
-                  })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bot Token</label>
-                <input
-                  type="password"
-                  value={settings.discordConfig?.botToken || ''}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    discordConfig: { ...settings.discordConfig, botToken: e.target.value }
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="Sensitive token..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Server (Guild) ID</label>
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Soft Skills</h3>
+              <p className="text-gray-600 mb-4">Master list of soft skills for student evaluation.</p>
+              <div className="flex gap-2 mb-4">
                 <input
                   type="text"
-                  value={settings.discordConfig?.guildId || ''}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    discordConfig: { ...settings.discordConfig, guildId: e.target.value }
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="Server ID"
+                  value={newSoftSkill}
+                  onChange={(e) => setNewSoftSkill(e.target.value)}
+                  placeholder="e.g. Communication, Teamwork..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                  onKeyPress={(e) => e.key === 'Enter' && addSoftSkill()}
                 />
+                <Button variant="primary" onClick={addSoftSkill}>Add</Button>
               </div>
-            </div>
+              <div className="flex flex-wrap gap-2">
+                {settings.softSkills?.map((skill) => (
+                  <span key={skill} className="inline-flex items-center px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-sm font-medium border border-indigo-100">
+                    {skill}
+                    <button onClick={() => removeSoftSkill(skill)} className="ml-2 hover:text-indigo-900"><X className="w-4 h-4" /></button>
+                  </span>
+                ))}
+              </div>
+            </Card>
 
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-medium text-gray-900 mb-3">Channel Configuration (IDs)</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Education Analytics</h3>
+                <Button size="sm" variant="secondary" onClick={fetchEducationAnalytics} disabled={loadingStats}>
+                  {loadingStats ? 'Refreshing...' : 'Refresh Stats'}
+                </Button>
+              </div>
+              <div className="space-y-8">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">New Job Postings</label>
-                  <input
-                    type="text"
-                    value={settings.discordConfig?.channels?.jobPostings || ''}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      discordConfig: {
-                        ...settings.discordConfig,
-                        channels: { ...settings.discordConfig?.channels, jobPostings: e.target.value }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                    placeholder="Channel ID"
-                  />
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Institute Distribution</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Object.entries(educationStats.institutes || {}).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
+                      <div key={name} className="p-4 bg-white border border-gray-200 rounded-lg flex justify-between items-center hover:shadow-sm transition-shadow">
+                        <div>
+                          <span className="block font-medium text-gray-900 truncate max-w-[200px]" title={name}>{name}</span>
+                          <span className="text-sm text-gray-500 font-semibold">{count} students</span>
+                        </div>
+                        <button
+                          onClick={() => handleRename('institution', name)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Rename / Merge"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Application Updates</label>
-                  <input
-                    type="text"
-                    value={settings.discordConfig?.channels?.applicationUpdates || ''}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      discordConfig: {
-                        ...settings.discordConfig,
-                        channels: { ...settings.discordConfig?.channels, applicationUpdates: e.target.value }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                    placeholder="Channel ID"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Profile Updates</label>
-                  <input
-                    type="text"
-                    value={settings.discordConfig?.channels?.profileUpdates || ''}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      discordConfig: {
-                        ...settings.discordConfig,
-                        channels: { ...settings.discordConfig?.channels, profileUpdates: e.target.value }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                    placeholder="Channel ID"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">General Notifications</label>
-                  <input
-                    type="text"
-                    value={settings.discordConfig?.channels?.general || ''}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      discordConfig: {
-                        ...settings.discordConfig,
-                        channels: { ...settings.discordConfig?.channels, general: e.target.value }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                    placeholder="Channel ID"
-                  />
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Department Distribution</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Object.entries(educationStats.departments || {}).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
+                      <div key={name} className="p-4 bg-white border border-gray-200 rounded-lg flex justify-between items-center hover:shadow-sm transition-shadow">
+                        <div>
+                          <span className="block font-medium text-gray-900 truncate max-w-[200px]" title={name}>{name}</span>
+                          <span className="text-sm text-gray-500 font-semibold">{count} students</span>
+                        </div>
+                        <button
+                          onClick={() => handleRename('department', name)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Rename / Merge"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            </Card>
+          </div>
+        )}
 
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-medium text-gray-900 mb-3">Preferences</h4>
-              <div className="flex gap-6">
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={settings.discordConfig?.useThreads ?? true}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      discordConfig: { ...settings.discordConfig, useThreads: e.target.checked }
-                    })}
-                    className="rounded text-indigo-600 focus:ring-indigo-500"
-                  />
-                  Use Threads for Updates
-                </label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={settings.discordConfig?.mentionUsers ?? true}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      discordConfig: { ...settings.discordConfig, mentionUsers: e.target.checked }
-                    })}
-                    className="rounded text-indigo-600 focus:ring-indigo-500"
-                  />
-                  Mention Users (@)
-                </label>
+        {/* Career & Skills Category */}
+        {activeCategory === 'career' && (
+          <div className="space-y-8 animate-fadeIn">
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Job Role Categories</h3>
+              <p className="text-gray-600 mb-4">Categories for job filtering (e.g. Frontend, Backend).</p>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newRoleCategory}
+                  onChange={(e) => setNewRoleCategory(e.target.value)}
+                  placeholder="New category..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                  onKeyPress={(e) => e.key === 'Enter' && addRoleCategory()}
+                />
+                <Button variant="primary" onClick={addRoleCategory}>Add</Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {settings.roleCategories?.map((cat) => (
+                  <span key={cat} className="inline-flex items-center px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">
+                    {cat}
+                    <button onClick={() => removeRoleCategory(cat)} className="ml-2 hover:text-indigo-900"><X className="w-4 h-4" /></button>
+                  </span>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Role Preferences</h3>
+              <p className="text-gray-600 mb-4">Roles available for student profiles.</p>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value)}
+                  placeholder="New role..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                  onKeyPress={(e) => e.key === 'Enter' && addRole()}
+                />
+                <Button variant="primary" onClick={addRole}>Add</Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {settings.rolePreferences?.map((role) => (
+                  <span key={role} className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                    {role}
+                    <button onClick={() => removeRole(role)} className="ml-2 hover:text-blue-900"><X className="w-4 h-4" /></button>
+                  </span>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Technical Skills</h3>
+              <p className="text-gray-600 mb-4">Skills for profiling and tracking.</p>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newSkill}
+                  onChange={(e) => setNewSkill(e.target.value)}
+                  placeholder="New technical skill..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                  onKeyPress={(e) => e.key === 'Enter' && addSkill()}
+                />
+                <Button variant="primary" onClick={addSkill}>Add</Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {settings.technicalSkills?.sort().map((skill) => (
+                  <span key={skill} className="inline-flex items-center px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">
+                    {skill}
+                    <button onClick={() => removeSkill(skill)} className="ml-2 hover:text-emerald-900"><X className="w-4 h-4" /></button>
+                  </span>
+                ))}
+              </div>
+            </Card>
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Proficiency Rubrics</h3>
+                  <p className="text-sm text-gray-500 mt-1">Define criteria for skill levels 1 through 5.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <Card key={level} className="border-l-4 border-l-blue-600 hover:shadow-md transition-all">
+                    <div className="flex flex-col md:flex-row md:items-start gap-6">
+                      <div className="flex-shrink-0">
+                        <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-blue-100 ring-4 ring-blue-50">
+                          {level}
+                        </div>
+                      </div>
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                            Level Title
+                            <div className="h-1.5 w-1.5 rounded-full bg-blue-400"></div>
+                          </label>
+                          <input
+                            type="text"
+                            className="w-full bg-gray-50 border-none rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all font-display"
+                            value={editingRubric[level]?.title || settings.proficiencyRubrics?.[level]?.title || ''}
+                            onChange={(e) => setEditingRubric({
+                              ...editingRubric,
+                              [level]: { ...editingRubric[level], title: e.target.value }
+                            })}
+                            placeholder={`e.g. ${level === 1 ? 'Beginner' : level === 5 ? 'Expert' : 'Intermediate'}`}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                            Success Criteria
+                            <div className="h-1.5 w-1.5 rounded-full bg-blue-400"></div>
+                          </label>
+                          <textarea
+                            className="w-full bg-gray-50 border-none rounded-xl px-4 py-2.5 text-sm text-gray-600 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all"
+                            rows={2}
+                            value={editingRubric[level]?.description || settings.proficiencyRubrics?.[level]?.description || ''}
+                            onChange={(e) => setEditingRubric({
+                              ...editingRubric,
+                              [level]: { ...editingRubric[level], description: e.target.value }
+                            })}
+                            placeholder="What must a student demonstrate to achieve this level?"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
               </div>
             </div>
           </div>
-        </Card>
-      )}
+        )}
 
+        {/* Registry & Data Category */}
+        {activeCategory === 'directory' && (
+          <div className="space-y-8 animate-fadeIn">
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-6 font-display">Departments & Degrees</h3>
+              <div className="flex flex-col md:flex-row gap-8 min-h-[400px]">
+                {/* Left Side: Degrees List */}
+                <div className="w-full md:w-1/3 border-r border-gray-100 pr-4">
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      type="text"
+                      value={newDegree}
+                      onChange={(e) => setNewDegree(e.target.value)}
+                      placeholder="Add degree..."
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white transition-all"
+                      onKeyPress={(e) => e.key === 'Enter' && addDegree()}
+                    />
+                    <Button variant="primary" size="sm" onClick={addDegree} className="px-3">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  <div className="space-y-1 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                    {(settings.degreeOptions || []).map((degree) => (
+                      <div
+                        key={degree}
+                        onClick={() => setSelectedRegistryDegree(degree)}
+                        className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 ${selectedRegistryDegree === degree
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
+                          : 'hover:bg-blue-50 text-gray-700 hover:text-blue-600'
+                          }`}
+                      >
+                        <span className="font-medium truncate flex-1">{degree}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeDegree(degree);
+                          }}
+                          className={`ml-2 p-1 rounded-md transition-colors ${selectedRegistryDegree === degree
+                            ? 'text-blue-200 hover:text-white hover:bg-blue-500'
+                            : 'text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100'
+                            }`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right Side: Specializations */}
+                <div className="flex-1">
+                  {selectedRegistryDegree ? (
+                    <div className="animate-fadeIn">
+                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900 leading-tight">
+                            {selectedRegistryDegree}
+                          </h4>
+                          <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mt-1">Specializations & Branches</p>
+                        </div>
+                        <Badge variant="primary" className="bg-blue-50 text-blue-700 border-blue-100">
+                          {(settings.higherEducationOptions?.[selectedRegistryDegree] || []).length} Entries
+                        </Badge>
+                      </div>
+
+                      <div className="bg-gray-50/50 rounded-2xl p-6 border border-gray-100">
+                        <label className="block text-sm font-bold text-gray-700 mb-3">Add New Specialization</label>
+                        <div className="flex gap-2 mb-6">
+                          <input
+                            type="text"
+                            value={newSpecialization[selectedRegistryDegree] || ''}
+                            onChange={(e) => setNewSpecialization({ ...newSpecialization, [selectedRegistryDegree]: e.target.value })}
+                            placeholder={`e.g. Artificial Intelligence, Marketing...`}
+                            className="flex-1 px-4 py-2 border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 shadow-sm transition-all"
+                            onKeyPress={(e) => e.key === 'Enter' && addSpecialization(selectedRegistryDegree)}
+                          />
+                          <Button onClick={() => addSpecialization(selectedRegistryDegree)} className="rounded-xl px-6">
+                            Add Entry
+                          </Button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {(settings.higherEducationOptions?.[selectedRegistryDegree] || []).map((spec) => (
+                            <span
+                              key={spec}
+                              className="group px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 flex items-center shadow-sm hover:border-blue-400 hover:text-blue-600 transition-all cursor-default"
+                            >
+                              {spec}
+                              <button
+                                onClick={() => removeSpecialization(selectedRegistryDegree, spec)}
+                                className="ml-3 text-gray-300 hover:text-red-500 transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </span>
+                          ))}
+                          {(settings.higherEducationOptions?.[selectedRegistryDegree] || []).length === 0 && (
+                            <div className="w-full py-12 text-center">
+                              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 border border-dashed border-gray-300">
+                                <Plus className="w-8 h-8 text-gray-300" />
+                              </div>
+                              <p className="text-gray-400 text-sm">No specializations added for this degree yet.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
+                      <div className="w-20 h-20 bg-white rounded-3xl shadow-xl shadow-gray-100 flex items-center justify-center mb-6">
+                        <BookOpen className="w-10 h-10 text-blue-500" />
+                      </div>
+                      <h4 className="text-lg font-bold text-gray-900">Select a Department</h4>
+                      <p className="text-gray-500 max-w-xs mt-2">Choose a degree from the left or add a new one to manage its specializations.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Institutions</h3>
+                  <p className="text-xs text-gray-500 mt-1">Manage the list of schools and colleges.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                <input
+                  type="text"
+                  value={newInstitution}
+                  onChange={(e) => setNewInstitution(e.target.value)}
+                  placeholder="Institution name..."
+                  className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 shadow-sm transition-all"
+                />
+                <input
+                  type="text"
+                  value={newInstitutionPincode}
+                  onChange={(e) => setNewInstitutionPincode(e.target.value)}
+                  placeholder="Pincode"
+                  className="w-full md:w-32 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 shadow-sm transition-all"
+                />
+                <Button variant="primary" onClick={addInstitution} className="rounded-xl px-6">Add</Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar p-1">
+                {Object.entries(settings.institutionOptions || {}).sort().map(([name, pin]) => (
+                  <div key={name} className="flex flex-col p-4 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="font-bold text-gray-900 text-sm leading-tight mb-2 uppercase tracking-wide truncate pr-6" title={name}>{name}</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">PINCODE:</span>
+                          <input
+                            type="text"
+                            className="text-xs bg-blue-50/50 border-none rounded-lg px-2 py-1 focus:ring-1 focus:ring-blue-500 text-blue-700 font-bold w-20"
+                            value={pin || ''}
+                            onChange={(e) => updateInstitutionPincode(name, e.target.value)}
+                            placeholder="Not set"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeInstitution(name)}
+                        className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all absolute top-2 right-2 opacity-0 group-hover:opacity-100"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Locations</h3>
+                <p className="text-xs text-gray-500 mt-1">Available job placement cities.</p>
+              </div>
+
+              <div className="flex gap-2 mb-6">
+                <input
+                  type="text"
+                  value={newLocation}
+                  onChange={(e) => setNewLocation(e.target.value)}
+                  placeholder="Add new city..."
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 shadow-sm"
+                />
+                <Button variant="primary" onClick={() => {
+                  if (!newLocation.trim()) return;
+                  setSettings({ ...settings, jobLocations: [...new Set([...(settings.jobLocations || []), newLocation.trim()])] });
+                  setNewLocation('');
+                }} className="rounded-xl">Add</Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 min-h-[50px]">
+                {(settings.jobLocations || []).map((loc) => (
+                  <span
+                    key={loc}
+                    className="group inline-flex items-center px-4 py-2 bg-white border border-gray-100 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:border-blue-400 hover:text-blue-600 transition-all"
+                  >
+                    {loc}
+                    <button
+                      onClick={() => setSettings({ ...settings, jobLocations: settings.jobLocations.filter(l => l !== loc) })}
+                      className="ml-2.5 p-0.5 text-gray-300 hover:text-red-500 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+                {(settings.jobLocations || []).length === 0 && (
+                  <p className="text-gray-400 text-sm italic">No locations added yet.</p>
+                )}
+              </div>
+            </Card>
+
+            <Card>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Company Registry</h3>
+                  <p className="text-xs text-gray-500 mt-1">Master list of visiting companies.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search companies..."
+                      className="w-full md:w-64 pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
+                      value={companyFilters.search}
+                      onChange={(e) => setCompanyFilters({ ...companyFilters, search: e.target.value })}
+                    />
+                    <div className="absolute left-3 top-2.5 text-gray-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <Button variant="primary" onClick={() => setIsAddingCompany(true)} className="rounded-xl flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    <span className="hidden sm:inline">Add Company</span>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar p-1">
+                {Object.entries(settings.masterCompanies || {})
+                  .filter(([name]) => name.toLowerCase().includes(companyFilters.search.toLowerCase()))
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([name, data]) => (
+                    <div
+                      key={name}
+                      onClick={() => setSelectedCompany({ name, ...data })}
+                      className="group flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer"
+                    >
+                      <div className="w-12 h-12 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl flex items-center justify-center font-bold text-gray-400 border border-gray-50 group-hover:from-blue-50 group-hover:to-blue-100 group-hover:text-blue-500 transition-colors">
+                        {data.logo ? (
+                          <img src={data.logo} alt="" className="w-8 h-8 object-contain" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                        ) : null}
+                        <span style={{ display: data.logo ? 'none' : 'flex' }}>{name[0].toUpperCase()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-gray-900 text-sm truncate group-hover:text-blue-600 transition-colors" title={name}>{name}</p>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const updated = { ...settings.masterCompanies };
+                            delete updated[name];
+                            setSettings({ ...settings, masterCompanies: updated });
+                          }}
+                          className="text-[10px] font-bold text-gray-400 uppercase tracking-wider hover:text-red-500 transition-colors flex items-center gap-1 mt-1"
+                        >
+                          <X className="w-3 h-3" />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                {Object.keys(settings.masterCompanies || {}).length === 0 && (
+                  <div className="col-span-full py-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                    <p className="text-gray-400 text-sm font-medium">No companies registered yet.</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Settings Category */}
+        {activeCategory === 'platform' && (
+          <div className="space-y-8 animate-fadeIn">
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Campuses</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {campuses.map((campus) => (
+                  <div key={campus._id} className="p-4 border rounded-xl bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-gray-900">{campus.name}</h4>
+                      <Badge variant="primary">
+                        {typeof campus.location === 'object'
+                          ? `${campus.location.city || ''}${campus.location.city && campus.location.state ? ', ' : ''}${campus.location.state || ''}`
+                          : campus.location || 'Active'}
+                      </Badge>
+                    </div>
+                    <div className="mt-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Discord Channel ID</label>
+                        <div className="group relative">
+                          <AlertCircle className="w-3 h-3 text-gray-400 cursor-help" />
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-tight">
+                            All notifications for this campus (Job Postings, Application Updates, and Self-Applications) will be sent here. This channel takes priority over global settings.
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          className="flex-1 text-sm rounded-lg border-gray-200"
+                          placeholder="Channel ID (e.g. 123456...)"
+                          defaultValue={campus.discordChannelId}
+                          onChange={(e) => setTempDiscordChannelId(e.target.value)}
+                        />
+                        <Button size="sm" onClick={() => handleSaveCampusDiscord(campus._id)} className="rounded-lg"><Save className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Placement Cycles</h3>
+              <div className="flex gap-2 mb-6">
+                <select className="w-32" value={newCycle.month} onChange={(e) => setNewCycle({ ...newCycle, month: e.target.value })}>
+                  <option value="">Month</option>
+                  {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>)}
+                </select>
+                <select className="w-32" value={newCycle.year} onChange={(e) => setNewCycle({ ...newCycle, year: e.target.value })}>
+                  <option value="">Year</option>
+                  {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <input className="flex-1" placeholder="Description..." value={newCycle.description} onChange={(e) => setNewCycle({ ...newCycle, description: e.target.value })} />
+                <Button onClick={createPlacementCycle} disabled={creatingCycle}>Create</Button>
+              </div>
+              <div className="space-y-2">
+                {placementCycles.map((cycle) => (
+                  <div key={cycle._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium">{new Date(2000, cycle.month - 1).toLocaleString('default', { month: 'long' })} {cycle.year}</p>
+                      <p className="text-xs text-gray-500">{cycle.description}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant={cycle.isActive ? 'primary' : 'secondary'} onClick={() => toggleCycleActive(cycle._id, cycle.isActive)}>{cycle.isActive ? 'Active' : 'Inactive'}</Button>
+                      <Button size="sm" variant="danger" onClick={() => deletePlacementCycle(cycle._id)}><Plus className="w-4 h-4 rotate-45" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">AI Integration (Gemini)</h3>
+              <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-xl mb-6">
+                <div>
+                  <h4 className="font-bold text-indigo-900">AI Assistant</h4>
+                  <p className="text-sm text-indigo-700">Powers smart insights and student profiling.</p>
+                </div>
+                <Button variant={aiConfig.enabled ? 'primary' : 'secondary'} onClick={toggleAiEnabled}>{aiConfig.enabled ? 'Enabled' : 'Disabled'}</Button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Google AI API Key</label>
+                  <div className="flex gap-2">
+                    <input type="password" placeholder={aiConfig.hasApiKey ? '••••••••••••••••' : 'Enter API Key'} value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} />
+                    <Button onClick={saveAiConfig} disabled={savingAiConfig}>Update</Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Discord Bot</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <h4 className="font-bold">Bot Status</h4>
+                    <p className="text-sm text-gray-500">Connected to your workspace.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={settings.discordConfig?.enabled} onChange={(e) => setSettings({ ...settings, discordConfig: { ...settings.discordConfig, enabled: e.target.checked } })} />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-indigo-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4 pt-2">
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5 transition-colors">Server ID</label>
+                      <input
+                        type="text"
+                        placeholder="Discord Guild ID"
+                        className="w-full bg-gray-50 border-none rounded-xl px-4 py-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                        value={settings.discordConfig?.guildId || ''}
+                        onChange={(e) => setSettings({ ...settings, discordConfig: { ...settings.discordConfig, guildId: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5 transition-colors">Bot Token</label>
+                      <input
+                        type="password"
+                        placeholder="Bot Token"
+                        className="w-full bg-gray-50 border-none rounded-xl px-4 py-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                        value={settings.discordConfig?.botToken || ''}
+                        onChange={(e) => setSettings({ ...settings, discordConfig: { ...settings.discordConfig, botToken: e.target.value } })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
+                    <h5 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <MessageSquare className="w-3 h-3" />
+                      Global Channels (Fallbacks)
+                    </h5>
+
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase">Job Postings Channel</label>
+                          <div className="group relative">
+                            <AlertCircle className="w-3 h-3 text-gray-400 cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-tight">
+                              Used for job postings that apply to multiple or all campuses.
+                            </div>
+                          </div>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Channel ID"
+                          className="w-full bg-white border border-indigo-100 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                          value={settings.discordConfig?.channels?.jobPostings || ''}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            discordConfig: {
+                              ...settings.discordConfig,
+                              channels: { ...settings.discordConfig.channels, jobPostings: e.target.value }
+                            }
+                          })}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase">General Notifications</label>
+                          <div className="group relative">
+                            <AlertCircle className="w-3 h-3 text-gray-400 cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-tight">
+                              Used for system-wide announcements and testing integration.
+                            </div>
+                          </div>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Channel ID"
+                          className="w-full bg-white border border-indigo-100 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                          value={settings.discordConfig?.channels?.general || ''}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            discordConfig: {
+                              ...settings.discordConfig,
+                              channels: { ...settings.discordConfig.channels, general: e.target.value }
+                            }
+                          })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-indigo-100/50">
+                      <p className="text-[10px] text-indigo-400 leading-relaxed font-medium italic">
+                        Note: Self-application and student-specific notifications ALWAYS require a campus-specific channel and will not be sent to global channels.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
       {/* Save reminder */}
       <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <div className="flex items-center">
@@ -1800,6 +1448,150 @@ node scripts/promote_normalized_index_unique.js`;
           </p>
         </div>
       </div>
+      {/* Company Detail Modal */}
+      {selectedCompany && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-fadeIn" onClick={() => setSelectedCompany(null)}></div>
+
+          <div className="relative w-full max-w-xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-pop border border-gray-100">
+            {/* Modal Header/Banner */}
+            <div className="h-32 bg-gradient-to-r from-blue-600 to-indigo-700 relative">
+              <button
+                onClick={() => setSelectedCompany(null)}
+                className="absolute top-6 right-6 p-2 bg-white/20 hover:bg-white/30 text-white rounded-full backdrop-blur-md transition-all z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="px-8 pb-10 -mt-12 relative">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-24 h-24 bg-white rounded-3xl shadow-xl flex items-center justify-center p-4 mb-6 border-4 border-white">
+                  {selectedCompany.logo ? (
+                    <img src={selectedCompany.logo} alt={selectedCompany.name} className="w-full h-full object-contain" />
+                  ) : (
+                    <Building2 className="w-10 h-10 text-gray-300" />
+                  )}
+                </div>
+
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight mb-2">
+                  {selectedCompany.name}
+                </h2>
+
+                {selectedCompany.website && (
+                  <a
+                    href={selectedCompany.website.startsWith('http') ? selectedCompany.website : `https://${selectedCompany.website}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-full text-sm font-bold hover:bg-blue-100 transition-all mb-8 group"
+                  >
+                    <Globe className="w-4 h-4" />
+                    {selectedCompany.website.replace(/^https?:\/\//, '')}
+                    <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                )}
+
+                <div className="w-full bg-gray-50 rounded-3xl p-6 text-left border border-gray-100">
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <MessageSquare className="w-3 h-3 text-blue-500" />
+                    About Company
+                  </h4>
+                  <p className="text-gray-600 text-sm leading-relaxed">
+                    {selectedCompany.description || "No description provided for this company."}
+                  </p>
+                </div>
+
+                <div className="mt-8 flex gap-3 w-full">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setSelectedCompany(null)}
+                    className="flex-1 rounded-2xl py-4 font-bold"
+                  >
+                    Close View
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Company Modal */}
+      {isAddingCompany && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-fadeIn" onClick={() => setIsAddingCompany(false)}></div>
+
+          <div className="relative w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-pop border border-gray-100">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h2 className="text-2xl font-black text-gray-900">Add New Company</h2>
+                  <p className="text-sm text-gray-500 mt-1">Register a company in the master list.</p>
+                </div>
+                <button onClick={() => setIsAddingCompany(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Company Name</label>
+                  <input
+                    type="text"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-sm font-medium"
+                    placeholder="e.g. Google India"
+                    value={newCompany.name}
+                    onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Official Website</label>
+                  <div className="relative">
+                    <Globe className="absolute left-5 top-4 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      className="w-full pl-12 pr-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-sm font-medium"
+                      placeholder="e.g. www.google.com"
+                      value={newCompany.website}
+                      onChange={(e) => setNewCompany({ ...newCompany, website: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Description</label>
+                  <textarea
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-sm font-medium min-h-[120px] resize-none"
+                    placeholder="Tell us a bit about what this company does..."
+                    value={newCompany.description}
+                    onChange={(e) => setNewCompany({ ...newCompany, description: e.target.value })}
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setIsAddingCompany(false)}
+                    className="flex-1 rounded-2xl py-4 font-bold border-gray-200"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleAddCompany}
+                    className="flex-1 rounded-2xl py-4 font-bold shadow-lg shadow-blue-200"
+                    disabled={!newCompany.name.trim()}
+                  >
+                    Register Company
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

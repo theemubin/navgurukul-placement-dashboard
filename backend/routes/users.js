@@ -1045,13 +1045,24 @@ router.put('/:userId', auth, authorize('manager'), async (req, res) => {
 
     // Allow manager to update select studentProfile fields when editing a student
     if (studentProfile && user.role === 'student') {
-      const { currentStatus, joiningDate, batch, currentSchool, linkedIn, resumeLink, resumeAccessibilityRemark, resumeAccessible, about } = studentProfile;
+      const {
+        currentStatus, isPaidProject, onInternship, internshipType,
+        joiningDate, batch, currentSchool, currentModule,
+        houseName, linkedIn, github, portfolio, resumeLink,
+        resumeAccessibilityRemark, resumeAccessible, about
+      } = studentProfile;
       if (currentStatus !== undefined) user.studentProfile.currentStatus = currentStatus;
+      if (isPaidProject !== undefined) user.studentProfile.isPaidProject = isPaidProject;
+      if (onInternship !== undefined) user.studentProfile.onInternship = onInternship;
+      if (internshipType !== undefined) user.studentProfile.internshipType = internshipType;
       if (joiningDate !== undefined) user.studentProfile.joiningDate = new Date(joiningDate);
-      // batch removed from modal requirement; keep updating if passed but UI no longer sends it
       if (batch !== undefined) user.studentProfile.batch = batch;
       if (currentSchool !== undefined) user.studentProfile.currentSchool = currentSchool;
+      if (currentModule !== undefined) user.studentProfile.currentModule = currentModule;
+      if (houseName !== undefined) user.studentProfile.houseName = houseName;
       if (linkedIn !== undefined) user.studentProfile.linkedIn = linkedIn;
+      if (github !== undefined) user.studentProfile.github = github;
+      if (portfolio !== undefined) user.studentProfile.portfolio = portfolio;
       if (about !== undefined) user.studentProfile.about = about;
 
       // If manager provided a resume link, verify accessibility and store decision and remark

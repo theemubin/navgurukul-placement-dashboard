@@ -7,6 +7,191 @@ const Campus = require('../models/Campus');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
 
+// Get detailed reports and analytics
+router.get('/reports', auth, authorize('manager'), async (req, res) => {
+  try {
+    const { dateRange = 'year' } = req.query;
+
+    // Set up date filter based on range
+    const now = new Date();
+    let dateFilter = {};
+    if (dateRange === 'year') {
+      dateFilter = { createdAt: { $gte: new Date(now.getFullYear(), 0, 1) } };
+    } else if (dateRange === 'quarter') {
+      const quarterStart = new Date();
+      quarterStart.setMonth(now.getMonth() - 3);
+      dateFilter = { createdAt: { $gte: quarterStart } };
+    } else if (dateRange === 'month') {
+      dateFilter = { createdAt: { $gte: new Date(now.getFullYear(), now.getMonth(), 1) } };
+    }
+
+    // 1. Basic Stats
+    const totalStudents = await User.countDocuments({ role: 'student', isActive: true });
+    const placedStudents = await Application.countDocuments({ status: 'selected' });
+    const totalJobs = await Job.countDocuments({});
+    const totalCompaniesCount = (await Job.distinct('company.name')).length;
+
+    // 2. Monthly Placement Trend (last 12 months)
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+    twelveMonthsAgo.setDate(1);
+
+    const monthlyDataRaw = await Application.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: twelveMonthsAgo }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            month: { $month: '$createdAt' },
+            year: { $year: '$createdAt' },
+            isPlacement: { $eq: ['$status', 'selected'] }
+          },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Format monthly data for frontend
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthlyTrend = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date();
+      d.setMonth(now.getMonth() - (11 - i));
+      const m = d.getMonth() + 1;
+      const y = d.getFullYear();
+
+      const apps = monthlyDataRaw.filter(v => v._id.month === m && v._id.year === y);
+      const placements = apps.find(v => v._id.isPlacement)?.count || 0;
+      const totalApps = apps.reduce((sum, item) => sum + item.count, 0);
+
+      monthlyTrend.push({
+        month: months[m - 1],
+        applications: totalApps,
+        placements: placements
+      });
+    }
+
+    // 3. Placement Rate by School
+    const schoolStats = await User.aggregate([
+      { $match: { role: 'student', isActive: true } },
+      {
+        $group: {
+          _id: '$studentProfile.currentSchool',
+          total: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const schoolPerformance = await Promise.all(schoolStats.map(async (school) => {
+      if (!school._id) return null;
+      const placements = await Application.countDocuments({
+        status: 'selected',
+        student: { $in: (await User.find({ 'studentProfile.currentSchool': school._id }).select('_id')).map(s => s._id) }
+      });
+      return {
+        school: school._id,
+        rate: school.total > 0 ? Math.round((placements / school.total) * 100) : 0,
+        students: school.total
+      };
+    }));
+
+    // 4. Top Recruiting Companies
+    const companyStats = await Application.aggregate([
+      { $match: { status: 'selected' } },
+      {
+        $lookup: {
+          from: 'jobs',
+          localField: 'job',
+          foreignField: '_id',
+          as: 'job'
+        }
+      },
+      { $unwind: '$job' },
+      {
+        $group: {
+          _id: '$job.company.name',
+          hires: { $sum: 1 },
+          avgSalary: { $avg: '$offerDetails.salary' },
+          fallbackSalary: { $avg: '$job.salary.max' }
+        }
+      },
+      { $sort: { hires: -1 } },
+      { $limit: 10 }
+    ]);
+
+    const topCompanies = companyStats.map((c, i) => ({
+      name: c._id,
+      hires: c.hires,
+      package: c.avgSalary ? `${Math.round(c.avgSalary / 100000)} LPA` : (c.fallbackSalary ? `${Math.round(c.fallbackSalary / 100000)} LPA` : 'N/A')
+    }));
+
+    // 5. Campus Performance
+    const campusData = await Campus.find({ isActive: true });
+    const campusStats = await Promise.all(campusData.map(async (campus) => {
+      const students = await User.countDocuments({ role: 'student', campus: campus._id, isActive: true });
+      const studentIds = await User.find({ campus: campus._id }).select('_id');
+      const placements = await Application.countDocuments({
+        student: { $in: studentIds.map(s => s._id) },
+        status: 'selected'
+      });
+      return {
+        name: campus.name,
+        students,
+        placements
+      };
+    }));
+
+    // 6. Quick Stats
+    const salaryStats = await Application.aggregate([
+      { $match: { status: 'selected', 'offerDetails.salary': { $gt: 0 } } },
+      {
+        $group: {
+          _id: null,
+          max: { $max: '$offerDetails.salary' },
+          min: { $min: '$offerDetails.salary' },
+          avg: { $avg: '$offerDetails.salary' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const ppoOffers = await Application.countDocuments({
+      status: 'selected',
+      'job.jobType': 'internship' // assuming internship converted to PPO
+    });
+
+    const reportData = {
+      totalStudents,
+      placedStudents,
+      totalJobs,
+      totalCompaniesCount,
+      monthlyTrend,
+      schoolPerformance: schoolPerformance.filter(Boolean).sort((a, b) => b.rate - a.rate),
+      topCompanies,
+      campusStats,
+      quickStats: {
+        highestPackage: salaryStats[0]?.max ? `${Math.round(salaryStats[0].max / 100000)} LPA` : 'N/A',
+        averagePackage: salaryStats[0]?.avg ? `${Math.round(salaryStats[0].avg / 100000)} LPA` : 'N/A',
+        lowestPackage: salaryStats[0]?.min ? `${Math.round(salaryStats[0].min / 100000)} LPA` : 'N/A',
+        totalOffers: salaryStats[0]?.count || placedStudents,
+        ppoOffers: 0, // Placeholder for actual PPO logic if implemented
+        dreamCompanies: topCompanies.filter(c => parseFloat(c.package) >= 10).length
+      }
+    };
+
+    res.json({ success: true, data: reportData });
+  } catch (error) {
+    console.error('Get report stats error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Support both legacy 'active' status and new pipeline stages
+const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing'];
+
 // Get dashboard stats (Managers and Coordinators)
 router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
@@ -23,8 +208,6 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
     }
 
     // Get counts
-    // Support both legacy 'active' status and new pipeline stages
-    const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing'];
     const totalStudents = await User.countDocuments(studentQuery);
     const totalJobs = await Job.countDocuments({ status: { $in: activeStatuses } });
     const totalApplications = await Application.countDocuments(applicationQuery);
@@ -33,6 +216,7 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
     // Get active companies
     const activeJobs = await Job.find({ status: { $in: activeStatuses } }).distinct('company.name');
     const activeCompanies = activeJobs.length;
+
 
     // Applications by status
     const applicationsByStatus = await Application.aggregate([
@@ -446,11 +630,10 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
     // Student status counts
     const statusCounts = {
       'Active': 0,
-      'Placed': 0,
+      'In active': 0,
+      'Long Leave': 0,
       'Dropout': 0,
-      'Internship Paid': 0,
-      'Internship UnPaid': 0,
-      'Paid Project': 0
+      'Placed': 0
     };
 
     students.forEach(s => {

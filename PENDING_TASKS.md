@@ -3,6 +3,8 @@
 This file lists actionable, high-priority work discovered during the recent changes (2026-01-14).
 
 ## High Priority
+- AI Integration Refinement: Further refine the JD parsing and mapping logic to handle complex job descriptions and ensure 100% accuracy in field mapping.
+- Deploy on GitHub: Push the current codebase to the GitHub repository and ensure all sync workflows are active.
 - Add unit tests for `checkUrlAccessible` (backend/utils/urlChecker.js):
   - public Drive file -> accessible
   - private Drive -> sign-in redirect / inaccessible

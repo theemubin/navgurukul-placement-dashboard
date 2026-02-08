@@ -7,7 +7,7 @@ import {
   ArrowLeft, Save, Plus, X, Sparkles, Upload, Link, FileText,
   AlertCircle, Users, CheckCircle, Search, Building, MapPin,
   Home, Briefcase, IndianRupee, ExternalLink, Calendar, Clock,
-  History, Download, Settings, Trash2, Edit
+  History, Download, Settings, Trash2, Edit, Share2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -19,6 +19,7 @@ const JobForm = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [broadcasting, setBroadcasting] = useState(false);
   const [skills, setSkills] = useState([]); // Technical skills
   const [domainSkills, setDomainSkills] = useState([]); // Domain skills
   const [otherSkills, setOtherSkills] = useState([]); // Other skills
@@ -30,6 +31,8 @@ const JobForm = () => {
   const [studentCount, setStudentCount] = useState({ total: 0, eligible: 0 });
   const [coordinators, setCoordinators] = useState([]);
   const [jdUrl, setJdUrl] = useState('');
+  const [jdRawText, setJdRawText] = useState('');
+  const [showRawTextInput, setShowRawTextInput] = useState(false);
   const [aiParseInfo, setAiParseInfo] = useState(null);
   const [parsedSuggestion, setParsedSuggestion] = useState(null); // holds parsed JD data for preview
 
@@ -415,6 +418,27 @@ const JobForm = () => {
     }
   };
 
+  const handleCopyLink = () => {
+    const baseUrl = window.location.origin;
+    const shareUrl = `${baseUrl}/student/jobs/${id}`;
+    navigator.clipboard.writeText(shareUrl);
+    toast.success('Shareable student link copied to clipboard!');
+  };
+
+  const handleBroadcast = async () => {
+    if (!id) return;
+    setBroadcasting(true);
+    try {
+      await jobAPI.broadcastJob(id);
+      toast.success('Job broadcasted to Discord!');
+    } catch (err) {
+      toast.error('Failed to broadcast job');
+      console.error(err);
+    } finally {
+      setBroadcasting(false);
+    }
+  };
+
   // Helper to add/remove list items
   const addListItem = (field) => {
     // For structured list types, add object defaults; otherwise add empty string
@@ -492,7 +516,7 @@ const JobForm = () => {
     setParsing(true);
     try {
       const res = await jobAPI.parseJDFromUrl(jdUrl);
-      setParsedSuggestion(res.data);
+      setParsedSuggestion(res.data.data);
       setAiParseInfo({ method: 'url', success: true });
       toast.success('JD Parsed! Review suggestions below.');
     } catch (error) {
@@ -508,7 +532,7 @@ const JobForm = () => {
     setParsing(true);
     try {
       const res = await jobAPI.parseJDFromPDF(file);
-      setParsedSuggestion(res.data);
+      setParsedSuggestion(res.data.data);
       setAiParseInfo({ method: 'file', success: true });
       toast.success('JD Parsed! Review suggestions below.');
     } catch (error) {
@@ -518,8 +542,51 @@ const JobForm = () => {
     }
   };
 
+  const handleParseRawText = async () => {
+    if (!jdRawText.trim()) return;
+    setParsing(true);
+    try {
+      const res = await jobAPI.parseJDFromText(jdRawText);
+      setParsedSuggestion(res.data.data);
+      setAiParseInfo({ method: 'text', success: true });
+      toast.success('JD Parsed! Review suggestions below.');
+      setShowRawTextInput(false);
+    } catch (error) {
+      console.error('Parse Raw Text Error:', error);
+      toast.error('Failed to parse JD text');
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const applySuggestion = () => {
     if (!parsedSuggestion) return;
+
+    // Map suggested skills to system skills
+    const mappedSkills = [];
+    if (parsedSuggestion.suggestedSkills) {
+      parsedSuggestion.suggestedSkills.forEach(skillName => {
+        const existingSkill = allSkills.find(s => s.name.toLowerCase() === skillName.toLowerCase());
+        if (existingSkill) {
+          mappedSkills.push({
+            skill: existingSkill._id,
+            proficiencyLevel: 1,
+            mandatory: true
+          });
+        }
+      });
+    }
+
+    // Process custom requirements
+    let customReqs = formData.customRequirements || [];
+    if (parsedSuggestion.requirements && parsedSuggestion.requirements.length > 0) {
+      const parsedReqs = parsedSuggestion.requirements.map(req => ({
+        requirement: req,
+        isMandatory: true
+      }));
+      customReqs = [...customReqs, ...parsedReqs].slice(0, 15);
+    }
+
     setFormData(prev => ({
       ...prev,
       title: parsedSuggestion.title || prev.title,
@@ -530,11 +597,15 @@ const JobForm = () => {
         website: parsedSuggestion.company?.website || prev.company.website
       },
       location: parsedSuggestion.location || prev.location,
+      jobType: parsedSuggestion.jobType || prev.jobType,
       salary: {
         ...prev.salary,
         min: parsedSuggestion.salary?.min || prev.salary.min,
         max: parsedSuggestion.salary?.max || prev.salary.max
       },
+      // Merge unique skills
+      requiredSkills: [...new Map([...prev.requiredSkills, ...mappedSkills].map(item => [item.skill, item])).values()],
+      customRequirements: customReqs
     }));
     setParsedSuggestion(null);
     toast.success('Applied suggestions to form');
@@ -643,6 +714,29 @@ const JobForm = () => {
           >
             {formData.status === 'published' ? 'Published' : 'Draft'}
           </button>
+          {isEdit && (
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="btn bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-100 flex items-center gap-2"
+              title="Copy student-facing job link"
+            >
+              <Share2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Share Link</span>
+            </button>
+          )}
+          {isEdit && (
+            <button
+              type="button"
+              onClick={handleBroadcast}
+              disabled={broadcasting}
+              className="btn bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-100 flex items-center gap-2"
+              title="Broadcast to Discord"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span className="hidden sm:inline">{broadcasting ? 'Broadcasting...' : 'Broadcast'}</span>
+            </button>
+          )}
           <button
             onClick={handleSubmit}
             disabled={saving}
@@ -666,7 +760,7 @@ const JobForm = () => {
               </div>
               <div className="flex-1">
                 <h2 className="text-lg font-semibold text-indigo-900 mb-1">Auto-fill with AI</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <input
@@ -693,7 +787,55 @@ const JobForm = () => {
                       <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
                     </label>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowRawTextInput(!showRawTextInput)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-dashed border-indigo-300 rounded cursor-pointer hover:bg-white/50 transition bg-white text-sm text-indigo-700 font-medium"
+                    >
+                      <FileText className="w-4 h-4 text-indigo-600" />
+                      Paste Text
+                    </button>
+                  </div>
                 </div>
+
+                {showRawTextInput && (
+                  <div className="mt-4 animate-slideDown">
+                    <textarea
+                      placeholder="Paste the complete Job Description here..."
+                      className="w-full p-3 rounded border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[150px] text-sm"
+                      value={jdRawText}
+                      onChange={(e) => setJdRawText(e.target.value)}
+                    />
+                    <div className="flex justify-end gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowRawTextInput(false)}
+                        className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-600"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleParseRawText}
+                        disabled={parsing || !jdRawText.trim()}
+                        className="px-6 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2 transition-all"
+                      >
+                        {parsing ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Parsing...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            Analyze JD
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             {parsedSuggestion && (
@@ -705,10 +847,43 @@ const JobForm = () => {
                     <button type="button" onClick={applySuggestion} className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">Apply</button>
                   </div>
                 </div>
-                <div className="text-sm">
-                  <p><strong>Title:</strong> {parsedSuggestion.title}</p>
-                  <p><strong>Company:</strong> {parsedSuggestion.company?.name}</p>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold">Job Title</p>
+                    <p className="font-medium truncate" title={parsedSuggestion.title}>{parsedSuggestion.title || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold">Company</p>
+                    <p className="font-medium truncate" title={parsedSuggestion.company?.name}>{parsedSuggestion.company?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold">Location</p>
+                    <p className="font-medium truncate" title={parsedSuggestion.location}>{parsedSuggestion.location || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold">Salary (Annual)</p>
+                    <p className="font-medium">
+                      {parsedSuggestion.salary?.min ? `₹${(parsedSuggestion.salary.min / 100000).toFixed(1)}L` : 'N/A'}
+                      {parsedSuggestion.salary?.max && parsedSuggestion.salary.max !== parsedSuggestion.salary.min ? ` - ₹${(parsedSuggestion.salary.max / 100000).toFixed(1)}L` : ''}
+                    </p>
+                  </div>
                 </div>
+
+                {parsedSuggestion.suggestedSkills?.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-indigo-50">
+                    <p className="text-gray-400 text-[10px] uppercase font-bold mb-1.5">Skills Found</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {parsedSuggestion.suggestedSkills.map((skill, i) => {
+                        const isMatch = allSkills.some(s => s.name.toLowerCase() === skill.toLowerCase());
+                        return (
+                          <span key={i} className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${isMatch ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {skill}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

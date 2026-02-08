@@ -62,11 +62,11 @@ const upload = multer({
 // Parse JD with AI (PDF or URL)
 router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.single('pdf'), async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, text: rawText } = req.body;
     const pdfFile = req.file;
 
-    if (!url && !pdfFile) {
-      return res.status(400).json({ message: 'Please provide either a PDF file or a URL' });
+    if (!url && !pdfFile && !rawText) {
+      return res.status(400).json({ message: 'Please provide either a PDF file, a URL, or raw text' });
     }
 
     // Get AI config from settings (global keys)
@@ -97,9 +97,11 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
     const aiService = new AIService(allKeys);
     let text = '';
 
-    // Extract text from PDF or URL
+    // Extract text from PDF or URL or use raw text
     try {
-      if (pdfFile) {
+      if (rawText) {
+        text = rawText;
+      } else if (pdfFile) {
         text = await aiService.extractTextFromPDF(pdfFile.buffer);
       } else if (url) {
         text = await aiService.extractTextFromURL(url);
@@ -125,9 +127,15 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
     let parsedWith = 'code';
 
     // Step 2: If code-based gave minimal results and AI is available, try AI
-    if (allKeys.length > 0 && settings.aiConfig?.enabled !== false &&
-      (!parsedData || !parsedData.title || parsedData.suggestedSkills.length < 3)) {
-      console.log('Code extraction had limited results, attempting AI parsing...');
+    // We want AI help if code based failed to find a title, company, or enough skills/description
+    const isCodeResultsMinimal = !parsedData ||
+      !parsedData.title ||
+      !parsedData.company?.name ||
+      (parsedData.suggestedSkills?.length || 0) < 5 ||
+      (parsedData.description?.length || 0) < 50;
+
+    if (allKeys.length > 0 && settings.aiConfig?.enabled !== false && isCodeResultsMinimal) {
+      console.log('Code extraction had limited results or missing key info, attempting AI parsing...');
       try {
         const aiResult = await aiService.parseJobDescription(text, skillNames);
         // Merge AI results into code results, AI fills gaps
@@ -491,7 +499,7 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
         type: 'new_job_posting',
         title: 'New Job Opportunity',
         message: `${job.company.name} is hiring for ${job.title}. Apply now!`,
-        link: `/jobs/${job._id}`,
+        link: `/student/jobs/${job._id}`,
         relatedEntity: { type: 'job', id: job._id }
       }));
 
@@ -556,7 +564,7 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
         type: 'new_job_posting',
         title: 'New Job Opportunity',
         message: `${job.company.name} is hiring for ${job.title}. Apply now!`,
-        link: `/jobs/${job._id}`,
+        link: `/student/jobs/${job._id}`,
         relatedEntity: { type: 'job', id: job._id }
       }));
 
@@ -833,7 +841,7 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
         type: 'new_job_posting',
         title: 'New Job Opportunity',
         message: `${job.company.name} is hiring for ${job.title}. Apply now!`,
-        link: `/jobs/${job._id}`,
+        link: `/student/jobs/${job._id}`,
         relatedEntity: { type: 'job', id: job._id }
       }));
 
@@ -856,6 +864,38 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
   } catch (error) {
     console.error('Update job status error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Manual broadcast to Discord
+router.post('/:id/broadcast', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id).populate('coordinator createdBy');
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+
+    // Use coordinator if assigned, otherwise creator
+    const sender = job.coordinator || job.createdBy || req.user;
+
+    const eligibleStudents = await User.find({
+      role: 'student',
+      isActive: true,
+      campus: job.eligibility.campuses?.length > 0
+        ? { $in: job.eligibility.campuses }
+        : { $exists: true }
+    });
+
+    const discordResult = await discordService.sendJobPosting(job, sender, eligibleStudents);
+
+    if (discordResult) {
+      if (discordResult.messageId) job.discordMessageId = discordResult.messageId;
+      if (discordResult.threadId) job.discordThreadId = discordResult.threadId;
+      await job.save();
+    }
+
+    res.json({ success: true, message: 'Job broadcasted to Discord successfully', discordResult });
+  } catch (error) {
+    console.error('Broadcast error:', error);
+    res.status(500).json({ message: 'Failed to broadcast job' });
   }
 });
 
