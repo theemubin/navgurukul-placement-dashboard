@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { statsAPI, applicationAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
-import { FileText, Briefcase, CheckCircle, XCircle, Clock, TrendingUp, DollarSign } from 'lucide-react';
+import { FileText, Briefcase, CheckCircle, XCircle, Clock, TrendingUp, DollarSign, Eye } from 'lucide-react';
 
 const StudentDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -108,7 +108,7 @@ const StudentDashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Link to="/student/jobs" className="card hover:shadow-md transition-shadow">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-primary-100 rounded-lg">
@@ -128,6 +128,17 @@ const StudentDashboard = () => {
             <div>
               <h3 className="font-semibold text-gray-900">Update Profile</h3>
               <p className="text-sm text-gray-500">Keep your profile up to date</p>
+            </div>
+          </div>
+        </Link>
+        <Link to="/students" className="card hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-purple-100 rounded-lg">
+              <Eye className="w-6 h-6 text-purple-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">View Portfolios</h3>
+              <p className="text-sm text-gray-500">Browse student portfolios</p>
             </div>
           </div>
         </Link>

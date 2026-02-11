@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { statsAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner } from '../../components/common/UIComponents';
-import { Briefcase, FileText, Users, TrendingUp, Building, Plus } from 'lucide-react';
+import { Briefcase, FileText, Users, TrendingUp, Building, Plus, Eye } from 'lucide-react';
 
 const CoordinatorDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -39,10 +39,16 @@ const CoordinatorDashboard = () => {
           <h1 className="text-2xl font-bold text-gray-900">Coordinator Dashboard</h1>
           <p className="text-gray-600">Manage jobs, applications, and placements</p>
         </div>
-        <Link to="/coordinator/jobs/new" className="btn btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          Post New Job
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link to="/students" className="btn btn-secondary flex items-center gap-2" title="View student portfolios">
+            <Eye className="w-4 h-4" />
+            Portfolios
+          </Link>
+          <Link to="/coordinator/jobs/new" className="btn btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Post New Job
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}

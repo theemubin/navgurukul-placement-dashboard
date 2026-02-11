@@ -1014,6 +1014,131 @@ router.get('/', auth, authorize('manager'), async (req, res) => {
   }
 });
 
+// PUBLIC: Get portfolio students (public endpoint, no auth required)
+// Returns only approved students with public-safe profile data
+router.get('/portfolio', async (req, res) => {
+  try {
+    const { campus, skill, search, page = 1, limit = 12 } = req.query;
+
+    let query = {
+      role: 'student',
+      'studentProfile.profileStatus': 'approved',
+      'studentProfile.currentStatus': 'Active'
+    };
+
+    // Filter by campus if provided
+    if (campus) {
+      query.campus = campus;
+    }
+
+    // Filter by approved skill if provided
+    if (skill) {
+      query['studentProfile.skills'] = {
+        $elemMatch: {
+          status: 'approved',
+          skill: skill
+        }
+      };
+    }
+
+    // Search by name or email
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Fetch students with pagination
+    const students = await User.find(query)
+      .select(
+        'firstName lastName avatar campus email ' +
+        'studentProfile.about studentProfile.currentStatus ' +
+        'studentProfile.resume studentProfile.resumeLink ' +
+        'studentProfile.portfolio studentProfile.github studentProfile.linkedIn ' +
+        'studentProfile.skills studentProfile.technicalSkills'
+      )
+      .populate('campus', 'name code')
+      .populate('studentProfile.skills.skill', 'name')
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+
+    // Transform response to only include approved skills
+    const portfolioStudents = students.map(student => {
+      const doc = student.toObject();
+      const approvedSkills = doc.studentProfile?.skills
+        ?.filter(s => s.status === 'approved')
+        ?.map(s => ({
+          name: s.skill?.name,
+          id: s.skill?._id
+        }))
+        || [];
+
+      return {
+        id: doc._id,
+        firstName: doc.firstName,
+        lastName: doc.lastName,
+        fullName: `${doc.firstName} ${doc.lastName}`,
+        avatar: doc.avatar || '',
+        campus: {
+          id: doc.campus?._id,
+          name: doc.campus?.name || 'N/A'
+        },
+        email: doc.email,
+        about: doc.studentProfile?.about || '',
+        status: doc.studentProfile?.currentStatus,
+        resume: doc.studentProfile?.resumeLink || doc.studentProfile?.resume || '',
+        portfolio: doc.studentProfile?.portfolio || '',
+        github: doc.studentProfile?.github || '',
+        linkedIn: doc.studentProfile?.linkedIn || '',
+        approvedSkills: approvedSkills
+      };
+    });
+
+    const total = await User.countDocuments(query);
+
+    res.json({
+      students: portfolioStudents,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / limit),
+        total
+      }
+    });
+  } catch (error) {
+    console.error('Get portfolio students error:', error);
+    res.status(500).json({ message: 'Server error fetching portfolio students' });
+  }
+});
+
+// PUBLIC: Get all campuses for portfolio filters
+router.get('/portfolio/campuses', async (req, res) => {
+  try {
+    const Campus = require('../models/Campus');
+    const campuses = await Campus.find().select('_id name code').sort('name');
+    res.json(campuses);
+  } catch (error) {
+    console.error('Get campuses error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUBLIC: Get all approved skills for portfolio filters
+router.get('/portfolio/skills', async (req, res) => {
+  try {
+    const Skill = require('../models/Skill');
+    const skills = await Skill.find()
+      .select('_id name category')
+      .sort('name');
+    res.json(skills);
+  } catch (error) {
+    console.error('Get skills error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get user by id (manager only)
 router.get('/:userId', auth, authorize('manager'), async (req, res) => {
   try {
