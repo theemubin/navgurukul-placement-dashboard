@@ -380,4 +380,11 @@ export const bulkUploadAPI = {
   }
 };
 
+// Portfolio APIs (public, no auth required)
+export const portfolioAPI = {
+  getPortfolioStudents: (params) => api.get('/users/portfolio', { params }),
+  getPortfolioCampuses: () => api.get('/users/portfolio/campuses'),
+  getPortfolioSkills: () => api.get('/users/portfolio/skills')
+};
+
 export default api;

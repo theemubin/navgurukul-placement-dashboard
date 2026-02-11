@@ -201,6 +201,14 @@ const POCDashboard = () => {
           <Plus className="w-4 h-4" />
           New Placement Cycle
         </button>
+        <Link
+          to="/students"
+          className="btn btn-secondary flex items-center gap-2"
+          title="View student portfolios"
+        >
+          <Eye className="w-4 h-4" />
+          Portfolios
+        </Link>
       </div>
 
       {/* Campus Selection Modal */}

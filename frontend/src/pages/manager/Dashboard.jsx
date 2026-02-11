@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { statsAPI, userAPI } from '../../services/api';
 import api from '../../services/api';
 import { StatsCard, LoadingSpinner } from '../../components/common/UIComponents';
@@ -7,7 +8,7 @@ import ManagerStudents from '../../components/manager/ManagerStudents';
 import ManagerStaff from '../../components/manager/ManagerStaff';
 import {
   Users, Briefcase, Building2, Award, TrendingUp,
-  CheckCircle, Clock, BarChart3, PieChart, Download, UserCog
+  CheckCircle, Clock, BarChart3, PieChart, Download, UserCog, Eye
 } from 'lucide-react';
 import { DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -184,6 +185,14 @@ const Dashboard = () => {
             <option value="month">This Month</option>
             <option value="week">This Week</option>
           </select>
+          <Link
+            to="/students"
+            className="btn btn-secondary flex items-center gap-2"
+            title="View student portfolios"
+          >
+            <Eye className="w-4 h-4" />
+            Portfolios
+          </Link>
           <div className="flex gap-2">
             <button
               onClick={() => exportData('pdf')}
