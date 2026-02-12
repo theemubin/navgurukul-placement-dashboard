@@ -219,9 +219,16 @@ Progress: 4/9 completed (44%)
     id: String,
     title: String,
     description: String,
-    inputType: 'yes_no' | 'yes_no_link' | 'yes_no_file' | 'yes_no_score' | 'yes_no_list',
+    // inputType: 'yes_no' | 'yes_no_link' | 'yes_no_file' | 'yes_no_score' | 'yes_no_list', 
+	// Note: We need to support composite types (e.g. 'multi_input') to ask for Link + Yes/No + Notes in one go
+    inputType: String, 
     required: Boolean,
-    order: Number
+    order: Number,
+	inputs: [{ // For multi-input support
+		label: String,
+		type: 'text' | 'link' | 'file' | 'number' | 'boolean',
+		required: Boolean
+	}]
   }],
   createdBy: ObjectId,
   isActive: Boolean
@@ -238,6 +245,10 @@ Progress: 4/9 completed (44%)
     file: String,
     score: Number,
     list: [String],
+	inputValues: [{ // Store values for multi-inputs
+		label: String,
+		value: Any
+	}],
     submittedAt: Date,
     status: 'pending' | 'approved' | 'revision_needed',
     reviewedBy: ObjectId,
