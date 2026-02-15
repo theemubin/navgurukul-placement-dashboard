@@ -255,7 +255,9 @@ router.get('/available', auth, isManager, async (req, res) => {
     try {
         // Get all featured application IDs
         const featured = await FeaturedPlacement.find().select('application');
-        const featuredIds = featured.map(f => f.application.toString());
+        const featuredIds = featured
+            .filter(f => f.application)
+            .map(f => f.application.toString());
 
         // Find accepted applications not yet featured
         const available = await Application.find({
