@@ -164,19 +164,27 @@ const Portfolios = () => {
 
     // Intersection Observer for section tracking
     const [activeRole, setActiveRole] = useState(null);
+    const [visibleSections, setVisibleSections] = useState({});
 
     useEffect(() => {
         const observer = new IntersectionObserver(
             (entries) => {
+                // Find the section that is most centered in the viewport
+                let mostCentered = null;
+                let maxIntersection = 0;
+
                 entries.forEach((entry) => {
-                    if (entry.isIntersecting) {
-                        const role = entry.target.getAttribute('data-role');
-                        setActiveRole(role);
+                    if (entry.isIntersecting && entry.intersectionRatio > maxIntersection) {
+                        maxIntersection = entry.intersectionRatio;
+                        mostCentered = entry.target.getAttribute('data-role');
                     }
                 });
+
+                // Only set active role if we found one, otherwise clear it
+                setActiveRole(mostCentered);
             },
             {
-                threshold: 0,
+                threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
                 // Trigger when the section is in the middle of the screen
                 rootMargin: '-40% 0px -40% 0px'
             }
@@ -186,6 +194,25 @@ const Portfolios = () => {
         sections.forEach(section => observer.observe(section));
 
         return () => observer.disconnect();
+    }, [displayedRoles, isExpanded, loading]);
+
+    // Separate observer for fade-in animations
+    useEffect(() => {
+        const fadeObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        setVisibleSections(prev => ({ ...prev, [entry.target.id]: true }));
+                    }
+                });
+            },
+            { threshold: 0.2 }
+        );
+
+        const sections = document.querySelectorAll('.role-section');
+        sections.forEach(section => fadeObserver.observe(section));
+
+        return () => fadeObserver.disconnect();
     }, [displayedRoles, isExpanded, loading]);
 
     return (
@@ -319,9 +346,9 @@ const Portfolios = () => {
                                 </div>
 
                                 <div id="portfolios-grid" className="relative mt-12 pb-20">
-                                    {/* FIXED TITLE OVERLAY - Does not scroll */}
-                                    <div className="hidden md:flex fixed left-0 top-0 h-screen w-32 flex-col justify-center items-center z-[70] pointer-events-none">
-                                        <div className="relative h-full flex items-center justify-center">
+                                    {/* STICKY TITLE OVERLAY - Constrained to portfolios grid */}
+                                    <div className="hidden md:block sticky top-0 left-0 h-0 w-full pointer-events-none z-[70]">
+                                        <div className="absolute left-0 top-0 h-screen w-32 flex flex-col justify-center items-center">
                                             {activeRole && (
                                                 <h3
                                                     key={activeRole}
@@ -338,13 +365,13 @@ const Portfolios = () => {
                                             key={role}
                                             id={`role-${role.toLowerCase().replace(/\s+/g, '-')}`}
                                             data-role={role}
-                                            className="flex flex-col md:flex-row items-start gap-8 md:gap-16 relative min-h-screen role-section mb-60"
+                                            className="flex flex-col md:flex-row items-start gap-8 md:gap-16 relative min-h-[60vh] role-section mb-20"
                                         >
                                             {/* Spacer for Fixed Title Column */}
                                             <div className="md:w-32 flex-shrink-0"></div>
 
                                             {/* Right Side: Content Wrapper */}
-                                            <div className="flex-1 min-w-0 group relative py-12">
+                                            <div className={`flex-1 min-w-0 group relative py-8 transition-all duration-1000 ${visibleSections[`role-${role.toLowerCase().replace(/\s+/g, '-')}`] ? 'opacity-100' : 'opacity-0'}`}>
                                                 <div className="hidden md:flex items-center justify-between mb-10">
                                                     <div className="h-[1px] flex-1 bg-gray-100"></div>
                                                     <span className="px-6 py-2 bg-white border border-gray-100 rounded-full text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] shadow-sm">
