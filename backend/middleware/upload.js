@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Ensure upload directories exist
-const uploadDirs = ['uploads/resumes', 'uploads/avatars', 'uploads/documents'];
+const uploadDirs = ['uploads/resumes', 'uploads/avatars', 'uploads/documents', 'uploads/hero_images'];
 uploadDirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -14,13 +14,15 @@ uploadDirs.forEach(dir => {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     let uploadPath = 'uploads/documents';
-    
+
     if (file.fieldname === 'resume') {
       uploadPath = 'uploads/resumes';
     } else if (file.fieldname === 'avatar') {
       uploadPath = 'uploads/avatars';
+    } else if (file.fieldname === 'heroImage') {
+      uploadPath = 'uploads/hero_images';
     }
-    
+
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
@@ -33,9 +35,9 @@ const storage = multer.diskStorage({
 const fileFilter = (req, file, cb) => {
   if (file.fieldname === 'resume') {
     // Allow PDF, DOC, DOCX for resumes
-    if (file.mimetype === 'application/pdf' || 
-        file.mimetype === 'application/msword' ||
-        file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    if (file.mimetype === 'application/pdf' ||
+      file.mimetype === 'application/msword' ||
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       cb(null, true);
     } else {
       cb(new Error('Resume must be PDF, DOC, or DOCX'), false);

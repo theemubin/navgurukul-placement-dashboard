@@ -4,7 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { questionAPI } from '../../services/api';
 import {
   Home, User, Briefcase, FileText, Users, CheckSquare, BarChart3, Settings,
-  X, GraduationCap, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle
+  X, GraduationCap, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle,
+  Image as ImageIcon, Globe
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -66,6 +67,9 @@ const Sidebar = ({ isOpen, onClose }) => {
       case 'manager':
         return [
           { path: '/manager', icon: Home, label: 'Dashboard', exact: true },
+          { path: '/manager/carousel', icon: ImageIcon, label: 'Hero Carousel' },
+          { path: '/manager/partners', icon: Globe, label: 'Hiring Partners' },
+          { path: '/manager/leads', icon: MessageCircle, label: 'Recruitment Leads' },
           { path: '/manager/reports', icon: BarChart3, label: 'Reports & Export' },
           { path: '/manager/settings', icon: Settings, label: 'Platform Settings' },
           { path: '/manager/job-readiness', icon: Target, label: 'Job Readiness' }

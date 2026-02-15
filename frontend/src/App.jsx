@@ -47,10 +47,16 @@ import ManagerDashboard from './pages/manager/Dashboard';
 import ManagerReports from './pages/manager/Reports';
 import ManagerSettings from './pages/manager/Settings';
 import UsersManager from './pages/manager/Users';
+import CarouselManagement from './pages/manager/CarouselManagement';
+import PartnerManagement from './pages/manager/PartnerManagement';
+import LeadsManagement from './pages/manager/LeadsManagement';
 
 // Common Pages
 import Notifications from './pages/common/Notifications';
 import NotFound from './pages/common/NotFound';
+
+// Public Pages
+import Portfolios from './pages/public/Portfolios';
 
 // Loading component
 const LoadingScreen = () => (
@@ -98,6 +104,7 @@ function App() {
   return (
     <Routes>
       {/* Public Routes */}
+      <Route path="/portfolios" element={<Portfolios />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
       <Route path="/auth/callback" element={<AuthCallback />} />
@@ -166,6 +173,9 @@ function App() {
       }>
         <Route index element={<ManagerDashboard />} />
         <Route path="reports" element={<ManagerReports />} />
+        <Route path="carousel" element={<CarouselManagement />} />
+        <Route path="partners" element={<PartnerManagement />} />
+        <Route path="leads" element={<LeadsManagement />} />
         <Route path="settings" element={<ManagerSettings />} />
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="notifications" element={<Notifications />} />
@@ -174,7 +184,7 @@ function App() {
       </Route>
 
       {/* Redirects */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Navigate to="/portfolios" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

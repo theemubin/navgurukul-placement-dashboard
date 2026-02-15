@@ -134,6 +134,20 @@ const settingsSchema = new mongoose.Schema({
     mentionUsers: { type: Boolean, default: true }, // @mention users in notifications
     testMode: { type: Boolean, default: false }     // Test mode (don't send actual notifications)
   },
+  // Hiring Partners logos for public showcase
+  hiringPartners: [{
+    name: { type: String, required: true },
+    logo: { type: String, required: true }
+  }],
+  // Testimonials for public showcase
+  testimonials: [{
+    companyName: { type: String, required: true },
+    companyLogo: { type: String },
+    authorName: { type: String, required: true },
+    authorRole: { type: String, required: true },
+    quote: { type: String, required: true },
+    isActive: { type: Boolean, default: true }
+  }],
   // Last updated by
   lastUpdatedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -442,6 +456,8 @@ settingsSchema.statics.updateSettings = async function (updates, userId) {
       settings.institutionOptions = updates.institutionOptions;
     }
   }
+  if (updates.hiringPartners) settings.hiringPartners = updates.hiringPartners;
+  if (updates.testimonials) settings.testimonials = updates.testimonials;
   if (userId) settings.lastUpdatedBy = userId;
 
   await settings.save();

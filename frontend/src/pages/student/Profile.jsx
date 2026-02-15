@@ -101,6 +101,8 @@ const StudentProfile = () => {
   const [submitting, setSubmitting] = useState(false);
   const [fetchingPincode, setFetchingPincode] = useState(false);
   const [activeTab, setActiveTab] = useState('personal');
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [campuses, setCampuses] = useState([]);
   const [placementCycles, setPlacementCycles] = useState([]);
   const [selectedCampus, setSelectedCampus] = useState('');
@@ -519,6 +521,35 @@ const StudentProfile = () => {
 
 
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size should be less than 2MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    const previewUrl = URL.createObjectURL(file);
+    setAvatarPreview(previewUrl);
+
+    try {
+      const response = await userAPI.uploadAvatar(file);
+      if (response.data.success) {
+        setProfile({ ...profile, avatar: response.data.avatar });
+        toast.success('Profile picture updated');
+      }
+    } catch (error) {
+      console.error('Avatar upload error:', error);
+      toast.error('Failed to upload profile picture');
+      setAvatarPreview(profile?.avatar || null);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSoftSkillChange = (skillKey, value) => {
     // Legacy support or deprecated function - we now use the new skills handling logic
   };
@@ -682,6 +713,37 @@ const StudentProfile = () => {
                   <User className="w-5 h-5" />
                   Personal Information
                 </h2>
+                <div className="flex flex-col md:flex-row items-center gap-6 mb-8 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                  <div className="relative group">
+                    <div className="w-32 h-32 rounded-full overflow-hidden ring-4 ring-white shadow-xl bg-white flex items-center justify-center">
+                      {(avatarPreview || (profile?.avatar)) ? (
+                        <img
+                          src={avatarPreview || (profile?.avatar?.startsWith('http') ? profile.avatar : `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}${profile.avatar}`)}
+                          alt="Profile"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-4xl font-bold">
+                          {formData.firstName?.[0]}{formData.lastName?.[0]}
+                        </div>
+                      )}
+                      {uploadingAvatar && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <LoadingSpinner size="sm" color="white" />
+                        </div>
+                      )}
+                    </div>
+                    <label className="absolute bottom-0 right-0 p-2 bg-primary-600 text-white rounded-full shadow-lg cursor-pointer hover:bg-primary-700 transition-all transform hover:scale-110">
+                      <Upload className="w-4 h-4" />
+                      <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
+                    </label>
+                  </div>
+                  <div className="text-center md:text-left">
+                    <h3 className="text-lg font-bold text-gray-900">Profile Picture</h3>
+                    <p className="text-sm text-gray-500 max-w-xs">Upload a clear professional photo. Recommended size: 400x400px, max 2MB.</p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>

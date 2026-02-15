@@ -25,7 +25,9 @@ router.get('/', auth, async (req, res) => {
       institutionOptions: Object.fromEntries(settings.institutionOptions || new Map()),
       higherEducationOptions: Object.fromEntries(settings.higherEducationOptions || new Map()),
       // Include discord settings so UI can display and edit them
-      discordConfig: settings.discordConfig || { enabled: false, channels: {} }
+      discordConfig: settings.discordConfig || { enabled: false, channels: {} },
+      hiringPartners: settings.hiringPartners || [],
+      testimonials: settings.testimonials || []
     };
 
     res.json({ success: true, data: response });
@@ -50,7 +52,7 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
       console.log('Failed to summarize settings payload', e && e.message);
     }
 
-    const { schoolModules, rolePreferences, technicalSkills, degreeOptions, softSkills, inactiveSchools, institutionOptions, higherEducationOptions, roleCategories, discordConfig } = req.body;
+    const { schoolModules, rolePreferences, technicalSkills, degreeOptions, softSkills, inactiveSchools, institutionOptions, higherEducationOptions, roleCategories, discordConfig, hiringPartners, testimonials } = req.body;
 
     if (discordConfig) {
       // Avoid logging sensitive token value; only log presence and channel counts
@@ -72,13 +74,15 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
       institutionOptions,
       higherEducationOptions,
       roleCategories,
-      discordConfig
+      discordConfig,
+      hiringPartners,
+      testimonials
     }, req.userId);
 
     // Log post-update snapshot for diagnostics (only keys and lengths to avoid leaking data)
     try {
       const snapshot = {
-        schoolModules: settings.schoolModules ? Object.fromEntries(Object.entries(Object.fromEntries(settings.schoolModules)).map(([k, v])=>[k, `array(len=${(v||[]).length})`])) : {},
+        schoolModules: settings.schoolModules ? Object.fromEntries(Object.entries(Object.fromEntries(settings.schoolModules)).map(([k, v]) => [k, `array(len=${(v || []).length})`])) : {},
         rolePreferencesLen: settings.rolePreferences ? settings.rolePreferences.length : 0,
         technicalSkillsLen: settings.technicalSkills ? settings.technicalSkills.length : 0,
         degreeOptionsLen: settings.degreeOptions ? settings.degreeOptions.length : 0,
@@ -103,7 +107,9 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
       institutionOptions: Object.fromEntries(settings.institutionOptions || new Map()),
       higherEducationOptions: Object.fromEntries(settings.higherEducationOptions || new Map()),
       // Include discordConfig so frontend sees updated values (botToken is sensitive but returned here for UX)
-      discordConfig: settings.discordConfig || { enabled: false, channels: {} }
+      discordConfig: settings.discordConfig || { enabled: false, channels: {} },
+      hiringPartners: settings.hiringPartners || [],
+      testimonials: settings.testimonials || []
     };
 
     res.json({

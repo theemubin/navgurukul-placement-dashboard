@@ -100,7 +100,7 @@ export const userAPI = {
   uploadAvatar: (file) => {
     const formData = new FormData();
     formData.append('avatar', file);
-    return api.post('/users/avatar', formData, {
+    return api.put('/users/profile/avatar', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
@@ -379,6 +379,33 @@ export const bulkUploadAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   }
+};
+
+// Recruitment Lead APIs
+export const leadAPI = {
+  getLeads: () => api.get('/leads'),
+  updateLead: (id, data) => api.patch(`/leads/${id}`, data)
+};
+
+export const featuredPlacementAPI = {
+  getFeaturedPlacements: () => api.get('/featured-placements'),
+  getAvailablePlacements: () => api.get('/featured-placements/available'),
+  createFeaturedPlacement: (data) => api.post('/featured-placements', data),
+  updateFeaturedPlacement: (id, data) => api.put(`/featured-placements/${id}`, data),
+  deleteFeaturedPlacement: (id) => api.delete(`/featured-placements/${id}`),
+  reorderFeaturedPlacements: (placements) => api.put('/featured-placements/reorder/batch', { placements }),
+  uploadHeroImage: (id, file) => {
+    const formData = new FormData();
+    formData.append('heroImage', file);
+    return api.put(`/featured-placements/${id}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  }
+};
+
+// Public APIs (No auth required)
+export const publicAPI = {
+  submitLead: (data) => axios.post(`${API_URL}/public/leads`, data)
 };
 
 export default api;

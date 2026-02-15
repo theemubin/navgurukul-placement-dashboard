@@ -17,6 +17,18 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initAuth = async () => {
+      // Check if we're on a public route first, before attempting authentication
+      const pathname = window.location.pathname || '';
+      const publicRoutes = ['/auth', '/login', '/register', '/portfolios'];
+      const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+
+      // If on a public route, skip authentication check and just set loading to false
+      if (isPublicRoute) {
+        console.debug('Auth init: on public route, skipping auth check');
+        setLoading(false);
+        return;
+      }
+
       try {
         console.debug('Auth init: document.cookie =>', document.cookie);
         const localToken = localStorage.getItem('token');
@@ -54,12 +66,11 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
 
       // If neither cookie-based getMe nor local token/user yielded a session,
-      // ensure the user ends up on the canonical login page (avoid being left on protected pages).
+      // redirect to login (we already checked for public routes above)
       try {
         const finalToken = localStorage.getItem('token');
         const finalUser = localStorage.getItem('user');
-        const pathname = window.location.pathname || '';
-        if (!finalToken && !finalUser && !pathname.startsWith('/auth') && !pathname.startsWith('/login') && !pathname.startsWith('/register')) {
+        if (!finalToken && !finalUser) {
           console.info('Auth init: not authenticated, redirecting to /login');
           window.location.replace('/login');
         }

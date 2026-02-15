@@ -24,6 +24,9 @@ const bulkUploadRoutes = require('./routes/bulkUpload');
 const utilsRoutes = require('./routes/utils');
 const questionRoutes = require('./routes/questions');
 const discordRoutes = require('./routes/discord');
+const publicRoutes = require('./routes/public');
+const featuredPlacementRoutes = require('./routes/featuredPlacements');
+const leadRoutes = require('./routes/leads');
 
 const app = express();
 // trust proxy so secure cookies work behind proxies (Render, Heroku, etc.)
@@ -98,6 +101,12 @@ app.use('/api/bulk-upload', bulkUploadRoutes);
 app.use('/api/utils', utilsRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/discord', discordRoutes);
+app.use('/api/public', publicRoutes);
+app.use('/api/featured-placements', featuredPlacementRoutes);
+app.use('/api/leads', leadRoutes);
+
+// Serve uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check with detailed status
 app.get('/api/health', async (req, res) => {

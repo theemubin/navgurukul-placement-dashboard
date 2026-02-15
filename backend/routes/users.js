@@ -168,11 +168,47 @@ router.put('/students/:studentId/status', auth, authorize('campus_poc', 'coordin
   }
 });
 
+/**
+ * PUT /api/users/profile/avatar
+ * Upload profile picture
+ */
+router.put('/profile/avatar', auth, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Save relative path
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    user.avatar = avatarUrl;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Profile picture updated successfully',
+      avatar: avatarUrl
+    });
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    res.status(500).json({ message: 'Error uploading profile picture' });
+  }
+});
+
 // Update profile (students and staff) - allow coordinators/managers/campus_poc to update their own discord and basic info
 router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'campus_poc'), upload.single('resume'), async (req, res) => {
   try {
     const updates = req.body;
     const user = await User.findById(req.userId);
+
+    // If file was uploaded for resume (handled by 'resume' fieldname in middleware)
+    if (req.file && req.file.fieldname === 'resume') {
+      user.studentProfile.resume = `/uploads/resumes/${req.file.filename}`;
+    }
 
     // Update basic info
     if (updates.firstName) user.firstName = updates.firstName;
