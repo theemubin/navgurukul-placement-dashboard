@@ -176,8 +176,19 @@ app.post('/api/sync-from-production', async (req, res) => {
 });
 
 // Error handling middleware
+// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Error Stack:', err.stack);
+
+  if (err instanceof require('multer').MulterError) {
+    console.error('Multer Error:', err);
+    return res.status(400).json({
+      message: 'File upload error',
+      error: err.message,
+      code: err.code
+    });
+  }
+
   res.status(500).json({
     message: 'Something went wrong!',
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
