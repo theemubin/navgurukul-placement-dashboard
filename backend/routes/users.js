@@ -183,9 +183,12 @@ router.put('/profile/avatar', auth, upload.single('avatar'), async (req, res) =>
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Save relative path
-    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
-    user.avatar = avatarUrl;
+    // Save path (Cloudinary URL or local relative path)
+    if (req.file.path.startsWith('http')) {
+      user.avatar = req.file.path;
+    } else {
+      user.avatar = `/uploads/avatars/${req.file.filename}`;
+    }
     await user.save();
 
     res.json({
@@ -207,7 +210,12 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
 
     // If file was uploaded for resume (handled by 'resume' fieldname in middleware)
     if (req.file && req.file.fieldname === 'resume') {
-      user.studentProfile.resume = `/uploads/resumes/${req.file.filename}`;
+      // If using Cloudinary, path is the URL. If local, we need to construct the relative URL.
+      if (req.file.path.startsWith('http')) {
+        user.studentProfile.resume = req.file.path;
+      } else {
+        user.studentProfile.resume = `/uploads/resumes/${req.file.filename}`;
+      }
     }
 
     // Update basic info
@@ -324,7 +332,11 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
 
       // Handle resume upload
       if (req.file) {
-        user.studentProfile.resume = req.file.path;
+        if (req.file.path.startsWith('http')) {
+          user.studentProfile.resume = req.file.path;
+        } else {
+          user.studentProfile.resume = `/uploads/resumes/${req.file.filename}`;
+        }
       }
 
       // If profile was approved and user made changes, set to draft and save snapshot

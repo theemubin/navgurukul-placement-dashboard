@@ -1,44 +1,88 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+require('dotenv').config();
 
-// Ensure upload directories exist
-const uploadDirs = ['uploads/resumes', 'uploads/avatars', 'uploads/documents', 'uploads/hero_images'];
-uploadDirs.forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
+// Check if Cloudinary credentials exist
+const useCloudinary = process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET;
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Resolve absolute path to uploads directory (backend/uploads)
-    const uploadsRoot = path.join(__dirname, '../uploads');
-    let uploadPath = path.join(uploadsRoot, 'documents');
+let storage;
 
-    if (file.fieldname === 'resume') {
-      uploadPath = path.join(uploadsRoot, 'resumes');
-    } else if (file.fieldname === 'avatar') {
-      uploadPath = path.join(uploadsRoot, 'avatars');
-    } else if (file.fieldname === 'heroImage') {
-      uploadPath = path.join(uploadsRoot, 'hero_images');
+if (useCloudinary) {
+  // Configure Cloudinary
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+
+  // Configure Cloudinary Storage
+  storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+      folder: (req, file) => {
+        if (file.fieldname === 'resume') return 'placements/resumes';
+        if (file.fieldname === 'avatar') return 'placements/avatars';
+        if (file.fieldname === 'heroImage') return 'placements/hero_images';
+        return 'placements/documents';
+      },
+      // use resource_type: 'auto' to support PDFs etc.
+      resource_type: 'auto',
+      public_id: (req, file) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        return file.fieldname + '-' + uniqueSuffix;
+      }
+    },
+  });
+  console.log('Using Cloudinary Storage for uploads');
+} else {
+  // Fallback to Local Disk Storage
+  console.log('Using Local Disk Storage for uploads');
+
+  // Ensure upload directories exist
+  const uploadDirs = ['uploads/resumes', 'uploads/avatars', 'uploads/documents', 'uploads/hero_images'];
+  const uploadsRoot = path.join(__dirname, '../'); // Prepare absolute path base
+
+  uploadDirs.forEach(dir => {
+    const absoluteDir = path.join(uploadsRoot, dir);
+    if (!fs.existsSync(absoluteDir)) {
+      fs.mkdirSync(absoluteDir, { recursive: true });
     }
+  });
 
-    // Ensure directory exists
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
+  storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      // Resolve absolute path to uploads directory (backend/uploads)
+      const uploadsRoot = path.join(__dirname, '../uploads');
+      let uploadPath = path.join(uploadsRoot, 'documents');
+
+      if (file.fieldname === 'resume') {
+        uploadPath = path.join(uploadsRoot, 'resumes');
+      } else if (file.fieldname === 'avatar') {
+        uploadPath = path.join(uploadsRoot, 'avatars');
+      } else if (file.fieldname === 'heroImage') {
+        uploadPath = path.join(uploadsRoot, 'hero_images');
+      }
+
+      // Ensure directory exists
+      if (!fs.existsSync(uploadPath)) {
+        fs.mkdirSync(uploadPath, { recursive: true });
+      }
+
+      cb(null, uploadPath);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
     }
+  });
+}
 
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-// File filter
+// File filter (same as before)
 const fileFilter = (req, file, cb) => {
   if (file.fieldname === 'resume') {
     // Allow PDF, DOC, DOCX for resumes
@@ -49,12 +93,12 @@ const fileFilter = (req, file, cb) => {
     } else {
       cb(new Error('Resume must be PDF, DOC, or DOCX'), false);
     }
-  } else if (file.fieldname === 'avatar') {
-    // Allow images for avatars
+  } else if (file.fieldname === 'avatar' || file.fieldname === 'heroImage') {
+    // Allow images
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error('Avatar must be an image'), false);
+      cb(new Error('File must be an image'), false);
     }
   } else {
     cb(null, true);

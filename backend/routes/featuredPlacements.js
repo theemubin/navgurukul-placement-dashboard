@@ -308,8 +308,12 @@ router.put('/:id/image', auth, isManager, upload.single('heroImage'), async (req
             });
         }
 
-        // Save relative path
-        featured.heroImage = `/uploads/hero_images/${req.file.filename}`;
+        // Save path (Cloudinary URL or local relative path)
+        if (req.file.path.startsWith('http')) {
+            featured.heroImage = req.file.path;
+        } else {
+            featured.heroImage = `/uploads/hero_images/${req.file.filename}`;
+        }
         await featured.save();
 
         res.json({
