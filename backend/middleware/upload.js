@@ -12,7 +12,14 @@ const useCloudinary = process.env.CLOUDINARY_CLOUD_NAME &&
 
 let storage;
 
+// Debug Cloudinary Config
 if (useCloudinary) {
+  console.log('Cloudinary Config Found:', {
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY ? '***' : 'MISSING',
+    api_secret: process.env.CLOUDINARY_API_SECRET ? '***' : 'MISSING'
+  });
+
   // Configure Cloudinary
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -41,7 +48,7 @@ if (useCloudinary) {
   console.log('Using Cloudinary Storage for uploads');
 } else {
   // Fallback to Local Disk Storage
-  console.log('Using Local Disk Storage for uploads');
+  console.log('Using Local Disk Storage for uploads (Cloudinary credentials missing)');
 
   // Ensure upload directories exist
   const uploadDirs = ['uploads/resumes', 'uploads/avatars', 'uploads/documents', 'uploads/hero_images'];
@@ -84,6 +91,8 @@ if (useCloudinary) {
 
 // File filter (same as before)
 const fileFilter = (req, file, cb) => {
+  console.log(`Processing upload: field=${file.fieldname}, mimetype=${file.mimetype}, name=${file.originalname}`);
+
   if (file.fieldname === 'resume') {
     // Allow PDF, DOC, DOCX for resumes
     if (file.mimetype === 'application/pdf' ||
@@ -91,6 +100,7 @@ const fileFilter = (req, file, cb) => {
       file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       cb(null, true);
     } else {
+      console.error('Upload rejected: Invalid resume format', file.mimetype);
       cb(new Error('Resume must be PDF, DOC, or DOCX'), false);
     }
   } else if (file.fieldname === 'avatar' || file.fieldname === 'heroImage') {
@@ -98,6 +108,7 @@ const fileFilter = (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
+      console.error('Upload rejected: Invalid image format', file.mimetype);
       cb(new Error('File must be an image'), false);
     }
   } else {

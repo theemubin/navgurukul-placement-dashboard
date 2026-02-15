@@ -293,12 +293,17 @@ router.get('/available', auth, isManager, async (req, res) => {
  */
 router.put('/:id/image', auth, isManager, upload.single('heroImage'), async (req, res) => {
     try {
+        console.log(`[DEBUG] Uploading hero image for placement ${req.params.id}`);
+
         if (!req.file) {
+            console.error('[DEBUG] No file received in request (req.file is undefined)');
             return res.status(400).json({
                 success: false,
                 message: 'No file uploaded'
             });
         }
+
+        console.log(`[DEBUG] File received: ${req.file.originalname} (${req.file.mimetype}) - Path: ${req.file.path}`);
 
         const featured = await FeaturedPlacement.findById(req.params.id);
         if (!featured) {
