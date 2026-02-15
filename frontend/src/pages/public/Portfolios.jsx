@@ -140,6 +140,23 @@ const Portfolios = () => {
         setSelectedRoleContext(null);
     };
 
+    // Auto-scroll logic for filter bar
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const filterContainer = document.getElementById('role-filter-scroll');
+            if (filterContainer && filterContainer.dataset.paused !== 'true') {
+                // If scanned to end, reset to start smoothly? Or jump?
+                // Let's try simple increment
+                if (filterContainer.scrollLeft >= (filterContainer.scrollWidth - filterContainer.clientWidth - 1)) {
+                    filterContainer.scrollTo({ left: 0, behavior: 'auto' });
+                } else {
+                    filterContainer.scrollLeft += 1;
+                }
+            }
+        }, 50);
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <PublicLayout
             isPortfolioPage={true}
@@ -244,7 +261,13 @@ const Portfolios = () => {
                                                 </button>
                                             )}
                                         </div>
-                                        <div className="flex overflow-x-auto pb-1 gap-2 no-scrollbar scroll-smooth">
+                                        {/* Auto-scrolling Filter Bar */}
+                                        <div
+                                            id="role-filter-scroll"
+                                            className="flex overflow-x-auto pb-1 gap-2 no-scrollbar scroll-smooth"
+                                            onMouseEnter={(e) => e.currentTarget.dataset.paused = "true"}
+                                            onMouseLeave={(e) => e.currentTarget.dataset.paused = "false"}
+                                        >
                                             {Object.keys(portfoliosByRole).map(role => {
                                                 const isActive = selectedRoles.includes(role);
                                                 return (
@@ -269,12 +292,13 @@ const Portfolios = () => {
                                         <div
                                             key={role}
                                             id={`role-${role.toLowerCase().replace(/\s+/g, '-')}`}
-                                            className="flex flex-col md:flex-row gap-8 md:gap-16 relative min-h-[400px]"
+                                            className="flex flex-col md:flex-row gap-8 md:gap-16 relative min-h-[400px] group/role-section"
                                         >
                                             {/* ... Left Side Content ... */}
-                                            <div className="md:w-32 flex-shrink-0 flex md:block items-center gap-4 sticky md:top-32 h-auto self-start">
+                                            <div className="md:w-32 flex-shrink-0 flex md:block items-center gap-4 sticky md:top-32 h-auto self-start z-10">
                                                 <div className="h-full flex md:items-center justify-center text-center">
-                                                    <h3 className="text-3xl md:text-[min(4vh,2.5rem)] lg:text-[min(5vh,3rem)] font-black text-gray-200 md:rotate-180 md:[writing-mode:vertical-lr] uppercase tracking-[0.1em] whitespace-nowrap leading-none select-none transition-all duration-500 hover:text-blue-600/20 cursor-default">
+                                                    {/* Animated Vertical Title */}
+                                                    <h3 className="text-3xl md:text-[min(4vh,2.5rem)] lg:text-[min(5vh,3rem)] font-black text-gray-200 md:rotate-180 md:[writing-mode:vertical-lr] uppercase tracking-[0.1em] whitespace-nowrap leading-none select-none transition-all duration-1000 ease-out transform group-hover/role-section:text-gray-300 md:group-hover/role-section:translate-y-2 cursor-default animate-in fade-in slide-in-from-bottom-4 duration-700">
                                                         {role}
                                                     </h3>
                                                 </div>
