@@ -206,14 +206,14 @@ const Portfolios = () => {
         >
             <div className="bg-gray-50 scroll-pt-[80px]">
                 {/* Portfolios Header Section */}
-                <section id="portfolios" className="py-24 md:py-32 bg-gray-50 flex flex-col justify-center snap-start min-h-[85vh]">
+                <section id="portfolios" className="py-12 sm:py-16 md:py-24 lg:py-32 bg-gray-50 flex flex-col justify-center snap-start min-h-[85vh]">
                     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="mb-20 text-center">
-                            <h2 className="text-5xl md:text-8xl font-black text-gray-900 mb-6 tracking-tighter uppercase leading-[0.85]">
+                        <div className="mb-12 sm:mb-16 md:mb-20 text-center">
+                            <h2 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-gray-900 mb-4 sm:mb-6 tracking-tighter uppercase leading-[0.85]">
                                 Hire From Us
                             </h2>
-                            <div className="h-3 w-40 bg-blue-600 mx-auto rounded-full mb-8"></div>
-                            <p className="max-w-3xl mx-auto text-lg md:text-xl text-gray-600 leading-relaxed font-medium">
+                            <div className="h-2 sm:h-3 w-24 sm:w-32 md:w-40 bg-blue-600 mx-auto rounded-full mb-6 sm:mb-8"></div>
+                            <p className="max-w-3xl mx-auto text-sm sm:text-base md:text-lg lg:text-xl text-gray-600 leading-relaxed font-medium px-4">
                                 NavGurukul transforms <span className="text-gray-900 font-black">raw potential</span> into high-performing professionals. <br className="hidden md:block" />
                                 You’re not just hiring talent, you’re <span className="relative inline-block"><span className="relative z-10">unlocking it.</span><span className="absolute bottom-1 left-0 w-full h-2 bg-gray-200 -z-10"></span></span>
                             </p>
@@ -221,24 +221,24 @@ const Portfolios = () => {
 
                         {/* Partner Feedback: Now prominent below headline */}
                         <div className="max-w-6xl mx-auto px-4">
-                            <div className="mb-12 flex flex-col items-center">
-                                <div className="px-4 py-1 bg-gray-100 rounded-full mb-4">
-                                    <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.5em]">Industry Feedback</h3>
+                            <div className="mb-8 sm:mb-10 md:mb-12 flex flex-col items-center">
+                                <div className="px-3 sm:px-4 py-1 bg-gray-100 rounded-full mb-3 sm:mb-4">
+                                    <h3 className="text-[8px] sm:text-[9px] md:text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] sm:tracking-[0.5em]">Industry Feedback</h3>
                                 </div>
-                                <p className="text-sm text-gray-400 font-bold uppercase tracking-widest text-center">What our partners say about our graduates</p>
+                                <p className="text-xs sm:text-sm text-gray-400 font-bold uppercase tracking-wide sm:tracking-widest text-center px-4">What our partners say about our graduates</p>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 md:gap-6 lg:gap-8">
                                 {(testimonials.length > 0 ? testimonials.slice(0, 3) : [
                                     { companyName: "Top Tech Firm", quote: "Navgurukul graduates bring a unique hunger to learn. They've become core members of our team.", authorName: "Growth Lead" },
                                     { companyName: "Global Solutions", quote: "Resilience and problem-solving mindset sets these students apart. Truly impressive curriculum.", authorName: "HR Director" },
                                     { companyName: "Innovate Labs", quote: "Quality of full-stack developers is comparable to top-tier universities. Solid foundation.", authorName: "CTO" }
                                 ]).map((t, i) => (
-                                    <div key={i} className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 flex flex-col">
-                                        <div className="text-gray-900 mb-6 font-serif text-4xl">"</div>
-                                        <p className="text-gray-600 text-sm italic mb-8 leading-relaxed flex-1">
+                                    <div key={i} className="bg-white p-5 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 flex flex-col">
+                                        <div className="text-gray-900 mb-4 sm:mb-5 md:mb-6 font-serif text-3xl sm:text-4xl">"</div>
+                                        <p className="text-gray-600 text-xs sm:text-sm italic mb-6 sm:mb-7 md:mb-8 leading-relaxed flex-1">
                                             {t.quote}
                                         </p>
-                                        <div className="flex items-center gap-3 border-t border-gray-50 pt-6">
+                                        <div className="flex items-center gap-2 sm:gap-3 border-t border-gray-50 pt-4 sm:pt-5 md:pt-6">
                                             {t.companyLogo ? (
                                                 <img src={t.companyLogo} alt={t.companyName} className="w-10 h-10 object-contain" />
                                             ) : (
@@ -259,7 +259,7 @@ const Portfolios = () => {
                 </section>
 
                 <section className="bg-white snap-start min-h-screen">
-                    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 md:py-12">
                         {loading ? (
                             <div className="flex justify-center items-center py-20">
                                 <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
@@ -271,11 +271,11 @@ const Portfolios = () => {
                         ) : (
                             <div className="relative">
                                 {/* Meet Our Talent Heading */}
-                                <div className="mb-16 text-center">
-                                    <h2 className="text-5xl md:text-8xl font-black text-gray-900 mb-6 tracking-tighter uppercase leading-[0.85]">
+                                <div className="mb-10 sm:mb-12 md:mb-16 text-center">
+                                    <h2 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-gray-900 mb-4 sm:mb-5 md:mb-6 tracking-tighter uppercase leading-[0.85]">
                                         Meet Our Talent
                                     </h2>
-                                    <div className="h-3 w-40 bg-blue-600 mx-auto rounded-full"></div>
+                                    <div className="h-2 sm:h-3 w-24 sm:w-32 md:w-40 bg-blue-600 mx-auto rounded-full"></div>
                                 </div>
 
                                 {/* Filter Trigger Zone (Hidden top area) */}
@@ -285,15 +285,15 @@ const Portfolios = () => {
                                 ></div>
 
                                 {/* Sticky Role Filter */}
-                                <div className={`sticky top-[56px] md:top-[64px] z-[60] -mx-4 px-4 py-2 bg-gray-50/50 backdrop-blur-md border-b border-gray-100 mb-6 transition-all duration-500 transform ${showFilter ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+                                <div className={`sticky top-[52px] sm:top-[56px] md:top-[64px] z-[60] -mx-4 px-4 py-2 sm:py-2.5 bg-gray-50/95 backdrop-blur-md border-b border-gray-100 mb-4 sm:mb-5 md:mb-6 transition-all duration-500 transform ${showFilter ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
                                     }`}>
                                     <div className="max-w-[1400px] mx-auto">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-[0.2em]">Filter Pools</p>
+                                        <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                                            <p className="text-[7px] sm:text-[8px] font-black text-gray-400 uppercase tracking-[0.15em] sm:tracking-[0.2em]">Filter Pools</p>
                                             {selectedRoles.length > 0 && (
                                                 <button
                                                     onClick={() => setSelectedRoles([])}
-                                                    className="text-[8px] font-bold text-blue-600 uppercase tracking-widest hover:underline"
+                                                    className="text-[7px] sm:text-[8px] font-bold text-blue-600 uppercase tracking-wide sm:tracking-widest hover:underline"
                                                 >
                                                     Clear ({selectedRoles.length})
                                                 </button>
@@ -302,7 +302,7 @@ const Portfolios = () => {
                                         {/* Auto-scrolling Filter Bar */}
                                         <div
                                             id="role-filter-scroll"
-                                            className="flex overflow-x-auto pb-1 gap-2 no-scrollbar"
+                                            className="flex overflow-x-auto pb-1 gap-1.5 sm:gap-2 no-scrollbar"
                                             onMouseEnter={(e) => e.currentTarget.dataset.paused = "true"}
                                             onMouseLeave={(e) => e.currentTarget.dataset.paused = "false"}
                                         >
@@ -312,7 +312,7 @@ const Portfolios = () => {
                                                     <button
                                                         key={role}
                                                         onClick={() => handleRoleToggle(role)}
-                                                        className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-wider transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-sm border ${isActive
+                                                        className={`whitespace-nowrap px-2 sm:px-2.5 md:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[7px] sm:text-[8px] md:text-[9px] lg:text-[10px] font-black uppercase tracking-wide sm:tracking-wider transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-sm border ${isActive
                                                             ? 'bg-blue-600 text-white border-blue-600 shadow-blue-100'
                                                             : 'bg-white text-gray-900 border-gray-100 hover:border-blue-600 hover:text-blue-600'
                                                             }`}
@@ -325,14 +325,14 @@ const Portfolios = () => {
                                     </div>
                                 </div>
 
-                                <div id="portfolios-grid" className="relative mt-12 pb-20">
+                                <div id="portfolios-grid" className="relative mt-6 sm:mt-8 md:mt-10 lg:mt-12 pb-12 sm:pb-16 md:pb-20">
                                     {/* STICKY TITLE OVERLAY - Constrained to portfolios grid */}
-                                    <div className="hidden md:block sticky top-0 left-0 h-0 w-full pointer-events-none z-[70]">
-                                        <div className="absolute left-0 top-0 h-screen w-32 flex flex-col justify-center items-center">
+                                    <div className="hidden lg:block sticky top-0 left-0 h-0 w-full pointer-events-none z-[70]">
+                                        <div className="absolute left-0 top-0 h-screen w-24 lg:w-28 xl:w-32 flex flex-col justify-center items-center">
                                             {activeRole && (
                                                 <h3
                                                     key={activeRole}
-                                                    className="text-xl md:text-[2.5vh] lg:text-[3vh] font-black text-gray-400 md:rotate-180 md:[writing-mode:vertical-lr] uppercase tracking-[0.2em] whitespace-nowrap leading-none select-none animate-in fade-in zoom-in-90 slide-in-from-left-24 duration-[1500ms] ease-in-out pointer-events-auto"
+                                                    className="text-xl lg:text-[2.5vh] xl:text-[3vh] font-black text-gray-400 rotate-180 [writing-mode:vertical-lr] uppercase tracking-[0.2em] whitespace-nowrap leading-none select-none animate-in fade-in zoom-in-90 slide-in-from-left-24 duration-[1500ms] ease-in-out pointer-events-auto"
                                                 >
                                                     {activeRole}
                                                 </h3>
@@ -345,22 +345,30 @@ const Portfolios = () => {
                                             key={role}
                                             id={`role-${role.toLowerCase().replace(/\s+/g, '-')}`}
                                             data-role={role}
-                                            className="flex flex-col md:flex-row items-start gap-8 md:gap-16 relative min-h-[60vh] role-section mb-20"
+                                            className="flex flex-col lg:flex-row items-start gap-4 sm:gap-6 md:gap-8 lg:gap-12 xl:gap-16 relative min-h-[60vh] role-section mb-12 sm:mb-14 md:mb-16 lg:mb-20"
                                         >
                                             {/* Spacer for Fixed Title Column */}
-                                            <div className="md:w-32 flex-shrink-0"></div>
+                                            <div className="hidden lg:block lg:w-24 xl:w-28 2xl:w-32 flex-shrink-0"></div>
 
                                             {/* Right Side: Content Wrapper */}
-                                            <div className="flex-1 min-w-0 group relative py-8">
-                                                <div className="hidden md:flex items-center justify-between mb-10">
+                                            <div className="flex-1 min-w-0 group relative py-4 sm:py-6 md:py-8">
+                                                {/* Mobile Role Title */}
+                                                <div className="lg:hidden mb-6 text-center">
+                                                    <span className="inline-block px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 bg-white border border-gray-100 rounded-full text-[9px] sm:text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] sm:tracking-[0.4em] shadow-sm">
+                                                        {role} Pool ({roleStudents.length})
+                                                    </span>
+                                                </div>
+
+                                                {/* Desktop Role Title */}
+                                                <div className="hidden lg:flex items-center justify-between mb-8 lg:mb-10">
                                                     <div className="h-[1px] flex-1 bg-gray-100"></div>
-                                                    <span className="px-6 py-2 bg-white border border-gray-100 rounded-full text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] shadow-sm">
+                                                    <span className="px-4 lg:px-5 xl:px-6 py-2 bg-white border border-gray-100 rounded-full text-[9px] lg:text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] lg:tracking-[0.4em] shadow-sm">
                                                         {role} Pool ({roleStudents.length})
                                                     </span>
                                                     <div className="h-[1px] flex-1 bg-gray-100"></div>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 lg:gap-6">
                                                     {roleStudents.map((portfolio, idx) => (
                                                         <div key={`${role}-${portfolio._id || idx}`} className="w-full">
                                                             <PortfolioCard
@@ -376,16 +384,16 @@ const Portfolios = () => {
 
                                     {/* Expand Button */}
                                     {!isExpanded && selectedRoles.length === 0 && displayedRoles.length > 2 && (
-                                        <div className="flex justify-center py-20 relative">
+                                        <div className="flex justify-center py-6 sm:py-8 md:py-10 relative">
                                             <div className="absolute inset-0 flex items-center">
                                                 <div className="w-full border-t border-gray-100"></div>
                                             </div>
                                             <button
                                                 onClick={() => setIsExpanded(true)}
-                                                className="relative z-10 px-12 py-6 bg-white border border-gray-200 text-gray-900 rounded-2xl font-black uppercase tracking-[0.3em] text-xs hover:bg-gray-900 hover:text-white transition-all shadow-xl group"
+                                                className="relative z-10 px-6 sm:px-8 md:px-10 lg:px-12 py-4 sm:py-5 md:py-6 bg-white border border-gray-200 text-gray-900 rounded-xl sm:rounded-2xl font-black uppercase tracking-[0.2em] sm:tracking-[0.25em] md:tracking-[0.3em] text-[10px] sm:text-xs hover:bg-gray-900 hover:text-white transition-all shadow-xl group"
                                             >
-                                                Show All Talent Pools
-                                                <span className="ml-4 opacity-40 group-hover:opacity-100 transition-opacity">({displayedRoles.length - 2} more)</span>
+                                                <span className="block sm:inline">Show All Talent Pools</span>
+                                                <span className="block sm:inline sm:ml-3 md:ml-4 mt-1 sm:mt-0 opacity-40 group-hover:opacity-100 transition-opacity text-[9px] sm:text-xs">({displayedRoles.length - 2} more)</span>
                                             </button>
                                         </div>
                                     )}
@@ -393,13 +401,13 @@ const Portfolios = () => {
                                     {/* Testimonials removed from here - now at the top section */}
 
                                     {displayedRoles.length === 0 && !loading && (
-                                        <div className="text-center py-40 bg-white rounded-[3rem] border-2 border-dashed border-gray-100">
-                                            <div className="text-6xl mb-6">🔍</div>
-                                            <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight">No talents match your selection</h3>
-                                            <p className="text-gray-500 mt-2">Try selecting different roles or clear the filter.</p>
+                                        <div className="text-center py-20 sm:py-28 md:py-36 lg:py-40 bg-white rounded-2xl sm:rounded-3xl md:rounded-[3rem] border-2 border-dashed border-gray-100 mx-4">
+                                            <div className="text-4xl sm:text-5xl md:text-6xl mb-4 sm:mb-5 md:mb-6">🔍</div>
+                                            <h3 className="text-lg sm:text-xl md:text-2xl font-black text-gray-900 uppercase tracking-tight px-4">No talents match your selection</h3>
+                                            <p className="text-gray-500 mt-2 text-sm sm:text-base px-4">Try selecting different roles or clear the filter.</p>
                                             <button
                                                 onClick={() => setSelectedRoles([])}
-                                                className="mt-8 px-8 py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-600 transition-all font-bold"
+                                                className="mt-6 sm:mt-7 md:mt-8 px-6 sm:px-7 md:px-8 py-3 sm:py-3.5 md:py-4 bg-gray-900 text-white rounded-xl sm:rounded-2xl font-black uppercase tracking-wide sm:tracking-wider md:tracking-widest text-[10px] sm:text-xs hover:bg-blue-600 transition-all font-bold"
                                             >
                                                 Reset Filters
                                             </button>
@@ -412,11 +420,11 @@ const Portfolios = () => {
                 </section>
 
                 {/* Partners & About Section - Full Screen Impact */}
-                <section id="about" className="h-screen bg-white flex flex-col snap-start justify-center overflow-hidden">
+                <section id="about" className="min-h-screen lg:h-screen bg-white flex flex-col snap-start justify-center overflow-hidden py-8 sm:py-10 md:py-12 lg:py-0">
                     {/* Partners Scroller - Compact */}
-                    <div className="py-6 bg-gray-50/50 border-y border-gray-100 overflow-hidden shrink-0">
-                        <div className="max-w-[1400px] mx-auto px-4 mb-4">
-                            <h3 className="text-center text-[10px] font-black text-gray-400 uppercase tracking-[0.4em]">Our Hiring Partners</h3>
+                    <div className="py-4 sm:py-5 md:py-6 bg-gray-50/50 border-y border-gray-100 overflow-hidden shrink-0">
+                        <div className="max-w-[1400px] mx-auto px-4 mb-3 sm:mb-4">
+                            <h3 className="text-center text-[8px] sm:text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] sm:tracking-[0.35em] md:tracking-[0.4em]">Our Hiring Partners</h3>
                         </div>
 
                         <div className="flex flex-col gap-4">
@@ -460,43 +468,43 @@ const Portfolios = () => {
                     </div>
 
                     {/* About Content & CTA - Compact */}
-                    <div className="flex-1 flex items-center py-4">
-                        <div className="max-w-7xl mx-auto px-4 w-full">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+                    <div className="flex-1 flex items-center py-6 sm:py-8 md:py-10 lg:py-4">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 md:gap-10 lg:gap-12 xl:gap-16 items-center">
                                 <div>
-                                    <h2 className="text-4xl md:text-6xl font-black text-gray-900 mb-6 leading-[0.9] uppercase tracking-tighter">
+                                    <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black text-gray-900 mb-4 sm:mb-5 md:mb-6 leading-[0.9] uppercase tracking-tighter">
                                         Bridging the gap in <br />
                                         <span className="text-blue-600">Higher Education.</span>
                                     </h2>
-                                    <p className="text-sm md:text-lg text-gray-600 leading-relaxed mb-8 max-w-xl">
+                                    <p className="text-xs sm:text-sm md:text-base lg:text-lg text-gray-600 leading-relaxed mb-6 sm:mb-7 md:mb-8 max-w-xl">
                                         Navgurukul is committed to empowering students from underserved backgrounds with world-class technical skills and career-ready mindset. Our graduates are trained with modern learning methods and real-world problem solving.
                                     </p>
-                                    <div className="grid grid-cols-3 gap-4 md:gap-8">
-                                        <div className="space-y-1">
-                                            <div className="text-3xl md:text-4xl font-black text-gray-900">840+</div>
-                                            <div className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Placements</div>
+                                    <div className="grid grid-cols-3 gap-3 sm:gap-4 md:gap-6 lg:gap-8">
+                                        <div className="space-y-0.5 sm:space-y-1">
+                                            <div className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900">840+</div>
+                                            <div className="text-[7px] sm:text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-wide sm:tracking-wider md:tracking-widest">Placements</div>
                                         </div>
-                                        <div className="space-y-1">
-                                            <div className="text-3xl md:text-4xl font-black text-gray-900">600+</div>
-                                            <div className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Hiring Partners</div>
+                                        <div className="space-y-0.5 sm:space-y-1">
+                                            <div className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900">600+</div>
+                                            <div className="text-[7px] sm:text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-wide sm:tracking-wider md:tracking-widest">Hiring Partners</div>
                                         </div>
-                                        <div className="space-y-1">
-                                            <div className="text-3xl md:text-4xl font-black text-gray-900">160+</div>
-                                            <div className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Cities</div>
+                                        <div className="space-y-0.5 sm:space-y-1">
+                                            <div className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900">160+</div>
+                                            <div className="text-[7px] sm:text-[8px] md:text-[9px] text-gray-500 font-black uppercase tracking-wide sm:tracking-wider md:tracking-widest">Cities</div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="relative group">
-                                    <div className="absolute -inset-4 bg-gray-900/10 rounded-[2rem] opacity-10 group-hover:opacity-20 transition-all blur-2xl"></div>
-                                    <div className="relative bg-gray-950 rounded-[2rem] p-8 md:p-12 overflow-hidden shadow-2xl">
-                                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
-                                        <div className="relative z-10 text-center md:text-left">
-                                            <h3 className="text-2xl md:text-3xl font-black text-white mb-3 uppercase tracking-tighter">Ready to Hire?</h3>
-                                            <p className="text-gray-400 text-sm md:text-base mb-8 max-w-sm">Connect with our placement team today and find your next star partner.</p>
+                                <div className="relative group mt-6 sm:mt-8 lg:mt-0">
+                                    <div className="absolute -inset-2 sm:-inset-3 md:-inset-4 bg-gray-900/10 rounded-xl sm:rounded-2xl md:rounded-[2rem] opacity-10 group-hover:opacity-20 transition-all blur-2xl"></div>
+                                    <div className="relative bg-gray-950 rounded-xl sm:rounded-2xl md:rounded-[2rem] p-6 sm:p-8 md:p-10 lg:p-12 overflow-hidden shadow-2xl">
+                                        <div className="absolute top-0 right-0 w-48 sm:w-56 md:w-64 h-48 sm:h-56 md:h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
+                                        <div className="relative z-10 text-center lg:text-left">
+                                            <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-white mb-2 sm:mb-3 uppercase tracking-tighter">Ready to Hire?</h3>
+                                            <p className="text-gray-400 text-xs sm:text-sm md:text-base mb-6 sm:mb-7 md:mb-8 max-w-sm mx-auto lg:mx-0">Connect with our placement team today and find your next star partner.</p>
                                             <button
                                                 onClick={() => setShowGetInTouch(true)}
-                                                className="inline-flex px-8 py-4 bg-white text-gray-900 rounded-xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-gray-200 transition-all shadow-xl shadow-black/20"
+                                                className="inline-flex px-6 sm:px-7 md:px-8 py-3 sm:py-3.5 md:py-4 bg-white text-gray-900 rounded-lg sm:rounded-xl font-black uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[9px] sm:text-[10px] hover:bg-gray-200 transition-all shadow-xl shadow-black/20"
                                             >
                                                 Get in Touch
                                             </button>
