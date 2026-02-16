@@ -403,6 +403,7 @@ const userSchema = new mongoose.Schema({
         currentSchool: { value: String, lastUpdated: Date },
         currentModule: { value: String, lastUpdated: Date },
         admissionDate: { value: Date, lastUpdated: Date },
+        lastSyncedAt: { type: Date },
         extraAttributes: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} }
       },
       // Placeholder for other platforms
@@ -431,6 +432,79 @@ userSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`;
 });
 
+// Virtual for prioritized profile data
+// Returns prioritized values for keys that could come from Ghar or student
+userSchema.virtual('resolvedProfile').get(function () {
+  if (this.role !== 'student') return null;
+
+  const ghar = this.studentProfile?.externalData?.ghar || {};
+  const local = this.studentProfile || {};
+
+  return {
+    currentSchool: ghar.currentSchool?.value || local.currentSchool || '',
+    joiningDate: ghar.admissionDate?.value || local.joiningDate || null,
+    currentModule: ghar.currentModule?.value || local.currentModule || '',
+    attendancePercentage: ghar.attendancePercentage?.value || local.attendancePercentage || null,
+    currentStatus: ghar.currentStatus?.value || local.currentStatus || 'Active',
+    // Flags for frontend to know which fields are verified
+    isSchoolVerified: !!ghar.currentSchool?.value,
+    isJoiningDateVerified: !!ghar.admissionDate?.value,
+    isModuleVerified: !!ghar.currentModule?.value,
+    isAttendanceVerified: !!ghar.attendancePercentage?.value,
+    isStatusVerified: !!ghar.currentStatus?.value
+  };
+});
+
 userSchema.set('toJSON', { virtuals: true });
+userSchema.set('toObject', { virtuals: true });
+
+/**
+ * Static method to sync Ghar data for a user
+ * @param {string} email - Student email
+ * @param {Object} externalData - Raw data from Ghar API
+ */
+userSchema.statics.syncGharData = async function (email, externalData) {
+  if (!externalData) return null;
+
+  const user = await this.findOne({ email, role: 'student' });
+  if (!user) return null;
+
+  if (!user.studentProfile.externalData) {
+    user.studentProfile.externalData = { ghar: {} };
+  }
+  if (!user.studentProfile.externalData.ghar) {
+    user.studentProfile.externalData.ghar = {};
+  }
+
+  const now = new Date();
+  const gharData = user.studentProfile.externalData.ghar;
+
+  // Map fields
+  if (externalData.Current_School) {
+    gharData.currentSchool = { value: externalData.Current_School, lastUpdated: now };
+  }
+  if (externalData.Joining_Date) {
+    gharData.admissionDate = { value: new Date(externalData.Joining_Date), lastUpdated: now };
+  }
+  if (externalData.Academic_Status) {
+    gharData.currentStatus = { value: externalData.Academic_Status, lastUpdated: now };
+  }
+  if (externalData.Attendance_Rate) {
+    const rate = parseFloat(externalData.Attendance_Rate);
+    if (!isNaN(rate)) {
+      gharData.attendancePercentage = { value: rate, lastUpdated: now };
+    }
+  }
+
+  gharData.lastSyncedAt = now;
+  gharData.extraAttributes = {
+    ...gharData.extraAttributes,
+    ...externalData,
+    syncTimestamp: now
+  };
+
+  user.markModified('studentProfile.externalData');
+  return await user.save();
+};
 
 module.exports = mongoose.model('User', userSchema);

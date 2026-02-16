@@ -252,6 +252,17 @@ const StudentProfile = () => {
         }
       });
 
+      // Override with resolvedProfile data if student and verified data exists
+      if (data.role === 'student' && data.resolvedProfile) {
+        setFormData(prev => ({
+          ...prev,
+          currentSchool: data.resolvedProfile.currentSchool || prev.currentSchool,
+          joiningDate: data.resolvedProfile.joiningDate ? new Date(data.resolvedProfile.joiningDate).toISOString().split('T')[0] : prev.joiningDate,
+          currentModule: data.resolvedProfile.currentModule || prev.currentModule
+        }));
+      }
+
+
       // If profile has a resume link, check accessibility (do this inside try so we can use `data` safely)
       const link = data?.studentProfile?.resumeLink || '';
       if (link) {
@@ -685,6 +696,28 @@ const StudentProfile = () => {
         </div>
       )}
 
+      {profile?.resolvedProfile?.attendancePercentage !== null && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+              <Award className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="font-bold text-green-900 text-lg">Verified Attendance: {profile.resolvedProfile.attendancePercentage}%</h4>
+              <p className="text-green-700 text-sm">
+                This data is periodically synced from the **Ghar Dashboard**. Keep it high to remain eligible for more jobs!
+              </p>
+            </div>
+          </div>
+          <div className="hidden md:block text-right">
+            <div className="text-xs text-green-600 font-medium uppercase tracking-wider mb-1">Status</div>
+            <div className="px-3 py-1 bg-green-200 text-green-800 rounded-full text-sm font-bold border border-green-300">
+              {profile.resolvedProfile.currentStatus}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2 border-b overflow-x-auto">
         {tabs.map(tab => {
           const TabIcon = tab.icon;
@@ -946,15 +979,40 @@ const StudentProfile = () => {
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">School</label>
-                      <select value={formData.currentSchool || ''} onChange={(e) => setFormData({ ...formData, currentSchool: e.target.value, currentModule: '', customModuleDescription: '' })} disabled={!canEdit}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                        School
+                        {profile?.resolvedProfile?.isSchoolVerified && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                            <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
+                          </span>
+                        )}
+                      </label>
+                      <select
+                        value={formData.currentSchool || ''}
+                        onChange={(e) => setFormData({ ...formData, currentSchool: e.target.value, currentModule: '', customModuleDescription: '' })}
+                        disabled={!canEdit || profile?.resolvedProfile?.isSchoolVerified}
+                        className={profile?.resolvedProfile?.isSchoolVerified ? 'bg-gray-50 border-green-200' : ''}
+                      >
                         <option value="">Select School</option>
                         {schools.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><Calendar className="w-4 h-4" /> Joining Date</label>
-                      <input type="date" value={formData.joiningDate} onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })} disabled={!canEdit} />
+                      <label className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                        <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> Joining Date</span>
+                        {profile?.resolvedProfile?.isJoiningDateVerified && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                            <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.joiningDate}
+                        onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })}
+                        disabled={!canEdit || profile?.resolvedProfile?.isJoiningDateVerified}
+                        className={profile?.resolvedProfile?.isJoiningDateVerified ? 'bg-gray-50 border-green-200' : ''}
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1 font-bold text-primary-700">House Name (Navgurukul)</label>
@@ -968,8 +1026,20 @@ const StudentProfile = () => {
                     {formData.currentSchool && (
                       hasModulesForSchool ? (
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Current Module/Phase</label>
-                          <select value={formData.currentModule} onChange={(e) => setFormData({ ...formData, currentModule: e.target.value })} disabled={!canEdit}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                            Current Module/Phase
+                            {profile?.resolvedProfile?.isModuleVerified && (
+                              <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                                <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
+                              </span>
+                            )}
+                          </label>
+                          <select
+                            value={formData.currentModule}
+                            onChange={(e) => setFormData({ ...formData, currentModule: e.target.value })}
+                            disabled={!canEdit || profile?.resolvedProfile?.isModuleVerified}
+                            className={profile?.resolvedProfile?.isModuleVerified ? 'bg-gray-50 border-green-200' : ''}
+                          >
                             <option value="">Select Module</option>
                             {modulesForSchool.map(m => <option key={m} value={m}>{m}</option>)}
                           </select>

@@ -6,6 +6,7 @@ const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 const passport = require('../config/passport');
 const { createTokenEntry, consumeTokenEntry } = require('../utils/tokenStore');
+const gharApiService = require('../services/gharApiService');
 
 // Helper to normalize FRONTEND_URL (trim trailing slash)
 const getFrontendBase = () => (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$|\/$/g, '').replace(/\/+$/, '');
@@ -98,6 +99,11 @@ router.post('/google/exchange', async (req, res) => {
     }
 
     // Default (safer): do not return token in response body. Browser will hold HttpOnly cookie.
+    // Trigger Ghar Sync in background if student
+    if (user.role === 'student') {
+      gharApiService.syncStudentData(user.email).catch(err => console.error('Background Ghar sync error (exchange):', err.message));
+    }
+
     return res.json({ user });
   } catch (error) {
     console.error('Token exchange error:', error);
@@ -142,6 +148,12 @@ router.get('/google/callback', (req, res, next) => {
 
     // Create a short-lived, single-use code and redirect the user with the code
     const code = createTokenEntry({ token, user: { id: user._id, email: user.email, role: user.role } }, 2 * 60 * 1000);
+
+    // Trigger Ghar Sync in background if student
+    if (user.role === 'student') {
+      gharApiService.syncStudentData(user.email).catch(err => console.error('Background Ghar sync error (callback):', err.message));
+    }
+
     const redirectUrl = `${frontendBase}/auth/callback?code=${code}`;
     res.redirect(redirectUrl);
 
@@ -414,6 +426,11 @@ router.post('/login', loginValidation, async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRE || '7d' }
     );
 
+    // Trigger Ghar Sync in background if student
+    if (user.role === 'student') {
+      gharApiService.syncStudentData(user.email).catch(err => console.error('Background Ghar sync error (login):', err.message));
+    }
+
     res.json({
       message: 'Login successful',
       token,
@@ -447,6 +464,18 @@ router.get('/me', auth, async (req, res) => {
 
     // Normalize softSkills for frontend convenience (return as object map key->rating)
     const userObj = user.toObject ? user.toObject() : user;
+
+    // Trigger background sync if student to keep dynamic data fresh
+    if (userObj.role === 'student' && userObj.email) {
+      // Optional: throttle sync to once every 4 hours via timestamp check
+      const lastSync = userObj.studentProfile?.externalData?.ghar?.lastSyncedAt;
+      const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
+
+      if (!lastSync || new Date(lastSync) < fourHoursAgo) {
+        gharApiService.syncStudentData(userObj.email).catch(err => console.error('Background Ghar sync error (/me):', err.message));
+      }
+    }
+
     res.json(userObj);
   } catch (error) {
     console.error('Get user error:', error);

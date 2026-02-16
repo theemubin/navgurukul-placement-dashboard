@@ -80,7 +80,7 @@ class GharApiService {
     /**
      * Sync student data from Ghar API to local database
      * @param {string} email - Student email to match
-     * @returns {Promise<Object>} Synced data
+     * @returns {Promise<Object>} Synced data or null
      */
     async syncStudentData(email) {
         try {
@@ -93,7 +93,10 @@ class GharApiService {
 
             // The API returns an array in data, take the first match
             if (response.data && response.data.data && response.data.data.length > 0) {
-                return response.data.data[0];
+                const externalData = response.data.data[0];
+                const User = require('../models/User');
+                await User.syncGharData(email, externalData);
+                return externalData;
             }
             return null;
         } catch (error) {
