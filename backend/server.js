@@ -27,6 +27,7 @@ const discordRoutes = require('./routes/discord');
 const publicRoutes = require('./routes/public');
 const featuredPlacementRoutes = require('./routes/featuredPlacements');
 const leadRoutes = require('./routes/leads');
+const gharIntegrationRoutes = require('./routes/gharIntegration');
 
 const app = express();
 // trust proxy so secure cookies work behind proxies (Render, Heroku, etc.)
@@ -104,6 +105,7 @@ app.use('/api/discord', discordRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/featured-placements', featuredPlacementRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/ghar', gharIntegrationRoutes);
 
 // Serve uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

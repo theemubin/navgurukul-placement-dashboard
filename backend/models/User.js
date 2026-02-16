@@ -395,7 +395,20 @@ const userSchema = new mongoose.Schema({
     github: String,
     portfolio: String,
     about: String,
-    expectedSalary: Number
+    expectedSalary: Number,
+    // Add additive external data section
+    externalData: {
+      ghar: {
+        attendancePercentage: { value: Number, lastUpdated: Date },
+        currentSchool: { value: String, lastUpdated: Date },
+        currentModule: { value: String, lastUpdated: Date },
+        admissionDate: { value: Date, lastUpdated: Date },
+        extraAttributes: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} }
+      },
+      // Placeholder for other platforms
+      zoho: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
+      other: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} }
+    }
   }
 }, {
   timestamps: true
