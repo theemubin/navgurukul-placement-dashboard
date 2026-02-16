@@ -290,10 +290,16 @@ router.post('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), 
 router.get('/my-status', auth, authorize('student'), async (req, res) => {
   try {
     const student = await User.findById(req.userId);
-    const school = student.studentProfile?.currentSchool;
+    const resolved = student.resolvedProfile || {};
+    const school = resolved.currentSchool;
 
     if (!school) {
-      return res.status(400).json({ message: 'Please set your current school in your profile first' });
+      return res.json({
+        readiness: { student: req.userId, criteriaStatus: [], readinessPercentage: 0 },
+        config: [],
+        defaults: DEFAULT_CRITERIA,
+        message: 'Please set your current school in your profile first'
+      });
     }
 
     // Find or create student readiness record
