@@ -92,12 +92,23 @@ class GharApiService {
 
             console.log(`[GharAPI] Attempting sync for ${email} (isDev: ${isDev})`);
 
-            const response = await this.client.get('/gharZoho/students/By/NgEmail', {
+            let response = await this.client.get('/gharZoho/students/By/NgEmail', {
                 params: {
                     isDev,
                     Student_ng_email: email
                 }
             });
+
+            // If no data found in primary environment, try the other one
+            if (!response.data || !response.data.data || !Array.isArray(response.data.data) || response.data.data.length === 0) {
+                console.log(`[GharAPI] No data in primary env, trying fallback (isDev: ${!isDev}) for ${email}`);
+                response = await this.client.get('/gharZoho/students/By/NgEmail', {
+                    params: {
+                        isDev: !isDev,
+                        Student_ng_email: email
+                    }
+                });
+            }
 
             // The API returns an array in data, take the first match
             if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {

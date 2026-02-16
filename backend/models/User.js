@@ -484,24 +484,33 @@ userSchema.statics.syncGharData = async function (email, externalData) {
   const now = new Date();
   const gharData = user.studentProfile.externalData.ghar;
 
-  // Map fields
-  if (externalData.Current_School) {
-    gharData.currentSchool = { value: externalData.Current_School, lastUpdated: now };
+  // Map fields with fallbacks for different API versions
+  const schoolValue = externalData.Current_School || externalData.Select_School1 || externalData.Select_School;
+  if (schoolValue) {
+    gharData.currentSchool = { value: schoolValue, lastUpdated: now };
   }
+
   if (externalData.Joining_Date) {
     gharData.admissionDate = { value: new Date(externalData.Joining_Date), lastUpdated: now };
   }
-  if (externalData.Academic_Status) {
-    gharData.currentStatus = { value: externalData.Academic_Status, lastUpdated: now };
+
+  const statusValue = externalData.Academic_Status || externalData.Status;
+  if (statusValue) {
+    gharData.currentStatus = { value: statusValue, lastUpdated: now };
   }
+
   if (externalData.Gender) {
     gharData.gender = { value: externalData.Gender, lastUpdated: now };
   }
-  if (externalData.Current_Module) {
-    gharData.currentModule = { value: externalData.Current_Module, lastUpdated: now };
+
+  const moduleValue = externalData.Current_Module || externalData.Current_Module_Avg;
+  if (moduleValue) {
+    gharData.currentModule = { value: moduleValue, lastUpdated: now };
   }
-  if (externalData.Attendance_Rate) {
-    const rate = parseFloat(externalData.Attendance_Rate);
+
+  const attendanceValue = externalData.Attendance_Rate || externalData.Attendance_Rate1;
+  if (attendanceValue) {
+    const rate = parseFloat(attendanceValue);
     if (!isNaN(rate)) {
       gharData.attendancePercentage = { value: rate, lastUpdated: now };
     }
