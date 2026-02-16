@@ -132,8 +132,12 @@ const jobSchema = new mongoose.Schema({
     // Minimum months at Navgurukul
     minMonthsAtNavgurukul: { type: Number, default: null },
 
-    // Minimum attendance percentage
+    // Minimum attendance percentage (Manual/General)
     minAttendance: { type: Number, default: null },
+
+    // Ghar Dashboard Authenticated Requirements
+    minGharAttendance: { type: Number, default: null },
+    requiredGharStatus: { type: String, default: null },
 
     // Job Readiness requirement
     readinessRequirement: {

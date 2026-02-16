@@ -75,6 +75,8 @@ const JobForm = () => {
       minModule: '', // Specific module (hierarchical) or Track (independent)
       certifications: [], // List of strings
       minAttendance: '',
+      minGharAttendance: '',
+      requiredGharStatus: '',
       minMonthsAtNavgurukul: '',
       englishWriting: '',
       englishSpeaking: '',
@@ -354,7 +356,9 @@ const JobForm = () => {
             acceptedDegrees: job.eligibility?.higherEducation?.acceptedDegrees || [],
             level: job.eligibility?.higherEducation?.level || '',
             minPercentage: job.eligibility?.higherEducation?.minPercentage ?? ''
-          }
+          },
+          minGharAttendance: job.eligibility?.minGharAttendance ?? '',
+          requiredGharStatus: job.eligibility?.requiredGharStatus || ''
         },
         interviewRounds: job.interviewRounds?.length > 0 ? job.interviewRounds : [{ name: 'Round 1', type: 'other' }]
       });
@@ -1799,6 +1803,53 @@ const JobForm = () => {
                   value={formData.eligibility.minMonthsAtNavgurukul || ''}
                   onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minMonthsAtNavgurukul: e.target.value } })}
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Ghar Dashboard (Authenticated) */}
+          <div className="mb-4">
+            <h3 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              Ghar Dashboard (Authenticated)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minGharAttendance ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-gray-900 text-sm">Min Ghar Attendance %</span>
+                  <div className="group relative">
+                    <CheckCircle className="w-3 h-3 text-green-500 cursor-help" />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl z-30 leading-tight">
+                      This will only allow students with verified attendance from the Ghar Dashboard to apply.
+                    </div>
+                  </div>
+                </div>
+                <input type="number" min="0" max="100" placeholder="e.g. 85" className="w-full text-sm"
+                  value={formData.eligibility.minGharAttendance || ''}
+                  onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minGharAttendance: e.target.value } })}
+                />
+              </div>
+              <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.requiredGharStatus ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-gray-900 text-sm">Required Ghar Status</span>
+                  <div className="group relative">
+                    <CheckCircle className="w-3 h-3 text-green-500 cursor-help" />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl z-30 leading-tight">
+                      Only students with this exact status in the Ghar Dashboard can apply.
+                    </div>
+                  </div>
+                </div>
+                <select
+                  className="w-full text-sm rounded border-gray-300"
+                  value={formData.eligibility.requiredGharStatus || ''}
+                  onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, requiredGharStatus: e.target.value } })}
+                >
+                  <option value="">Any Status</option>
+                  <option value="Active">Active</option>
+                  <option value="Placed">Placed</option>
+                  <option value="Dropped">Dropped</option>
+                  <option value="Completed">Completed</option>
+                </select>
               </div>
             </div>
           </div>

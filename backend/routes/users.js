@@ -11,9 +11,20 @@ const upload = require('../middleware/upload');
 router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     // Accept pagination, filters and sorting
-    const { campus, school, batch, page = 1, limit = 20, search, status, sortField, sortOrder } = req.query;
+    const {
+      campus, school, batch, page = 1, limit = 20, search, status,
+      sortField, sortOrder, gharAttendanceMin, gharStatus
+    } = req.query;
 
     let query = { role: 'student', isActive: true };
+
+    // Ghar Dashboard Filters
+    if (gharAttendanceMin) {
+      query['studentProfile.externalData.ghar.attendancePercentage.value'] = { $gte: parseFloat(gharAttendanceMin) };
+    }
+    if (gharStatus) {
+      query['studentProfile.externalData.ghar.currentStatus.value'] = gharStatus;
+    }
 
     // Default: show only Active students if status not provided, but allow 'all' to show everything
     const statusFilter = status;
