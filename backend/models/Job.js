@@ -123,6 +123,10 @@ const jobSchema = new mongoose.Schema({
     englishWriting: { type: String, enum: ['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'], default: '' },
     englishSpeaking: { type: String, enum: ['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'], default: '' },
 
+    // Geographic filters
+    hometown: { type: String, default: null },
+    homestate: { type: String, default: null },
+
     // Shortlist Deadline - Students must complete profile before this
     shortlistDeadline: { type: Date, default: null },
 
@@ -137,7 +141,9 @@ const jobSchema = new mongoose.Schema({
 
     // Ghar Dashboard Authenticated Requirements
     minGharAttendance: { type: Number, default: null },
-    requiredGharStatus: { type: String, default: null },
+    requiredGharStatuses: { type: [String], default: [] },
+    minReadTheoryLevel: { type: String, default: null },
+    minAtCoderRating: { type: Number, default: null },
 
     // Job Readiness requirement
     readinessRequirement: {

@@ -5,7 +5,7 @@ import { questionAPI } from '../../services/api';
 import {
   Home, User, Briefcase, FileText, Users, CheckSquare, BarChart3, Settings,
   X, GraduationCap, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle,
-  Image as ImageIcon, Globe
+  Image as ImageIcon, Globe, Search
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -74,7 +74,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/manager/settings', icon: Settings, label: 'Platform Settings' },
           { path: '/manager/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/manager/users', icon: Users, label: 'User Management' },
-          { path: '/manager/ghar', icon: GraduationCap, label: 'Ghar Integration' }
+          { path: '/manager/ghar', icon: GraduationCap, label: 'Ghar Integration' },
+          { path: '/manager/ghar-viewer', icon: Search, label: 'Ghar Explorer' }
         ];
       default:
         return [];

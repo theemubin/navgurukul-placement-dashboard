@@ -404,6 +404,32 @@ const userSchema = new mongoose.Schema({
         currentModule: { value: String, lastUpdated: Date },
         admissionDate: { value: Date, lastUpdated: Date },
         gender: { value: String, lastUpdated: Date },
+        englishSpeaking: { value: String, lastUpdated: Date },
+        englishWriting: { value: String, lastUpdated: Date },
+        hometown: {
+          value: {
+            pincode: String,
+            district: String,
+            state: String,
+            address: String
+          },
+          lastUpdated: Date
+        },
+        phone: { value: String, lastUpdated: Date },
+        personalEmail: { value: String, lastUpdated: Date },
+        aadharNo: { value: String, lastUpdated: Date },
+        caste: { value: String, lastUpdated: Date },
+        religion: { value: String, lastUpdated: Date },
+        dob: { value: Date, lastUpdated: Date },
+        qualification: { value: String, lastUpdated: Date },
+        maritalStatus: { value: String, lastUpdated: Date },
+        daysInCampus: { value: Number, lastUpdated: Date },
+        admissionTestScore: { value: String, lastUpdated: Date },
+        readTheoryLevel: { value: String, lastUpdated: Date },
+        atCoderRating: { value: String, lastUpdated: Date },
+        campus: { value: String, lastUpdated: Date },
+        firstName: { value: String, lastUpdated: Date },
+        lastName: { value: String, lastUpdated: Date },
         lastSyncedAt: { type: Date },
         extraAttributes: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} }
       },
@@ -450,13 +476,34 @@ userSchema.virtual('resolvedProfile').get(function () {
     attendancePercentage: ghar.attendancePercentage?.value || local.attendancePercentage || null,
     currentStatus: ghar.currentStatus?.value || local.currentStatus || 'Active',
     gender: (ghar.gender?.value || this.gender || '').toLowerCase(),
+    englishSpeaking: ghar.englishSpeaking?.value || local.englishProficiency?.speaking || '',
+    englishWriting: ghar.englishWriting?.value || local.englishProficiency?.writing || '',
+    hometown: ghar.hometown?.value || local.hometown || null,
+    phone: ghar.phone?.value || this.phone || '',
+    personalEmail: ghar.personalEmail?.value || local.personalEmail || '',
+    aadharNo: ghar.aadharNo?.value || '',
+    qualification: ghar.qualification?.value || '',
+    caste: ghar.caste?.value || '',
+    religion: ghar.religion?.value || '',
+    maritalStatus: ghar.maritalStatus?.value || '',
+    dob: ghar.dob?.value || null,
+    readTheoryLevel: ghar.readTheoryLevel?.value || '',
+    atCoderRating: ghar.atCoderRating?.value || '',
+    campus: ghar.campus?.value || '',
+    firstName: ghar.firstName?.value || this.firstName || '',
+    lastName: ghar.lastName?.value || this.lastName || '',
     // Flags for frontend to know which fields are verified
     isSchoolVerified: !!ghar.currentSchool?.value,
     isJoiningDateVerified: !!ghar.admissionDate?.value,
     isModuleVerified: !!ghar.currentModule?.value,
     isAttendanceVerified: !!ghar.attendancePercentage?.value,
     isStatusVerified: !!ghar.currentStatus?.value,
-    isGenderVerified: !!ghar.gender?.value
+    isGenderVerified: !!ghar.gender?.value,
+    isEnglishVerified: !!(ghar.englishSpeaking?.value || ghar.englishWriting?.value),
+    isHometownVerified: !!ghar.hometown?.value,
+    isPhoneVerified: !!ghar.phone?.value,
+    isNameVerified: !!(ghar.firstName?.value || ghar.lastName?.value),
+    isCampusVerified: !!ghar.campus?.value
   };
 });
 
@@ -496,7 +543,7 @@ userSchema.statics.syncGharData = async function (email, externalData) {
 
   const statusValue = externalData.Academic_Status || externalData.Status;
   if (statusValue) {
-    gharData.currentStatus = { value: statusValue, lastUpdated: now };
+    gharData.currentStatus = { value: statusValue.toString().trim(), lastUpdated: now };
   }
 
   if (externalData.Gender) {
@@ -516,12 +563,80 @@ userSchema.statics.syncGharData = async function (email, externalData) {
     }
   }
 
+  // New Mappings from latest request
+  if (externalData.Speak_Improve_Latest_Grade) {
+    gharData.englishSpeaking = { value: externalData.Speak_Improve_Latest_Grade, lastUpdated: now };
+  }
+  if (externalData.Write_Improve_Latest_Grade) {
+    gharData.englishWriting = { value: externalData.Write_Improve_Latest_Grade, lastUpdated: now };
+  }
+  if (externalData.Address) {
+    gharData.hometown = {
+      value: {
+        pincode: externalData.Address.postal_code
+      },
+      lastUpdated: now
+    };
+  }
+  if (externalData.Phone_Number) {
+    gharData.phone = { value: externalData.Phone_Number, lastUpdated: now };
+  }
+  if (externalData.Personal_Email) {
+    gharData.personalEmail = { value: externalData.Personal_Email, lastUpdated: now };
+  }
+  if (externalData.Aadhar_No) {
+    gharData.aadharNo = { value: externalData.Aadhar_No, lastUpdated: now };
+  }
+  if (externalData.Caste) {
+    gharData.caste = { value: externalData.Caste, lastUpdated: now };
+  }
+  if (externalData.Religion) {
+    gharData.religion = { value: externalData.Religion, lastUpdated: now };
+  }
+  if (externalData.Date_of_Birth) {
+    gharData.dob = { value: new Date(externalData.Date_of_Birth), lastUpdated: now };
+  }
+  if (externalData.Qualification) {
+    gharData.qualification = { value: externalData.Qualification, lastUpdated: now };
+  }
+  if (externalData.Marital_status) {
+    gharData.maritalStatus = { value: externalData.Marital_status, lastUpdated: now };
+  }
+  if (externalData.Days_in_Campus) {
+    gharData.daysInCampus = { value: parseInt(externalData.Days_in_Campus), lastUpdated: now };
+  }
+  if (externalData.Admission_Test_Score) {
+    gharData.admissionTestScore = { value: externalData.Admission_Test_Score, lastUpdated: now };
+  }
+  if (externalData.ReadTheory_Avg_Quize_Level) {
+    gharData.readTheoryLevel = { value: externalData.ReadTheory_Avg_Quize_Level, lastUpdated: now };
+  }
+  if (externalData.AtCoder_Rating) {
+    gharData.atCoderRating = { value: externalData.AtCoder_Rating, lastUpdated: now };
+  }
+  if (externalData.Select_Campus?.Campus_Name || externalData.Select_Campus?.zc_display_value) {
+    gharData.campus = { value: externalData.Select_Campus?.Campus_Name || externalData.Select_Campus?.zc_display_value, lastUpdated: now };
+  }
+  if (externalData.Name?.first_name) {
+    gharData.firstName = { value: externalData.Name.first_name, lastUpdated: now };
+  }
+  if (externalData.Name?.last_name) {
+    gharData.lastName = { value: externalData.Name.last_name, lastUpdated: now };
+  }
+
   gharData.lastSyncedAt = now;
 
   // Safely update Map
   if (externalData) {
+    // Re-initialize extraAttributes if it's not a Map
+    if (!user.studentProfile.externalData.ghar.extraAttributes || typeof user.studentProfile.externalData.ghar.extraAttributes.set !== 'function') {
+      user.studentProfile.externalData.ghar.extraAttributes = new Map();
+    }
+
     Object.keys(externalData).forEach(key => {
-      user.studentProfile.externalData.ghar.extraAttributes.set(key, externalData[key]);
+      // MongoDB does not allow dots in Map keys
+      const safeKey = key.replace(/\./g, '_');
+      user.studentProfile.externalData.ghar.extraAttributes.set(safeKey, externalData[key]);
     });
     user.studentProfile.externalData.ghar.extraAttributes.set('syncTimestamp', now);
   }

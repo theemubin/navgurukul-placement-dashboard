@@ -51,6 +51,7 @@ import CarouselManagement from './pages/manager/CarouselManagement';
 import PartnerManagement from './pages/manager/PartnerManagement';
 import LeadsManagement from './pages/manager/LeadsManagement';
 import GharIntegration from './pages/manager/GharIntegration';
+import GharDataViewer from './pages/manager/GharDataViewer';
 
 // Common Pages
 import Notifications from './pages/common/Notifications';
@@ -183,6 +184,7 @@ function App() {
         <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />
         <Route path="users" element={<UsersManager />} />
         <Route path="ghar" element={<GharIntegration />} />
+        <Route path="ghar-viewer" element={<GharDataViewer />} />
       </Route>
 
       {/* Redirects */}

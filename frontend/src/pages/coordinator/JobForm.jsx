@@ -76,14 +76,16 @@ const JobForm = () => {
       certifications: [], // List of strings
       minAttendance: '',
       minGharAttendance: '',
-      requiredGharStatus: '',
       minMonthsAtNavgurukul: '',
       englishWriting: '',
       englishSpeaking: '',
       homestate: '',
       councilPosts: [], // Array of { post: String, minMonths: Number }
       readinessRequirement: 'yes',
-      houses: []
+      houses: [],
+      requiredGharStatuses: [],
+      minReadTheoryLevel: '',
+      minAtCoderRating: ''
     },
     status: 'draft',
     interviewRounds: [{ name: 'Round 1', type: 'other' }] // Initialize with one round
@@ -299,7 +301,12 @@ const JobForm = () => {
         higherEducationRequired: formData.eligibility.higherEducation?.required ? 'true' : undefined,
         higherEducationMinPercentage: formData.eligibility.higherEducation?.minPercentage || undefined,
         // Required Skills - send as JSON string for complex data structure
-        requiredSkills: formData.requiredSkills?.length > 0 ? JSON.stringify(formData.requiredSkills) : undefined
+        requiredSkills: formData.requiredSkills?.length > 0 ? JSON.stringify(formData.requiredSkills) : undefined,
+        // Ghar Dashboard Filters
+        minGharAttendance: formData.eligibility.minGharAttendance || undefined,
+        requiredGharStatuses: formData.eligibility.requiredGharStatuses?.length > 0 ? formData.eligibility.requiredGharStatuses.join(',') : undefined,
+        minReadTheoryLevel: formData.eligibility.minReadTheoryLevel || undefined,
+        minAtCoderRating: formData.eligibility.minAtCoderRating || undefined
       };
 
       // Clean undefined/null/empty values
@@ -358,7 +365,9 @@ const JobForm = () => {
             minPercentage: job.eligibility?.higherEducation?.minPercentage ?? ''
           },
           minGharAttendance: job.eligibility?.minGharAttendance ?? '',
-          requiredGharStatus: job.eligibility?.requiredGharStatus || ''
+          requiredGharStatuses: job.eligibility?.requiredGharStatuses || [],
+          minReadTheoryLevel: job.eligibility?.minReadTheoryLevel ?? '',
+          minAtCoderRating: job.eligibility?.minAtCoderRating ?? ''
         },
         interviewRounds: job.interviewRounds?.length > 0 ? job.interviewRounds : [{ name: 'Round 1', type: 'other' }]
       });
@@ -694,6 +703,8 @@ const JobForm = () => {
     (formData.eligibility.readinessRequirement && formData.eligibility.readinessRequirement !== 'no') ||
     // Council posts
     (formData.eligibility.councilPosts?.length > 0 && formData.eligibility.councilPosts.some(cp => cp.post)) ||
+    // Ghar Status
+    (formData.eligibility.requiredGharStatuses?.length > 0) ||
     // Certifications
     formData.eligibility.certifications?.length > 0 ||
     // Required Skills
@@ -1264,93 +1275,53 @@ const JobForm = () => {
         </div >
 
         {/* Required Skills */}
-        < div className="card" >
+        <div className="card">
           <div className="mb-4">
             <h2 className="text-lg font-semibold">Required Skills</h2>
             <p className="text-sm text-gray-500">Select skills and set the minimum proficiency level required</p>
           </div>
-          {/* CEFR Levels */}
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm font-medium text-blue-800 mb-2">English Proficiency (CEFR)</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-600">English Writing</label>
-                <select
-                  value={formData.eligibility.englishWriting || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    eligibility: { ...formData.eligibility, englishWriting: e.target.value }
-                  })}
-                  className="w-full text-sm mt-1"
-                >
-                  <option value="">Any</option>
-                  {cefrLevels.map(level => (
-                    <option key={level.value} value={level.value}>{level.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">English Speaking</label>
-                <select
-                  value={formData.eligibility.englishSpeaking || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    eligibility: { ...formData.eligibility, englishSpeaking: e.target.value }
-                  })}
-                  className="w-full text-sm mt-1"
-                >
-                  <option value="">Any</option>
-                  {cefrLevels.map(level => (
-                    <option key={level.value} value={level.value}>{level.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
 
           {/* Selected Skills with Proficiency */}
-          {
-            formData.requiredSkills.length > 0 && (
-              <div className="mb-4 space-y-2">
-                <p className="text-sm font-medium text-gray-700">Selected Skills:</p>
-                {formData.requiredSkills.map((selectedSkill) => {
-                  const skillId = selectedSkill.skill?._id || selectedSkill.skill;
-                  const skillInfo = allSkills.find(s => s._id === skillId);
-                  if (!skillInfo) return null;
+          {formData.requiredSkills.length > 0 && (
+            <div className="mb-4 space-y-2">
+              <p className="text-sm font-medium text-gray-700">Selected Skills:</p>
+              {formData.requiredSkills.map((selectedSkill) => {
+                const skillId = selectedSkill.skill?._id || selectedSkill.skill;
+                const skillInfo = allSkills.find(s => s._id === skillId);
+                if (!skillInfo) return null;
 
-                  // If CEFR English is set, do not show duplicate English in Selected Skills
-                  const isEnglishSkill = (skillInfo.name || '').toLowerCase() === 'english';
-                  if (isEnglishSkill && (formData.eligibility.englishSpeaking || formData.eligibility.englishWriting)) {
-                    return null;
-                  }
+                // If CEFR English is set, do not show duplicate English in Selected Skills
+                const isEnglishSkill = (skillInfo.name || '').toLowerCase() === 'english';
+                if (isEnglishSkill && (formData.eligibility.englishSpeaking || formData.eligibility.englishWriting)) {
+                  return null;
+                }
 
-                  return (
-                    <div key={skillId} className="flex items-center gap-3 p-2 bg-primary-50 rounded-lg">
-                      <span className="font-medium text-primary-800 min-w-32 text-sm">{skillInfo.name}</span>
-                      <select
-                        value={selectedSkill.proficiencyLevel || 1}
-                        onChange={(e) => updateSkillProficiency(skillId, parseInt(e.target.value))}
-                        className="text-sm"
-                      >
-                        {proficiencyLevels.map(level => (
-                          <option key={level.value} value={level.value}>
-                            {level.label} - {level.description}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => toggleSkill(skillId)}
-                        className="ml-auto text-red-500 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )
-          }
+                return (
+                  <div key={skillId} className="flex items-center gap-3 p-2 bg-primary-50 rounded-lg">
+                    <span className="font-medium text-primary-800 min-w-32 text-sm">{skillInfo.name}</span>
+                    <select
+                      value={selectedSkill.proficiencyLevel || 1}
+                      onChange={(e) => updateSkillProficiency(skillId, parseInt(e.target.value))}
+                      className="text-sm"
+                    >
+                      {proficiencyLevels.map(level => (
+                        <option key={level.value} value={level.value}>
+                          {level.label} - {level.description}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => toggleSkill(skillId)}
+                      className="ml-auto text-red-500 hover:text-red-700"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Available Skills to Add */}
           <div className="flex flex-wrap gap-2">
@@ -1373,10 +1344,10 @@ const JobForm = () => {
               );
             })}
           </div>
-        </div >
+        </div>
 
         {/* Eligibility Criteria */}
-        < div className="card" >
+        <div className="card">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-lg font-semibold">Eligibility Criteria</h2>
           </div>
@@ -1384,9 +1355,7 @@ const JobForm = () => {
             Click to select criteria. Unselected criteria means open for all in that category.
           </p>
 
-          {/* Academic Requirements Section (Collapsible or just standard) */}
-          {/* ... [Existing Academic Logic preserved in snippet below] ... */}
-          {/* (Re-implementation of existing logic omitted here to save context execution space, assuming write_to_file replaces full content - I will write full content) */}
+          {/* Academic Requirements Section */}
           <div className="mb-4">
             <h3 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
               <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
@@ -1461,102 +1430,67 @@ const JobForm = () => {
             </div>
           </div>
 
-          {/* Geographic Preferences */}
-          <div className="mb-4">
+          {/* Job Readiness Section */}
+          <div className="mb-6">
             <h3 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 bg-teal-500 rounded-full"></span>
-              Geographic Preferences
+              <span className="w-2 h-2 bg-rose-500 rounded-full"></span>
+              Job Readiness Requirement
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Home State */}
-              <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.homestate ? 'border-teal-500 bg-teal-50' : 'border-gray-200 bg-white'}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Home className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium text-gray-900 text-sm">Home State</span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="e.g. Maharashtra"
-                    className="w-full text-sm rounded border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-                    value={formData.eligibility.homestate || ''}
-                    onChange={(e) => {
-                      setFormData({ ...formData, eligibility: { ...formData.eligibility, homestate: e.target.value } });
-                      setShowHomestateSuggestions(true);
-                    }}
-                    onFocus={() => setShowHomestateSuggestions(true)}
-                  />
-                  {showHomestateSuggestions && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setShowHomestateSuggestions(false)}></div>
-                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {studentLocations.states
-                          .filter(s => s.toLowerCase().includes((formData.eligibility.homestate || '').toLowerCase()))
-                          .map(s => (
-                            <button
-                              key={s}
-                              type="button"
-                              onClick={() => {
-                                setFormData({ ...formData, eligibility: { ...formData.eligibility, homestate: s } });
-                                setShowHomestateSuggestions(false);
-                              }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-0"
-                            >
-                              {s}
-                            </button>
-                          ))}
-                        {studentLocations.states.length === 0 && (
-                          <div className="px-3 py-2 text-sm text-gray-500">No available data</div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
+            <div className="bg-rose-50 p-4 rounded-lg border border-rose-100">
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'yes' ? 'border-rose-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
+                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'yes' } })}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'yes' ? 'border-rose-500' : 'border-gray-400'}`}>
+                    {formData.eligibility.readinessRequirement === 'yes' && <div className="w-2 h-2 bg-rose-500 rounded-full" />}
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-rose-900 text-sm">Required (100%)</p>
+                    <p className="text-xs text-rose-700">Student must be 100% ready</p>
+                  </div>
+                </label>
+
+                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'in_progress' ? 'border-rose-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
+                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'in_progress' } })}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'in_progress' ? 'border-rose-500' : 'border-gray-400'}`}>
+                    {formData.eligibility.readinessRequirement === 'in_progress' && <div className="w-2 h-2 bg-rose-500 rounded-full" />}
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-rose-900 text-sm">In Progress (30%+)</p>
+                    <p className="text-xs text-rose-700">Must be at least 30% ready</p>
+                  </div>
+                </label>
+
+                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'no' ? 'border-gray-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
+                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'no' } })}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'no' ? 'border-gray-500' : 'border-gray-400'}`}>
+                    {formData.eligibility.readinessRequirement === 'no' && <div className="w-2 h-2 bg-gray-500 rounded-full" />}
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-gray-900 text-sm">Not Required</p>
+                    <p className="text-xs text-gray-700">Open to all students</p>
+                  </div>
+                </label>
               </div>
 
-              {/* Home District/Town */}
-              <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.hometown ? 'border-teal-500 bg-teal-50' : 'border-gray-200 bg-white'}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Home className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium text-gray-900 text-sm">Hometown (District)</span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="e.g. Pune"
-                    className="w-full text-sm rounded border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-                    value={formData.eligibility.hometown || ''}
-                    onChange={(e) => {
-                      setFormData({ ...formData, eligibility: { ...formData.eligibility, hometown: e.target.value } });
-                      setShowHometownSuggestions(true);
-                    }}
-                    onFocus={() => setShowHometownSuggestions(true)}
-                  />
-                  {showHometownSuggestions && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setShowHometownSuggestions(false)}></div>
-                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {studentLocations.districts
-                          .filter(d => d.toLowerCase().includes((formData.eligibility.hometown || '').toLowerCase()))
-                          .map(d => (
-                            <button
-                              key={d}
-                              type="button"
-                              onClick={() => {
-                                setFormData({ ...formData, eligibility: { ...formData.eligibility, hometown: d } });
-                                setShowHometownSuggestions(false);
-                              }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-0"
-                            >
-                              {d}
-                            </button>
-                          ))}
-                        {studentLocations.districts.length === 0 && (
-                          <div className="px-3 py-2 text-sm text-gray-500">No available data</div>
-                        )}
-                      </div>
-                    </>
-                  )}
+              {/* Global Readiness Metrics Note */}
+              <div className="bg-white/60 rounded-lg p-3 border border-rose-100/50">
+                <p className="text-[10px] font-bold text-rose-800 uppercase mb-2 tracking-wide">Common Readiness Standards (Apply to All Schools):</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-3 h-3 text-rose-500" />
+                    <span className="text-[10px] text-rose-700 font-medium">Attendance: Verified mandatory min.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-3 h-3 text-rose-500" />
+                    <span className="text-[10px] text-rose-700 font-medium">English: B2 Level (Speaking & Writing)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-3 h-3 text-rose-500" />
+                    <span className="text-[10px] text-rose-700 font-medium">Read Theory: Level 6+ (&gt;5)</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1662,194 +1596,172 @@ const JobForm = () => {
             </div>
           </div>
 
-          {/* Navgurukul Specific */}
+          {/* Additional Internal Filters */}
           <div className="mb-4">
             <h3 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-              Navgurukul Specific
+              <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
+              Internal Filtering
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.schools || []).length > 0 ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'}`}>
-                <span className="font-medium text-gray-900 text-sm block mb-1">Schools</span>
-                <div className="flex flex-wrap gap-1">
-                  {schools.map(school => (
-                    <button key={school} type="button"
-                      onClick={() => {
-                        const current = formData.eligibility.schools || [];
-                        const newSchools = current.includes(school) ? current.filter(s => s !== school) : [...current, school];
-                        setFormData({ ...formData, eligibility: { ...formData.eligibility, schools: newSchools } });
-                      }}
-                      className={`px-2 py-1 rounded text-xs transition ${(formData.eligibility.schools || []).includes(school) ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-600'}`}
-                    >
-                      {school.replace('School of ', '')}
-                    </button>
-                  ))}
-                </div>
+            <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.houses || []).length > 0 ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-medium text-gray-900 text-sm">House Selection</span>
               </div>
-              <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.campuses || []).length > 0 ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'}`}>
-                <span className="font-medium text-gray-900 text-sm block mb-1">Campuses</span>
-                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-                  {campuses.map(campus => (
-                    <button key={campus._id} type="button"
-                      onClick={() => {
-                        const current = formData.eligibility.campuses || [];
-                        const newCampuses = current.includes(campus._id) ? current.filter(c => c !== campus._id) : [...current, campus._id];
-                        setFormData({ ...formData, eligibility: { ...formData.eligibility, campuses: newCampuses } });
-                      }}
-                      className={`px-2 py-1 rounded text-xs transition ${(formData.eligibility.campuses || []).includes(campus._id) ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-600'}`}
-                    >
-                      {campus.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.houses || []).length > 0 ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-gray-900 text-sm">House Specific?</span>
-                  <div className="group relative">
-                    <AlertCircle className="w-3 h-3 text-gray-400 cursor-help" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl z-30 leading-tight">
-                      If selected, this job will only be visible to students belonging to the chosen houses. By default, it's off (visible to all).
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {['Bageshree', 'Bhairav', 'Malhar'].map(house => (
-                    <button key={house} type="button"
-                      onClick={() => {
-                        const current = formData.eligibility.houses || [];
-                        const newHouses = current.includes(house) ? current.filter(h => h !== house) : [...current, house];
-                        setFormData({ ...formData, eligibility: { ...formData.eligibility, houses: newHouses } });
-                      }}
-                      className={`px-2 py-1 rounded text-xs transition ${(formData.eligibility.houses || []).includes(house) ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-600'}`}
-                    >
-                      {house}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex flex-wrap gap-1">
+                {['Bageshree', 'Bhairav', 'Malhar'].map(house => (
+                  <button key={house} type="button"
+                    onClick={() => {
+                      const current = formData.eligibility.houses || [];
+                      const newHouses = current.includes(house) ? current.filter(h => h !== house) : [...current, house];
+                      setFormData({ ...formData, eligibility: { ...formData.eligibility, houses: newHouses } });
+                    }}
+                    className={`px-2 py-1 rounded text-[10px] transition ${(formData.eligibility.houses || []).includes(house) ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-600'}`}
+                  >
+                    {house}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Job Readiness Section */}
+          {/* Verified Dashboard Filters (Grouped) */}
           <div className="mb-6">
             <h3 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 bg-rose-500 rounded-full"></span>
-              Job Readiness Requirement
-            </h3>
-            <div className="bg-rose-50 p-4 rounded-lg border border-rose-100">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'yes' ? 'border-rose-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
-                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'yes' } })}
-                >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'yes' ? 'border-rose-500' : 'border-gray-400'}`}>
-                    {formData.eligibility.readinessRequirement === 'yes' && <div className="w-2 h-2 bg-rose-500 rounded-full" />}
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-rose-900 text-sm">Required (100%)</p>
-                    <p className="text-xs text-rose-700">Student must be 100% ready</p>
-                  </div>
-                </label>
-
-                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'in_progress' ? 'border-rose-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
-                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'in_progress' } })}
-                >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'in_progress' ? 'border-rose-500' : 'border-gray-400'}`}>
-                    {formData.eligibility.readinessRequirement === 'in_progress' && <div className="w-2 h-2 bg-rose-500 rounded-full" />}
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-rose-900 text-sm">In Progress (30%+)</p>
-                    <p className="text-xs text-rose-700">Must be at least 30% ready</p>
-                  </div>
-                </label>
-
-                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'no' ? 'border-gray-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
-                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'no' } })}
-                >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'no' ? 'border-gray-500' : 'border-gray-400'}`}>
-                    {formData.eligibility.readinessRequirement === 'no' && <div className="w-2 h-2 bg-gray-500 rounded-full" />}
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-gray-900 text-sm">Not Required</p>
-                    <p className="text-xs text-gray-700">Open to all students</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Additional Filters */}
-          {/* ... [Additional Filters Logic] ... */}
-          {/* Minimizing for brevity, re-inserting existing ... */}
-          <div className="mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, femaleOnly: !formData.eligibility.femaleOnly } })}
-                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.femaleOnly ? 'border-pink-500 bg-pink-50' : 'border-gray-200 bg-white'}`}>
-                <span className="font-medium text-gray-900 text-sm">Female Only</span>
-                <div className={`w-10 h-6 rounded-full relative transition-colors mt-1 ${formData.eligibility.femaleOnly ? 'bg-pink-500' : 'bg-gray-300'}`}>
-                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.eligibility.femaleOnly ? 'left-5' : 'left-1'}`}></div>
-                </div>
-              </div>
-              <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minAttendance ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'}`}>
-                <span className="font-medium text-gray-900 text-sm block mb-1">Min Attendance %</span>
-                <input type="number" min="0" max="100" placeholder="e.g. 75" className="w-full text-sm"
-                  value={formData.eligibility.minAttendance || ''}
-                  onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minAttendance: e.target.value } })}
-                />
-              </div>
-              <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minMonthsAtNavgurukul ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'}`}>
-                <span className="font-medium text-gray-900 text-sm block mb-1">Min Months at NG</span>
-                <input type="number" min="0" placeholder="e.g. 6" className="w-full text-sm"
-                  value={formData.eligibility.minMonthsAtNavgurukul || ''}
-                  onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minMonthsAtNavgurukul: e.target.value } })}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Ghar Dashboard (Authenticated) */}
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              Ghar Dashboard (Authenticated)
+              Verified Sync Filters (Ghar Dashboard)
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minGharAttendance ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-gray-900 text-sm">Min Ghar Attendance %</span>
-                  <div className="group relative">
-                    <CheckCircle className="w-3 h-3 text-green-500 cursor-help" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl z-30 leading-tight">
-                      This will only allow students with verified attendance from the Ghar Dashboard to apply.
+            <div className="bg-green-50/50 p-4 rounded-xl border border-green-100">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* 1. Schools */}
+                <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.schools || []).length > 0 ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Schools</span>
+                  <div className="flex flex-wrap gap-1">
+                    {schools.map(school => (
+                      <button key={school} type="button"
+                        onClick={() => {
+                          const current = formData.eligibility.schools || [];
+                          const next = current.includes(school) ? current.filter(s => s !== school) : [...current, school];
+                          setFormData({ ...formData, eligibility: { ...formData.eligibility, schools: next } });
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[10px] transition ${(formData.eligibility.schools || []).includes(school) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}
+                      >
+                        {school.replace('School of ', '')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Campuses */}
+                <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.campuses || []).length > 0 ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Campuses</span>
+                  <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                    {campuses.map(campus => (
+                      <button key={campus._id} type="button"
+                        onClick={() => {
+                          const current = formData.eligibility.campuses || [];
+                          const next = current.includes(campus._id) ? current.filter(c => c !== campus._id) : [...current, campus._id];
+                          setFormData({ ...formData, eligibility: { ...formData.eligibility, campuses: next } });
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[10px] transition ${(formData.eligibility.campuses || []).includes(campus._id) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}
+                      >
+                        {campus.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Geographical */}
+                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.homestate || formData.eligibility.hometown ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Location (State/District)</span>
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <input type="text" placeholder="State..." className="w-full text-xs py-1" value={formData.eligibility.homestate || ''} onChange={(e) => { setFormData({ ...formData, eligibility: { ...formData.eligibility, homestate: e.target.value } }); setShowHomestateSuggestions(true); }} onFocus={() => setShowHomestateSuggestions(true)} />
+                      {showHomestateSuggestions && (
+                        <div className="absolute z-30 w-full mt-1 bg-white border rounded shadow-lg max-h-32 overflow-y-auto">
+                          {studentLocations.states.filter(s => s.toLowerCase().includes((formData.eligibility.homestate || '').toLowerCase())).map(s => (
+                            <button key={s} type="button" onClick={() => { setFormData({ ...formData, eligibility: { ...formData.eligibility, homestate: s } }); setShowHomestateSuggestions(false); }} className="w-full text-left px-2 py-1 hover:bg-gray-50 text-[10px] border-b">{s}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input type="text" placeholder="District..." className="w-full text-xs py-1" value={formData.eligibility.hometown || ''} onChange={(e) => { setFormData({ ...formData, eligibility: { ...formData.eligibility, hometown: e.target.value } }); setShowHometownSuggestions(true); }} onFocus={() => setShowHometownSuggestions(true)} />
+                      {showHometownSuggestions && (
+                        <div className="absolute z-30 w-full mt-1 bg-white border rounded shadow-lg max-h-32 overflow-y-auto">
+                          {studentLocations.districts.filter(d => d.toLowerCase().includes((formData.eligibility.hometown || '').toLowerCase())).map(d => (
+                            <button key={d} type="button" onClick={() => { setFormData({ ...formData, eligibility: { ...formData.eligibility, hometown: d } }); setShowHometownSuggestions(false); }} className="w-full text-left px-2 py-1 hover:bg-gray-50 text-[10px] border-b">{d}</button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-                <input type="number" min="0" max="100" placeholder="e.g. 85" className="w-full text-sm"
-                  value={formData.eligibility.minGharAttendance || ''}
-                  onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minGharAttendance: e.target.value } })}
-                />
-              </div>
-              <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.requiredGharStatus ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-gray-900 text-sm">Required Ghar Status</span>
-                  <div className="group relative">
-                    <CheckCircle className="w-3 h-3 text-green-500 cursor-help" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl z-30 leading-tight">
-                      Only students with this exact status in the Ghar Dashboard can apply.
+
+                {/* 4. English Proficiency */}
+                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.englishWriting || formData.eligibility.englishSpeaking ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">English Level (CEFR)</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select className="text-[10px] py-1" value={formData.eligibility.englishWriting || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, englishWriting: e.target.value } })}>
+                      <option value="">Writing</option>
+                      {cefrLevels.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                    </select>
+                    <select className="text-[10px] py-1" value={formData.eligibility.englishSpeaking || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, englishSpeaking: e.target.value } })}>
+                      <option value="">Speaking</option>
+                      {cefrLevels.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 5. Attendance & Status */}
+                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minGharAttendance || (formData.eligibility.requiredGharStatuses || []).length > 0 ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Attendance & Status</span>
+                  <input type="number" placeholder="Min %" className="w-full text-[10px] py-1 mb-2" value={formData.eligibility.minGharAttendance || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minGharAttendance: e.target.value } })} />
+                  <div className="flex flex-wrap gap-1">
+                    {['Active', 'Placed', 'Intern (Out Campus)', 'Intern (In Campus)', 'Dropout'].map(s => (
+                      <button key={s} type="button" onClick={() => {
+                        const current = formData.eligibility.requiredGharStatuses || [];
+                        const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s];
+                        setFormData({ ...formData, eligibility: { ...formData.eligibility, requiredGharStatuses: next } });
+                      }} className={`px-1 rounded-[2px] text-[8px] border ${(formData.eligibility.requiredGharStatuses || []).includes(s) ? 'bg-green-600 border-green-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 6. Academic Metrics (ReadTheory/Atcoder) */}
+                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minReadTheoryLevel || formData.eligibility.minAtCoderRating ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Academic Metrics</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[8px] text-gray-400 uppercase block mb-0.5">ReadTheory Level</span>
+                      <input type="number" placeholder="Level" className="w-full text-[10px] py-1" value={formData.eligibility.minReadTheoryLevel || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minReadTheoryLevel: e.target.value } })} />
+                    </div>
+                    <div>
+                      <span className="text-[8px] text-gray-400 uppercase block mb-0.5">AtCoder Rating</span>
+                      <input type="number" placeholder="Rating" className="w-full text-[10px] py-1" value={formData.eligibility.minAtCoderRating || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minAtCoderRating: e.target.value } })} />
                     </div>
                   </div>
                 </div>
-                <select
-                  className="w-full text-sm rounded border-gray-300"
-                  value={formData.eligibility.requiredGharStatus || ''}
-                  onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, requiredGharStatus: e.target.value } })}
-                >
-                  <option value="">Any Status</option>
-                  <option value="Active">Active</option>
-                  <option value="Placed">Placed</option>
-                  <option value="Dropped">Dropped</option>
-                  <option value="Completed">Completed</option>
-                </select>
+
+                {/* 7. Gender (Verified) */}
+                <div onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, femaleOnly: !formData.eligibility.femaleOnly } })}
+                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.femaleOnly ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Gender (Ghar)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-600">Female Only</span>
+                    <div className={`w-8 h-4 rounded-full relative transition-colors ${formData.eligibility.femaleOnly ? 'bg-green-500' : 'bg-gray-300'}`}>
+                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${formData.eligibility.femaleOnly ? 'left-4.5' : 'left-0.5'}`}></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 8. Tenure at Navgurukul (Verified) */}
+                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minMonthsAtNavgurukul ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Min Tenure (Months)</span>
+                  <input type="number" min="0" placeholder="e.g. 6" className="w-full text-[10px] py-1"
+                    value={formData.eligibility.minMonthsAtNavgurukul || ''}
+                    onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minMonthsAtNavgurukul: e.target.value } })}
+                  />
+                  <p className="text-[8px] text-gray-400 mt-1">* Calculated from admission date</p>
+                </div>
               </div>
             </div>
           </div>
@@ -1870,14 +1782,15 @@ const JobForm = () => {
               <p className="text-xs text-gray-500">{hasEligibilityRestrictions ? 'estimated' : 'total'}</p>
             </div>
           </div>
-
-        </div >
+        </div>
 
         {/* Interview Rounds */}
-        < div className="card" >
+        <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Interview Rounds</h2>
-            <button type="button" onClick={() => addListItem('interviewRounds')} className="text-primary-600 text-sm">+ Add Round</button>
+            <button type="button" onClick={() => addListItem('interviewRounds')} className="text-primary-600 text-sm flex items-center gap-1 hover:underline">
+              <Plus className="w-4 h-4" /> Add Round
+            </button>
           </div>
           <div className="space-y-4">
             {(formData.interviewRounds || []).map((round, index) => (
@@ -1915,7 +1828,7 @@ const JobForm = () => {
         </div >
 
         {/* Submit */}
-        < div className="card" >
+        <div className="card">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>

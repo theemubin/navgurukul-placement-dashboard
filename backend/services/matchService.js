@@ -386,20 +386,21 @@ function calculateEligibilityMatch(student, job) {
     details.gender = { required: false, meets: true };
   }
 
-  // Minimum Attendance
-  if (eligibility.minAttendance) {
+  // Minimum Attendance (Consolidated)
+  const requiredAttendance = eligibility.minGharAttendance || eligibility.minAttendance;
+  if (requiredAttendance) {
     totalRequired++;
     const studentAttendance = profile.attendancePercentage || 0;
-    const meets = studentAttendance >= eligibility.minAttendance;
+    const meets = studentAttendance >= requiredAttendance;
     if (meets) passedCount++;
     details.attendance = {
       required: true,
       meets,
       studentValue: studentAttendance,
-      jobRequirement: eligibility.minAttendance,
+      jobRequirement: requiredAttendance,
       message: meets
-        ? `Attendance: ${studentAttendance}% (meets ${eligibility.minAttendance}% requirement)`
-        : `Attendance: ${studentAttendance}% (requires ${eligibility.minAttendance}%)`
+        ? `Attendance: ${studentAttendance}% (meets ${requiredAttendance}% requirement)`
+        : `Attendance: ${studentAttendance}% (requires ${requiredAttendance}% verified)`
     };
   } else {
     details.attendance = { required: false, meets: true };
@@ -450,6 +451,115 @@ function calculateEligibilityMatch(student, job) {
     };
   } else {
     details.house = { required: false, meets: true };
+  }
+
+  // Geographic Filters (Ghar Dashboard)
+  if (eligibility.homestate) {
+    totalRequired++;
+    const studentState = profile.hometown?.state || '';
+    const meets = studentState.toLowerCase() === eligibility.homestate.toLowerCase();
+    if (meets) passedCount++;
+    details.homestate = {
+      required: true,
+      meets,
+      studentValue: studentState || 'Not specified',
+      jobRequirement: eligibility.homestate,
+      message: meets ? `Home State: ${studentState} (eligible)` : `Home State: Requires ${eligibility.homestate}`
+    };
+  }
+
+  if (eligibility.hometown) {
+    totalRequired++;
+    const studentDistrict = profile.hometown?.district || '';
+    const meets = studentDistrict.toLowerCase() === eligibility.hometown.toLowerCase();
+    if (meets) passedCount++;
+    details.hometown = {
+      required: true,
+      meets,
+      studentValue: studentDistrict || 'Not specified',
+      jobRequirement: eligibility.hometown,
+      message: meets ? `Hometown: ${studentDistrict} (eligible)` : `Hometown: Requires ${eligibility.hometown}`
+    };
+  }
+
+  // Ghar Dashboard Statuses
+  if (eligibility.requiredGharStatuses && eligibility.requiredGharStatuses.length > 0) {
+    totalRequired++;
+    const studentStatus = profile.currentStatus || 'Active';
+    const meets = eligibility.requiredGharStatuses.some(s => s.toLowerCase() === studentStatus.toLowerCase());
+    if (meets) passedCount++;
+    details.gharStatus = {
+      required: true,
+      meets,
+      studentValue: studentStatus,
+      jobRequirement: eligibility.requiredGharStatuses.join(', '),
+      message: meets ? `Status: ${studentStatus} (verified eligible)` : `Status: Requires ${eligibility.requiredGharStatuses.join('/')}`
+    };
+  }
+
+  // Academic Dashboard Metrics
+  if (eligibility.minReadTheoryLevel) {
+    totalRequired++;
+    const studentLevel = profile.readTheoryLevel || 0;
+    const reqLevel = parseFloat(eligibility.minReadTheoryLevel) || 0;
+    const meets = studentLevel >= reqLevel;
+    if (meets) passedCount++;
+    details.readTheory = {
+      required: true,
+      meets,
+      studentValue: studentLevel,
+      jobRequirement: reqLevel,
+      message: meets ? `ReadTheory: Level ${studentLevel} (meets req)` : `ReadTheory: Requires Level ${reqLevel}`
+    };
+  }
+
+  if (eligibility.minAtCoderRating) {
+    totalRequired++;
+    const studentRating = profile.atCoderRating || 0;
+    const reqRating = parseFloat(eligibility.minAtCoderRating) || 0;
+    const meets = studentRating >= reqRating;
+    if (meets) passedCount++;
+    details.atCoder = {
+      required: true,
+      meets,
+      studentValue: studentRating,
+      jobRequirement: reqRating,
+      message: meets ? `AtCoder: Rating ${studentRating} (meets req)` : `AtCoder: Requires Rating ${reqRating}`
+    };
+  }
+
+  // English CEFR Level
+  const cefrOrder = ['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+  if (eligibility.englishWriting) {
+    totalRequired++;
+    const studentLevel = profile.englishProficiency?.writing || 'A1';
+    const reqIndex = cefrOrder.indexOf(eligibility.englishWriting);
+    const stuIndex = cefrOrder.indexOf(studentLevel);
+    const meets = stuIndex >= reqIndex;
+    if (meets) passedCount++;
+    details.englishWriting = {
+      required: true,
+      meets,
+      studentValue: studentLevel,
+      jobRequirement: eligibility.englishWriting,
+      message: meets ? `Writing: ${studentLevel} (eligible)` : `Writing: Requires ${eligibility.englishWriting} or higher`
+    };
+  }
+
+  if (eligibility.englishSpeaking) {
+    totalRequired++;
+    const studentLevel = profile.englishProficiency?.speaking || 'A1';
+    const reqIndex = cefrOrder.indexOf(eligibility.englishSpeaking);
+    const stuIndex = cefrOrder.indexOf(studentLevel);
+    const meets = stuIndex >= reqIndex;
+    if (meets) passedCount++;
+    details.englishSpeaking = {
+      required: true,
+      meets,
+      studentValue: studentLevel,
+      jobRequirement: eligibility.englishSpeaking,
+      message: meets ? `Speaking: ${studentLevel} (eligible)` : `Speaking: Requires ${eligibility.englishSpeaking} or higher`
+    };
   }
 
   return {

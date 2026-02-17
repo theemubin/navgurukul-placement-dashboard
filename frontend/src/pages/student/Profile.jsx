@@ -139,7 +139,9 @@ const StudentProfile = () => {
     resumeLink: '',
     houseName: '',
     councilService: [],
-    discord: { userId: '', username: '' }
+    discord: { userId: '', username: '' },
+    readTheoryLevel: '',
+    atCoderRating: ''
   });
 
   const [newCourseSkill, setNewCourseSkill] = useState('');
@@ -256,9 +258,20 @@ const StudentProfile = () => {
       if (data.role === 'student' && data.resolvedProfile) {
         setFormData(prev => ({
           ...prev,
+          firstName: data.resolvedProfile.firstName || prev.firstName,
+          lastName: data.resolvedProfile.lastName || prev.lastName,
           currentSchool: data.resolvedProfile.currentSchool || prev.currentSchool,
           joiningDate: data.resolvedProfile.joiningDate ? new Date(data.resolvedProfile.joiningDate).toISOString().split('T')[0] : prev.joiningDate,
-          currentModule: data.resolvedProfile.currentModule || prev.currentModule
+          currentModule: data.resolvedProfile.currentModule || prev.currentModule,
+          gender: data.resolvedProfile.gender || prev.gender,
+          phone: data.resolvedProfile.phone || prev.phone,
+          englishProficiency: {
+            speaking: data.resolvedProfile.englishSpeaking || prev.englishProficiency.speaking,
+            writing: data.resolvedProfile.englishWriting || prev.englishProficiency.writing
+          },
+          hometown: data.resolvedProfile.hometown ? { ...prev.hometown, ...data.resolvedProfile.hometown } : prev.hometown,
+          readTheoryLevel: data.resolvedProfile.readTheoryLevel || prev.readTheoryLevel || '',
+          atCoderRating: data.resolvedProfile.atCoderRating || prev.atCoderRating || ''
         }));
       }
 
@@ -279,6 +292,27 @@ const StudentProfile = () => {
       setLoading(false);
     }
   };
+
+  // Auto-populate hometown if pincode is present but other details are missing (e.g. after Ghar sync)
+  useEffect(() => {
+    const { pincode, district, state } = formData.hometown;
+    if (pincode && pincode.length === 6 && (!district || !state)) {
+      handlePincodeChange(pincode);
+    }
+  }, [formData.hometown.pincode]);
+
+  // Handle campus sync from Ghar - needs to wait for both profile and campuses list
+  useEffect(() => {
+    if (profile?.resolvedProfile?.isCampusVerified && profile.resolvedProfile.campus && campuses.length > 0) {
+      const matchedCampus = campuses.find(c =>
+        c.name.toLowerCase().includes(profile.resolvedProfile.campus.toLowerCase()) ||
+        profile.resolvedProfile.campus.toLowerCase().includes(c.name.toLowerCase())
+      );
+      if (matchedCampus) {
+        setSelectedCampus(matchedCampus._id);
+      }
+    }
+  }, [profile, campuses]);
 
   const fetchSettings = async () => {
     try {
@@ -779,20 +813,61 @@ const StudentProfile = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                    <input type="text" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} required disabled={!canEdit} />
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      First Name
+                      {profile?.resolvedProfile?.isNameVerified && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                          <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                      required
+                      disabled={!canEdit || profile?.resolvedProfile?.isNameVerified}
+                      className={profile?.resolvedProfile?.isNameVerified ? 'bg-gray-50 border-green-200' : ''}
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                    <input type="text" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} required disabled={!canEdit} />
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      Last Name
+                      {profile?.resolvedProfile?.isNameVerified && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                          <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                      required
+                      disabled={!canEdit || profile?.resolvedProfile?.isNameVerified}
+                      className={profile?.resolvedProfile?.isNameVerified ? 'bg-gray-50 border-green-200' : ''}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <input type="email" value={profile?.email || ''} disabled className="bg-gray-100" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                    <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} disabled={!canEdit} />
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      Phone
+                      {profile?.resolvedProfile?.isPhoneVerified && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                          <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      disabled={!canEdit || profile?.resolvedProfile?.isPhoneVerified}
+                      className={profile?.resolvedProfile?.isPhoneVerified ? 'bg-gray-50 border-green-200' : ''}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
@@ -870,55 +945,126 @@ const StudentProfile = () => {
                   </div>
                 </div>
 
+                <div className="bg-green-50/50 border border-green-100 rounded-lg p-4 mt-6">
+                  <h3 className="text-md font-semibold flex items-center gap-2 text-green-900 mb-4">
+                    <CheckCircle className="w-5 h-5" />
+                    Verified Identity & Details
+                    <span className="text-[10px] bg-green-200 text-green-800 px-2 py-0.5 rounded-full uppercase">Synced from Ghar</span>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Aadhar Number</label>
+                      <div className="p-2 bg-white border border-green-100 rounded-md font-mono text-sm leading-none h-9 flex items-center">
+                        {profile?.resolvedProfile?.aadharNo || 'Not Synced'}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Caste/Category</label>
+                      <div className="p-2 bg-white border border-green-100 rounded-md text-sm leading-none h-9 flex items-center">
+                        {profile?.resolvedProfile?.caste || 'Not Synced'}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Qualification</label>
+                      <div className="p-2 bg-white border border-green-100 rounded-md text-sm leading-none h-9 flex items-center">
+                        {profile?.resolvedProfile?.qualification || 'Not Synced'}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Marital Status</label>
+                      <div className="p-2 bg-white border border-green-100 rounded-md text-sm leading-none h-9 flex items-center">
+                        {profile?.resolvedProfile?.maritalStatus || 'Not Synced'}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Religion</label>
+                      <div className="p-2 bg-white border border-green-100 rounded-md text-sm leading-none h-9 flex items-center">
+                        {profile?.resolvedProfile?.religion || 'Not Synced'}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Date of Birth</label>
+                      <div className="p-2 bg-white border border-green-100 rounded-md text-sm leading-none h-9 flex items-center">
+                        {profile?.resolvedProfile?.dob ? new Date(profile.resolvedProfile.dob).toLocaleDateString() : 'Not Synced'}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-green-700 mt-2 font-medium italic">
+                    Note: These details are verified by Navgurukul Administrative team. Contact management for corrections.
+                  </p>
+                </div>
+
                 <h3 className="text-md font-semibold mt-6 flex items-center gap-2">
                   <Building2 className="w-5 h-5" />
                   Campus & Placement Cycle
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Campus *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      Campus *
+                      {profile?.resolvedProfile?.isCampusVerified && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-tighter">
+                          <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
+                        </span>
+                      )}
+                    </label>
                     <div className="flex items-center gap-2">
                       <select
                         value={selectedCampus || ''}
                         onChange={(e) => setSelectedCampus(e.target.value)}
-                        disabled={!canEdit}
+                        disabled={!canEdit || profile?.resolvedProfile?.isCampusVerified}
                         required
+                        className={profile?.resolvedProfile?.isCampusVerified ? 'bg-gray-50 border-green-200' : ''}
                       >
                         <option value="">Select Campus</option>
-                        {campuses.length === 0 ? (
-                          <option value="" disabled>No campuses found</option>
-                        ) : (
-                          campuses.map(c => <option key={c._id} value={c._id}>{c.name}</option>)
-                        )}
+                        {campuses.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                       </select>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">Select your Navgurukul campus</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Placement Cycle</label>
-                    {/* Display only the active cycle (read-only) */}
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      {selectedPlacementCycle ? (
-                        (() => {
-                          const my = placementCycles.find(p => p._id === selectedPlacementCycle) || null;
-                          if (my) {
-                            return (
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <div className="text-sm font-medium">{my.name}</div>
-                                  <div className="text-xs text-gray-500">{my.status === 'active' ? 'Active cycle' : (my.isActive === false ? 'Inactive' : my.status)}</div>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return <div className="text-sm text-gray-600">No placement cycle assigned</div>;
-                        })()
-                      ) : (
-                        <div className="text-sm text-gray-600">No placement cycle assigned</div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      Placement Cycle & Status
+                      {profile?.resolvedProfile?.isStatusVerified && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-tighter">
+                          <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
+                        </span>
                       )}
+                    </label>
+                    {/* Display only the active cycle (read-only) */}
+                    <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+                      <div className="flex flex-col gap-2">
+                        {selectedPlacementCycle ? (
+                          (() => {
+                            const my = placementCycles.find(p => p._id === selectedPlacementCycle) || null;
+                            if (my) {
+                              return (
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="text-sm font-medium text-indigo-900">{my.name}</div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-tighter">{my.status === 'active' ? 'Active cycle' : my.status}</div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return <div className="text-sm text-gray-600">No placement cycle assigned</div>;
+                          })()
+                        ) : (
+                          <div className="text-sm text-gray-600">No placement cycle assigned</div>
+                        )}
+
+                        <div className="pt-2 mt-1 border-t border-gray-200 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-gray-500">Current Status:</span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase ${profile?.resolvedProfile?.currentStatus?.toLowerCase() === 'placed' ? 'bg-green-100 text-green-700' :
+                            profile?.resolvedProfile?.currentStatus?.toLowerCase() === 'active' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                            {profile?.resolvedProfile?.currentStatus || 'Active'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Only the active cycle is shown here. To request a change, contact your Campus POC; the profile approval flow will be followed.</p>
-                    <p className="text-xs text-gray-500 mt-1">The cycle when you aim to be placed</p>
+                    <p className="text-[10px] text-gray-500 mt-1 leading-tight">Only the active cycle/status is shown. To request changes, contact management.</p>
                   </div>
                 </div>
 
@@ -1592,10 +1738,26 @@ const StudentProfile = () => {
               <div className="space-y-6">
                 {/* Technical Skills - School Specific */}
                 <div className="card">
-                  <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <Brain className="w-5 h-5" />
-                    {formData.currentSchool ? `${formData.currentSchool.replace('School of ', '')} Skills` : 'Technical Skills'} (Self-Assessment)
-                  </h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <Brain className="w-5 h-5" />
+                      {formData.currentSchool ? `${formData.currentSchool.replace('School of ', '')} Skills` : 'Technical Skills'} (Self-Assessment)
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      {profile?.resolvedProfile?.atCoderRating ? (
+                        <div className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded-full">
+                          <span className="text-[10px] font-bold text-orange-600 uppercase">AtCoder:</span>
+                          <span className="text-xs font-bold text-orange-700">{profile.resolvedProfile.atCoderRating}</span>
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 px-3 py-1 bg-gray-50 border border-gray-100 rounded-full" title="No rating found in Ghar Dashboard">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase">AtCoder:</span>
+                          <span className="text-[10px] font-medium text-gray-400 italic">Rating Not Available</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <p className="text-sm text-gray-500 mb-4">Select your specialized skills and rate yourself (1 = Basic, 4 = Expert)</p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1934,14 +2096,19 @@ const StudentProfile = () => {
                   <h3 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
                     <span className="bg-primary-100 text-primary-700 px-2 py-0.5 rounded text-xs">Required</span>
                     English Proficiency
+                    {profile?.resolvedProfile?.isEnglishVerified && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 uppercase tracking-tighter">
+                        <CheckCircle className="w-3 h-3" /> Verified by Ghar
+                      </span>
+                    )}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Speaking Level</label>
                       <div className="space-y-2">
                         {cefrLevels.map((level) => (
-                          <label key={level} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${formData.englishProficiency.speaking === level ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'} ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}>
-                            <input type="radio" name="speaking" value={level} checked={formData.englishProficiency.speaking === level} onChange={(e) => setFormData({ ...formData, englishProficiency: { ...formData.englishProficiency, speaking: e.target.value } })} disabled={!canEdit} className="sr-only" />
+                          <label key={level} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${formData.englishProficiency.speaking === level ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'} ${(!canEdit || profile?.resolvedProfile?.isEnglishVerified) ? 'cursor-not-allowed opacity-60' : ''}`}>
+                            <input type="radio" name="speaking" value={level} checked={formData.englishProficiency.speaking === level} onChange={(e) => setFormData({ ...formData, englishProficiency: { ...formData.englishProficiency, speaking: e.target.value } })} disabled={!canEdit || profile?.resolvedProfile?.isEnglishVerified} className="sr-only" />
                             <span className="font-semibold text-primary-600">{level}</span>
                             <span className="text-gray-600">{cefrDescriptions[level]}</span>
                           </label>
@@ -1953,12 +2120,28 @@ const StudentProfile = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">Writing Level</label>
                       <div className="space-y-2">
                         {cefrLevels.map((level) => (
-                          <label key={level} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${formData.englishProficiency.writing === level ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'} ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}>
-                            <input type="radio" name="writing" value={level} checked={formData.englishProficiency.writing === level} onChange={(e) => setFormData({ ...formData, englishProficiency: { ...formData.englishProficiency, writing: e.target.value } })} disabled={!canEdit} className="sr-only" />
+                          <label key={level} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${formData.englishProficiency.writing === level ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'} ${(!canEdit || profile?.resolvedProfile?.isEnglishVerified) ? 'cursor-not-allowed opacity-60' : ''}`}>
+                            <input type="radio" name="writing" value={level} checked={formData.englishProficiency.writing === level} onChange={(e) => setFormData({ ...formData, englishProficiency: { ...formData.englishProficiency, writing: e.target.value } })} disabled={!canEdit || profile?.resolvedProfile?.isEnglishVerified} className="sr-only" />
                             <span className="font-semibold text-primary-600">{level}</span>
                             <span className="text-gray-600">{cefrDescriptions[level]}</span>
                           </label>
                         ))}
+                      </div>
+                      {/* Read Theory Level - Synced from Ghar */}
+                      <div className="mt-6 pt-6 border-t border-gray-100">
+                        <h3 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          Read Theory Level
+                          <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full uppercase ml-auto">Verified by Ghar</span>
+                        </h3>
+                        <div className={`p-4 rounded-lg flex items-center justify-between border ${profile?.resolvedProfile?.readTheoryLevel ? 'bg-indigo-50/50 border-indigo-100' : 'bg-gray-50 border-gray-100'}`}>
+                          <span className="text-sm text-indigo-900 font-medium">Current Average Quiz Level:</span>
+                          {profile?.resolvedProfile?.readTheoryLevel ? (
+                            <span className="text-lg font-bold text-indigo-700">{profile.resolvedProfile.readTheoryLevel}</span>
+                          ) : (
+                            <span className="text-sm font-medium text-gray-400 italic">Data Not Available</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2120,7 +2303,7 @@ const StudentProfile = () => {
               </div>
             )}
           </form>
-        </div>
+        </div >
 
         <div className="space-y-6">
           {formData.profileStatus !== 'approved' && (
@@ -2252,7 +2435,7 @@ const StudentProfile = () => {
             })()}
           </div>
         </div>
-      </div>
+      </div >
     </div >
   );
 };

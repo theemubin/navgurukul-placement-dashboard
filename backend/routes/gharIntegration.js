@@ -182,4 +182,42 @@ router.get('/connection-status', isAuthenticated, isManager, async (req, res) =>
     }
 });
 
+/**
+ * @route   GET /api/ghar/student-preview/:email
+ * @desc    Fetch raw student data from Ghar API (no DB sync)
+ * @access  Manager only
+ */
+router.get('/student-preview/:email', isAuthenticated, isManager, async (req, res) => {
+    try {
+        const { email } = req.params;
+        const isDev = req.query.isDev === 'true';
+
+        const response = await gharApiService.client.get('/gharZoho/students/By/NgEmail', {
+            params: {
+                isDev,
+                Student_ng_email: email
+            }
+        });
+
+        if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
+            res.json({
+                success: true,
+                data: response.data.data
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                message: `No data found for email ${email} in Ghar Dashboard`
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching student preview:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch student data',
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;

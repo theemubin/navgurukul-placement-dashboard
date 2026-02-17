@@ -856,7 +856,12 @@ router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (
       englishSpeaking,
       englishWriting,
       certifications,
-      requiredSkills
+      requiredSkills,
+      // Ghar Dashboard Filters
+      minGharAttendance,
+      requiredGharStatuses,
+      minReadTheoryLevel,
+      minAtCoderRating
     } = req.query;
 
     // Build query for students
@@ -971,6 +976,26 @@ router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (
       query['studentProfile.jobReadiness.overallStatus'] = { $in: ['in_progress', 'ready'] };
     }
     // If 'no' or not specified, no filter applied
+
+    // Ghar Dashboard Filters
+    if (minGharAttendance) {
+      query['studentProfile.externalData.ghar.attendancePercentage.value'] = { $gte: parseFloat(minGharAttendance) };
+    }
+
+    if (requiredGharStatuses) {
+      const statusList = requiredGharStatuses.split(',').filter(s => s.trim());
+      if (statusList.length > 0) {
+        query['studentProfile.currentStatus'] = { $in: statusList };
+      }
+    }
+
+    if (minReadTheoryLevel) {
+      query['studentProfile.externalData.ghar.readTheoryLevel.value'] = { $gte: parseFloat(minReadTheoryLevel) };
+    }
+
+    if (minAtCoderRating) {
+      query['studentProfile.externalData.ghar.atCoderRating.value'] = { $gte: parseFloat(minAtCoderRating) };
+    }
 
     // Council Post Eligibility
     const { councilPost, minCouncilMonths } = req.query;
