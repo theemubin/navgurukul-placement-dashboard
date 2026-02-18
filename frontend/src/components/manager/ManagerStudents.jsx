@@ -441,9 +441,9 @@ const ManagerStudents = () => {
                       onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), houseName: e.target.value } }))}
                     >
                       <option value="">Select House</option>
-                      <option value="Bageshree">Bageshree</option>
-                      <option value="Bhairav">Bhairav</option>
-                      <option value="Malhar">Malhar</option>
+                      <option value="Bageshree House">Bageshree House</option>
+                      <option value="Bhairav House">Bhairav House</option>
+                      <option value="Malhar House">Malhar House</option>
                     </select>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useLocation } from 'react-router-dom';
 import { selfApplicationAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert, Modal } from '../../components/common/UIComponents';
 import { BulkUploadModal } from '../../components/common/BulkUpload';
@@ -48,9 +49,27 @@ function SelfApplicationsReview() {
   const [processing, setProcessing] = useState(false);
   const [expandedStudents, setExpandedStudents] = useState({});
 
+  const location = useLocation();
+
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Handle appId from URL for deep linking
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const appId = params.get('appId');
+    if (appId && applications.length > 0) {
+      const app = applications.find(a => a._id === appId);
+      if (app) {
+        setDetailModal({ open: true, application: app });
+        const studentId = app.student?._id;
+        if (studentId) {
+          setExpandedStudents(prev => ({ ...prev, [studentId]: true }));
+        }
+      }
+    }
+  }, [location.search, applications]);
 
   const fetchData = async () => {
     try {

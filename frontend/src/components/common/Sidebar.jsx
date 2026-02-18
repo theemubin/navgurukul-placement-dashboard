@@ -16,7 +16,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (user?.role === 'coordinator') {
       fetchUnreadCount();
-      const interval = setInterval(fetchUnreadCount, 5000);
+      const interval = setInterval(fetchUnreadCount, 30000);
       return () => clearInterval(interval);
     }
   }, [user]);

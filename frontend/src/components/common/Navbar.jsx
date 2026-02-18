@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { notificationAPI, questionAPI } from '../../services/api';
 import { Menu, Bell, LogOut, ChevronDown, User, MessageCircle, Heart } from 'lucide-react';
+import { getNotificationUrl } from '../../utils/notificationUtils';
 
 const Navbar = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
@@ -88,6 +89,17 @@ const Navbar = ({ onMenuClick }) => {
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Error marking as read:', error);
+    }
+  };
+
+  const handleNotificationClick = async (notification) => {
+    const url = getNotificationUrl(notification, user?.role);
+    if (!notification.isRead) {
+      await markAsRead(notification._id);
+    }
+    setShowNotifications(false);
+    if (url) {
+      navigate(url);
     }
   };
 
@@ -181,7 +193,7 @@ const Navbar = ({ onMenuClick }) => {
                     notifications.map((notif) => (
                       <div
                         key={notif._id}
-                        onClick={() => markAsRead(notif._id)}
+                        onClick={() => handleNotificationClick(notif)}
                         className={`p-4 border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors ${!notif.isRead ? 'bg-indigo-50/50' : ''
                           }`}
                       >

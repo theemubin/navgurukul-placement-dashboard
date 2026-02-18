@@ -1172,7 +1172,7 @@ const StudentProfile = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1 font-bold text-primary-700">House Name (Navgurukul)</label>
                       <select value={formData.houseName || ''} onChange={(e) => setFormData({ ...formData, houseName: e.target.value })} disabled={!canEdit} className="border-primary-200 focus:ring-primary-500">
                         <option value="">Select House</option>
-                        {['Bageshree', 'Bhairav', 'Malhar'].map(h => <option key={h} value={h}>{h}</option>)}
+                        {['Bageshree House', 'Bhairav House', 'Malhar House'].map(h => <option key={h} value={h}>{h}</option>)}
                       </select>
                       <p className="text-[10px] text-gray-400 mt-1 italic">Selecting a house helps in filtering house-specific opportunities.</p>
                     </div>

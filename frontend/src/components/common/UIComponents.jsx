@@ -222,10 +222,10 @@ export const Pagination = ({ current, total, onPageChange }) => {
           onClick={() => typeof page === 'number' && onPageChange(page)}
           disabled={page === '...'}
           className={`px-3 py-1 rounded ${page === current
-              ? 'bg-primary-600 text-white'
-              : page === '...'
-                ? 'cursor-default'
-                : 'border hover:bg-gray-100'
+            ? 'bg-primary-600 text-white'
+            : page === '...'
+              ? 'cursor-default'
+              : 'border hover:bg-gray-100'
             }`}
         >
           {page}
@@ -260,9 +260,9 @@ export const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
           <h3 className="text-lg font-semibold">{title}</h3>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-full transition"
+            className="p-2 hover:bg-gray-100 rounded-full transition text-gray-400 group"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>

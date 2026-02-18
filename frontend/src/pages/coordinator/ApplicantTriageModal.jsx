@@ -43,6 +43,7 @@ const ApplicantTriageModal = ({
     const [viewMode, setViewMode] = useState('triage'); // 'triage' or 'preview'
     const [selectedRoundIndex, setSelectedRoundIndex] = useState(0);
     const [discordThreadId, setDiscordThreadId] = useState('');
+    const [activeTab, setActiveTab] = useState('promote');
 
     // Map job status to label
     const getStatusLabel = (statusId) => {
@@ -146,75 +147,65 @@ const ApplicantTriageModal = ({
                     ref={provided.innerRef}
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
-                    className={`bg-white border rounded-lg p-3 mb-3 shadow-sm transition-all ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary-500 opacity-90' : 'hover:border-primary-300'
-                        } ${isExiting && !app.comment.trim() ? 'border-red-200 bg-red-50' : ''}`}
+                    className={`bg-white border rounded-xl p-2.5 mb-2 shadow-sm transition-all ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary-500 opacity-90 scale-105 z-50' : 'hover:border-primary-300'
+                        } ${isExiting && !app.comment.trim() ? 'border-red-200 bg-red-50/50' : 'border-gray-100'}`}
                 >
-                    <div className="flex justify-between items-start mb-2">
-                        <div>
-                            <h5 className="font-semibold text-gray-900 leading-tight">
+                    <div className="flex justify-between items-start gap-2 mb-2">
+                        <div className="min-w-0">
+                            <h5 className="font-bold text-gray-900 text-[13px] leading-none mb-0.5 truncate">
                                 {app.student?.firstName} {app.student?.lastName}
                             </h5>
-                            <p className="text-xs text-gray-500 truncate max-w-[150px]">{app.student?.email}</p>
+                            <p className="text-[10px] text-gray-400 truncate tracking-tight">{app.student?.email}</p>
                         </div>
-                        <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${app.matchPercentage >= 80 ? 'bg-green-100 text-green-700' :
-                            app.matchPercentage >= 60 ? 'bg-blue-100 text-blue-700' :
-                                'bg-gray-100 text-gray-700'
+                        <div className={`px-1.5 py-0.5 rounded-lg text-[10px] font-black tracking-tighter shrink-0 ${app.matchPercentage >= 80 ? 'bg-green-50 text-green-700 border border-green-100' :
+                            app.matchPercentage >= 60 ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                                'bg-gray-50 text-gray-600 border border-gray-100'
                             }`}>
-                            {app.matchPercentage || 0}% Match
+                            {app.matchPercentage || 0}%
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 mb-3">
-                        <div className="flex items-center gap-1 text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                        <div className="flex items-center gap-1 text-[9px] font-medium text-gray-500 bg-white px-1.5 py-0.5 rounded-full border border-gray-100">
                             <MapPin className="w-2.5 h-2.5" />
-                            {app.student?.campus?.name || 'N/A'}
+                            {app.student?.campus?.name?.split(' ')[0] || 'N/A'}
                         </div>
-                        <div className="flex items-center gap-1 text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border">
+                        <div className="flex items-center gap-1 text-[9px] font-medium text-gray-500 bg-white px-1.5 py-0.5 rounded-full border border-gray-100">
                             <GraduationCap className="w-2.5 h-2.5" />
                             {app.student?.currentModule || 'N/A'}
                         </div>
                     </div>
 
                     {app.bucket === 'promote' && (
-                        <div className="mt-2">
+                        <div className="mb-2">
                             {(getStatusLabel(app.status) === (isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel)) ? (
-                                <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-primary-700 bg-primary-50 px-2 py-1 rounded border border-primary-100 uppercase">
+                                <div className="flex items-center gap-1 text-[9px] font-black text-primary-600 uppercase tracking-tight bg-primary-50/50 p-1.5 rounded-lg border border-primary-100/50">
                                     <CheckCircle className="w-3 h-3" />
-                                    Currently in: {isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel}
+                                    Advancing To {isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel}
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-1.5 text-[10px] font-medium text-green-700 bg-green-50 p-1.5 rounded border border-green-100">
-                                    <span className="bg-white px-1.5 py-0.5 rounded shadow-sm text-gray-500 font-bold border border-gray-100 uppercase">
-                                        {getStatusLabel(app.status)}
-                                    </span>
+                                <div className="flex items-center gap-1 text-[9px] font-black text-green-700 bg-green-50/50 p-1.5 rounded-lg border border-green-100/50">
+                                    <span className="opacity-50 line-through truncate max-w-[60px]">{getStatusLabel(app.status)}</span>
                                     <ArrowRight className="w-3 h-3 text-green-400" />
-                                    <span className="font-bold flex items-center gap-1 uppercase">
-                                        {isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel}
-                                    </span>
+                                    <span className="truncate">{isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel}</span>
                                 </div>
                             )}
                         </div>
                     )}
 
                     {app.bucket === 'exit' && (
-                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-red-700 bg-red-50 p-1.5 rounded mt-2 border border-red-100">
-                            <span className="bg-white px-1.5 py-0.5 rounded shadow-sm text-gray-500 font-bold border border-gray-100 uppercase">
-                                {getStatusLabel(app.status)}
-                            </span>
+                        <div className="flex items-center gap-1 text-[9px] font-black text-red-700 bg-red-50/50 p-1.5 rounded-lg mb-2 border border-red-100/50">
+                            <span className="opacity-50 line-through truncate max-w-[60px]">{getStatusLabel(app.status)}</span>
                             <ArrowRight className="w-3 h-3 text-red-400" />
-                            <span className="font-bold uppercase">REJECTED</span>
+                            <span>REJECT</span>
                         </div>
                     )}
 
-                    <div className="mt-2">
-                        <label className="block text-[10px] font-medium text-gray-400 mb-1 flex items-center gap-1">
-                            <MessageSquare className="w-3 h-3" />
-                            {isExiting ? 'MANDATORY FEEDBACK *' : 'NOTES (OPTIONAL)'}
-                        </label>
+                    <div className="pt-2 border-t border-gray-50">
                         <LocalCommentArea
                             initialValue={app.comment}
                             onSave={(val) => updateComment(app._id, val)}
-                            placeholder={isExiting ? "Why are they not moving ahead?" : "Add a note..."}
+                            placeholder={isExiting ? "Why reject?" : "Add note..."}
                             isExiting={isExiting}
                         />
                     </div>
@@ -288,17 +279,45 @@ const ApplicantTriageModal = ({
 
                 {viewMode === 'triage' ? (
                     <>
+                        {/* Mobile Tabs for Triage */}
+                        <div className="md:hidden flex p-1.5 bg-white border-b sticky top-0 z-20">
+                            {[
+                                { id: 'promote', label: 'Promote', color: 'green', count: promoteList.length },
+                                { id: 'hold', label: 'Hold', color: 'yellow', count: holdList.length },
+                                { id: 'exit', label: 'Exit', color: 'red', count: exitList.length }
+                            ].map(tab => {
+                                const isActive = activeTab === tab.id;
+                                const colorMap = {
+                                    green: isActive ? 'bg-green-600 text-white shadow-green-100' : 'text-green-600 bg-green-50/50',
+                                    yellow: isActive ? 'bg-amber-500 text-white shadow-amber-100' : 'text-amber-600 bg-amber-50/50',
+                                    red: isActive ? 'bg-red-600 text-white shadow-red-100' : 'text-red-600 bg-red-50/50'
+                                };
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`flex-1 py-2.5 px-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1.5 ${colorMap[tab.color]} ${isActive ? 'scale-100 shadow-lg' : 'scale-95 opacity-70'}`}
+                                    >
+                                        {tab.label}
+                                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isActive ? 'bg-white/20' : 'bg-gray-100'}`}>
+                                            {tab.count}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
                         {/* Triage Workspace */}
-                        <div className="p-6 bg-gray-100 overflow-x-auto">
+                        <div className="flex-1 p-4 sm:p-6 bg-gray-100 overflow-hidden">
                             <DragDropContext onDragEnd={onDragEnd}>
-                                <div className="flex gap-6 min-w-[1000px] h-[60vh]">
+                                <div className="flex md:flex-row flex-col gap-6 h-[65vh] md:h-[60vh]">
 
                                     {/* Column 1: PROMOTE */}
                                     <Droppable droppableId="promote">
                                         {(provided, snapshot) => (
-                                            <div className="flex-1 flex flex-col min-w-[320px]">
+                                            <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'promote' && 'hidden md:flex'}`}>
                                                 <div className="flex items-center justify-between mb-3 px-2">
-                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
                                                         <div className="w-2 h-2 rounded-full bg-green-500"></div>
                                                         PROMOTE TO {isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name.toUpperCase() : targetLabel.toUpperCase()}
                                                     </h3>
@@ -315,7 +334,7 @@ const ApplicantTriageModal = ({
                                                     {filteredPromoteList.length === 0 && !snapshot.isDraggingOver && (
                                                         <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
                                                             <CheckCircle className="w-12 h-12 mb-3 opacity-20" />
-                                                            <p className="text-sm">Drag candidates here to advance them to the next round</p>
+                                                            <p className="text-sm">Drag candidates here to advance them</p>
                                                         </div>
                                                     )}
                                                     {filteredPromoteList.map((app, index) => (
@@ -330,9 +349,9 @@ const ApplicantTriageModal = ({
                                     {/* Column 2: HOLD */}
                                     <Droppable droppableId="hold">
                                         {(provided, snapshot) => (
-                                            <div className="flex-1 flex flex-col min-w-[320px]">
+                                            <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'hold' && 'hidden md:flex'}`}>
                                                 <div className="flex items-center justify-between mb-3 px-2">
-                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
                                                         <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
                                                         KEEP ON HOLD
                                                     </h3>
@@ -349,7 +368,7 @@ const ApplicantTriageModal = ({
                                                     {filteredHoldList.length === 0 && !snapshot.isDraggingOver && (
                                                         <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
                                                             <Pause className="w-12 h-12 mb-3 opacity-20" />
-                                                            <p className="text-sm">Candidates dropped here won't change status but can still be messaged</p>
+                                                            <p className="text-sm">Candidates dropped here won't change status</p>
                                                         </div>
                                                     )}
                                                     {filteredHoldList.map((app, index) => (
@@ -364,16 +383,16 @@ const ApplicantTriageModal = ({
                                     {/* Column 3: EXIT */}
                                     <Droppable droppableId="exit">
                                         {(provided, snapshot) => (
-                                            <div className="flex-1 flex flex-col min-w-[320px]">
+                                            <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'exit' && 'hidden md:flex'}`}>
                                                 <div className="flex items-center justify-between mb-3 px-2">
-                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
                                                         <div className="w-2 h-2 rounded-full bg-red-500"></div>
                                                         EXIT AT {currentLabel.toUpperCase()}
                                                     </h3>
                                                     <div className="flex items-center gap-2">
                                                         {exitList.some(a => !a.comment.trim()) && (
                                                             <span className="text-[10px] text-red-600 font-medium animate-pulse flex items-center gap-1">
-                                                                <AlertCircle className="w-3 h-3" /> Feedback Required
+                                                                <AlertCircle className="w-3 h-3" />
                                                             </span>
                                                         )}
                                                         <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold">
@@ -390,7 +409,7 @@ const ApplicantTriageModal = ({
                                                     {filteredExitList.length === 0 && !snapshot.isDraggingOver && (
                                                         <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
                                                             <XCircle className="w-12 h-12 mb-3 opacity-20" />
-                                                            <p className="text-sm">Candidates here will be rejected with mandatory feedback</p>
+                                                            <p className="text-sm">Candidates here will be rejected</p>
                                                         </div>
                                                     )}
                                                     {filteredExitList.map((app, index) => (

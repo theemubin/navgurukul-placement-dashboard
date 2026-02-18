@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { jobAPI, settingsAPI } from '../../services/api';
 import { Badge, Button, Alert } from '../../components/common/UIComponents';
-import { 
-  Building2, 
-  MapPin, 
+import {
+  Building2,
+  MapPin,
   Calendar,
   Users,
   Pencil,
@@ -63,9 +63,8 @@ const JobCard = ({ job, index, onExportJob }) => {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`bg-white rounded-lg shadow-sm border p-4 mb-3 cursor-grab active:cursor-grabbing transition-shadow ${
-            snapshot.isDragging ? 'shadow-lg ring-2 ring-primary-500' : 'hover:shadow-md'
-          }`}
+          className={`bg-white rounded-lg shadow-sm border p-4 mb-3 cursor-grab active:cursor-grabbing transition-shadow ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary-500' : 'hover:shadow-md'
+            }`}
         >
           {/* Header */}
           <div className="flex items-start justify-between mb-2">
@@ -147,7 +146,7 @@ const JobCard = ({ job, index, onExportJob }) => {
 // Kanban Column component
 const KanbanColumn = ({ stage, jobs, onEditStage, onExportJob }) => {
   const colorConfig = STAGE_COLORS[stage.color] || STAGE_COLORS.gray;
-  
+
   return (
     <div className={`flex-shrink-0 w-72 rounded-lg border ${colorConfig.bg}`}>
       {/* Column Header */}
@@ -181,9 +180,8 @@ const KanbanColumn = ({ stage, jobs, onEditStage, onExportJob }) => {
           <div
             ref={provided.innerRef}
             {...provided.droppableProps}
-            className={`p-3 min-h-[400px] max-h-[calc(100vh-300px)] overflow-y-auto transition-colors ${
-              snapshot.isDraggingOver ? 'bg-primary-50/50' : ''
-            }`}
+            className={`p-3 min-h-[400px] max-h-[calc(100vh-300px)] overflow-y-auto transition-colors ${snapshot.isDraggingOver ? 'bg-primary-50/50' : ''
+              }`}
           >
             {jobs.length === 0 ? (
               <div className="text-center py-8 text-gray-400 text-sm">
@@ -279,13 +277,13 @@ const StageManagementModal = ({ isOpen, onClose, stages, onSave }) => {
 
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
-    
+
     const items = Array.from(localStages);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
-    
+
     setLocalStages(items);
-    
+
     // Save new order
     try {
       await settingsAPI.reorderPipelineStages(items.map(s => s.id));
@@ -422,9 +420,8 @@ const StageManagementModal = ({ isOpen, onClose, stages, onSave }) => {
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          className={`flex items-center gap-3 p-3 bg-white border rounded-lg ${
-                            snapshot.isDragging ? 'shadow-lg' : ''
-                          }`}
+                          className={`flex items-center gap-3 p-3 bg-white border rounded-lg ${snapshot.isDragging ? 'shadow-lg' : ''
+                            }`}
                         >
                           <div {...provided.dragHandleProps} className="cursor-grab">
                             <GripVertical className="w-5 h-5 text-gray-400" />
@@ -542,14 +539,23 @@ const JobsKanban = ({ onExportJob }) => {
     fetchAll();
   }, []);
 
+  const [activeStageId, setActiveStageId] = useState('');
+
+  // Update activeStageId when stages load if not set
+  useEffect(() => {
+    if (stages.length > 0 && !activeStageId) {
+      setActiveStageId(stages[0].id);
+    }
+  }, [stages, activeStageId]);
+
   // Handle drag end
   const handleDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
 
     // No destination or dropped in same place
-    if (!destination || 
-        (destination.droppableId === source.droppableId && 
-         destination.index === source.index)) {
+    if (!destination ||
+      (destination.droppableId === source.droppableId &&
+        destination.index === source.index)) {
       return;
     }
 
@@ -558,8 +564,8 @@ const JobsKanban = ({ onExportJob }) => {
     const oldStatus = source.droppableId;
 
     // Optimistic update
-    setJobs(prevJobs => 
-      prevJobs.map(job => 
+    setJobs(prevJobs =>
+      prevJobs.map(job =>
         job._id === jobId ? { ...job, status: newStatus } : job
       )
     );
@@ -571,8 +577,8 @@ const JobsKanban = ({ onExportJob }) => {
     } catch (err) {
       console.error('Error updating job status:', err);
       // Revert on error
-      setJobs(prevJobs => 
-        prevJobs.map(job => 
+      setJobs(prevJobs =>
+        prevJobs.map(job =>
           job._id === jobId ? { ...job, status: oldStatus } : job
         )
       );
@@ -597,13 +603,33 @@ const JobsKanban = ({ onExportJob }) => {
   return (
     <div className="h-full">
       {/* Header Actions */}
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+        <div className="md:hidden w-full overflow-x-auto pb-2">
+          <div className="flex gap-2 min-w-max">
+            {stages.map((stage) => (
+              <button
+                key={stage.id}
+                onClick={() => setActiveStageId(stage.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border-2 ${activeStageId === stage.id
+                  ? `bg-primary-600 border-primary-600 text-white shadow-md`
+                  : `bg-white border-gray-200 text-gray-500`
+                  }`}
+              >
+                {stage.label}
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] ${activeStageId === stage.id ? 'bg-white/20' : 'bg-gray-100'
+                  }`}>
+                  {jobsByStatus[stage.id]?.length || 0}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
         <button
           onClick={() => setShowStageModal(true)}
-          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors ml-auto sm:ml-0"
         >
           <Settings className="w-4 h-4" />
-          Manage Stages
+          <span className="text-sm font-medium">Manage Stages</span>
         </button>
       </div>
 
@@ -624,8 +650,22 @@ const JobsKanban = ({ onExportJob }) => {
 
       {/* Kanban Board */}
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6">
+        {/* Desktop View */}
+        <div className="hidden md:flex gap-4 overflow-x-auto pb-4 -mx-6 px-6">
           {stages.map((stage) => (
+            <KanbanColumn
+              key={stage.id}
+              stage={stage}
+              jobs={jobsByStatus[stage.id] || []}
+              onEditStage={handleEditStage}
+              onExportJob={onExportJob}
+            />
+          ))}
+        </div>
+
+        {/* Mobile View - Only show active stage */}
+        <div className="md:hidden">
+          {stages.filter(s => s.id === activeStageId).map((stage) => (
             <KanbanColumn
               key={stage.id}
               stage={stage}

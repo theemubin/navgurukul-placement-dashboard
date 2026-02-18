@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { applicationAPI, jobAPI, settingsAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Modal } from '../../components/common/UIComponents';
-import { Search, Filter, Eye, CheckCircle, XCircle, Clock, MessageSquare, Download, Users } from 'lucide-react';
+import { Search, Filter, Eye, CheckCircle, XCircle, Clock, MessageSquare, Download, Users, ExternalLink, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Applications = () => {
@@ -86,6 +86,24 @@ const Applications = () => {
       setFilters(prev => ({ ...prev, job: '' }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
+  // Handle appId from URL for deep linking
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const appId = params.get('appId');
+    if (appId) {
+      const fetchAndOpenDetails = async () => {
+        try {
+          const response = await applicationAPI.getApplication(appId);
+          setSelectedApplication(response.data);
+          setShowDetailModal(true);
+        } catch (error) {
+          console.error('Error fetching application for deep link:', error);
+        }
+      };
+      fetchAndOpenDetails();
+    }
   }, [location.search]);
 
   // Keep selected job title in sync when filters.job changes; fetch job if necessary
@@ -285,38 +303,104 @@ const Applications = () => {
     return acc;
   }, {});
 
+  const renderApplicationsCards = (apps) => {
+    return (
+      <div className="md:hidden space-y-4">
+        {apps.map((app) => (
+          <div key={app._id} className="card p-4 space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(app._id)}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedIds(prev => [...new Set([...prev, app._id])]);
+                    else setSelectedIds(prev => prev.filter(id => id !== app._id));
+                  }}
+                  className="mt-1 sticky top-0"
+                />
+                <div>
+                  <p className="font-bold text-gray-900">{app.student?.name}</p>
+                  <p className="text-sm text-gray-500">{app.student?.email}</p>
+                </div>
+              </div>
+              <StatusBadge status={app.status} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 py-3 border-y border-gray-50">
+              <div className="col-span-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Job</p>
+                <p className="text-sm font-medium text-gray-900 truncate">{app.job?.title}</p>
+                <p className="text-xs text-gray-500 truncate">{app.job?.company?.name}</p>
+              </div>
+              <div className="col-span-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Applied On</p>
+                <p className="text-sm text-gray-600">{new Date(app.createdAt).toLocaleDateString()}</p>
+              </div>
+              <div className="col-span-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Current Round</p>
+                <p className="text-sm text-gray-600">{app.currentRound !== undefined ? `Round ${app.currentRound + 1}` : '-'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setSelectedApplication(app); setShowDetailModal(true); }}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition"
+              >
+                <Eye className="w-4 h-4" />
+                Details
+              </button>
+              {app.student?.profile?.resume && (
+                <a
+                  href={`${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.student.profile.resume}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderApplicationsTable = (apps) => {
     const selectedApps = applications.filter(a => selectedIds.includes(a._id));
     const uniqueJobIds = [...new Set(selectedApps.map(a => a.job?._id))];
 
     return (
-      <div>
+      <div className="space-y-4">
         {selectedIds.length > 0 && (
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <div className="text-sm text-gray-700">{selectedIds.length} selected</div>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-3 bg-primary-50 rounded-xl border border-primary-100">
+            <div className="text-sm font-bold text-primary-900">{selectedIds.length} applicants selected</div>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <button
-                className="btn btn-outline"
+                className="flex-1 sm:flex-none btn btn-primary text-xs py-2"
                 onClick={() => setShowBulkModal(true)}
                 disabled={selectedIds.length === 0 || uniqueJobIds.length > 1}
                 title={uniqueJobIds.length > 1 ? 'Select applications from a single job to perform bulk actions' : 'Bulk change status'}
               >
-                Bulk Change Status
+                <MessageSquare className="w-3 h-3 mr-1" />
+                Change Status
               </button>
               <button
-                className="btn btn-outline"
+                className="flex-1 sm:flex-none btn btn-outline bg-white text-xs py-2"
                 onClick={() => { setShowBulkModal(true); setNewStatus('advance'); }}
                 disabled={selectedIds.length === 0 || uniqueJobIds.length > 1}
                 title={uniqueJobIds.length > 1 ? 'Select applications from a single job to perform bulk actions' : 'Advance round for selected'}
               >
                 Advance Round
               </button>
-              <button className="btn btn-secondary" onClick={() => setSelectedIds([])}>Clear Selection</button>
+              <button className="flex-1 sm:flex-none btn btn-secondary text-xs py-2" onClick={() => setSelectedIds([])}>Clear</button>
             </div>
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
@@ -393,6 +477,7 @@ const Applications = () => {
             </tbody>
           </table>
         </div>
+        {renderApplicationsCards(apps)}
       </div>
     );
   };
@@ -455,60 +540,97 @@ const Applications = () => {
       </div>
 
       {/* Filters */}
-      <div className="card">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <div className="card border-none shadow-sm bg-gray-50/50">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-5 relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-600 transition-colors" />
             <input
               type="text"
-              placeholder="Search by student name, email, or job..."
+              placeholder="Search student, email, or job..."
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="pl-10 w-full"
+              className="pl-10 w-full bg-white border-gray-200 focus:border-primary-500 transition-all rounded-xl"
             />
           </div>
-          <select
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            className="md:w-48"
-          >
-            {statusOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <select
-            value={filters.job}
-            onChange={(e) => handleJobSelect(e.target.value)}
-            className="md:w-64"
-          >
-            <option value="">All Jobs</option>
-            {jobs.map(job => (
-              <option key={job._id} value={job._id}>
-                {job.title} - {job.company?.name}
-              </option>
-            ))}
-          </select>
-          <label className="flex items-center gap-2 text-sm ml-4">
-            <input type="checkbox" checked={filters.myLeads} onChange={(e) => setFilters({ ...filters, myLeads: e.target.checked })} />
-            My Leads
-          </label>
-          <label className="flex items-center gap-2 text-sm ml-4">
-            <input type="checkbox" checked={groupByCompany} onChange={(e) => setGroupByCompany(e.target.checked)} />
-            Group by Company
-          </label>
+
+          <div className="md:col-span-3">
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl"
+            >
+              {statusOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="md:col-span-4">
+            <select
+              value={filters.job}
+              onChange={(e) => handleJobSelect(e.target.value)}
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl"
+            >
+              <option value="">All Job Postings</option>
+              {jobs.map(job => (
+                <option key={job._id} value={job._id}>
+                  {job.title} ({job.company?.name})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Filter pill for active job filter */}
-        {filters.job && selectedJobTitle && (
-          <div className="mt-3 flex items-center gap-2">
-            <div className="px-3 py-1 bg-blue-50 border border-blue-100 rounded-full text-sm flex items-center gap-3">
-              <span className="text-sm text-blue-700">Filtered by: <strong className="ml-1">{selectedJobTitle}</strong></span>
-              <button className="px-2 py-1 text-xs text-blue-600 bg-blue-100 rounded" onClick={clearJobFilter} aria-label="Clear job filter">Clear</button>
+        <div className="flex flex-wrap items-center gap-6 mt-4 px-1">
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div className={`w-10 h-5 rounded-full relative transition-colors ${filters.myLeads ? 'bg-primary-600' : 'bg-gray-300'}`}>
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={filters.myLeads}
+                onChange={(e) => setFilters({ ...filters, myLeads: e.target.checked })}
+              />
+              <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-transform ${filters.myLeads ? 'translate-x-6' : 'translate-x-1'}`} />
             </div>
-          </div>
-        )}
-      </div>
+            <span className="text-sm font-medium text-gray-700 group-hover:text-primary-600 transition-colors">My Leads Only</span>
+          </label>
 
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div className={`w-10 h-5 rounded-full relative transition-colors ${groupByCompany ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={groupByCompany}
+                onChange={(e) => setGroupByCompany(e.target.checked)}
+              />
+              <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-transform ${groupByCompany ? 'translate-x-6' : 'translate-x-1'}`} />
+            </div>
+            <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-600 transition-colors">Group by Company</span>
+          </label>
+
+          {/* New Active Filters Count */}
+          {(filters.status !== '' || filters.job !== '' || filters.myLeads) && (
+            <button
+              onClick={() => {
+                setFilters({ search: '', status: '', job: '', myLeads: false });
+                setGroupByCompany(false);
+              }}
+              className="text-xs font-bold text-red-500 hover:text-red-700 uppercase tracking-wider ml-auto"
+            >
+              Clear All Filters
+            </button>
+          )}
+        </div>
+      </div>
+      {/* Filter pill for active job filter */}
+      {filters.job && selectedJobTitle && (
+        <div className="mt-3 flex items-center gap-2">
+          <div className="px-3 py-1 bg-blue-50 border border-blue-100 rounded-full text-sm flex items-center gap-3">
+            <span className="text-sm text-blue-700">Filtered by: <strong className="ml-1">{selectedJobTitle}</strong></span>
+            <button className="px-2 py-1 text-xs text-blue-600 bg-blue-100 rounded" onClick={clearJobFilter} aria-label="Clear job filter">Clear</button>
+          </div>
+        </div>
+      )}
       {applicationsContent}
 
       {pagination.totalPages > 1 && (
@@ -528,6 +650,43 @@ const Applications = () => {
       >
         {selectedApplication && (
           <div className="space-y-6">
+            {/* Quick Actions Bar */}
+            <div className="flex flex-wrap gap-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
+              {selectedApplication.student?.profile?.resume && (
+                <a
+                  href={`${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedApplication.student.profile.resume}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white text-primary-600 border border-primary-100 rounded-lg hover:bg-primary-50 transition shadow-sm text-xs font-bold uppercase tracking-tight"
+                >
+                  <Download className="w-4 h-4" />
+                  Resume
+                </a>
+              )}
+              {selectedApplication.student?.profile?.portfolioLinks?.filter(l => l.url).map((link, idx) => (
+                <a
+                  key={idx}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white text-indigo-600 border border-indigo-100 rounded-lg hover:bg-indigo-50 transition shadow-sm text-xs font-bold uppercase tracking-tight"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {link.platform || 'Portfolio'}
+                </a>
+              ))}
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(selectedApplication.student?.email);
+                  toast.success('Email copied!');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white text-gray-600 border border-gray-100 rounded-lg hover:bg-gray-50 transition shadow-sm text-xs font-bold uppercase tracking-tight"
+              >
+                <Mail className="w-4 h-4" />
+                Email
+              </button>
+            </div>
+
             {/* Student Info */}
             <div className="bg-gray-50 rounded-lg p-4">
               <h3 className="font-semibold text-gray-900 mb-3">Student Information</h3>
@@ -831,7 +990,7 @@ const Applications = () => {
           </div>
         </div>
       </Modal>
-    </div>
+    </div >
   );
 };
 

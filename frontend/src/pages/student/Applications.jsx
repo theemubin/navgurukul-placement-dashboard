@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { applicationAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, ConfirmModal } from '../../components/common/UIComponents';
 import { FileText, ChevronRight, XCircle, Building, Calendar, CheckCircle, Clock, AlertCircle, GraduationCap, Briefcase, MessageCircle, ArrowRight, User } from 'lucide-react';
@@ -14,6 +14,15 @@ const StudentApplications = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawingId, setWithdrawingId] = useState(null);
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const appId = params.get('appId');
+    if (appId) {
+      viewDetails(appId);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     fetchApplications();

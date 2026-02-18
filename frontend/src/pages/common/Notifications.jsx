@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { notificationAPI } from '../../services/api';
 import { LoadingSpinner, EmptyState } from '../../components/common/UIComponents';
 import { Bell, Check, CheckCheck, Trash2, Mail, Briefcase, Award, AlertCircle } from 'lucide-react';
+import { getNotificationUrl } from '../../utils/notificationUtils';
 import toast from 'react-hot-toast';
 
 const Notifications = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all, unread, read
@@ -53,6 +57,16 @@ const Notifications = () => {
       toast.success('Notification deleted');
     } catch (error) {
       toast.error('Error deleting notification');
+    }
+  };
+
+  const handleNotificationClick = async (notification) => {
+    const url = getNotificationUrl(notification, user?.role);
+    if (!notification.read) {
+      await markAsRead(notification._id);
+    }
+    if (url) {
+      navigate(url);
     }
   };
 
@@ -135,8 +149,8 @@ const Notifications = () => {
             key={tab.value}
             onClick={() => setFilter(tab.value)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-[2px] transition ${filter === tab.value
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             {tab.label}
@@ -161,7 +175,8 @@ const Notifications = () => {
           {filteredNotifications.map((notification) => (
             <div
               key={notification._id}
-              className={`card flex items-start gap-4 transition ${!notification.read ? 'bg-primary-50 border-primary-200' : ''
+              onClick={() => handleNotificationClick(notification)}
+              className={`card flex items-start gap-4 transition cursor-pointer hover:bg-gray-50 hover:border-primary-300 ${!notification.read ? 'bg-primary-50 border-primary-200' : ''
                 }`}
             >
               <div className={`p-3 rounded-full ${getIconColor(notification.type)}`}>
@@ -179,7 +194,10 @@ const Notifications = () => {
               <div className="flex items-center gap-2">
                 {!notification.read && (
                   <button
-                    onClick={() => markAsRead(notification._id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markAsRead(notification._id);
+                    }}
                     className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
                     title="Mark as read"
                   >
@@ -187,7 +205,10 @@ const Notifications = () => {
                   </button>
                 )}
                 <button
-                  onClick={() => deleteNotification(notification._id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteNotification(notification._id);
+                  }}
                   className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                   title="Delete"
                 >

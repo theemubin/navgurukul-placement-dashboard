@@ -967,7 +967,7 @@ const JobForm = () => {
                   }}
                   placeholder="https://..."
                 />
-              </div >
+              </div>
               <div className="w-20">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
                 <div className="w-full h-[38px] flex items-center justify-center bg-gray-50 border rounded-lg overflow-hidden">
@@ -978,7 +978,7 @@ const JobForm = () => {
                   )}
                 </div>
               </div>
-            </div >
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Coordinator (Lead)</label>
@@ -1001,11 +1001,11 @@ const JobForm = () => {
                 placeholder="Brief description of the company"
               />
             </div>
-          </div >
-        </div >
+          </div>
+        </div>
 
         {/* Job Details */}
-        < div className="card" >
+        <div className="card" >
           <h2 className="text-lg font-semibold mb-4">Job Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -1143,10 +1143,10 @@ const JobForm = () => {
               />
             </div>
           </div>
-        </div >
+        </div>
 
         {/* Requirements */}
-        < div className="card" >
+        <div className="card" >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Requirements</h2>
             <button type="button" onClick={() => addListItem('requirements')} className="text-primary-600 text-sm">
@@ -1200,10 +1200,10 @@ const JobForm = () => {
               </div>
             ))}
           </div>
-        </div >
+        </div>
 
         {/* Custom Requirements for Students */}
-        < div className="card" >
+        <div className="card" >
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold">Custom Requirements</h2>
@@ -1272,7 +1272,7 @@ const JobForm = () => {
               <p className="text-gray-500 text-sm italic">No custom requirements added yet</p>
             )}
           </div>
-        </div >
+        </div>
 
         {/* Required Skills */}
         <div className="card">
@@ -1607,7 +1607,7 @@ const JobForm = () => {
                 <span className="font-medium text-gray-900 text-sm">House Selection</span>
               </div>
               <div className="flex flex-wrap gap-1">
-                {['Bageshree', 'Bhairav', 'Malhar'].map(house => (
+                {['Bageshree House', 'Bhairav House', 'Malhar House'].map(house => (
                   <button key={house} type="button"
                     onClick={() => {
                       const current = formData.eligibility.houses || [];
@@ -1825,7 +1825,7 @@ const JobForm = () => {
               </div>
             ))}
           </div>
-        </div >
+        </div>
 
         {/* Submit */}
         <div className="card">
@@ -1849,10 +1849,10 @@ const JobForm = () => {
               </button>
             </div>
           </div>
-        </div >
+        </div>
 
-      </form >
-    </div >
+      </form>
+    </div>
   );
 };
 

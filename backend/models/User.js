@@ -154,7 +154,7 @@ const userSchema = new mongoose.Schema({
     // House Name (Navgurukul Specific)
     houseName: {
       type: String,
-      enum: ['', 'Bageshree', 'Bhairav', 'Malhar'],
+      enum: ['', 'Bageshree House', 'Bhairav House', 'Malhar House'],
       default: ''
     },
 

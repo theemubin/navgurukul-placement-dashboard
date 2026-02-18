@@ -534,28 +534,28 @@ const JobDetails = () => {
               </div>
 
               {/* Breakdown */}
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="p-3 bg-white rounded-lg">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
+                <div className="p-3 bg-white rounded-xl border border-blue-100 shadow-sm">
                   <div className="text-lg font-bold text-blue-600">
                     {matchDetails.breakdown?.skills?.matched || 0}/{matchDetails.breakdown?.skills?.required || 0}
                   </div>
-                  <p className="text-xs text-gray-500">Skills Match</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Skills Match</p>
                 </div>
-                <div className="p-3 bg-white rounded-lg">
+                <div className="p-3 bg-white rounded-xl border border-green-100 shadow-sm">
                   <div className="text-lg font-bold text-green-600">
                     {matchDetails.breakdown?.eligibility?.passed || 0}/{matchDetails.breakdown?.eligibility?.total || 0}
                   </div>
-                  <p className="text-xs text-gray-500">Eligibility</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Eligibility</p>
                 </div>
-                <div className="p-3 bg-white rounded-lg">
+                <div className="p-3 bg-white rounded-xl border border-purple-100 shadow-sm">
                   <div className="text-lg font-bold text-purple-600">
                     {matchDetails.canApply ? (
                       <CheckCircle className="w-6 h-6 mx-auto text-green-500" />
                     ) : (
-                      <span className="text-orange-500">Need Approval</span>
+                      <span className="text-xs text-orange-500 font-bold">Need Permission</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500">Apply Status</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Apply Status</p>
                 </div>
               </div>
             </div>

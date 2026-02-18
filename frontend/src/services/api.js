@@ -43,7 +43,8 @@ api.interceptors.response.use(
       // Only redirect to login and clear state if we're not already on an auth/login route 
       // to avoid reload loops or wiping state during AuthCallback's initialization.
       const pathname = window.location.pathname || '';
-      if (!pathname.startsWith('/auth') && !pathname.startsWith('/login')) {
+      const isPublicPath = ['/auth', '/login', '/register', '/portfolios', '/public', '/shared'].some(p => pathname.startsWith(p));
+      if (!isPublicPath) {
         // Clear client-side auth state
         localStorage.removeItem('token');
         localStorage.removeItem('user');

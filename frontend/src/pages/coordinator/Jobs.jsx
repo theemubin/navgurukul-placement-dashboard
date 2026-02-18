@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { jobReadinessAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { jobAPI, settingsAPI, applicationAPI, userAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, ConfirmModal } from '../../components/common/UIComponents';
-import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles } from 'lucide-react';
+import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles, Link as LinkIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import JobsKanban from './JobsKanban';
@@ -13,6 +13,24 @@ import ApplicantTriageModal from './ApplicantTriageModal';
 const CoordinatorJobs = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
+
+  // Handle jobId from URL for deep linking (open triage)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const jobId = params.get('jobId');
+    if (jobId) {
+      const fetchAndOpen = async () => {
+        try {
+          const res = await jobAPI.getJob(jobId);
+          openManageApplicants(res.data.job);
+        } catch (err) {
+          console.error('Error fetching job for deep link:', err);
+        }
+      };
+      fetchAndOpen();
+    }
+  }, [location.search]);
   const [pagination, setPagination] = useState({ current: 1, pages: 1, total: 0 });
   const [filters, setFilters] = useState({ search: '', status: '', jobType: '', sortBy: 'newest' });
   const [deleteModal, setDeleteModal] = useState({ show: false, jobId: null });
@@ -616,50 +634,71 @@ const CoordinatorJobs = () => {
       ) : (
         <>
           {/* Filters */}
-          <div className="card">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="card border-none shadow-sm bg-gray-50/50">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+              <div className="md:col-span-4 relative group">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-600 transition-colors" />
                 <input
                   type="text"
                   placeholder="Search jobs..."
                   value={filters.search}
                   onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  className="pl-10"
+                  className="pl-10 w-full bg-white border-gray-200 focus:border-primary-500 transition-all rounded-xl shadow-sm"
                 />
               </div>
-              <select
-                value={filters.jobType}
-                onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
-                className="w-full md:w-40"
-              >
-                <option value="">All Types</option>
-                <option value="full_time">Full Time</option>
-                <option value="part_time">Part Time</option>
-                <option value="internship">Internship</option>
-                <option value="contract">Contract</option>
-              </select>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                className="w-full md:w-48"
-              >
-                <option value="">All Status</option>
-                {pipelineStages.map(stage => (
-                  <option key={stage.id} value={stage.id}>{stage.label}</option>
-                ))}
-              </select>
-              <select
-                value={filters.sortBy}
-                onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
-                className="w-full md:w-48"
-              >
-                <option value="newest">Newest First</option>
-                <option value="deadline_asc">Deadline (Soonest)</option>
-                <option value="deadline_desc">Deadline (Latest)</option>
-                <option value="placements">Most Placements</option>
-              </select>
+
+              <div className="md:col-span-2">
+                <select
+                  value={filters.jobType}
+                  onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
+                  className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+                >
+                  <option value="">All Types</option>
+                  <option value="full_time">Full Time</option>
+                  <option value="part_time">Part Time</option>
+                  <option value="internship">Internship</option>
+                  <option value="contract">Contract</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-3">
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                  className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+                >
+                  <option value="">All Status</option>
+                  {pipelineStages.map(stage => (
+                    <option key={stage.id} value={stage.id}>{stage.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-3">
+                <select
+                  value={filters.sortBy}
+                  onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
+                  className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="deadline_asc">Deadline (Soonest)</option>
+                  <option value="deadline_desc">Deadline (Latest)</option>
+                  <option value="placements">Most Placements</option>
+                </select>
+              </div>
             </div>
+
+            {(filters.search || filters.jobType || filters.status || filters.sortBy !== 'newest') && (
+              <div className="flex justify-end mt-3">
+                <button
+                  onClick={() => setFilters({ search: '', status: '', jobType: '', sortBy: 'newest' })}
+                  className="text-[10px] font-black text-red-500 hover:text-red-700 uppercase tracking-widest flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-red-50 shadow-sm transition-all"
+                >
+                  <X className="w-3 h-3" />
+                  Reset Filters
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Jobs List */}
@@ -720,72 +759,76 @@ const CoordinatorJobs = () => {
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-3 lg:border-l lg:pl-6 border-gray-100">
-                        <div className="flex flex-col gap-2 min-w-[200px]">
+                      <div className="flex flex-wrap items-center gap-2 lg:border-l lg:pl-6 border-gray-100">
+                        <div className="flex flex-col gap-2 w-full lg:w-[220px]">
                           <Link
                             to={`/coordinator/applications?job=${job._id}`}
-                            className="flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-primary-50 hover:text-primary-700 rounded-xl transition-all group/link"
+                            className="flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-primary-50 hover:text-primary-700 rounded-xl transition-all group/link border border-gray-100"
                           >
-                            <span className="text-sm font-semibold">View Applicants</span>
-                            <span className="bg-white border rounded-full px-2 py-0.5 text-xs shadow-sm group-hover/link:border-primary-200">
+                            <span className="text-xs font-bold uppercase tracking-tight">Applicants</span>
+                            <span className="bg-white border rounded-full px-2 py-0.5 text-[10px] font-black shadow-sm group-hover/link:border-primary-200">
                               {job.totalApplications || 0}
                             </span>
                           </Link>
                           <button
                             onClick={() => openManageApplicants(job)}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all font-semibold text-sm"
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl shadow-lg shadow-primary-100 hover:shadow-primary-200 transition-all font-bold text-xs uppercase tracking-widest"
                           >
+                            <Users className="w-3.5 h-3.5" />
                             Manage Triage
                           </button>
                         </div>
 
-                        <div className="flex flex-col gap-2">
+                        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-2 w-full lg:w-auto">
                           <select
                             value={job.status}
                             onChange={(e) => handleStatusChange(job._id, e.target.value)}
-                            className="text-xs font-bold border-2 border-gray-100 rounded-xl px-3 py-2 focus:border-primary-500 transition-colors uppercase bg-white cursor-pointer"
+                            className="col-span-3 sm:w-48 text-[11px] font-black border-2 border-gray-100 rounded-xl px-3 py-2 focus:border-primary-500 transition-colors uppercase bg-white cursor-pointer shadow-sm hover:border-gray-200"
                           >
                             {pipelineStages.map(stage => (
                               <option key={stage.id} value={stage.id}>{stage.label}</option>
                             ))}
                           </select>
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleCopyLink(job._id)}
-                              className="job-action-btn bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
-                              title="Copy Shareable Link"
-                            >
-                              <Share2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleBroadcast(job._id)}
-                              className="job-action-btn bg-purple-50 text-purple-600 hover:bg-purple-100"
-                              title="Broadcast to Discord"
-                            >
-                              <Sparkles className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => openExportModal(job._id, job.title)}
-                              className="job-action-btn bg-green-50 text-green-600 hover:bg-green-100"
-                              title="Export Data"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                            <Link
-                              to={`/coordinator/jobs/${job._id}/edit`}
-                              className="job-action-btn bg-blue-50 text-blue-600 hover:bg-blue-100"
-                              title="Edit Job"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Link>
-                            <button
-                              onClick={() => setDeleteModal({ show: true, jobId: job._id })}
-                              className="job-action-btn bg-red-50 text-red-600 hover:bg-red-100"
-                              title="Delete Job"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+
+                          <button
+                            onClick={() => handleCopyLink(job._id)}
+                            className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-all shadow-sm group"
+                            title="Copy Student Link"
+                          >
+                            <LinkIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                          </button>
+
+                          <button
+                            onClick={() => handleBroadcast(job._id)}
+                            className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-gray-400 hover:text-purple-600 hover:border-purple-200 rounded-xl transition-all shadow-sm group"
+                            title="Broadcast to Discord"
+                          >
+                            <Sparkles className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                          </button>
+
+                          <button
+                            onClick={() => openExportModal(job._id, job.title)}
+                            className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-gray-400 hover:text-green-600 hover:border-green-200 rounded-xl transition-all shadow-sm group"
+                            title="Export Data"
+                          >
+                            <Download className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                          </button>
+
+                          <Link
+                            to={`/coordinator/jobs/${job._id}/edit`}
+                            className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-gray-400 hover:text-primary-600 hover:border-primary-200 rounded-xl transition-all shadow-sm group"
+                            title="Edit Job"
+                          >
+                            <Edit className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                          </Link>
+
+                          <button
+                            onClick={() => setDeleteModal({ show: true, jobId: job._id })}
+                            className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-all shadow-sm group"
+                            title="Delete Job"
+                          >
+                            <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                          </button>
                         </div>
                       </div>
                     </div>
