@@ -142,15 +142,17 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
         parsedData = {
           ...parsedData,
           ...aiResult,
-          suggestedSkills: [...new Set([...(parsedData?.suggestedSkills || []), ...aiResult.suggestedSkills])],
-          requirements: aiResult.requirements.length > (parsedData?.requirements.length || 0) ? aiResult.requirements : parsedData?.requirements
+          suggestedSkills: [...new Set([...(parsedData?.suggestedSkills || []), ...(aiResult?.suggestedSkills || [])])],
+          requirements: (aiResult?.requirements?.length || 0) > (parsedData?.requirements?.length || 0) ? aiResult.requirements : (parsedData?.requirements || [])
         };
         parsedWith = 'ai';
       } catch (aiError) {
         console.error('AI parsing failed, continuing with code extraction:', aiError.message);
-        // Keep code-based results
-        parsedData.aiError = aiError.message || 'AI parse failed';
-        parsedData.aiErrorCode = aiError.code || aiError.originalError?.code || null;
+        // Keep code-based results but attach error if possible
+        if (parsedData) {
+          parsedData.aiError = aiError.message || 'AI parse failed';
+          parsedData.aiErrorCode = aiError.code || aiError.originalError?.code || null;
+        }
       }
     }
 
@@ -667,6 +669,13 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       }
 
       await application.save();
+
+      // If moving to selected/filled, also mark student as Placed
+      if (status === 'selected' || status === 'filled') {
+        await User.findByIdAndUpdate(application.student._id, {
+          'studentProfile.currentStatus': 'Placed'
+        });
+      }
 
       // Notify student about bulk change (wrapped in try-catch to isolate errors)
       try {

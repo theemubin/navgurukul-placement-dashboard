@@ -89,6 +89,13 @@ const settingsSchema = new mongoose.Schema({
       website: String,
       description: String,
       logo: String, // Favicon/Logo URL
+      pocs: [{
+        name: String,
+        role: String,
+        contact: String,
+        email: String,
+        isPrimary: { type: Boolean, default: false }
+      }],
       addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
     },
     default: new Map()

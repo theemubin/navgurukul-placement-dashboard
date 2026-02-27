@@ -20,7 +20,7 @@ const POCDashboard = () => {
   const [selectedCycle, setSelectedCycle] = useState('');
   const [studentSummary, setStudentSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('jobs');
   const [expandedCompany, setExpandedCompany] = useState(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [showCycleModal, setShowCycleModal] = useState(false);
@@ -320,52 +320,28 @@ const POCDashboard = () => {
         )}
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        <StatsCard
-          icon={Users}
-          label="Total Students"
-          value={stats?.totalStudents || 0}
-          color="blue"
-        />
-        <StatsCard
-          icon={CheckSquare}
-          label="Pending Skills"
-          value={stats?.pendingSkillApprovals || 0}
-          color="yellow"
-        />
-        <StatsCard
-          icon={FileText}
-          label="Pending Profiles"
-          value={stats?.pendingProfileApprovals || 0}
-          color="orange"
-        />
-        <StatsCard
-          icon={CheckCircle}
-          label="Job Ready"
-          value={stats?.readinessPool?.['Job Ready'] || 0}
-          color="green"
-        />
-        <StatsCard
-          icon={Clock}
-          label="Under Process"
-          value={stats?.readinessPool?.['Job Ready Under Process'] || 0}
-          color="indigo"
-        />
-        <StatsCard
-          icon={TrendingUp}
-          label="Interested"
-          value={stats?.interestCount || 0}
-          color="purple"
-        />
+      {/* Compact Stats Bar */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { label: 'Total Students', value: stats?.totalStudents || 0, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
+          { label: 'Pending Skills', value: stats?.pendingSkillApprovals || 0, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-100' },
+          { label: 'Pending Profiles', value: stats?.pendingProfileApprovals || 0, color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100' },
+          { label: 'Job Ready', value: stats?.readinessPool?.['Job Ready'] || 0, color: 'text-green-600', bg: 'bg-green-50 border-green-100' },
+          { label: 'Under Process', value: stats?.readinessPool?.['Job Ready Under Process'] || 0, color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-100' },
+          { label: 'Interested', value: stats?.interestCount || 0, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-100' },
+        ].map(({ label, value, color, bg }) => (
+          <div key={label} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${bg} flex-shrink-0`}>
+            <span className={`text-lg font-bold leading-none ${color}`}>{value}</span>
+            <span className="text-xs text-gray-500 leading-tight">{label}</span>
+          </div>
+        ))}
       </div>
 
-      {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="flex gap-4 overflow-x-auto">
           {[
-            { id: 'overview', label: 'Overview', icon: Eye },
             { id: 'jobs', label: 'Active Jobs', icon: Briefcase },
+            { id: 'overview', label: 'Overview', icon: Eye },
             { id: 'company', label: 'Company-wise', icon: Building2 },
             { id: 'school', label: 'School-wise', icon: GraduationCap },
             { id: 'students', label: 'Student Summary', icon: Users },
@@ -375,8 +351,8 @@ const POCDashboard = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === tab.id
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
             >
               <tab.icon className="w-4 h-4" />

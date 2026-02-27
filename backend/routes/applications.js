@@ -236,8 +236,8 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
       application.feedbackBy = req.userId;
     }
 
-    // Update placement count if selected
-    if (status === 'selected') {
+    // Update placement count if selected or filled
+    if (status === 'selected' || status === 'filled') {
       await Job.findByIdAndUpdate(application.job._id, {
         $inc: { placementsCount: 1 }
       });
@@ -263,8 +263,9 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
         });
       }
 
-      // Update student's placement cycle
+      // Update student's placement cycle and status
       await User.findByIdAndUpdate(application.student, {
+        'studentProfile.currentStatus': 'Placed',
         placementCycle: cycle._id,
         placementCycleAssignedAt: new Date(),
         placementCycleAssignedBy: req.userId

@@ -37,10 +37,15 @@ import CoordinatorJobs from './pages/coordinator/Jobs';
 import JobForm from './pages/coordinator/JobForm';
 import CoordinatorApplications from './pages/coordinator/Applications';
 import CoordinatorSkills from './pages/coordinator/Skills';
-import CoordinatorSettings from './pages/coordinator/Settings';
 import CoordinatorInterestRequests from './pages/coordinator/InterestRequests';
 import CoordinatorInterestRequestsForManager from './pages/coordinator/InterestRequests';
 import CoordinatorForum from './pages/coordinator/Forum';
+// Coordinator Settings sub-pages
+import AIKeysSettings from './pages/coordinator/settings/AIKeys';
+import DiscordSettings from './pages/coordinator/settings/Discord';
+// Layout wrappers
+import SkillsLayout from './layouts/SkillsLayout';
+import SettingsLayout from './layouts/SettingsLayout';
 
 // Manager Pages
 import ManagerDashboard from './pages/manager/Dashboard';
@@ -159,10 +164,18 @@ function App() {
         <Route path="jobs/new" element={<JobForm />} />
         <Route path="jobs/:id/edit" element={<JobForm />} />
         <Route path="applications" element={<CoordinatorApplications />} />
-        <Route path="skills" element={<CoordinatorSkills />} />
+        {/* Nested Skills routes */}
+        <Route path="skills" element={<SkillsLayout role="coordinator" />}>
+          <Route index element={<CoordinatorSkills />} />
+          <Route path="approvals" element={<POCSkillApprovals />} />
+        </Route>
         <Route path="interest-requests" element={<CoordinatorInterestRequests />} />
         <Route path="forum" element={<CoordinatorForum />} />
-        <Route path="settings" element={<CoordinatorSettings />} />
+        {/* Nested Settings routes */}
+        <Route path="settings" element={<SettingsLayout role="coordinator" />}>
+          <Route index element={<AIKeysSettings />} />
+          <Route path="discord" element={<DiscordSettings />} />
+        </Route>
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>

@@ -435,7 +435,7 @@ const CoordinatorJobs = () => {
 
   const handleStatusChange = async (jobId, newStatus) => {
     // statuses that should trigger applicant review modal
-    const reviewStatuses = ['hr_shortlisting', 'interviewing', 'application_stage'];
+    const reviewStatuses = ['hr_shortlisting', 'interviewing', 'application_stage', 'filled'];
 
     if (reviewStatuses.includes(newStatus)) {
       // Open modal and set up for review flow instead of directly updating the job
@@ -448,7 +448,7 @@ const CoordinatorJobs = () => {
       setModalNewStatus(newStatus);
       await fetchApplicantsForJob(jobId);
       // Only show applicants who are still 'in process' (not rejected/withdrawn/placed)
-      setModalApplicants(prev => (prev || []).filter(a => !['rejected', 'withdrawn', 'selected', 'placed'].includes(a.status)).map(a => ({ ...a, _target: a._target || undefined, _comment: a._comment || '' })));
+      setModalApplicants(prev => (prev || []).filter(a => !['rejected', 'withdrawn', 'selected', 'placed', 'filled'].includes(a.status)).map(a => ({ ...a, _target: a._target || undefined, _comment: a._comment || '' })));
       setSectionComments({ selected: '', notMoving: '', noAction: '' });
       setCollapsedSections({ selected: false, notMoving: false, noAction: false });
       setSectionStatus({ selected: 'selected', notMoving: 'rejected', noAction: 'no_change' });

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { jobAPI, settingsAPI } from '../../services/api';
+import { jobAPI, settingsAPI, applicationAPI } from '../../services/api';
+import ApplicantTriageModal from './ApplicantTriageModal';
 import { Badge, Button, Alert } from '../../components/common/UIComponents';
 import {
   Building2,
@@ -501,6 +502,13 @@ const JobsKanban = ({ onExportJob }) => {
   const [updating, setUpdating] = useState(null);
   const [showStageModal, setShowStageModal] = useState(false);
 
+  // Applicant Review / Triage Modal State
+  const [showApplicantModal, setShowApplicantModal] = useState(false);
+  const [modalJob, setModalJob] = useState(null);
+  const [modalApplicants, setModalApplicants] = useState([]);
+  const [modalNewStatus, setModalNewStatus] = useState(null);
+  const [applyingModalChanges, setApplyingModalChanges] = useState(false);
+
   // Organize jobs by status
   const jobsByStatus = stages.reduce((acc, stage) => {
     acc[stage.id] = jobs.filter(job => job.status === stage.id);
@@ -548,6 +556,96 @@ const JobsKanban = ({ onExportJob }) => {
     }
   }, [stages, activeStageId]);
 
+  const fetchApplicantsForJob = async (jobId) => {
+    try {
+      const res = await applicationAPI.getApplications({ job: jobId, limit: 1000 });
+      // Only show applicants who are still 'in process' (not rejected/withdrawn/placed/selected/filled)
+      const apps = (res.data.applications || []).filter(a => !['rejected', 'withdrawn', 'selected', 'placed', 'filled'].includes(a.status));
+      setModalApplicants(apps.map(a => ({ ...a, _target: a._target || undefined, _comment: a._comment || '' })));
+    } catch (error) {
+      console.error('Error fetching applicants', error);
+      toast.error('Failed to load applicants for review');
+    }
+  };
+
+  const handleTriageConfirm = async (triageApplicants, metadata = {}) => {
+    if (!modalJob) return;
+    setApplyingModalChanges(true);
+
+    try {
+      // Group by action/status
+      const grouped = {
+        promote: triageApplicants.filter(a => a.bucket === 'promote'),
+        exit: triageApplicants.filter(a => a.bucket === 'exit'),
+        hold: triageApplicants.filter(a => a.bucket === 'hold' && a.comment.trim())
+      };
+
+      // 1. Handle Promoted
+      if (grouped.promote.length > 0) {
+        const payload = {
+          applicationIds: grouped.promote.map(a => a._id),
+          action: 'set_status',
+          status: modalNewStatus || modalJob.status,
+          perApplicationFeedbacks: grouped.promote.reduce((acc, a) => {
+            if (a.comment) acc[a._id] = a.comment;
+            return acc;
+          }, {})
+        };
+        if ((payload.status === 'interviewing' || payload.status?.includes('interview')) && metadata.roundIndex !== undefined) {
+          payload.targetRound = metadata.roundIndex;
+          payload.roundName = metadata.roundName;
+        }
+        await jobAPI.bulkUpdate(modalJob._id, payload);
+      }
+
+      // 2. Handle Exited
+      if (grouped.exit.length > 0) {
+        const payload = {
+          applicationIds: grouped.exit.map(a => a._id),
+          action: 'set_status',
+          status: 'rejected',
+          perApplicationFeedbacks: grouped.exit.reduce((acc, a) => {
+            acc[a._id] = a.comment;
+            return acc;
+          }, {})
+        };
+        await jobAPI.bulkUpdate(modalJob._id, payload);
+      }
+
+      // 3. Handle Hold
+      if (grouped.hold.length > 0) {
+        const payload = {
+          applicationIds: grouped.hold.map(a => a._id),
+          action: 'set_status',
+          perApplicationFeedbacks: grouped.hold.reduce((acc, a) => {
+            acc[a._id] = a.comment;
+            return acc;
+          }, {})
+        };
+        await jobAPI.bulkUpdate(modalJob._id, payload);
+      }
+
+      // After bulk updates, check if the job is already filled
+      const latestJobRes = await jobAPI.getJob(modalJob._id);
+      const latestJob = latestJobRes.data;
+
+      if (modalNewStatus && latestJob.status !== 'filled') {
+        await jobAPI.updateJob(modalJob._id, { status: modalNewStatus });
+      }
+
+      toast.success('Batch processing completed successfully!');
+      setShowApplicantModal(false);
+      setModalApplicants([]);
+      setModalNewStatus(null);
+      fetchData();
+    } catch (error) {
+      console.error('Triage apply error', error);
+      toast.error(error?.response?.data?.message || 'Failed to apply changes');
+    } finally {
+      setApplyingModalChanges(false);
+    }
+  };
+
   // Handle drag end
   const handleDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
@@ -562,6 +660,17 @@ const JobsKanban = ({ onExportJob }) => {
     const jobId = draggableId;
     const newStatus = destination.droppableId;
     const oldStatus = source.droppableId;
+
+    // Define statuses that require applicant review before changing job status
+    const reviewStatuses = ['hr_shortlisting', 'interviewing', 'application_stage', 'filled'];
+    if (reviewStatuses.includes(newStatus)) {
+      const job = jobs.find(j => j._id === jobId);
+      setModalJob(job);
+      setModalNewStatus(newStatus);
+      await fetchApplicantsForJob(jobId);
+      setShowApplicantModal(true);
+      return;
+    }
 
     // Optimistic update
     setJobs(prevJobs =>
@@ -693,6 +802,22 @@ const JobsKanban = ({ onExportJob }) => {
         onClose={() => setShowStageModal(false)}
         stages={stages}
         onSave={fetchStages}
+      />
+
+      {/* Applicant Review Modal */}
+      <ApplicantTriageModal
+        isOpen={showApplicantModal}
+        onClose={() => {
+          setShowApplicantModal(false);
+          setModalApplicants([]);
+          setModalNewStatus(null);
+        }}
+        job={modalJob}
+        applicants={modalApplicants}
+        targetStatus={modalNewStatus}
+        pipelineStages={stages}
+        onConfirm={handleTriageConfirm}
+        isApplying={applyingModalChanges}
       />
     </div>
   );

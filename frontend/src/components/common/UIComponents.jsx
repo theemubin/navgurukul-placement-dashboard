@@ -161,7 +161,13 @@ export const EmptyState = ({ icon: Icon, title, description, action }) => (
     {Icon && <Icon className="w-16 h-16 mx-auto text-gray-300 mb-4" />}
     <h3 className="text-lg font-medium text-gray-900">{title}</h3>
     <p className="text-gray-500 mt-1">{description}</p>
-    {action && <div className="mt-4">{action}</div>}
+    {action && (
+      <div className="mt-4">
+        {action && typeof action === 'object' && !Object.prototype.hasOwnProperty.call(action, '$$typeof')
+          ? <button onClick={action.onClick} className="btn btn-primary">{action.label}</button>
+          : action}
+      </div>
+    )}
   </div>
 );
 

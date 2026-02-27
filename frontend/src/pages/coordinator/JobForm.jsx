@@ -1,15 +1,43 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { jobAPI, skillAPI, campusAPI, userAPI, settingsAPI } from '../../services/api';
-import { LoadingSpinner } from '../../components/common/UIComponents';
-import SearchableSelect from '../../components/common/SearchableSelect.jsx';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Save, Plus, X, Sparkles, Upload, Link, FileText,
-  AlertCircle, Users, CheckCircle, Search, Building, MapPin,
-  Home, Briefcase, IndianRupee, ExternalLink, Calendar, Clock,
-  History, Download, Settings, Trash2, Edit, Share2
-} from 'lucide-react';
-import toast from 'react-hot-toast';
+  jobAPI,
+  skillAPI,
+  campusAPI,
+  userAPI,
+  settingsAPI,
+} from "../../services/api";
+import { LoadingSpinner } from "../../components/common/UIComponents";
+import SearchableSelect from "../../components/common/SearchableSelect.jsx";
+import {
+  ArrowLeft,
+  Save,
+  Plus,
+  X,
+  Sparkles,
+  Upload,
+  Link,
+  FileText,
+  AlertCircle,
+  Users,
+  CheckCircle,
+  Search,
+  Building,
+  MapPin,
+  Home,
+  Briefcase,
+  IndianRupee,
+  ExternalLink,
+  Calendar,
+  Clock,
+  History,
+  Download,
+  Settings,
+  Trash2,
+  Edit,
+  Share2,
+} from "lucide-react";
+import toast from "react-hot-toast";
 
 const JobForm = () => {
   const { id } = useParams();
@@ -30,8 +58,8 @@ const JobForm = () => {
   // const [schoolsWithTracks, setSchoolsWithTracks] = useState([]); // Unused
   const [studentCount, setStudentCount] = useState({ total: 0, eligible: 0 });
   const [coordinators, setCoordinators] = useState([]);
-  const [jdUrl, setJdUrl] = useState('');
-  const [jdRawText, setJdRawText] = useState('');
+  const [jdUrl, setJdUrl] = useState("");
+  const [jdRawText, setJdRawText] = useState("");
   const [showRawTextInput, setShowRawTextInput] = useState(false);
   const [aiParseInfo, setAiParseInfo] = useState(null);
   const [parsedSuggestion, setParsedSuggestion] = useState(null); // holds parsed JD data for preview
@@ -41,108 +69,150 @@ const JobForm = () => {
   const [showCompanySuggestions, setShowCompanySuggestions] = useState(false);
   const [availableLocations, setAvailableLocations] = useState([]);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
-  const [studentLocations, setStudentLocations] = useState({ districts: [], states: [] });
+  const [showAllRequirements, setShowAllRequirements] = useState(false);
+  const [showAllResponsibilities, setShowAllResponsibilities] = useState(false);
+  const [studentLocations, setStudentLocations] = useState({
+    districts: [],
+    states: [],
+  });
   // Council Post State
   const [councilPostsList, setCouncilPostsList] = useState([]);
   const [showHometownSuggestions, setShowHometownSuggestions] = useState(false);
-  const [showHomestateSuggestions, setShowHomestateSuggestions] = useState(false);
-  const [showCouncilPostSuggestions, setShowCouncilPostSuggestions] = useState({}); // Keyed by index
+  const [showHomestateSuggestions, setShowHomestateSuggestions] =
+    useState(false);
+  const [showCouncilPostSuggestions, setShowCouncilPostSuggestions] = useState(
+    {},
+  ); // Keyed by index
   const [roleCategories, setRoleCategories] = useState([]);
 
   const [formData, setFormData] = useState({
-    title: '',
-    company: { name: '', website: '', description: '', logo: '' },
-    location: '',
-    roleCategory: '',
-    jobType: 'full_time',
-    duration: '', // for internship
-    salary: { min: '', max: '', currency: 'INR' },
-    applicationDeadline: '',
-    maxPositions: '',
-    description: '',
-    requirements: [''], // List of strings
-    responsibilities: [''], // List of strings
+    title: "",
+    company: {
+      name: "",
+      website: "",
+      description: "",
+      logo: "",
+      pocName: "",
+      pocContact: "",
+      pocEmail: "",
+    },
+    location: "",
+    roleCategory: "",
+    jobType: "full_time",
+    duration: "", // for internship
+    salary: { min: "", max: "", currency: "INR" },
+    applicationDeadline: "",
+    maxPositions: "",
+    description: "",
+    requirements: [""], // List of strings
+    responsibilities: [""], // List of strings
     requiredSkills: [], // { skill: ID, proficiencyLevel: 1-5, mandatory: true }
     customRequirements: [], // { requirement: string, isMandatory: boolean }
     eligibility: {
-      minCgpa: '',
-      tenthGrade: { required: false, minPercentage: '' },
-      twelfthGrade: { required: false, minPercentage: '' },
-      higherEducation: { required: false, acceptedDegrees: [], level: '', minPercentage: '' },
-      gender: 'any',
+      minCgpa: "",
+      tenthGrade: { required: false, minPercentage: "" },
+      twelfthGrade: { required: false, minPercentage: "" },
+      higherEducation: {
+        required: false,
+        acceptedDegrees: [],
+        level: "",
+        minPercentage: "",
+      },
+      gender: "any",
       campuses: [],
       schools: [], // School names
-      minModule: '', // Specific module (hierarchical) or Track (independent)
+      minModule: "", // Specific module (hierarchical) or Track (independent)
       certifications: [], // List of strings
-      minAttendance: '',
-      minGharAttendance: '',
-      minMonthsAtNavgurukul: '',
-      englishWriting: '',
-      englishSpeaking: '',
-      homestate: '',
+      minAttendance: "",
+      minGharAttendance: "",
+      minMonthsAtNavgurukul: "",
+      englishWriting: "",
+      englishSpeaking: "",
+      homestate: "",
       councilPosts: [], // Array of { post: String, minMonths: Number }
-      readinessRequirement: 'yes',
+      readinessRequirement: "yes",
       houses: [],
       requiredGharStatuses: [],
-      minReadTheoryLevel: '',
-      minAtCoderRating: ''
+      minReadTheoryLevel: "",
+      minAtCoderRating: "",
     },
-    status: 'draft',
-    interviewRounds: [{ name: 'Round 1', type: 'other' }] // Initialize with one round
+    status: "draft",
+    interviewRounds: [{ name: "Round 1", type: "other" }], // Initialize with one round
   });
-  const [salaryPeriod, setSalaryPeriod] = useState('yearly'); // 'yearly' or 'monthly'
+  const [salaryPeriod, setSalaryPeriod] = useState("yearly"); // 'yearly' or 'monthly'
 
   const [settings, setSettings] = useState({
     jobLocations: [],
     masterCompanies: {},
     proficiencyRubrics: {
-      '1': { label: 'Basic', description: 'Has basic theoretical knowledge and can perform simple tasks with guidance.' },
-      '2': { label: 'Intermediate', description: 'Can work independently on routine tasks and understands core principles.' },
-      '3': { label: 'Advanced', description: 'Can handle complex problems, optimize workflows, and guide others.' },
-      '4': { label: 'Expert', description: 'Deep mastery of the subject with ability to architect systems and lead strategy.' }
-    }
+      1: {
+        label: "Basic",
+        description:
+          "Has basic theoretical knowledge and can perform simple tasks with guidance.",
+      },
+      2: {
+        label: "Intermediate",
+        description:
+          "Can work independently on routine tasks and understands core principles.",
+      },
+      3: {
+        label: "Advanced",
+        description:
+          "Can handle complex problems, optimize workflows, and guide others.",
+      },
+      4: {
+        label: "Expert",
+        description:
+          "Deep mastery of the subject with ability to architect systems and lead strategy.",
+      },
+    },
   });
 
-  const proficiencyLevels = [1, 2, 3, 4].map(l => ({
+  const proficiencyLevels = [1, 2, 3, 4].map((l) => ({
     value: l,
     label: settings.proficiencyRubrics?.[l]?.label || `Level ${l} `,
-    description: settings.proficiencyRubrics?.[l]?.description || ''
+    description: settings.proficiencyRubrics?.[l]?.description || "",
   }));
 
   const cefrLevels = [
-    { value: 'A1', label: 'A1 - Beginner' },
-    { value: 'A2', label: 'A2 - Elementary' },
-    { value: 'B1', label: 'B1 - Intermediate' },
-    { value: 'B2', label: 'B2 - Upper Intermediate' },
-    { value: 'C1', label: 'C1 - Advanced' },
-    { value: 'C2', label: 'C2 - Proficient' }
+    { value: "A1", label: "A1 - Beginner" },
+    { value: "A2", label: "A2 - Elementary" },
+    { value: "B1", label: "B1 - Intermediate" },
+    { value: "B2", label: "B2 - Upper Intermediate" },
+    { value: "C1", label: "C1 - Advanced" },
+    { value: "C2", label: "C2 - Proficient" },
   ];
 
-  const bachelorDegrees = ['B.Tech', 'B.Sc', 'BCA', 'B.Com', 'B.A'];
-  const masterDegrees = ['M.Tech', 'M.Sc', 'MCA', 'MBA', 'M.A'];
+  const bachelorDegrees = ["B.Tech", "B.Sc", "BCA", "B.Com", "B.A"];
+  const masterDegrees = ["M.Tech", "M.Sc", "MCA", "MBA", "M.A"];
 
   // Module breakdown by school
   const schoolModules = {
-    'School of Programming': {
-      type: 'hierarchical',
+    "School of Programming": {
+      type: "hierarchical",
       modules: [
-        'Introduction to Programming',
-        'Data Structures',
-        'Algorithms',
-        'Web Development Basics',
-        'Frontend Development',
-        'Backend Development',
-        'Full Stack Project'
-      ]
+        "Introduction to Programming",
+        "Data Structures",
+        "Algorithms",
+        "Web Development Basics",
+        "Frontend Development",
+        "Backend Development",
+        "Full Stack Project",
+      ],
     },
-    'School of Business': {
-      type: 'tracks',
-      modules: ['Finance', 'Marketing', 'Operations', 'HR', 'Entrepreneurship']
+    "School of Business": {
+      type: "tracks",
+      modules: ["Finance", "Marketing", "Operations", "HR", "Entrepreneurship"],
     },
-    'School of Design': {
-      type: 'tracks',
-      modules: ['Graphic Design', 'UI/UX Design', 'Product Design', 'Motion Graphics']
-    }
+    "School of Design": {
+      type: "tracks",
+      modules: [
+        "Graphic Design",
+        "UI/UX Design",
+        "Product Design",
+        "Motion Graphics",
+      ],
+    },
   };
 
   useEffect(() => {
@@ -161,7 +231,7 @@ const JobForm = () => {
       const res = await userAPI.getCoordinators();
       setCoordinators(res.data.coordinators || []);
     } catch (err) {
-      console.error('Error fetching coordinators', err);
+      console.error("Error fetching coordinators", err);
     }
   };
 
@@ -178,9 +248,9 @@ const JobForm = () => {
       const res = await settingsAPI.getSettings();
       const master = res.data.data.masterCompanies || {};
       setAvailableCompanies(Object.values(master));
-      setSettings(prev => ({ ...prev, ...res.data.data }));
+      setSettings((prev) => ({ ...prev, ...res.data.data }));
     } catch (error) {
-      console.error('Error fetching companies:', error);
+      console.error("Error fetching companies:", error);
     }
   };
 
@@ -189,24 +259,52 @@ const JobForm = () => {
       const res = await settingsAPI.getSettings();
       setAvailableLocations(res.data.data.jobLocations || []);
     } catch (error) {
-      console.error('Error fetching locations:', error);
+      console.error("Error fetching locations:", error);
     }
   };
 
-  const handleAddCompany = async (name) => {
+  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
+  const [newCompanyFormData, setNewCompanyFormData] = useState({
+    name: "",
+    website: "",
+    description: "",
+    pocName: "",
+    pocContact: "",
+    pocEmail: "",
+  });
+
+  const handleAddCompany = (name) => {
+    setNewCompanyFormData({
+      name: name || "",
+      website: "",
+      description: "",
+      pocName: "",
+      pocContact: "",
+      pocEmail: "",
+    });
+    setShowAddCompanyModal(true);
+  };
+
+  const submitNewCompany = async () => {
     try {
-      const companyData = { name };
-      // Website is optional but good for favicon
-      const res = await settingsAPI.addCompanyOption(companyData);
+      const res = await settingsAPI.addCompanyOption(newCompanyFormData);
       if (res.data.success) {
-        toast.success(`Registered "${name}" as a company`);
+        toast.success(`Registered "${newCompanyFormData.name}" as a company`);
         await fetchCompanies();
-        return true;
+        // Auto-select the newly added company
+        setFormData((prev) => ({
+          ...prev,
+          company: {
+            ...newCompanyFormData,
+            logo: `https://www.google.com/s2/favicons?domain=${newCompanyFormData.website.replace(/^https?:\/\//, "").split("/")[0]}&sz=128`,
+          },
+        }));
+        setShowAddCompanyModal(false);
       }
     } catch (err) {
-      console.error('Failed to add company', err);
+      console.error("Failed to add company", err);
+      toast.error(err.response?.data?.message || "Failed to add company");
     }
-    return false;
   };
 
   const handleAddLocation = async (location) => {
@@ -218,7 +316,7 @@ const JobForm = () => {
         return true;
       }
     } catch (err) {
-      console.error('Failed to add location', err);
+      console.error("Failed to add location", err);
     }
     return false;
   };
@@ -228,7 +326,7 @@ const JobForm = () => {
       const response = await userAPI.getStudentLocations();
       setStudentLocations(response.data);
     } catch (error) {
-      console.error('Error fetching student locations:', error);
+      console.error("Error fetching student locations:", error);
     }
   };
 
@@ -236,11 +334,20 @@ const JobForm = () => {
     try {
       const response = await skillAPI.getSkills();
       setAllSkills(response.data);
-      setSkills(response.data.filter(s => s.category === 'technical'));
-      setDomainSkills(response.data.filter(s => s.category === 'domain'));
-      setOtherSkills(response.data.filter(s => s.category === 'other' || s.category === 'soft' || s.category === 'soft_skill' || s.category === 'office' || s.category === 'language'));
+      setSkills(response.data.filter((s) => s.category === "technical"));
+      setDomainSkills(response.data.filter((s) => s.category === "domain"));
+      setOtherSkills(
+        response.data.filter(
+          (s) =>
+            s.category === "other" ||
+            s.category === "soft" ||
+            s.category === "soft_skill" ||
+            s.category === "office" ||
+            s.category === "language",
+        ),
+      );
     } catch (error) {
-      console.error('Error fetching skills:', error);
+      console.error("Error fetching skills:", error);
     }
   };
 
@@ -249,13 +356,26 @@ const JobForm = () => {
       const response = await campusAPI.getCampuses();
       setCampuses(response.data);
 
-      const settingsRes = await settingsAPI.getSettings().then(r => r.data.data).catch(() => ({}));
+      const settingsRes = await settingsAPI
+        .getSettings()
+        .then((r) => r.data.data)
+        .catch(() => ({}));
 
-      const allSchools = settingsRes.schools && settingsRes.schools.length > 0
-        ? settingsRes.schools
-        : ['School of Programming', 'School of Business', 'School of Finance', 'School of Education', 'School of Second Chance', 'School of Design'];
+      const allSchools =
+        settingsRes.schools && settingsRes.schools.length > 0
+          ? settingsRes.schools
+          : [
+              "School of Programming",
+              "School of Business",
+              "School of Finance",
+              "School of Education",
+              "School of Second Chance",
+              "School of Design",
+            ];
 
-      const filteredSchools = allSchools.filter(s => !settingsRes.inactiveSchools?.includes(s));
+      const filteredSchools = allSchools.filter(
+        (s) => !settingsRes.inactiveSchools?.includes(s),
+      );
       setSchools(filteredSchools);
       setSchoolsWithModules(filteredSchools);
 
@@ -264,10 +384,21 @@ const JobForm = () => {
         setCouncilPostsList(settingsRes.councilPosts);
       } else {
         // Fallback default list
-        setCouncilPostsList(['General Secretary', 'Technical Secretary', 'Cultural Secretary', 'Sports Secretary', 'Health Secretary', 'Mess Secretary', 'Maintenance Secretary', 'Discipline Secretary', 'Academic Secretary', 'Placement Coordinator']);
+        setCouncilPostsList([
+          "General Secretary",
+          "Technical Secretary",
+          "Cultural Secretary",
+          "Sports Secretary",
+          "Health Secretary",
+          "Mess Secretary",
+          "Maintenance Secretary",
+          "Discipline Secretary",
+          "Academic Secretary",
+          "Placement Coordinator",
+        ]);
       }
     } catch (error) {
-      console.error('Error fetching campuses:', error);
+      console.error("Error fetching campuses:", error);
     }
   };
 
@@ -276,7 +407,7 @@ const JobForm = () => {
       const response = await settingsAPI.getSettings();
       setRoleCategories(response.data.data.roleCategories || []);
     } catch (error) {
-      console.error('Error fetching role categories:', error);
+      console.error("Error fetching role categories:", error);
     }
   };
 
@@ -285,33 +416,66 @@ const JobForm = () => {
       // Pass eligibility details including new fields
       const params = {
         ...formData.eligibility,
-        schools: formData.eligibility.schools?.length > 0 ? formData.eligibility.schools.join(',') : undefined,
-        campuses: formData.eligibility.campuses?.length > 0 ? formData.eligibility.campuses.join(',') : undefined,
-        houses: formData.eligibility.houses?.length > 0 ? formData.eligibility.houses.join(',') : undefined,
-        certifications: formData.eligibility.certifications?.length > 0 ? formData.eligibility.certifications.join(',') : undefined,
+        schools:
+          formData.eligibility.schools?.length > 0
+            ? formData.eligibility.schools.join(",")
+            : undefined,
+        campuses:
+          formData.eligibility.campuses?.length > 0
+            ? formData.eligibility.campuses.join(",")
+            : undefined,
+        houses:
+          formData.eligibility.houses?.length > 0
+            ? formData.eligibility.houses.join(",")
+            : undefined,
+        certifications:
+          formData.eligibility.certifications?.length > 0
+            ? formData.eligibility.certifications.join(",")
+            : undefined,
         // Council Post (taking the first one for count estimation if multiple, as API currently handles one 'councilPost' param simplicity)
         // ideally backend should support multiple, but for now let's send the first requirement if exists
         councilPost: formData.eligibility.councilPosts?.[0]?.post || undefined,
-        minCouncilMonths: formData.eligibility.councilPosts?.[0]?.minMonths || undefined,
+        minCouncilMonths:
+          formData.eligibility.councilPosts?.[0]?.minMonths || undefined,
         // Academic requirements - send as booleans and values
-        tenthRequired: formData.eligibility.tenthGrade?.required ? 'true' : undefined,
-        tenthMinPercentage: formData.eligibility.tenthGrade?.minPercentage || undefined,
-        twelfthRequired: formData.eligibility.twelfthGrade?.required ? 'true' : undefined,
-        twelfthMinPercentage: formData.eligibility.twelfthGrade?.minPercentage || undefined,
-        higherEducationRequired: formData.eligibility.higherEducation?.required ? 'true' : undefined,
-        higherEducationMinPercentage: formData.eligibility.higherEducation?.minPercentage || undefined,
+        tenthRequired: formData.eligibility.tenthGrade?.required
+          ? "true"
+          : undefined,
+        tenthMinPercentage:
+          formData.eligibility.tenthGrade?.minPercentage || undefined,
+        twelfthRequired: formData.eligibility.twelfthGrade?.required
+          ? "true"
+          : undefined,
+        twelfthMinPercentage:
+          formData.eligibility.twelfthGrade?.minPercentage || undefined,
+        higherEducationRequired: formData.eligibility.higherEducation?.required
+          ? "true"
+          : undefined,
+        higherEducationMinPercentage:
+          formData.eligibility.higherEducation?.minPercentage || undefined,
         // Required Skills - send as JSON string for complex data structure
-        requiredSkills: formData.requiredSkills?.length > 0 ? JSON.stringify(formData.requiredSkills) : undefined,
+        requiredSkills:
+          formData.requiredSkills?.length > 0
+            ? JSON.stringify(formData.requiredSkills)
+            : undefined,
         // Ghar Dashboard Filters
         minGharAttendance: formData.eligibility.minGharAttendance || undefined,
-        requiredGharStatuses: formData.eligibility.requiredGharStatuses?.length > 0 ? formData.eligibility.requiredGharStatuses.join(',') : undefined,
-        minReadTheoryLevel: formData.eligibility.minReadTheoryLevel || undefined,
-        minAtCoderRating: formData.eligibility.minAtCoderRating || undefined
+        requiredGharStatuses:
+          formData.eligibility.requiredGharStatuses?.length > 0
+            ? formData.eligibility.requiredGharStatuses.join(",")
+            : undefined,
+        minReadTheoryLevel:
+          formData.eligibility.minReadTheoryLevel || undefined,
+        minAtCoderRating: formData.eligibility.minAtCoderRating || undefined,
       };
 
       // Clean undefined/null/empty values
-      Object.keys(params).forEach(key => {
-        if (params[key] === undefined || params[key] === null || params[key] === '') {
+      Object.keys(params).forEach((key) => {
+        if (
+          params[key] === undefined ||
+          params[key] === null ||
+          params[key] === ""
+        ) {
           delete params[key];
         }
       });
@@ -332,48 +496,55 @@ const JobForm = () => {
       setFormData({
         ...job,
         company: {
-          name: job.company?.name || '',
-          website: job.company?.website || '',
-          description: job.company?.description || '',
-          logo: job.company?.logo || ''
+          name: job.company?.name || "",
+          website: job.company?.website || "",
+          description: job.company?.description || "",
+          logo: job.company?.logo || "",
         },
         salary: {
-          min: job.salary?.min ?? '',
-          max: job.salary?.max ?? '',
-          currency: job.salary?.currency || 'INR'
+          min: job.salary?.min ?? "",
+          max: job.salary?.max ?? "",
+          currency: job.salary?.currency || "INR",
         },
-        applicationDeadline: job.applicationDeadline ? new Date(job.applicationDeadline).toISOString().split('T')[0] : '',
+        applicationDeadline: job.applicationDeadline
+          ? new Date(job.applicationDeadline).toISOString().split("T")[0]
+          : "",
         eligibility: {
           ...job.eligibility,
-          minCgpa: job.eligibility?.minCgpa ?? '',
-          minAttendance: job.eligibility?.minAttendance ?? '',
-          minMonthsAtNavgurukul: job.eligibility?.minMonthsAtNavgurukul ?? '',
-          hometown: job.eligibility?.hometown || '',
-          homestate: job.eligibility?.homestate || '',
+          minCgpa: job.eligibility?.minCgpa ?? "",
+          minAttendance: job.eligibility?.minAttendance ?? "",
+          minMonthsAtNavgurukul: job.eligibility?.minMonthsAtNavgurukul ?? "",
+          hometown: job.eligibility?.hometown || "",
+          homestate: job.eligibility?.homestate || "",
           tenthGrade: {
             required: job.eligibility?.tenthGrade?.required || false,
-            minPercentage: job.eligibility?.tenthGrade?.minPercentage ?? ''
+            minPercentage: job.eligibility?.tenthGrade?.minPercentage ?? "",
           },
           twelfthGrade: {
             required: job.eligibility?.twelfthGrade?.required || false,
-            minPercentage: job.eligibility?.twelfthGrade?.minPercentage ?? ''
+            minPercentage: job.eligibility?.twelfthGrade?.minPercentage ?? "",
           },
           higherEducation: {
             required: job.eligibility?.higherEducation?.required || false,
-            acceptedDegrees: job.eligibility?.higherEducation?.acceptedDegrees || [],
-            level: job.eligibility?.higherEducation?.level || '',
-            minPercentage: job.eligibility?.higherEducation?.minPercentage ?? ''
+            acceptedDegrees:
+              job.eligibility?.higherEducation?.acceptedDegrees || [],
+            level: job.eligibility?.higherEducation?.level || "",
+            minPercentage:
+              job.eligibility?.higherEducation?.minPercentage ?? "",
           },
-          minGharAttendance: job.eligibility?.minGharAttendance ?? '',
+          minGharAttendance: job.eligibility?.minGharAttendance ?? "",
           requiredGharStatuses: job.eligibility?.requiredGharStatuses || [],
-          minReadTheoryLevel: job.eligibility?.minReadTheoryLevel ?? '',
-          minAtCoderRating: job.eligibility?.minAtCoderRating ?? ''
+          minReadTheoryLevel: job.eligibility?.minReadTheoryLevel ?? "",
+          minAtCoderRating: job.eligibility?.minAtCoderRating ?? "",
         },
-        interviewRounds: job.interviewRounds?.length > 0 ? job.interviewRounds : [{ name: 'Round 1', type: 'other' }]
+        interviewRounds:
+          job.interviewRounds?.length > 0
+            ? job.interviewRounds
+            : [{ name: "Round 1", type: "other" }],
       });
     } catch (error) {
-      toast.error('Failed to load job details');
-      navigate('/coordinator/jobs');
+      toast.error("Failed to load job details");
+      navigate("/coordinator/jobs");
     } finally {
       setLoading(false);
     }
@@ -383,8 +554,13 @@ const JobForm = () => {
     e.preventDefault();
     setSaving(true);
 
-    if (!formData.title || !formData.company.name || !formData.location || !formData.applicationDeadline) {
-      toast.error('Please fill in all required fields');
+    if (
+      !formData.title ||
+      !formData.company.name ||
+      !formData.location ||
+      !formData.applicationDeadline
+    ) {
+      toast.error("Please fill in all required fields");
       setSaving(false);
       return;
     }
@@ -393,9 +569,11 @@ const JobForm = () => {
       const payload = { ...formData };
 
       // Convert monthly salary to annual before saving to database
-      if (salaryPeriod === 'monthly') {
-        if (payload.salary.min) payload.salary.min = Number(payload.salary.min) * 12;
-        if (payload.salary.max) payload.salary.max = Number(payload.salary.max) * 12;
+      if (salaryPeriod === "monthly") {
+        if (payload.salary.min)
+          payload.salary.min = Number(payload.salary.min) * 12;
+        if (payload.salary.max)
+          payload.salary.max = Number(payload.salary.max) * 12;
       }
 
       if (!payload.salary.min) delete payload.salary.min;
@@ -406,26 +584,26 @@ const JobForm = () => {
         try {
           await settingsAPI.addCompanyOption({
             name: formData.company.name,
-            website: formData.company.website || '',
-            description: formData.company.description || '',
-            logo: formData.company.logo || ''
+            website: formData.company.website || "",
+            description: formData.company.description || "",
+            logo: formData.company.logo || "",
           });
         } catch (err) {
-          console.error('Failed to sync company details to master list', err);
+          console.error("Failed to sync company details to master list", err);
           // Don't block job saving if master list sync fails
         }
       }
 
       if (isEdit) {
         await jobAPI.updateJob(id, payload);
-        toast.success('Job updated successfully');
+        toast.success("Job updated successfully");
       } else {
         await jobAPI.createJob(payload);
-        toast.success('Job created successfully');
+        toast.success("Job created successfully");
       }
-      navigate('/coordinator/jobs');
+      navigate("/coordinator/jobs");
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to save job');
+      toast.error(error.response?.data?.message || "Failed to save job");
     } finally {
       setSaving(false);
     }
@@ -435,7 +613,7 @@ const JobForm = () => {
     const baseUrl = window.location.origin;
     const shareUrl = `${baseUrl}/student/jobs/${id}`;
     navigator.clipboard.writeText(shareUrl);
-    toast.success('Shareable student link copied to clipboard!');
+    toast.success("Shareable student link copied to clipboard!");
   };
 
   const handleBroadcast = async () => {
@@ -443,9 +621,9 @@ const JobForm = () => {
     setBroadcasting(true);
     try {
       await jobAPI.broadcastJob(id);
-      toast.success('Job broadcasted to Discord!');
+      toast.success("Job broadcasted to Discord!");
     } catch (err) {
-      toast.error('Failed to broadcast job');
+      toast.error("Failed to broadcast job");
       console.error(err);
     } finally {
       setBroadcasting(false);
@@ -455,7 +633,8 @@ const JobForm = () => {
   // Helper to add/remove list items
   const addListItem = (field) => {
     // For structured list types, add object defaults; otherwise add empty string
-    const defaultItem = field === 'interviewRounds' ? { name: '', type: 'other' } : '';
+    const defaultItem =
+      field === "interviewRounds" ? { name: "", type: "other" } : "";
     setFormData({ ...formData, [field]: [...formData[field], defaultItem] });
   };
 
@@ -463,12 +642,16 @@ const JobForm = () => {
     const list = [...formData[field]];
 
     // Check if value contains newlines (from paste)
-    if (typeof value === 'string' && (value.includes('\n') || value.includes('\r'))) {
-      const parts = value.split(/\r?\n/)
-        .map(p => p.trim())
+    if (
+      typeof value === "string" &&
+      (value.includes("\n") || value.includes("\r"))
+    ) {
+      const parts = value
+        .split(/\r?\n/)
+        .map((p) => p.trim())
         // Clean up common bullet points: •, -, *, 1. etc
-        .map(p => p.replace(/^[•\-\*\d+\.]\s*/, ''))
-        .filter(p => p !== '');
+        .map((p) => p.replace(/^[•\-\*\d+\.]\s*/, ""))
+        .filter((p) => p !== "");
 
       if (parts.length > 1) {
         list.splice(index, 1, ...parts);
@@ -489,16 +672,23 @@ const JobForm = () => {
 
   // Skill handlers
   const toggleSkill = (skillId) => {
-    const exists = formData.requiredSkills.find(s => s.skill === skillId || s.skill?._id === skillId);
+    const exists = formData.requiredSkills.find(
+      (s) => s.skill === skillId || s.skill?._id === skillId,
+    );
     if (exists) {
       setFormData({
         ...formData,
-        requiredSkills: formData.requiredSkills.filter(s => s.skill !== skillId && s.skill?._id !== skillId)
+        requiredSkills: formData.requiredSkills.filter(
+          (s) => s.skill !== skillId && s.skill?._id !== skillId,
+        ),
       });
     } else {
       setFormData({
         ...formData,
-        requiredSkills: [...formData.requiredSkills, { skill: skillId, proficiencyLevel: 1, mandatory: true }]
+        requiredSkills: [
+          ...formData.requiredSkills,
+          { skill: skillId, proficiencyLevel: 1, mandatory: true },
+        ],
       });
     }
   };
@@ -506,9 +696,11 @@ const JobForm = () => {
   const updateSkillProficiency = (skillId, level) => {
     setFormData({
       ...formData,
-      requiredSkills: formData.requiredSkills.map(s =>
-        (s.skill === skillId || s.skill?._id === skillId) ? { ...s, proficiencyLevel: level } : s
-      )
+      requiredSkills: formData.requiredSkills.map((s) =>
+        s.skill === skillId || s.skill?._id === skillId
+          ? { ...s, proficiencyLevel: level }
+          : s,
+      ),
     });
   };
 
@@ -518,8 +710,11 @@ const JobForm = () => {
       ...formData,
       eligibility: {
         ...formData.eligibility,
-        [type]: { ...formData.eligibility[type], required: !formData.eligibility[type]?.required }
-      }
+        [type]: {
+          ...formData.eligibility[type],
+          required: !formData.eligibility[type]?.required,
+        },
+      },
     });
   };
 
@@ -530,10 +725,14 @@ const JobForm = () => {
     try {
       const res = await jobAPI.parseJDFromUrl(jdUrl);
       setParsedSuggestion(res.data.data);
-      setAiParseInfo({ method: 'url', success: true });
-      toast.success('JD Parsed! Review suggestions below.');
+      setAiParseInfo({ method: "url", success: true });
+      toast.success("Analysis Complete! Review suggestions below.");
     } catch (error) {
-      toast.error('Failed to parse JD URL');
+      const msg =
+        error.response?.data?.message ||
+        "Failed to parse JD URL. The site may be protected or link is invalid.";
+      toast.error(msg, { duration: 5000 });
+      console.error("Parse JD URL Error:", error);
     } finally {
       setParsing(false);
     }
@@ -546,10 +745,14 @@ const JobForm = () => {
     try {
       const res = await jobAPI.parseJDFromPDF(file);
       setParsedSuggestion(res.data.data);
-      setAiParseInfo({ method: 'file', success: true });
-      toast.success('JD Parsed! Review suggestions below.');
+      setAiParseInfo({ method: "file", success: true });
+      toast.success("PDF Analyzed! Review suggestions below.");
     } catch (error) {
-      toast.error('Failed to parse PDF');
+      const msg =
+        error.response?.data?.message ||
+        "Failed to parse PDF. Please ensure it is a valid job description.";
+      toast.error(msg, { duration: 5000 });
+      console.error("Parse PDF Error:", error);
     } finally {
       setParsing(false);
     }
@@ -561,12 +764,15 @@ const JobForm = () => {
     try {
       const res = await jobAPI.parseJDFromText(jdRawText);
       setParsedSuggestion(res.data.data);
-      setAiParseInfo({ method: 'text', success: true });
-      toast.success('JD Parsed! Review suggestions below.');
+      setAiParseInfo({ method: "text", success: true });
+      toast.success("Text Analyzed! Review suggestions below.");
       setShowRawTextInput(false);
     } catch (error) {
-      console.error('Parse Raw Text Error:', error);
-      toast.error('Failed to parse JD text');
+      const msg =
+        error.response?.data?.message ||
+        "AI failed to analyze this text. Please check your AI quota or formatting.";
+      toast.error(msg, { duration: 5000 });
+      console.error("Parse Raw Text Error:", error);
     } finally {
       setParsing(false);
     }
@@ -578,72 +784,133 @@ const JobForm = () => {
     // Map suggested skills to system skills
     const mappedSkills = [];
     if (parsedSuggestion.suggestedSkills) {
-      parsedSuggestion.suggestedSkills.forEach(skillName => {
-        const existingSkill = allSkills.find(s => s.name.toLowerCase() === skillName.toLowerCase());
+      parsedSuggestion.suggestedSkills.forEach((skillName) => {
+        const existingSkill = allSkills.find(
+          (s) => s.name.toLowerCase() === skillName.toLowerCase(),
+        );
         if (existingSkill) {
           mappedSkills.push({
             skill: existingSkill._id,
             proficiencyLevel: 1,
-            mandatory: true
+            mandatory: true,
           });
         }
       });
     }
 
-    // Process custom requirements
-    let customReqs = formData.customRequirements || [];
-    if (parsedSuggestion.requirements && parsedSuggestion.requirements.length > 0) {
-      const parsedReqs = parsedSuggestion.requirements.map(req => ({
+    // Process custom requirements - CLEAR old ones first if we have new ones
+    let customReqs = [];
+    if (
+      parsedSuggestion.requirements &&
+      parsedSuggestion.requirements.length > 0
+    ) {
+      customReqs = parsedSuggestion.requirements.map((req) => ({
         requirement: req,
-        isMandatory: true
+        isMandatory: true,
       }));
-      customReqs = [...customReqs, ...parsedReqs].slice(0, 15);
     }
 
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       title: parsedSuggestion.title || prev.title,
       description: parsedSuggestion.description || prev.description,
+      roleCategory: parsedSuggestion.roleCategory || prev.roleCategory,
       company: {
         ...prev.company,
         name: parsedSuggestion.company?.name || prev.company.name,
-        website: parsedSuggestion.company?.website || prev.company.website
+        website: parsedSuggestion.company?.website || prev.company.website,
       },
       location: parsedSuggestion.location || prev.location,
       jobType: parsedSuggestion.jobType || prev.jobType,
+      duration: parsedSuggestion.duration || prev.duration,
       salary: {
         ...prev.salary,
         min: parsedSuggestion.salary?.min || prev.salary.min,
-        max: parsedSuggestion.salary?.max || prev.salary.max
+        max: parsedSuggestion.salary?.max || prev.salary.max,
       },
-      // Merge unique skills
-      requiredSkills: [...new Map([...prev.requiredSkills, ...mappedSkills].map(item => [item.skill, item])).values()],
-      customRequirements: customReqs
+      eligibility: {
+        ...prev.eligibility,
+        tenthGrade: {
+          ...prev.eligibility.tenthGrade,
+          required:
+            parsedSuggestion.eligibility?.tenthGrade?.required ??
+            prev.eligibility.tenthGrade.required,
+          minPercentage:
+            parsedSuggestion.eligibility?.tenthGrade?.minPercentage ??
+            prev.eligibility.tenthGrade.minPercentage,
+        },
+        twelfthGrade: {
+          ...prev.eligibility.twelfthGrade,
+          required:
+            parsedSuggestion.eligibility?.twelfthGrade?.required ??
+            prev.eligibility.twelfthGrade.required,
+          minPercentage:
+            parsedSuggestion.eligibility?.twelfthGrade?.minPercentage ??
+            prev.eligibility.twelfthGrade.minPercentage,
+        },
+        higherEducation: {
+          ...prev.eligibility.higherEducation,
+          required:
+            parsedSuggestion.eligibility?.higherEducation?.required ??
+            prev.eligibility.higherEducation.required,
+          level:
+            parsedSuggestion.eligibility?.higherEducation?.level ??
+            prev.eligibility.higherEducation.level,
+          acceptedDegrees:
+            parsedSuggestion.eligibility?.higherEducation?.acceptedDegrees
+              ?.length > 0
+              ? parsedSuggestion.eligibility.higherEducation.acceptedDegrees
+              : prev.eligibility.higherEducation.acceptedDegrees,
+        },
+        femaleOnly:
+          parsedSuggestion.eligibility?.femaleOnly ??
+          prev.eligibility.femaleOnly,
+        englishWriting:
+          parsedSuggestion.eligibility?.englishProficiency?.writing ??
+          prev.eligibility.englishWriting,
+        englishSpeaking:
+          parsedSuggestion.eligibility?.englishProficiency?.speaking ??
+          prev.eligibility.englishSpeaking,
+      },
+      // Overwrite skills and requirements (replace instead of merge)
+      requiredSkills: mappedSkills,
+      customRequirements: customReqs,
+      // Clear legacy simple lists
+      requirements: [],
+      responsibilities: [],
     }));
+
     setParsedSuggestion(null);
-    toast.success('Applied suggestions to form');
+    toast.success("Applied suggestions to form");
   };
 
   // Helper for modules
   const getAvailableModules = () => {
     if (formData.eligibility.schools.length !== 1) return [];
     const school = formData.eligibility.schools[0];
-    const cleanName = Object.keys(schoolModules).find(k => school.includes(k));
+    const cleanName = Object.keys(schoolModules).find((k) =>
+      school.includes(k),
+    );
     return cleanName ? schoolModules[cleanName].modules : [];
   };
 
   const isHierarchical = () => {
     if (formData.eligibility.schools.length !== 1) return false;
     const school = formData.eligibility.schools[0];
-    const cleanName = Object.keys(schoolModules).find(k => school.includes(k));
-    return cleanName ? schoolModules[cleanName].type === 'hierarchical' : false;
+    const cleanName = Object.keys(schoolModules).find((k) =>
+      school.includes(k),
+    );
+    return cleanName ? schoolModules[cleanName].type === "hierarchical" : false;
   };
 
   // Custom Requirements Handlers
   const addCustomRequirement = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      customRequirements: [...(prev.customRequirements || []), { requirement: '', isMandatory: true }]
+      customRequirements: [
+        ...(prev.customRequirements || []),
+        { requirement: "", isMandatory: true },
+      ],
     }));
   };
 
@@ -651,29 +918,34 @@ const JobForm = () => {
     const updated = [...(formData.customRequirements || [])];
 
     // Check if value contains newlines (from paste)
-    if (field === 'requirement' && typeof value === 'string' && (value.includes('\n') || value.includes('\r'))) {
-      const parts = value.split(/\r?\n/)
-        .map(p => p.trim())
-        .map(p => p.replace(/^[•\-\*\d+\.]\s*/, ''))
-        .filter(p => p !== '');
+    if (
+      field === "requirement" &&
+      typeof value === "string" &&
+      (value.includes("\n") || value.includes("\r"))
+    ) {
+      const parts = value
+        .split(/\r?\n/)
+        .map((p) => p.trim())
+        .map((p) => p.replace(/^[•\-\*\d+\.]\s*/, ""))
+        .filter((p) => p !== "");
 
       if (parts.length > 1) {
         const isMandatory = updated[index]?.isMandatory ?? true;
-        const newReqs = parts.map(p => ({ requirement: p, isMandatory }));
+        const newReqs = parts.map((p) => ({ requirement: p, isMandatory }));
         updated.splice(index, 1, ...newReqs);
-        setFormData(prev => ({ ...prev, customRequirements: updated }));
+        setFormData((prev) => ({ ...prev, customRequirements: updated }));
         return;
       }
     }
 
     updated[index] = { ...updated[index], [field]: value };
-    setFormData(prev => ({ ...prev, customRequirements: updated }));
+    setFormData((prev) => ({ ...prev, customRequirements: updated }));
   };
 
   const removeCustomRequirement = (index) => {
     const updated = [...(formData.customRequirements || [])];
     updated.splice(index, 1);
-    setFormData(prev => ({ ...prev, customRequirements: updated }));
+    setFormData((prev) => ({ ...prev, customRequirements: updated }));
   };
 
   if (loading) return <LoadingSpinner />;
@@ -700,11 +972,13 @@ const JobForm = () => {
     formData.eligibility.englishSpeaking ||
     formData.eligibility.englishWriting ||
     // Job readiness
-    (formData.eligibility.readinessRequirement && formData.eligibility.readinessRequirement !== 'no') ||
+    (formData.eligibility.readinessRequirement &&
+      formData.eligibility.readinessRequirement !== "no") ||
     // Council posts
-    (formData.eligibility.councilPosts?.length > 0 && formData.eligibility.councilPosts.some(cp => cp.post)) ||
+    (formData.eligibility.councilPosts?.length > 0 &&
+      formData.eligibility.councilPosts.some((cp) => cp.post)) ||
     // Ghar Status
-    (formData.eligibility.requiredGharStatuses?.length > 0) ||
+    formData.eligibility.requiredGharStatuses?.length > 0 ||
     // Certifications
     formData.eligibility.certifications?.length > 0 ||
     // Required Skills
@@ -715,19 +989,26 @@ const JobForm = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/coordinator/jobs')}
+            onClick={() => navigate("/coordinator/jobs")}
             className="p-2 hover:bg-gray-100 rounded-full transition"
           >
             <ArrowLeft className="w-6 h-6 text-gray-600" />
           </button>
-          <h1 className="text-2xl font-bold text-gray-800">{isEdit ? 'Edit Job' : 'Create New Job'}</h1>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {isEdit ? "Edit Job" : "Create New Job"}
+          </h1>
         </div>
         <div className="flex gap-3">
           <button
-            onClick={() => setFormData({ ...formData, status: formData.status === 'published' ? 'draft' : 'published' })}
-            className={`btn ${formData.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} `}
+            onClick={() =>
+              setFormData({
+                ...formData,
+                status: formData.status === "published" ? "draft" : "published",
+              })
+            }
+            className={`btn ${formData.status === "published" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"} `}
           >
-            {formData.status === 'published' ? 'Published' : 'Draft'}
+            {formData.status === "published" ? "Published" : "Draft"}
           </button>
           {isEdit && (
             <button
@@ -749,7 +1030,9 @@ const JobForm = () => {
               title="Broadcast to Discord"
             >
               <Sparkles className="w-4 h-4" />
-              <span className="hidden sm:inline">{broadcasting ? 'Broadcasting...' : 'Broadcast'}</span>
+              <span className="hidden sm:inline">
+                {broadcasting ? "Broadcasting..." : "Broadcast"}
+              </span>
             </button>
           )}
           <button
@@ -758,13 +1041,12 @@ const JobForm = () => {
             className="btn btn-primary flex items-center gap-2"
           >
             <Save className="w-5 h-5" />
-            {saving ? 'Saving...' : 'Save Job'}
+            {saving ? "Saving..." : "Save Job"}
           </button>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-
         {/* AI Parse Section */}
         {!isEdit && (
           <div className="card bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-100">
@@ -774,7 +1056,9 @@ const JobForm = () => {
                 <Sparkles className="w-6 h-6 text-indigo-600" />
               </div>
               <div className="flex-1">
-                <h2 className="text-lg font-semibold text-indigo-900 mb-1">Auto-fill with AI</h2>
+                <h2 className="text-lg font-semibold text-indigo-900 mb-1">
+                  Auto-fill with AI
+                </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="flex gap-2">
                     <div className="relative flex-1">
@@ -798,8 +1082,15 @@ const JobForm = () => {
                   <div className="flex items-center gap-2">
                     <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-dashed border-indigo-300 rounded cursor-pointer hover:bg-white/50 transition bg-white">
                       <Upload className="w-4 h-4 text-indigo-600" />
-                      <span className="text-sm text-indigo-700 font-medium">Upload PDF</span>
-                      <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
+                      <span className="text-sm text-indigo-700 font-medium">
+                        Upload PDF
+                      </span>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
                     </label>
                   </div>
                   <div className="flex items-center gap-2">
@@ -856,42 +1147,217 @@ const JobForm = () => {
             {parsedSuggestion && (
               <div className="mt-4 p-4 bg-white rounded border border-indigo-100 animate-slideDown">
                 <div className="flex justify-between items-start mb-3">
-                  <h3 className="font-medium">Parsed Information</h3>
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-indigo-500" />
+                    AI Analysis Result
+                  </h3>
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => setParsedSuggestion(null)} className="text-gray-500 text-sm">Discard</button>
-                    <button type="button" onClick={applySuggestion} className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">Apply</button>
+                    <button
+                      type="button"
+                      onClick={() => setParsedSuggestion(null)}
+                      className="text-gray-500 text-sm hover:text-gray-700"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={applySuggestion}
+                      className="px-4 py-1.5 bg-indigo-600 text-white rounded text-sm font-semibold hover:bg-indigo-700 shadow-sm transition-all focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      Apply to Form
+                    </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-4 gap-x-6 text-sm mb-4">
                   <div>
-                    <p className="text-gray-400 text-[10px] uppercase font-bold">Job Title</p>
-                    <p className="font-medium truncate" title={parsedSuggestion.title}>{parsedSuggestion.title || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-[10px] uppercase font-bold">Company</p>
-                    <p className="font-medium truncate" title={parsedSuggestion.company?.name}>{parsedSuggestion.company?.name || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-[10px] uppercase font-bold">Location</p>
-                    <p className="font-medium truncate" title={parsedSuggestion.location}>{parsedSuggestion.location || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-[10px] uppercase font-bold">Salary (Annual)</p>
-                    <p className="font-medium">
-                      {parsedSuggestion.salary?.min ? `₹${(parsedSuggestion.salary.min / 100000).toFixed(1)}L` : 'N/A'}
-                      {parsedSuggestion.salary?.max && parsedSuggestion.salary.max !== parsedSuggestion.salary.min ? ` - ₹${(parsedSuggestion.salary.max / 100000).toFixed(1)}L` : ''}
+                    <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+                      Role Title
                     </p>
+                    <p
+                      className="font-semibold text-gray-800 truncate"
+                      title={parsedSuggestion.title}
+                    >
+                      {parsedSuggestion.title || "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+                      Company
+                    </p>
+                    <p
+                      className="font-semibold text-gray-800 truncate"
+                      title={parsedSuggestion.company?.name}
+                    >
+                      {parsedSuggestion.company?.name || "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+                      Location
+                    </p>
+                    <p
+                      className="font-semibold text-gray-800 truncate"
+                      title={parsedSuggestion.location}
+                    >
+                      {parsedSuggestion.location || "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+                      Salary (Annual)
+                    </p>
+                    <p className="font-semibold text-gray-800">
+                      {parsedSuggestion.salary?.min
+                        ? `₹${(parsedSuggestion.salary.min / 100000).toFixed(1)}L`
+                        : "N/A"}
+                      {parsedSuggestion.salary?.max &&
+                      parsedSuggestion.salary.max !==
+                        parsedSuggestion.salary.min
+                        ? ` - ₹${(parsedSuggestion.salary.max / 100000).toFixed(1)}L`
+                        : ""}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+                      Job Type
+                    </p>
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-bold uppercase">
+                      {parsedSuggestion.jobType?.replace("_", " ") || "N/A"}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+                      Experience
+                    </p>
+                    <p className="font-semibold text-gray-800 capitalize">
+                      {parsedSuggestion.experienceLevel || "N/A"}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+                      Eligibility Found
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {parsedSuggestion.eligibility?.tenthGrade?.required && (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] border border-blue-100">
+                          10th:{" "}
+                          {
+                            parsedSuggestion.eligibility.tenthGrade
+                              .minPercentage
+                          }
+                          %
+                        </span>
+                      )}
+                      {parsedSuggestion.eligibility?.twelfthGrade?.required && (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] border border-blue-100">
+                          12th:{" "}
+                          {
+                            parsedSuggestion.eligibility.twelfthGrade
+                              .minPercentage
+                          }
+                          %
+                        </span>
+                      )}
+                      {parsedSuggestion.eligibility?.higherEducation
+                        ?.required && (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] border border-blue-100 uppercase">
+                          Degree:{" "}
+                          {parsedSuggestion.eligibility.higherEducation.level}
+                        </span>
+                      )}
+                      {parsedSuggestion.eligibility?.femaleOnly && (
+                        <span className="px-2 py-0.5 bg-pink-50 text-pink-700 rounded text-[10px] border border-pink-100">
+                          Female Only
+                        </span>
+                      )}
+                      {(parsedSuggestion.eligibility?.englishProficiency
+                        ?.writing ||
+                        parsedSuggestion.eligibility?.englishProficiency
+                          ?.speaking) && (
+                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] border border-purple-100">
+                          English:{" "}
+                          {parsedSuggestion.eligibility.englishProficiency
+                            .speaking ||
+                            parsedSuggestion.eligibility.englishProficiency
+                              .writing}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Requirements & Responsibilities Preview */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 py-3 border-t border-indigo-50">
+                  <div className="space-y-3">
+                    <p className="text-gray-400 text-[10px] uppercase font-bold mb-2 tracking-wider">
+                      Key Requirements
+                    </p>
+                    <ul className="text-[11px] space-y-1.5 text-gray-700 list-disc pl-4">
+                      {(showAllRequirements
+                        ? parsedSuggestion.requirements
+                        : parsedSuggestion.requirements?.slice(0, 5)
+                      ).map((req, i) => <li key={i}>{req}</li>) || (
+                        <li className="italic text-gray-400">None found</li>
+                      )}
+                      {parsedSuggestion.requirements?.length > 5 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowAllRequirements(!showAllRequirements)
+                          }
+                          className="text-indigo-500 font-bold hover:underline mt-1"
+                        >
+                          {showAllRequirements
+                            ? "Show Less"
+                            : `+${parsedSuggestion.requirements.length - 5} more items`}
+                        </button>
+                      )}
+                    </ul>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-gray-400 text-[10px] uppercase font-bold mb-2 tracking-wider">
+                      Responsibilities
+                    </p>
+                    <ul className="text-[11px] space-y-1.5 text-gray-700 list-disc pl-4">
+                      {(showAllResponsibilities
+                        ? parsedSuggestion.responsibilities
+                        : parsedSuggestion.responsibilities?.slice(0, 5)
+                      ).map((resp, i) => <li key={i}>{resp}</li>) || (
+                        <li className="italic text-gray-400">None found</li>
+                      )}
+                      {parsedSuggestion.responsibilities?.length > 5 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowAllResponsibilities(!showAllResponsibilities)
+                          }
+                          className="text-indigo-500 font-bold hover:underline mt-1"
+                        >
+                          {showAllResponsibilities
+                            ? "Show Less"
+                            : `+${parsedSuggestion.responsibilities.length - 5} more items`}
+                        </button>
+                      )}
+                    </ul>
                   </div>
                 </div>
 
                 {parsedSuggestion.suggestedSkills?.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-indigo-50">
-                    <p className="text-gray-400 text-[10px] uppercase font-bold mb-1.5">Skills Found</p>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold mb-1.5 tracking-wider">
+                      Skills Recognized
+                    </p>
                     <div className="flex flex-wrap gap-1.5">
                       {parsedSuggestion.suggestedSkills.map((skill, i) => {
-                        const isMatch = allSkills.some(s => s.name.toLowerCase() === skill.toLowerCase());
+                        const isMatch = allSkills.some(
+                          (s) => s.name.toLowerCase() === skill.toLowerCase(),
+                        );
                         return (
-                          <span key={i} className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${isMatch ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                          <span
+                            key={i}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${isMatch ? "bg-indigo-100 text-indigo-700 border border-indigo-200" : "bg-gray-50 text-gray-400 border border-gray-100"}`}
+                          >
                             {skill}
                           </span>
                         );
@@ -909,11 +1375,15 @@ const JobForm = () => {
           <h2 className="text-lg font-semibold mb-4">Basic Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Job Title *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Job Title *
+              </label>
               <input
                 type="text"
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, title: e.target.value })
+                }
                 placeholder="e.g., Software Engineer"
                 required
               />
@@ -925,18 +1395,27 @@ const JobForm = () => {
                 label="Company Name"
                 required
                 placeholder="e.g. Google, Microsoft"
-                options={availableCompanies.map(c => c.name)}
+                options={availableCompanies.map((c) => c.name)}
                 value={formData.company.name}
                 onChange={(val) => {
-                  const company = availableCompanies.find(c => c.name === val);
-                  setFormData(prev => ({
+                  const companyData = availableCompanies.find(
+                    (c) => c.name === val,
+                  );
+                  const primaryPoc =
+                    companyData?.pocs?.find((p) => p.isPrimary) ||
+                    companyData?.pocs?.[0] ||
+                    {};
+                  setFormData((prev) => ({
                     ...prev,
                     company: {
                       name: val,
-                      website: company?.website || '',
-                      description: company?.description || '',
-                      logo: company?.logo || ''
-                    }
+                      website: companyData?.website || "",
+                      description: companyData?.description || "",
+                      logo: companyData?.logo || "",
+                      pocName: primaryPoc.name || "",
+                      pocContact: primaryPoc.contact || "",
+                      pocEmail: primaryPoc.email || "",
+                    },
                   }));
                 }}
                 onAdd={handleAddCompany}
@@ -945,7 +1424,9 @@ const JobForm = () => {
 
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Company Website</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Company Website
+                </label>
                 <input
                   type="url"
                   value={formData.company.website}
@@ -953,26 +1434,43 @@ const JobForm = () => {
                     const website = e.target.value;
                     let logo = formData.company.logo;
 
-                    // Only try to fetch favicon if website contains a dot and is not just "www." or similar
-                    if (website && website.includes('.') && website.length > 5 && !logo) {
+                    if (
+                      website &&
+                      website.includes(".") &&
+                      website.length > 5 &&
+                      !logo
+                    ) {
                       try {
-                        const domain = website.replace(/^https?:\/\//, '').split('/')[0];
-                        if (domain && domain.includes('.')) {
+                        const domain = website
+                          .replace(/^https?:\/\//, "")
+                          .split("/")[0];
+                        if (domain && domain.includes(".")) {
                           logo = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
                         }
-                      } catch (e) { /* ignore */ }
+                      } catch (e) {
+                        /* ignore */
+                      }
                     }
 
-                    setFormData({ ...formData, company: { ...formData.company, website, logo } });
+                    setFormData({
+                      ...formData,
+                      company: { ...formData.company, website, logo },
+                    });
                   }}
                   placeholder="https://..."
                 />
               </div>
               <div className="w-20">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Logo
+                </label>
                 <div className="w-full h-[38px] flex items-center justify-center bg-gray-50 border rounded-lg overflow-hidden">
                   {formData.company.logo ? (
-                    <img src={formData.company.logo} alt="Logo" className="w-6 h-6 object-contain" />
+                    <img
+                      src={formData.company.logo}
+                      alt="Logo"
+                      className="w-6 h-6 object-contain"
+                    />
                   ) : (
                     <Building className="w-4 h-4 text-gray-400" />
                   )}
@@ -980,35 +1478,150 @@ const JobForm = () => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Coordinator (Lead)</label>
-              <select
-                value={formData.coordinator || ''}
-                onChange={(e) => setFormData({ ...formData, coordinator: e.target.value || null })}
-              >
-                <option value="">None (Unassigned)</option>
-                {coordinators.map(c => (
-                  <option key={c._id} value={c._id}>{c.firstName} {c.lastName} {c.email ? `(${c.email})` : ''}</option>
-                ))}
-              </select>
+            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+              <div className="md:col-span-3 flex items-center justify-between">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Users className="w-3 h-3" />
+                  Company Point of Contact (PoC)
+                </p>
+                {availableCompanies.find(
+                  (c) => c.name === formData.company.name,
+                )?.pocs?.length > 1 && (
+                  <select
+                    className="text-[10px] py-1 px-2 h-auto w-auto border-gray-200"
+                    onChange={(e) => {
+                      const company = availableCompanies.find(
+                        (c) => c.name === formData.company.name,
+                      );
+                      const poc = company.pocs.find(
+                        (p) => p.name === e.target.value,
+                      );
+                      if (poc) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          company: {
+                            ...prev.company,
+                            pocName: poc.name,
+                            pocContact: poc.contact,
+                            pocEmail: poc.email,
+                          },
+                        }));
+                      }
+                    }}
+                  >
+                    <option value="">Switch to other PoC...</option>
+                    {availableCompanies
+                      .find((c) => c.name === formData.company.name)
+                      .pocs.map((p, i) => (
+                        <option key={i} value={p.name}>
+                          {p.name} ({p.role || "PoC"})
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  PoC Name
+                </label>
+                <input
+                  type="text"
+                  className="bg-white"
+                  placeholder="Name"
+                  value={formData.company.pocName || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      company: { ...formData.company, pocName: e.target.value },
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  PoC Contact No.
+                </label>
+                <input
+                  type="text"
+                  className="bg-white"
+                  placeholder="Number"
+                  value={formData.company.pocContact || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      company: {
+                        ...formData.company,
+                        pocContact: e.target.value,
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  PoC Email
+                </label>
+                <input
+                  type="email"
+                  className="bg-white"
+                  placeholder="Email (Optional)"
+                  value={formData.company.pocEmail || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      company: {
+                        ...formData.company,
+                        pocEmail: e.target.value,
+                      },
+                    })
+                  }
+                />
+              </div>
             </div>
+
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company Description</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Company Description
+              </label>
               <textarea
                 rows={2}
                 value={formData.company.description}
-                onChange={(e) => setFormData({ ...formData, company: { ...formData.company, description: e.target.value } })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    company: {
+                      ...formData.company,
+                      description: e.target.value,
+                    },
+                  })
+                }
                 placeholder="Brief description of the company"
+                className="w-full"
+              />
+            </div>
+
+            <div className="md:col-span-2 mt-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Job Description *
+              </label>
+              <textarea
+                rows={4}
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+                placeholder="Detailed job description..."
+                required
+                className="w-full"
               />
             </div>
           </div>
         </div>
 
         {/* Job Details */}
-        <div className="card" >
+        <div className="card">
           <h2 className="text-lg font-semibold mb-4">Job Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
             {/* Location Autocomplete */}
             <div>
               <SearchableSelect
@@ -1023,23 +1636,33 @@ const JobForm = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Role Category</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Role Category
+              </label>
               <select
                 value={formData.roleCategory}
-                onChange={(e) => setFormData({ ...formData, roleCategory: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, roleCategory: e.target.value })
+                }
               >
                 <option value="">Select Category (Optional)</option>
                 {roleCategories.map((category) => (
-                  <option key={category} value={category}>{category}</option>
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Job Type</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Job Type
+              </label>
               <select
                 value={formData.jobType}
-                onChange={(e) => setFormData({ ...formData, jobType: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, jobType: e.target.value })
+                }
               >
                 <option value="full_time">Full Time</option>
                 <option value="part_time">Part Time</option>
@@ -1047,12 +1670,16 @@ const JobForm = () => {
                 <option value="contract">Contract</option>
               </select>
             </div>
-            {formData.jobType === 'internship' && (
+            {formData.jobType === "internship" && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duration
+                </label>
                 <select
                   value={formData.duration}
-                  onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, duration: e.target.value })
+                  }
                 >
                   <option value="">Select Duration</option>
                   <option value="1 month">1 Month</option>
@@ -1065,19 +1692,21 @@ const JobForm = () => {
             )}
             <div className="md:col-span-2">
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">Salary Details ({formData.salary.currency || 'INR'})</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Salary Details ({formData.salary.currency || "INR"})
+                </label>
                 <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200 shadow-sm">
                   <button
                     type="button"
-                    onClick={() => setSalaryPeriod('monthly')}
-                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${salaryPeriod === 'monthly' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => setSalaryPeriod("monthly")}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${salaryPeriod === "monthly" ? "bg-white text-primary-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                   >
                     Monthly
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSalaryPeriod('yearly')}
-                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${salaryPeriod === 'yearly' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => setSalaryPeriod("yearly")}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${salaryPeriod === "yearly" ? "bg-white text-primary-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                   >
                     Yearly
                   </button>
@@ -1086,7 +1715,8 @@ const JobForm = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Min {salaryPeriod === 'monthly' ? 'Monthly' : 'Annual'} {formData.jobType === 'internship' ? 'Stipend' : 'Salary'}
+                Min {salaryPeriod === "monthly" ? "Monthly" : "Annual"}{" "}
+                {formData.jobType === "internship" ? "Stipend" : "Salary"}
               </label>
               <div className="relative group">
                 <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
@@ -1094,14 +1724,22 @@ const JobForm = () => {
                   type="number"
                   className="pl-7"
                   value={formData.salary.min}
-                  onChange={(e) => setFormData({ ...formData, salary: { ...formData.salary, min: e.target.value } })}
-                  placeholder={salaryPeriod === 'monthly' ? 'e.g., 25000' : 'e.g., 300000'}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      salary: { ...formData.salary, min: e.target.value },
+                    })
+                  }
+                  placeholder={
+                    salaryPeriod === "monthly" ? "e.g., 25000" : "e.g., 300000"
+                  }
                 />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max {salaryPeriod === 'monthly' ? 'Monthly' : 'Annual'} {formData.jobType === 'internship' ? 'Stipend' : 'Salary'}
+                Max {salaryPeriod === "monthly" ? "Monthly" : "Annual"}{" "}
+                {formData.jobType === "internship" ? "Stipend" : "Salary"}
               </label>
               <div className="relative group">
                 <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
@@ -1109,47 +1747,60 @@ const JobForm = () => {
                   type="number"
                   className="pl-7"
                   value={formData.salary.max}
-                  onChange={(e) => setFormData({ ...formData, salary: { ...formData.salary, max: e.target.value } })}
-                  placeholder={salaryPeriod === 'monthly' ? 'e.g., 50000' : 'e.g., 600000'}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      salary: { ...formData.salary, max: e.target.value },
+                    })
+                  }
+                  placeholder={
+                    salaryPeriod === "monthly" ? "e.g., 50000" : "e.g., 600000"
+                  }
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Application Deadline *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Application Deadline *
+              </label>
               <input
                 type="date"
                 value={formData.applicationDeadline}
-                onChange={(e) => setFormData({ ...formData, applicationDeadline: e.target.value })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    applicationDeadline: e.target.value,
+                  })
+                }
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Positions</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Max Positions
+              </label>
               <input
                 type="number"
                 min="1"
                 value={formData.maxPositions}
-                onChange={(e) => setFormData({ ...formData, maxPositions: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, maxPositions: e.target.value })
+                }
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Job Description *</label>
-              <textarea
-                rows={4}
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Detailed job description..."
-                required
-              />
-            </div>
+            {/* Moved Description to Basic Information card */}
           </div>
         </div>
 
         {/* Requirements */}
-        <div className="card" >
+        <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Requirements</h2>
-            <button type="button" onClick={() => addListItem('requirements')} className="text-primary-600 text-sm">
+            <button
+              type="button"
+              onClick={() => addListItem("requirements")}
+              className="text-primary-600 text-sm"
+            >
               + Add Requirement
             </button>
           </div>
@@ -1160,21 +1811,25 @@ const JobForm = () => {
                   <textarea
                     rows={1}
                     value={req}
-                    ref={el => {
+                    ref={(el) => {
                       if (el) {
-                        el.style.height = 'auto';
-                        el.style.height = el.scrollHeight + 'px';
+                        el.style.height = "auto";
+                        el.style.height = el.scrollHeight + "px";
                       }
                     }}
-                    onChange={(e) => updateListItem('requirements', index, e.target.value)}
+                    onChange={(e) =>
+                      updateListItem("requirements", index, e.target.value)
+                    }
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
+                      if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
                         const newList = [...formData.requirements];
-                        newList.splice(index + 1, 0, '');
+                        newList.splice(index + 1, 0, "");
                         setFormData({ ...formData, requirements: newList });
                         setTimeout(() => {
-                          const inputs = document.querySelectorAll('textarea[placeholder="e.g., BS in Computer Science"]');
+                          const inputs = document.querySelectorAll(
+                            'textarea[placeholder="e.g., BS in Computer Science"]',
+                          );
                           if (inputs[index + 1]) inputs[index + 1].focus();
                         }, 0);
                       }
@@ -1182,15 +1837,15 @@ const JobForm = () => {
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none overflow-hidden text-sm bg-white hover:border-gray-300 transition-colors"
                     placeholder="e.g., BS in Computer Science"
                     onInput={(e) => {
-                      e.target.style.height = 'auto';
-                      e.target.style.height = e.target.scrollHeight + 'px';
+                      e.target.style.height = "auto";
+                      e.target.style.height = e.target.scrollHeight + "px";
                     }}
                   />
                 </div>
                 {formData.requirements.length > 1 && (
                   <button
                     type="button"
-                    onClick={() => removeListItem('requirements', index)}
+                    onClick={() => removeListItem("requirements", index)}
                     className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                     title="Remove requirement"
                   >
@@ -1203,38 +1858,64 @@ const JobForm = () => {
         </div>
 
         {/* Custom Requirements for Students */}
-        <div className="card" >
+        <div className="card">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold">Custom Requirements</h2>
-              <p className="text-sm text-gray-500">These will be shown to students who must confirm each one (Yes/No)</p>
+              <p className="text-sm text-gray-500">
+                These will be shown to students who must confirm each one
+                (Yes/No)
+              </p>
             </div>
-            <button type="button" onClick={addCustomRequirement} className="text-primary-600 text-sm">
+            <button
+              type="button"
+              onClick={addCustomRequirement}
+              className="text-primary-600 text-sm"
+            >
               + Add Requirement
             </button>
           </div>
           <div className="space-y-3">
             {(formData.customRequirements || []).map((req, index) => (
-              <div key={index} className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg group">
+              <div
+                key={index}
+                className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg group"
+              >
                 <div className="flex-1 relative">
                   <textarea
                     rows={1}
                     value={req.requirement}
-                    ref={el => {
+                    ref={(el) => {
                       if (el) {
-                        el.style.height = 'auto';
-                        el.style.height = el.scrollHeight + 'px';
+                        el.style.height = "auto";
+                        el.style.height = el.scrollHeight + "px";
                       }
                     }}
-                    onChange={(e) => updateCustomRequirement(index, 'requirement', e.target.value)}
+                    onChange={(e) =>
+                      updateCustomRequirement(
+                        index,
+                        "requirement",
+                        e.target.value,
+                      )
+                    }
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
+                      if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
-                        const updated = [...(formData.customRequirements || [])];
-                        updated.splice(index + 1, 0, { requirement: '', isMandatory: true });
-                        setFormData(prev => ({ ...prev, customRequirements: updated }));
+                        const updated = [
+                          ...(formData.customRequirements || []),
+                        ];
+                        updated.splice(index + 1, 0, {
+                          requirement: "",
+                          isMandatory: true,
+                        });
+                        setFormData((prev) => ({
+                          ...prev,
+                          customRequirements: updated,
+                        }));
                         setTimeout(() => {
-                          const inputs = document.querySelectorAll('textarea[placeholder="e.g., Willing to relocate to Bangalore?"]');
+                          const inputs = document.querySelectorAll(
+                            'textarea[placeholder="e.g., Willing to relocate to Bangalore?"]',
+                          );
                           if (inputs[index + 1]) inputs[index + 1].focus();
                         }, 0);
                       }
@@ -1242,8 +1923,8 @@ const JobForm = () => {
                     placeholder="e.g., Willing to relocate to Bangalore?"
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none overflow-hidden text-sm bg-white hover:border-gray-300 transition-colors"
                     onInput={(e) => {
-                      e.target.style.height = 'auto';
-                      e.target.style.height = e.target.scrollHeight + 'px';
+                      e.target.style.height = "auto";
+                      e.target.style.height = e.target.scrollHeight + "px";
                     }}
                   />
                 </div>
@@ -1253,7 +1934,13 @@ const JobForm = () => {
                       type="checkbox"
                       className="rounded text-primary-600 focus:ring-primary-500"
                       checked={req.isMandatory}
-                      onChange={(e) => updateCustomRequirement(index, 'isMandatory', e.target.checked)}
+                      onChange={(e) =>
+                        updateCustomRequirement(
+                          index,
+                          "isMandatory",
+                          e.target.checked,
+                        )
+                      }
                     />
                     <span className="text-gray-600">Mandatory</span>
                   </label>
@@ -1268,8 +1955,11 @@ const JobForm = () => {
                 </div>
               </div>
             ))}
-            {(!formData.customRequirements || formData.customRequirements.length === 0) && (
-              <p className="text-gray-500 text-sm italic">No custom requirements added yet</p>
+            {(!formData.customRequirements ||
+              formData.customRequirements.length === 0) && (
+              <p className="text-gray-500 text-sm italic">
+                No custom requirements added yet
+              </p>
             )}
           </div>
         </div>
@@ -1278,33 +1968,52 @@ const JobForm = () => {
         <div className="card">
           <div className="mb-4">
             <h2 className="text-lg font-semibold">Required Skills</h2>
-            <p className="text-sm text-gray-500">Select skills and set the minimum proficiency level required</p>
+            <p className="text-sm text-gray-500">
+              Select skills and set the minimum proficiency level required
+            </p>
           </div>
 
           {/* Selected Skills with Proficiency */}
           {formData.requiredSkills.length > 0 && (
             <div className="mb-4 space-y-2">
-              <p className="text-sm font-medium text-gray-700">Selected Skills:</p>
+              <p className="text-sm font-medium text-gray-700">
+                Selected Skills:
+              </p>
               {formData.requiredSkills.map((selectedSkill) => {
                 const skillId = selectedSkill.skill?._id || selectedSkill.skill;
-                const skillInfo = allSkills.find(s => s._id === skillId);
+                const skillInfo = allSkills.find((s) => s._id === skillId);
                 if (!skillInfo) return null;
 
                 // If CEFR English is set, do not show duplicate English in Selected Skills
-                const isEnglishSkill = (skillInfo.name || '').toLowerCase() === 'english';
-                if (isEnglishSkill && (formData.eligibility.englishSpeaking || formData.eligibility.englishWriting)) {
+                const isEnglishSkill =
+                  (skillInfo.name || "").toLowerCase() === "english";
+                if (
+                  isEnglishSkill &&
+                  (formData.eligibility.englishSpeaking ||
+                    formData.eligibility.englishWriting)
+                ) {
                   return null;
                 }
 
                 return (
-                  <div key={skillId} className="flex items-center gap-3 p-2 bg-primary-50 rounded-lg">
-                    <span className="font-medium text-primary-800 min-w-32 text-sm">{skillInfo.name}</span>
+                  <div
+                    key={skillId}
+                    className="flex items-center gap-3 p-2 bg-primary-50 rounded-lg"
+                  >
+                    <span className="font-medium text-primary-800 min-w-32 text-sm">
+                      {skillInfo.name}
+                    </span>
                     <select
                       value={selectedSkill.proficiencyLevel || 1}
-                      onChange={(e) => updateSkillProficiency(skillId, parseInt(e.target.value))}
+                      onChange={(e) =>
+                        updateSkillProficiency(
+                          skillId,
+                          parseInt(e.target.value),
+                        )
+                      }
                       className="text-sm"
                     >
-                      {proficiencyLevels.map(level => (
+                      {proficiencyLevels.map((level) => (
                         <option key={level.value} value={level.value}>
                           {level.label} - {level.description}
                         </option>
@@ -1327,10 +2036,15 @@ const JobForm = () => {
           <div className="flex flex-wrap gap-2">
             {allSkills.map((skill) => {
               // Hide English as a selectable 'skill' when CEFR fields are set (we use CEFR instead)
-              const isCEFRSet = formData.eligibility.englishSpeaking || formData.eligibility.englishWriting;
-              if (isCEFRSet && (skill.name || '').toLowerCase() === 'english') return null;
+              const isCEFRSet =
+                formData.eligibility.englishSpeaking ||
+                formData.eligibility.englishWriting;
+              if (isCEFRSet && (skill.name || "").toLowerCase() === "english")
+                return null;
 
-              const isSelected = formData.requiredSkills.some(s => s.skill === skill._id || s.skill?._id === skill._id);
+              const isSelected = formData.requiredSkills.some(
+                (s) => s.skill === skill._id || s.skill?._id === skill._id,
+              );
               if (isSelected) return null;
               return (
                 <button
@@ -1352,7 +2066,8 @@ const JobForm = () => {
             <h2 className="text-lg font-semibold">Eligibility Criteria</h2>
           </div>
           <p className="text-sm text-gray-500 mb-4">
-            Click to select criteria. Unselected criteria means open for all in that category.
+            Click to select criteria. Unselected criteria means open for all in
+            that category.
           </p>
 
           {/* Academic Requirements Section */}
@@ -1364,60 +2079,129 @@ const JobForm = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* 10th */}
               <div
-                onClick={() => toggleAcademicRequirement('tenthGrade')}
-                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.tenthGrade?.required ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                onClick={() => toggleAcademicRequirement("tenthGrade")}
+                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.tenthGrade?.required ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900 text-sm">10th Grade</span>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${formData.eligibility.tenthGrade?.required ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                    {formData.eligibility.tenthGrade?.required && <CheckCircle className="w-3 h-3 text-white" />}
+                  <span className="font-medium text-gray-900 text-sm">
+                    10th Grade
+                  </span>
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center ${formData.eligibility.tenthGrade?.required ? "bg-blue-500" : "bg-gray-200"}`}
+                  >
+                    {formData.eligibility.tenthGrade?.required && (
+                      <CheckCircle className="w-3 h-3 text-white" />
+                    )}
                   </div>
                 </div>
                 {formData.eligibility.tenthGrade?.required && (
                   <div onClick={(e) => e.stopPropagation()} className="mt-2">
-                    <input type="number" min="0" max="100" placeholder="Min %" className="w-full text-sm"
-                      value={formData.eligibility.tenthGrade?.minPercentage || ''}
-                      onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, tenthGrade: { ...formData.eligibility.tenthGrade, minPercentage: e.target.value } } })}
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="Min %"
+                      className="w-full text-sm"
+                      value={
+                        formData.eligibility.tenthGrade?.minPercentage || ""
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            tenthGrade: {
+                              ...formData.eligibility.tenthGrade,
+                              minPercentage: e.target.value,
+                            },
+                          },
+                        })
+                      }
                     />
                   </div>
                 )}
               </div>
               {/* 12th */}
               <div
-                onClick={() => toggleAcademicRequirement('twelfthGrade')}
-                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.twelfthGrade?.required ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                onClick={() => toggleAcademicRequirement("twelfthGrade")}
+                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.twelfthGrade?.required ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900 text-sm">12th Grade</span>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${formData.eligibility.twelfthGrade?.required ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                    {formData.eligibility.twelfthGrade?.required && <CheckCircle className="w-3 h-3 text-white" />}
+                  <span className="font-medium text-gray-900 text-sm">
+                    12th Grade
+                  </span>
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center ${formData.eligibility.twelfthGrade?.required ? "bg-blue-500" : "bg-gray-200"}`}
+                  >
+                    {formData.eligibility.twelfthGrade?.required && (
+                      <CheckCircle className="w-3 h-3 text-white" />
+                    )}
                   </div>
                 </div>
                 {formData.eligibility.twelfthGrade?.required && (
                   <div onClick={(e) => e.stopPropagation()} className="mt-2">
-                    <input type="number" min="0" max="100" placeholder="Min %" className="w-full text-sm"
-                      value={formData.eligibility.twelfthGrade?.minPercentage || ''}
-                      onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, twelfthGrade: { ...formData.eligibility.twelfthGrade, minPercentage: e.target.value } } })}
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="Min %"
+                      className="w-full text-sm"
+                      value={
+                        formData.eligibility.twelfthGrade?.minPercentage || ""
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            twelfthGrade: {
+                              ...formData.eligibility.twelfthGrade,
+                              minPercentage: e.target.value,
+                            },
+                          },
+                        })
+                      }
                     />
                   </div>
                 )}
               </div>
               {/* Higher Ed */}
               <div
-                onClick={() => toggleAcademicRequirement('higherEducation')}
-                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.higherEducation?.required ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                onClick={() => toggleAcademicRequirement("higherEducation")}
+                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.higherEducation?.required ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900 text-sm">Higher Education</span>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${formData.eligibility.higherEducation?.required ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                    {formData.eligibility.higherEducation?.required && <CheckCircle className="w-3 h-3 text-white" />}
+                  <span className="font-medium text-gray-900 text-sm">
+                    Higher Education
+                  </span>
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center ${formData.eligibility.higherEducation?.required ? "bg-blue-500" : "bg-gray-200"}`}
+                  >
+                    {formData.eligibility.higherEducation?.required && (
+                      <CheckCircle className="w-3 h-3 text-white" />
+                    )}
                   </div>
                 </div>
                 {formData.eligibility.higherEducation?.required && (
-                  <div onClick={(e) => e.stopPropagation()} className="mt-2 space-y-2">
-                    <select className="w-full text-sm"
-                      value={formData.eligibility.higherEducation?.level || ''}
-                      onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, higherEducation: { ...formData.eligibility.higherEducation, level: e.target.value } } })}
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-2 space-y-2"
+                  >
+                    <select
+                      className="w-full text-sm"
+                      value={formData.eligibility.higherEducation?.level || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            higherEducation: {
+                              ...formData.eligibility.higherEducation,
+                              level: e.target.value,
+                            },
+                          },
+                        })
+                      }
                     >
                       <option value="">Select Level</option>
                       <option value="bachelor">Bachelor's</option>
@@ -1438,58 +2222,118 @@ const JobForm = () => {
             </h3>
             <div className="bg-rose-50 p-4 rounded-lg border border-rose-100">
               <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'yes' ? 'border-rose-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
-                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'yes' } })}
+                <label
+                  className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === "yes" ? "border-rose-500 bg-white" : "border-rose-200 bg-rose-50 hover:bg-white"}`}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      eligibility: {
+                        ...formData.eligibility,
+                        readinessRequirement: "yes",
+                      },
+                    })
+                  }
                 >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'yes' ? 'border-rose-500' : 'border-gray-400'}`}>
-                    {formData.eligibility.readinessRequirement === 'yes' && <div className="w-2 h-2 bg-rose-500 rounded-full" />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === "yes" ? "border-rose-500" : "border-gray-400"}`}
+                  >
+                    {formData.eligibility.readinessRequirement === "yes" && (
+                      <div className="w-2 h-2 bg-rose-500 rounded-full" />
+                    )}
                   </div>
                   <div className="text-left">
-                    <p className="font-semibold text-rose-900 text-sm">Required (100%)</p>
-                    <p className="text-xs text-rose-700">Student must be 100% ready</p>
+                    <p className="font-semibold text-rose-900 text-sm">
+                      Required (100%)
+                    </p>
+                    <p className="text-xs text-rose-700">
+                      Student must be 100% ready
+                    </p>
                   </div>
                 </label>
 
-                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'in_progress' ? 'border-rose-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
-                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'in_progress' } })}
+                <label
+                  className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === "in_progress" ? "border-rose-500 bg-white" : "border-rose-200 bg-rose-50 hover:bg-white"}`}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      eligibility: {
+                        ...formData.eligibility,
+                        readinessRequirement: "in_progress",
+                      },
+                    })
+                  }
                 >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'in_progress' ? 'border-rose-500' : 'border-gray-400'}`}>
-                    {formData.eligibility.readinessRequirement === 'in_progress' && <div className="w-2 h-2 bg-rose-500 rounded-full" />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === "in_progress" ? "border-rose-500" : "border-gray-400"}`}
+                  >
+                    {formData.eligibility.readinessRequirement ===
+                      "in_progress" && (
+                      <div className="w-2 h-2 bg-rose-500 rounded-full" />
+                    )}
                   </div>
                   <div className="text-left">
-                    <p className="font-semibold text-rose-900 text-sm">In Progress (30%+)</p>
-                    <p className="text-xs text-rose-700">Must be at least 30% ready</p>
+                    <p className="font-semibold text-rose-900 text-sm">
+                      In Progress (30%+)
+                    </p>
+                    <p className="text-xs text-rose-700">
+                      Must be at least 30% ready
+                    </p>
                   </div>
                 </label>
 
-                <label className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === 'no' ? 'border-gray-500 bg-white' : 'border-rose-200 bg-rose-50 hover:bg-white'}`}
-                  onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, readinessRequirement: 'no' } })}
+                <label
+                  className={`flex-1 flex items-center justify-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.readinessRequirement === "no" ? "border-gray-500 bg-white" : "border-rose-200 bg-rose-50 hover:bg-white"}`}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      eligibility: {
+                        ...formData.eligibility,
+                        readinessRequirement: "no",
+                      },
+                    })
+                  }
                 >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === 'no' ? 'border-gray-500' : 'border-gray-400'}`}>
-                    {formData.eligibility.readinessRequirement === 'no' && <div className="w-2 h-2 bg-gray-500 rounded-full" />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.eligibility.readinessRequirement === "no" ? "border-gray-500" : "border-gray-400"}`}
+                  >
+                    {formData.eligibility.readinessRequirement === "no" && (
+                      <div className="w-2 h-2 bg-gray-500 rounded-full" />
+                    )}
                   </div>
                   <div className="text-left">
-                    <p className="font-semibold text-gray-900 text-sm">Not Required</p>
-                    <p className="text-xs text-gray-700">Open to all students</p>
+                    <p className="font-semibold text-gray-900 text-sm">
+                      Not Required
+                    </p>
+                    <p className="text-xs text-gray-700">
+                      Open to all students
+                    </p>
                   </div>
                 </label>
               </div>
 
               {/* Global Readiness Metrics Note */}
               <div className="bg-white/60 rounded-lg p-3 border border-rose-100/50">
-                <p className="text-[10px] font-bold text-rose-800 uppercase mb-2 tracking-wide">Common Readiness Standards (Apply to All Schools):</p>
+                <p className="text-[10px] font-bold text-rose-800 uppercase mb-2 tracking-wide">
+                  Common Readiness Standards (Apply to All Schools):
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-rose-500" />
-                    <span className="text-[10px] text-rose-700 font-medium">Attendance: Verified mandatory min.</span>
+                    <span className="text-[10px] text-rose-700 font-medium">
+                      Attendance: Verified mandatory min.
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-rose-500" />
-                    <span className="text-[10px] text-rose-700 font-medium">English: B2 Level (Speaking & Writing)</span>
+                    <span className="text-[10px] text-rose-700 font-medium">
+                      English: B2 Level (Speaking & Writing)
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-rose-500" />
-                    <span className="text-[10px] text-rose-700 font-medium">Read Theory: Level 6+ (&gt;5)</span>
+                    <span className="text-[10px] text-rose-700 font-medium">
+                      Read Theory: Level 6+ (&gt;5)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1511,8 +2355,8 @@ const JobForm = () => {
                     ...formData,
                     eligibility: {
                       ...formData.eligibility,
-                      councilPosts: [...current, { post: '', minMonths: 0 }]
-                    }
+                      councilPosts: [...current, { post: "", minMonths: 0 }],
+                    },
                   });
                 }}
                 className="text-xs text-indigo-600 font-medium hover:underline"
@@ -1523,7 +2367,10 @@ const JobForm = () => {
 
             <div className="space-y-2">
               {(formData.eligibility.councilPosts || []).map((req, index) => (
-                <div key={index} className="flex gap-2 items-start p-2 bg-indigo-50 rounded-lg border border-indigo-100">
+                <div
+                  key={index}
+                  className="flex gap-2 items-start p-2 bg-indigo-50 rounded-lg border border-indigo-100"
+                >
                   <div className="flex-1 relative">
                     <input
                       type="text"
@@ -1531,28 +2378,66 @@ const JobForm = () => {
                       className="w-full text-sm rounded border-gray-300"
                       value={req.post}
                       onChange={(e) => {
-                        const updated = [...(formData.eligibility.councilPosts || [])];
+                        const updated = [
+                          ...(formData.eligibility.councilPosts || []),
+                        ];
                         updated[index].post = e.target.value;
-                        setFormData({ ...formData, eligibility: { ...formData.eligibility, councilPosts: updated } });
-                        setShowCouncilPostSuggestions({ ...showCouncilPostSuggestions, [index]: true });
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            councilPosts: updated,
+                          },
+                        });
+                        setShowCouncilPostSuggestions({
+                          ...showCouncilPostSuggestions,
+                          [index]: true,
+                        });
                       }}
-                      onFocus={() => setShowCouncilPostSuggestions({ ...showCouncilPostSuggestions, [index]: true })}
+                      onFocus={() =>
+                        setShowCouncilPostSuggestions({
+                          ...showCouncilPostSuggestions,
+                          [index]: true,
+                        })
+                      }
                     />
                     {showCouncilPostSuggestions[index] && (
                       <>
-                        <div className="fixed inset-0 z-10" onClick={() => setShowCouncilPostSuggestions({ ...showCouncilPostSuggestions, [index]: false })}></div>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() =>
+                            setShowCouncilPostSuggestions({
+                              ...showCouncilPostSuggestions,
+                              [index]: false,
+                            })
+                          }
+                        ></div>
                         <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                           {councilPostsList
-                            .filter(p => p.toLowerCase().includes(req.post.toLowerCase()))
-                            .map(p => (
+                            .filter((p) =>
+                              p.toLowerCase().includes(req.post.toLowerCase()),
+                            )
+                            .map((p) => (
                               <button
                                 key={p}
                                 type="button"
                                 onClick={() => {
-                                  const updated = [...(formData.eligibility.councilPosts || [])];
+                                  const updated = [
+                                    ...(formData.eligibility.councilPosts ||
+                                      []),
+                                  ];
                                   updated[index].post = p;
-                                  setFormData({ ...formData, eligibility: { ...formData.eligibility, councilPosts: updated } });
-                                  setShowCouncilPostSuggestions({ ...showCouncilPostSuggestions, [index]: false });
+                                  setFormData({
+                                    ...formData,
+                                    eligibility: {
+                                      ...formData.eligibility,
+                                      councilPosts: updated,
+                                    },
+                                  });
+                                  setShowCouncilPostSuggestions({
+                                    ...showCouncilPostSuggestions,
+                                    [index]: false,
+                                  });
                                 }}
                                 className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-0"
                               >
@@ -1571,18 +2456,35 @@ const JobForm = () => {
                       className="w-full text-sm rounded border-gray-300"
                       value={req.minMonths}
                       onChange={(e) => {
-                        const updated = [...(formData.eligibility.councilPosts || [])];
-                        updated[index].minMonths = parseInt(e.target.value) || 0;
-                        setFormData({ ...formData, eligibility: { ...formData.eligibility, councilPosts: updated } });
+                        const updated = [
+                          ...(formData.eligibility.councilPosts || []),
+                        ];
+                        updated[index].minMonths =
+                          parseInt(e.target.value) || 0;
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            councilPosts: updated,
+                          },
+                        });
                       }}
                     />
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      const updated = [...(formData.eligibility.councilPosts || [])];
+                      const updated = [
+                        ...(formData.eligibility.councilPosts || []),
+                      ];
                       updated.splice(index, 1);
-                      setFormData({ ...formData, eligibility: { ...formData.eligibility, councilPosts: updated } });
+                      setFormData({
+                        ...formData,
+                        eligibility: {
+                          ...formData.eligibility,
+                          councilPosts: updated,
+                        },
+                      });
                     }}
                     className="p-2 text-red-500 hover:bg-red-50 rounded"
                   >
@@ -1590,8 +2492,11 @@ const JobForm = () => {
                   </button>
                 </div>
               ))}
-              {(!formData.eligibility.councilPosts || formData.eligibility.councilPosts.length === 0) && (
-                <p className="text-xs text-gray-500 italic px-2">No council post requirements added</p>
+              {(!formData.eligibility.councilPosts ||
+                formData.eligibility.councilPosts.length === 0) && (
+                <p className="text-xs text-gray-500 italic px-2">
+                  No council post requirements added
+                </p>
               )}
             </div>
           </div>
@@ -1602,23 +2507,39 @@ const JobForm = () => {
               <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
               Internal Filtering
             </h3>
-            <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.houses || []).length > 0 ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
+            <div
+              className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.houses || []).length > 0 ? "border-indigo-500 bg-indigo-50" : "border-gray-200 bg-white"}`}
+            >
               <div className="flex items-center justify-between mb-1">
-                <span className="font-medium text-gray-900 text-sm">House Selection</span>
+                <span className="font-medium text-gray-900 text-sm">
+                  House Selection
+                </span>
               </div>
               <div className="flex flex-wrap gap-1">
-                {['Bageshree House', 'Bhairav House', 'Malhar House'].map(house => (
-                  <button key={house} type="button"
-                    onClick={() => {
-                      const current = formData.eligibility.houses || [];
-                      const newHouses = current.includes(house) ? current.filter(h => h !== house) : [...current, house];
-                      setFormData({ ...formData, eligibility: { ...formData.eligibility, houses: newHouses } });
-                    }}
-                    className={`px-2 py-1 rounded text-[10px] transition ${(formData.eligibility.houses || []).includes(house) ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-600'}`}
-                  >
-                    {house}
-                  </button>
-                ))}
+                {["Bageshree House", "Bhairav House", "Malhar House"].map(
+                  (house) => (
+                    <button
+                      key={house}
+                      type="button"
+                      onClick={() => {
+                        const current = formData.eligibility.houses || [];
+                        const newHouses = current.includes(house)
+                          ? current.filter((h) => h !== house)
+                          : [...current, house];
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            houses: newHouses,
+                          },
+                        });
+                      }}
+                      className={`px-2 py-1 rounded text-[10px] transition ${(formData.eligibility.houses || []).includes(house) ? "bg-indigo-500 text-white" : "bg-gray-100 text-gray-600"}`}
+                    >
+                      {house}
+                    </button>
+                  ),
+                )}
               </div>
             </div>
           </div>
@@ -1632,36 +2553,64 @@ const JobForm = () => {
             <div className="bg-green-50/50 p-4 rounded-xl border border-green-100">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* 1. Schools */}
-                <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.schools || []).length > 0 ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
-                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Schools</span>
+                <div
+                  className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.schools || []).length > 0 ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                >
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
+                    Schools
+                  </span>
                   <div className="flex flex-wrap gap-1">
-                    {schools.map(school => (
-                      <button key={school} type="button"
+                    {schools.map((school) => (
+                      <button
+                        key={school}
+                        type="button"
                         onClick={() => {
                           const current = formData.eligibility.schools || [];
-                          const next = current.includes(school) ? current.filter(s => s !== school) : [...current, school];
-                          setFormData({ ...formData, eligibility: { ...formData.eligibility, schools: next } });
+                          const next = current.includes(school)
+                            ? current.filter((s) => s !== school)
+                            : [...current, school];
+                          setFormData({
+                            ...formData,
+                            eligibility: {
+                              ...formData.eligibility,
+                              schools: next,
+                            },
+                          });
                         }}
-                        className={`px-1.5 py-0.5 rounded text-[10px] transition ${(formData.eligibility.schools || []).includes(school) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}
+                        className={`px-1.5 py-0.5 rounded text-[10px] transition ${(formData.eligibility.schools || []).includes(school) ? "bg-green-600 text-white" : "bg-gray-100 text-gray-500"}`}
                       >
-                        {school.replace('School of ', '')}
+                        {school.replace("School of ", "")}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* 2. Campuses */}
-                <div className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.campuses || []).length > 0 ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
-                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Campuses</span>
+                <div
+                  className={`p-3 rounded-lg border-2 transition-all ${(formData.eligibility.campuses || []).length > 0 ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                >
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
+                    Campuses
+                  </span>
                   <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-                    {campuses.map(campus => (
-                      <button key={campus._id} type="button"
+                    {campuses.map((campus) => (
+                      <button
+                        key={campus._id}
+                        type="button"
                         onClick={() => {
                           const current = formData.eligibility.campuses || [];
-                          const next = current.includes(campus._id) ? current.filter(c => c !== campus._id) : [...current, campus._id];
-                          setFormData({ ...formData, eligibility: { ...formData.eligibility, campuses: next } });
+                          const next = current.includes(campus._id)
+                            ? current.filter((c) => c !== campus._id)
+                            : [...current, campus._id];
+                          setFormData({
+                            ...formData,
+                            eligibility: {
+                              ...formData.eligibility,
+                              campuses: next,
+                            },
+                          });
                         }}
-                        className={`px-1.5 py-0.5 rounded text-[10px] transition ${(formData.eligibility.campuses || []).includes(campus._id) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}
+                        className={`px-1.5 py-0.5 rounded text-[10px] transition ${(formData.eligibility.campuses || []).includes(campus._id) ? "bg-green-600 text-white" : "bg-gray-100 text-gray-500"}`}
                       >
                         {campus.name}
                       </button>
@@ -1670,26 +2619,114 @@ const JobForm = () => {
                 </div>
 
                 {/* 3. Geographical */}
-                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.homestate || formData.eligibility.hometown ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
-                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Location (State/District)</span>
+                <div
+                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.homestate || formData.eligibility.hometown ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                >
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
+                    Location (State/District)
+                  </span>
                   <div className="space-y-2">
                     <div className="relative">
-                      <input type="text" placeholder="State..." className="w-full text-xs py-1" value={formData.eligibility.homestate || ''} onChange={(e) => { setFormData({ ...formData, eligibility: { ...formData.eligibility, homestate: e.target.value } }); setShowHomestateSuggestions(true); }} onFocus={() => setShowHomestateSuggestions(true)} />
+                      <input
+                        type="text"
+                        placeholder="State..."
+                        className="w-full text-xs py-1"
+                        value={formData.eligibility.homestate || ""}
+                        onChange={(e) => {
+                          setFormData({
+                            ...formData,
+                            eligibility: {
+                              ...formData.eligibility,
+                              homestate: e.target.value,
+                            },
+                          });
+                          setShowHomestateSuggestions(true);
+                        }}
+                        onFocus={() => setShowHomestateSuggestions(true)}
+                      />
                       {showHomestateSuggestions && (
                         <div className="absolute z-30 w-full mt-1 bg-white border rounded shadow-lg max-h-32 overflow-y-auto">
-                          {studentLocations.states.filter(s => s.toLowerCase().includes((formData.eligibility.homestate || '').toLowerCase())).map(s => (
-                            <button key={s} type="button" onClick={() => { setFormData({ ...formData, eligibility: { ...formData.eligibility, homestate: s } }); setShowHomestateSuggestions(false); }} className="w-full text-left px-2 py-1 hover:bg-gray-50 text-[10px] border-b">{s}</button>
-                          ))}
+                          {studentLocations.states
+                            .filter((s) =>
+                              s
+                                .toLowerCase()
+                                .includes(
+                                  (
+                                    formData.eligibility.homestate || ""
+                                  ).toLowerCase(),
+                                ),
+                            )
+                            .map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => {
+                                  setFormData({
+                                    ...formData,
+                                    eligibility: {
+                                      ...formData.eligibility,
+                                      homestate: s,
+                                    },
+                                  });
+                                  setShowHomestateSuggestions(false);
+                                }}
+                                className="w-full text-left px-2 py-1 hover:bg-gray-50 text-[10px] border-b"
+                              >
+                                {s}
+                              </button>
+                            ))}
                         </div>
                       )}
                     </div>
                     <div className="relative">
-                      <input type="text" placeholder="District..." className="w-full text-xs py-1" value={formData.eligibility.hometown || ''} onChange={(e) => { setFormData({ ...formData, eligibility: { ...formData.eligibility, hometown: e.target.value } }); setShowHometownSuggestions(true); }} onFocus={() => setShowHometownSuggestions(true)} />
+                      <input
+                        type="text"
+                        placeholder="District..."
+                        className="w-full text-xs py-1"
+                        value={formData.eligibility.hometown || ""}
+                        onChange={(e) => {
+                          setFormData({
+                            ...formData,
+                            eligibility: {
+                              ...formData.eligibility,
+                              hometown: e.target.value,
+                            },
+                          });
+                          setShowHometownSuggestions(true);
+                        }}
+                        onFocus={() => setShowHometownSuggestions(true)}
+                      />
                       {showHometownSuggestions && (
                         <div className="absolute z-30 w-full mt-1 bg-white border rounded shadow-lg max-h-32 overflow-y-auto">
-                          {studentLocations.districts.filter(d => d.toLowerCase().includes((formData.eligibility.hometown || '').toLowerCase())).map(d => (
-                            <button key={d} type="button" onClick={() => { setFormData({ ...formData, eligibility: { ...formData.eligibility, hometown: d } }); setShowHometownSuggestions(false); }} className="w-full text-left px-2 py-1 hover:bg-gray-50 text-[10px] border-b">{d}</button>
-                          ))}
+                          {studentLocations.districts
+                            .filter((d) =>
+                              d
+                                .toLowerCase()
+                                .includes(
+                                  (
+                                    formData.eligibility.hometown || ""
+                                  ).toLowerCase(),
+                                ),
+                            )
+                            .map((d) => (
+                              <button
+                                key={d}
+                                type="button"
+                                onClick={() => {
+                                  setFormData({
+                                    ...formData,
+                                    eligibility: {
+                                      ...formData.eligibility,
+                                      hometown: d,
+                                    },
+                                  });
+                                  setShowHometownSuggestions(false);
+                                }}
+                                className="w-full text-left px-2 py-1 hover:bg-gray-50 text-[10px] border-b"
+                              >
+                                {d}
+                              </button>
+                            ))}
                         </div>
                       )}
                     </div>
@@ -1697,89 +2734,257 @@ const JobForm = () => {
                 </div>
 
                 {/* 4. English Proficiency */}
-                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.englishWriting || formData.eligibility.englishSpeaking ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
-                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">English Level (CEFR)</span>
+                <div
+                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.englishWriting || formData.eligibility.englishSpeaking ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                >
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
+                    English Level (CEFR)
+                  </span>
                   <div className="grid grid-cols-2 gap-2">
-                    <select className="text-[10px] py-1" value={formData.eligibility.englishWriting || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, englishWriting: e.target.value } })}>
+                    <select
+                      className="text-[10px] py-1"
+                      value={formData.eligibility.englishWriting || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            englishWriting: e.target.value,
+                          },
+                        })
+                      }
+                    >
                       <option value="">Writing</option>
-                      {cefrLevels.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                      {cefrLevels.map((l) => (
+                        <option key={l.value} value={l.value}>
+                          {l.label}
+                        </option>
+                      ))}
                     </select>
-                    <select className="text-[10px] py-1" value={formData.eligibility.englishSpeaking || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, englishSpeaking: e.target.value } })}>
+                    <select
+                      className="text-[10px] py-1"
+                      value={formData.eligibility.englishSpeaking || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            englishSpeaking: e.target.value,
+                          },
+                        })
+                      }
+                    >
                       <option value="">Speaking</option>
-                      {cefrLevels.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                      {cefrLevels.map((l) => (
+                        <option key={l.value} value={l.value}>
+                          {l.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
 
                 {/* 5. Attendance & Status */}
-                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minGharAttendance || (formData.eligibility.requiredGharStatuses || []).length > 0 ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
-                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Attendance & Status</span>
-                  <input type="number" placeholder="Min %" className="w-full text-[10px] py-1 mb-2" value={formData.eligibility.minGharAttendance || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minGharAttendance: e.target.value } })} />
+                <div
+                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minGharAttendance || (formData.eligibility.requiredGharStatuses || []).length > 0 ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                >
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
+                    Attendance & Status
+                  </span>
+                  <input
+                    type="number"
+                    placeholder="Min %"
+                    className="w-full text-[10px] py-1 mb-2"
+                    value={formData.eligibility.minGharAttendance || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        eligibility: {
+                          ...formData.eligibility,
+                          minGharAttendance: e.target.value,
+                        },
+                      })
+                    }
+                  />
                   <div className="flex flex-wrap gap-1">
-                    {['Active', 'Placed', 'Intern (Out Campus)', 'Intern (In Campus)', 'Dropout'].map(s => (
-                      <button key={s} type="button" onClick={() => {
-                        const current = formData.eligibility.requiredGharStatuses || [];
-                        const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s];
-                        setFormData({ ...formData, eligibility: { ...formData.eligibility, requiredGharStatuses: next } });
-                      }} className={`px-1 rounded-[2px] text-[8px] border ${(formData.eligibility.requiredGharStatuses || []).includes(s) ? 'bg-green-600 border-green-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>{s}</button>
+                    {[
+                      "Active",
+                      "Placed",
+                      "Intern (Out Campus)",
+                      "Intern (In Campus)",
+                      "Dropout",
+                    ].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => {
+                          const current =
+                            formData.eligibility.requiredGharStatuses || [];
+                          const next = current.includes(s)
+                            ? current.filter((x) => x !== s)
+                            : [...current, s];
+                          setFormData({
+                            ...formData,
+                            eligibility: {
+                              ...formData.eligibility,
+                              requiredGharStatuses: next,
+                            },
+                          });
+                        }}
+                        className={`px-1 rounded-[2px] text-[8px] border ${(formData.eligibility.requiredGharStatuses || []).includes(s) ? "bg-green-600 border-green-700 text-white" : "bg-gray-50 border-gray-200 text-gray-500"}`}
+                      >
+                        {s}
+                      </button>
                     ))}
                   </div>
                 </div>
 
                 {/* 6. Academic Metrics (ReadTheory/Atcoder) */}
-                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minReadTheoryLevel || formData.eligibility.minAtCoderRating ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
-                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Academic Metrics</span>
+                <div
+                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minReadTheoryLevel || formData.eligibility.minAtCoderRating ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                >
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
+                    Academic Metrics
+                  </span>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-[8px] text-gray-400 uppercase block mb-0.5">ReadTheory Level</span>
-                      <input type="number" placeholder="Level" className="w-full text-[10px] py-1" value={formData.eligibility.minReadTheoryLevel || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minReadTheoryLevel: e.target.value } })} />
+                      <span className="text-[8px] text-gray-400 uppercase block mb-0.5">
+                        ReadTheory Level
+                      </span>
+                      <input
+                        type="number"
+                        placeholder="Level"
+                        className="w-full text-[10px] py-1"
+                        value={formData.eligibility.minReadTheoryLevel || ""}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            eligibility: {
+                              ...formData.eligibility,
+                              minReadTheoryLevel: e.target.value,
+                            },
+                          })
+                        }
+                      />
                     </div>
                     <div>
-                      <span className="text-[8px] text-gray-400 uppercase block mb-0.5">AtCoder Rating</span>
-                      <input type="number" placeholder="Rating" className="w-full text-[10px] py-1" value={formData.eligibility.minAtCoderRating || ''} onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minAtCoderRating: e.target.value } })} />
+                      <span className="text-[8px] text-gray-400 uppercase block mb-0.5">
+                        AtCoder Rating
+                      </span>
+                      <input
+                        type="number"
+                        placeholder="Rating"
+                        className="w-full text-[10px] py-1"
+                        value={formData.eligibility.minAtCoderRating || ""}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            eligibility: {
+                              ...formData.eligibility,
+                              minAtCoderRating: e.target.value,
+                            },
+                          })
+                        }
+                      />
                     </div>
                   </div>
                 </div>
 
                 {/* 7. Gender (Verified) */}
-                <div onClick={() => setFormData({ ...formData, eligibility: { ...formData.eligibility, femaleOnly: !formData.eligibility.femaleOnly } })}
-                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.femaleOnly ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
-                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Gender (Ghar)</span>
+                <div
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      eligibility: {
+                        ...formData.eligibility,
+                        femaleOnly: !formData.eligibility.femaleOnly,
+                      },
+                    })
+                  }
+                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.eligibility.femaleOnly ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                >
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
+                    Gender (Ghar)
+                  </span>
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-gray-600">Female Only</span>
-                    <div className={`w-8 h-4 rounded-full relative transition-colors ${formData.eligibility.femaleOnly ? 'bg-green-500' : 'bg-gray-300'}`}>
-                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${formData.eligibility.femaleOnly ? 'left-4.5' : 'left-0.5'}`}></div>
+                    <span className="text-[10px] text-gray-600">
+                      Female Only
+                    </span>
+                    <div
+                      className={`w-8 h-4 rounded-full relative transition-colors ${formData.eligibility.femaleOnly ? "bg-green-500" : "bg-gray-300"}`}
+                    >
+                      <div
+                        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${formData.eligibility.femaleOnly ? "left-4.5" : "left-0.5"}`}
+                      ></div>
                     </div>
                   </div>
                 </div>
 
                 {/* 8. Tenure at Navgurukul (Verified) */}
-                <div className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minMonthsAtNavgurukul ? 'border-green-500 bg-white' : 'border-gray-200 bg-white'}`}>
-                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">Min Tenure (Months)</span>
-                  <input type="number" min="0" placeholder="e.g. 6" className="w-full text-[10px] py-1"
-                    value={formData.eligibility.minMonthsAtNavgurukul || ''}
-                    onChange={(e) => setFormData({ ...formData, eligibility: { ...formData.eligibility, minMonthsAtNavgurukul: e.target.value } })}
+                <div
+                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minMonthsAtNavgurukul ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                >
+                  <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
+                    Min Tenure (Months)
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 6"
+                    className="w-full text-[10px] py-1"
+                    value={formData.eligibility.minMonthsAtNavgurukul || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        eligibility: {
+                          ...formData.eligibility,
+                          minMonthsAtNavgurukul: e.target.value,
+                        },
+                      })
+                    }
                   />
-                  <p className="text-[8px] text-gray-400 mt-1">* Calculated from admission date</p>
+                  <p className="text-[8px] text-gray-400 mt-1">
+                    * Calculated from admission date
+                  </p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Count Display */}
-          <div className={`p-3 rounded-lg flex items-center justify-between ${hasEligibilityRestrictions ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
+          <div
+            className={`p-3 rounded-lg flex items-center justify-between ${hasEligibilityRestrictions ? "bg-amber-50 border border-amber-200" : "bg-green-50 border border-green-200"}`}
+          >
             <div className="flex items-center gap-2">
-              <Users className={`w-6 h-6 ${hasEligibilityRestrictions ? 'text-amber-500' : 'text-green-500'}`} />
+              <Users
+                className={`w-6 h-6 ${hasEligibilityRestrictions ? "text-amber-500" : "text-green-500"}`}
+              />
               <div>
-                <p className={`font-medium text-sm ${hasEligibilityRestrictions ? 'text-amber-800' : 'text-green-800'}`}>{hasEligibilityRestrictions ? 'Restricted Eligibility' : 'Open for All Students'}</p>
-                <p className={`text-xs ${hasEligibilityRestrictions ? 'text-amber-600' : 'text-green-600'}`}>{hasEligibilityRestrictions ? 'Only students matching criteria can apply' : 'All registered students can apply'}</p>
+                <p
+                  className={`font-medium text-sm ${hasEligibilityRestrictions ? "text-amber-800" : "text-green-800"}`}
+                >
+                  {hasEligibilityRestrictions
+                    ? "Restricted Eligibility"
+                    : "Open for All Students"}
+                </p>
+                <p
+                  className={`text-xs ${hasEligibilityRestrictions ? "text-amber-600" : "text-green-600"}`}
+                >
+                  {hasEligibilityRestrictions
+                    ? "Only students matching criteria can apply"
+                    : "All registered students can apply"}
+                </p>
               </div>
             </div>
             <div className="text-right">
-              <div className={`text-2xl font-bold ${hasEligibilityRestrictions ? 'text-amber-600' : 'text-green-600'}`}>
+              <div
+                className={`text-2xl font-bold ${hasEligibilityRestrictions ? "text-amber-600" : "text-green-600"}`}
+              >
                 ~{studentCount.count || studentCount.total || 0}
               </div>
-              <p className="text-xs text-gray-500">{hasEligibilityRestrictions ? 'estimated' : 'total'}</p>
+              <p className="text-xs text-gray-500">
+                {hasEligibilityRestrictions ? "estimated" : "total"}
+              </p>
             </div>
           </div>
         </div>
@@ -1788,23 +2993,33 @@ const JobForm = () => {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Interview Rounds</h2>
-            <button type="button" onClick={() => addListItem('interviewRounds')} className="text-primary-600 text-sm flex items-center gap-1 hover:underline">
+            <button
+              type="button"
+              onClick={() => addListItem("interviewRounds")}
+              className="text-primary-600 text-sm flex items-center gap-1 hover:underline"
+            >
               <Plus className="w-4 h-4" /> Add Round
             </button>
           </div>
           <div className="space-y-4">
             {(formData.interviewRounds || []).map((round, index) => (
               <div key={index} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-semibold shrink-0">{index + 1}</div>
+                <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-semibold shrink-0">
+                  {index + 1}
+                </div>
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input type="text" placeholder="Round name" value={round.name}
+                  <input
+                    type="text"
+                    placeholder="Round name"
+                    value={round.name}
                     onChange={(e) => {
                       const updated = [...formData.interviewRounds];
                       updated[index].name = e.target.value;
                       setFormData({ ...formData, interviewRounds: updated });
                     }}
                   />
-                  <select value={round.type}
+                  <select
+                    value={round.type}
                     onChange={(e) => {
                       const updated = [...formData.interviewRounds];
                       updated[index].type = e.target.value;
@@ -1819,7 +3034,13 @@ const JobForm = () => {
                     <option value="other">Other</option>
                   </select>
                   {formData.interviewRounds.length > 1 && (
-                    <button type="button" onClick={() => removeListItem('interviewRounds', index)} className="text-red-500 text-sm">Remove</button>
+                    <button
+                      type="button"
+                      onClick={() => removeListItem("interviewRounds", index)}
+                      className="text-red-500 text-sm"
+                    >
+                      Remove
+                    </button>
                   )}
                 </div>
               </div>
@@ -1827,31 +3048,276 @@ const JobForm = () => {
           </div>
         </div>
 
-        {/* Submit */}
+        {/* Coordinator Section */}
         <div className="card">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="w-5 h-5 text-gray-400" />
+            <h2 className="text-lg font-semibold">Assignment & Status</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select className="w-48" value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
-                <option value="draft">Draft</option>
+              <label className="block text-sm font-medium text-gray-900 mb-1.5">
+                Coordinator (Lead) *
+              </label>
+              <select
+                className="w-full bg-white border-gray-200"
+                value={formData.coordinator || ""}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    coordinator: e.target.value || null,
+                  })
+                }
+                required
+              >
+                <option value="">Select Coordinator...</option>
+                {coordinators.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.firstName} {c.lastName} {c.email ? `(${c.email})` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-gray-400 font-medium">
+                The coordinator responsible for this recruitment cycle
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-1.5">
+                Job Status
+              </label>
+              <select
+                className={`w-full font-bold ${
+                  formData.status === "application_stage"
+                    ? "text-green-600"
+                    : formData.status === "closed" ||
+                        formData.status === "filled"
+                      ? "text-red-600"
+                      : "text-primary-600"
+                }`}
+                value={formData.status}
+                onChange={(e) =>
+                  setFormData({ ...formData, status: e.target.value })
+                }
+              >
+                <option value="draft text-gray-600">
+                  Draft (Not visible to students)
+                </option>
                 <option value="application_stage">Open for Applications</option>
                 <option value="hr_shortlisting">HR Shortlisting</option>
                 <option value="interviewing">Interviewing</option>
                 <option value="on_hold">On Hold</option>
-                <option value="closed">Closed</option>
-                <option value="filled">Filled</option>
+                <option value="closed">Closed / Expired</option>
+                <option value="filled text-purple-600">
+                  Filled / Successful
+                </option>
               </select>
-            </div>
-            <div className="flex gap-3">
-              <button type="button" onClick={() => navigate('/coordinator/jobs')} className="btn btn-secondary">Cancel</button>
-              <button type="submit" disabled={saving} className="btn btn-primary flex items-center gap-2">
-                <Save className="w-4 h-4" /> {saving ? 'Saving...' : isEdit ? 'Update Job' : 'Create Job'}
-              </button>
             </div>
           </div>
         </div>
 
+        {/* Submit Action Bar */}
+        <div className="sticky bottom-4 z-40">
+          <div className="card shadow-2xl border-primary-100 bg-white/90 backdrop-blur-md">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-2 h-2 rounded-full animate-pulse ${formData.status === "application_stage" ? "bg-green-500" : "bg-amber-500"}`}
+                />
+                <p className="text-sm font-medium text-gray-600 capitalize">
+                  {formData.status.replace("_", " ")} Mode
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate("/coordinator/jobs")}
+                  className="px-6 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-all"
+                >
+                  Discard Changes
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-8 py-2.5 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:shadow-none transition-all shadow-lg shadow-primary-200 flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  {saving
+                    ? "Processing..."
+                    : isEdit
+                      ? "Update Job Details"
+                      : "Publish Job Posting"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </form>
+
+      {showAddCompanyModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp border border-gray-100">
+            <div className="p-6 border-b flex items-center justify-between bg-gray-50/80">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center">
+                  <Building className="w-6 h-6 text-primary-600" />
+                </div>
+                <div>
+                  <p>Register New Company</p>
+                  <p className="text-[10px] text-gray-400 font-normal uppercase tracking-widest mt-0.5">
+                    Corporate Database
+                  </p>
+                </div>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddCompanyModal(false)}
+                className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 gap-5">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                    Company Name *
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-xl border-gray-200 focus:ring-primary-500 focus:border-primary-500 py-2.5"
+                    placeholder="e.g., Google India"
+                    value={newCompanyFormData.name}
+                    onChange={(e) =>
+                      setNewCompanyFormData({
+                        ...newCompanyFormData,
+                        name: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                    Website URL
+                  </label>
+                  <div className="relative">
+                    <Link className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="url"
+                      className="w-full rounded-xl border-gray-200 focus:ring-primary-500 focus:border-primary-500 py-2.5 pl-10"
+                      placeholder="https://google.com"
+                      value={newCompanyFormData.website}
+                      onChange={(e) =>
+                        setNewCompanyFormData({
+                          ...newCompanyFormData,
+                          website: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                    Company Description
+                  </label>
+                  <textarea
+                    rows="3"
+                    className="w-full rounded-xl border-gray-200 focus:ring-primary-500 focus:border-primary-500 py-2.5"
+                    placeholder="Brief overview about the company's work..."
+                    value={newCompanyFormData.description}
+                    onChange={(e) =>
+                      setNewCompanyFormData({
+                        ...newCompanyFormData,
+                        description: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-dashed border-gray-200">
+                <div className="flex items-center gap-2 mb-4 bg-amber-50 p-2 rounded-lg border border-amber-100">
+                  <Users className="w-4 h-4 text-amber-600" />
+                  <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+                    Recruitment Point of Contact (PoC)
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-xl border-gray-200 focus:ring-primary-500 focus:border-primary-500 py-2.5"
+                      placeholder="e.g. Rahul Sharma"
+                      value={newCompanyFormData.pocName}
+                      onChange={(e) =>
+                        setNewCompanyFormData({
+                          ...newCompanyFormData,
+                          pocName: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                        Contact No.
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full rounded-xl border-gray-200 focus:ring-primary-500 focus:border-primary-500 py-2.5"
+                        placeholder="+91 98765 43210"
+                        value={newCompanyFormData.pocContact}
+                        onChange={(e) =>
+                          setNewCompanyFormData({
+                            ...newCompanyFormData,
+                            pocContact: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        className="w-full rounded-xl border-gray-200 focus:ring-primary-500 focus:border-primary-500 py-2.5"
+                        placeholder="rahul@company.com"
+                        value={newCompanyFormData.pocEmail}
+                        onChange={(e) =>
+                          setNewCompanyFormData({
+                            ...newCompanyFormData,
+                            pocEmail: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t flex flex-col sm:flex-row gap-3 bg-gray-50/80">
+              <button
+                type="button"
+                onClick={() => setShowAddCompanyModal(false)}
+                className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-all shadow-sm order-2 sm:order-1"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitNewCompany}
+                disabled={!newCompanyFormData.name}
+                className="flex-[2] px-4 py-3 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-primary-200 order-1 sm:order-2"
+              >
+                Register Company & Select
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

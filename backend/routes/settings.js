@@ -872,7 +872,7 @@ router.put('/proficiency-rubrics', auth, authorize('manager'), async (req, res) 
 // Add/Update master company (authenticated user)
 router.post('/companies/add', auth, async (req, res) => {
   try {
-    const { name, website, description, logo } = req.body;
+    const { name, website, description, logo, pocName, pocContact, pocEmail } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Company name is required' });
     }
@@ -892,11 +892,33 @@ router.post('/companies/add', auth, async (req, res) => {
       }
     }
 
+    let existing = current.get(normalizedName) || { name: normalizedName, website: '', description: '', pocs: [] };
+
+    // Update basic info if provided
+    if (website) existing.website = website;
+    if (description) existing.description = description;
+    if (logoUrl) existing.logo = logoUrl;
+
+    // Manage PoCs
+    if (pocName) {
+      if (!existing.pocs) existing.pocs = [];
+      const pocIndex = existing.pocs.findIndex(p => p.name.toLowerCase() === pocName.toLowerCase());
+      const newPoc = {
+        name: pocName,
+        contact: pocContact || '',
+        email: pocEmail || '',
+        isPrimary: existing.pocs.length === 0 // First one added becomes primary
+      };
+
+      if (pocIndex > -1) {
+        existing.pocs[pocIndex] = { ...existing.pocs[pocIndex], ...newPoc };
+      } else {
+        existing.pocs.push(newPoc);
+      }
+    }
+
     current.set(normalizedName, {
-      name: normalizedName,
-      website: website || '',
-      description: description || '',
-      logo: logoUrl || '',
+      ...existing,
       addedBy: req.userId
     });
 
@@ -907,7 +929,7 @@ router.post('/companies/add', auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Company added/updated successfully',
+      message: 'Company info saved successfully',
       data: Object.fromEntries(current)
     });
   } catch (error) {

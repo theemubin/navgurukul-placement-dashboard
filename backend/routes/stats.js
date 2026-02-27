@@ -798,18 +798,20 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
       .select('title company jobType applicationDeadline maxPositions eligibility createdAt')
       .sort({ createdAt: -1 });
 
-    // Get students count for this campus
+    // Get approved students count for this campus (matches the detail view criteria)
     const studentCount = await User.countDocuments({
       role: 'student',
       campus: campusId,
-      isActive: true
+      isActive: true,
+      'studentProfile.profileStatus': 'approved'
     });
 
-    // Get application counts for each job
+    // Get application counts for each job — only approved students
     const studentIds = await User.find({
       role: 'student',
       campus: campusId,
-      isActive: true
+      isActive: true,
+      'studentProfile.profileStatus': 'approved'
     }).select('_id');
 
     const jobsWithStats = await Promise.all(jobs.map(async (job) => {

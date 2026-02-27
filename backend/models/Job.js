@@ -13,7 +13,10 @@ const jobSchema = new mongoose.Schema({
     },
     logo: String,
     website: String,
-    description: String
+    description: String,
+    pocName: String,
+    pocContact: String,
+    pocEmail: String
   },
   description: {
     type: String,
