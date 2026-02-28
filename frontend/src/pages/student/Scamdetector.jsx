@@ -207,17 +207,6 @@ const ScamDetector = () => {
   const [companyStats, setCompanyStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
 
-  // Get base path based on user role
-  const getBasePath = () => {
-    const roleMap = {
-      'student': '/student',
-      'campus_poc': '/campus-poc',
-      'coordinator': '/coordinator',
-      'manager': '/manager'
-    };
-    return roleMap[user?.role] || '/student';
-  };
-
   const prescreenHits = useMemo(() => {
     if (offerInput.trim().length < 30) return [];
     return PRESCREEN_PATTERNS.filter((rule) => rule.pattern.test(offerInput)).map((rule) => rule.label);
@@ -629,7 +618,7 @@ const ScamDetector = () => {
           API Configuration
         </button>
         <Link
-          to={`${getBasePath()}/scam-education`}
+          to="/scam-education"
           className="mt-4 ml-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300 text-sm font-medium transition-colors"
           title="Learn how the metrics are calculated"
         >
@@ -843,7 +832,7 @@ const ScamDetector = () => {
                         )}
 
                         <Link
-                          to={`${getBasePath()}/scam-reports`}
+                          to="/scam-reports"
                           className="px-4 py-2 bg-primary-50 border border-primary-200 text-primary-700 rounded-lg hover:bg-primary-100 transition-colors inline-flex items-center gap-2"
                         >
                           <Users size={16} /> View All Reports
@@ -884,7 +873,7 @@ const ScamDetector = () => {
                         {companyStats.stats.totalReports > 1 && (
                           <div className="mt-3 text-center">
                             <Link
-                              to={`/student/scam-reports?company=${encodeURIComponent(result.company)}`}
+                              to={`/scam-reports?company=${encodeURIComponent(result.company)}`}
                               className="text-sm text-blue-700 hover:text-blue-800 underline inline-flex items-center gap-1"
                             >
                               <Eye size={14} /> View all {companyStats.stats.totalReports} reports for this company

@@ -112,48 +112,8 @@ const PublicRoute = ({ children }) => {
   return children;
 };
 
-// Redirect scam report links to user's role-specific path
-const ScamReportRedirect = () => {
-  const { user, loading } = useAuth();
-  const { id } = useParams();
-  
-  if (loading) return <LoadingScreen />;
-  
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  const roleMap = {
-    'student': '/student',
-    'campus_poc': '/campus-poc',
-    'coordinator': '/coordinator',
-    'manager': '/manager'
-  };
-  
-  const basePath = roleMap[user.role] || '/student';
-  return <Navigate to={`${basePath}/scam-reports/${id}`} replace />;
-};
-
-// Redirect scam pages to user's role-specific path
-const ScamRadarRedirect = ({ page = 'scam-detector' }) => {
-  const { user, loading } = useAuth();
-  
-  if (loading) return <LoadingScreen />;
-  
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  const roleMap = {
-    'student': '/student',
-    'campus_poc': '/campus-poc',
-    'coordinator': '/coordinator',
-    'manager': '/manager'
-  };
-  
-  const basePath = roleMap[user.role] || '/student';
-  return <Navigate to={`${basePath}/${page}`} replace />;
-};
+// Public ScamRadar routes - accessible to all authenticated users
+// These use universal URLs that don't change based on user role
 
 function App() {
   return (
@@ -185,10 +145,6 @@ function App() {
         <Route path="applications" element={<StudentApplications />} />
         <Route path="job-readiness" element={<StudentJobReadiness />} />
         <Route path="self-applications" element={<StudentSelfApplications />} />
-        <Route path="scam-detector" element={<StudentScamDetector />} />
-        <Route path="scam-education" element={<ScamEducation />} />
-        <Route path="scam-reports" element={<ScamReportsRepository />} />
-        <Route path="scam-reports/:id" element={<ScamReportDetails />} />
         <Route path="notifications" element={<Notifications />} />
 
       </Route>
@@ -208,10 +164,6 @@ function App() {
         <Route path="self-applications" element={<POCSelfApplicationsReview />} />
         <Route path="interest-requests" element={<POCInterestRequestsReview />} />
         <Route path="skills" element={<POCSkills />} />
-        <Route path="scam-detector" element={<StudentScamDetector />} />
-        <Route path="scam-education" element={<ScamEducation />} />
-        <Route path="scam-reports" element={<ScamReportsRepository />} />
-        <Route path="scam-reports/:id" element={<ScamReportDetails />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
@@ -239,10 +191,6 @@ function App() {
           <Route path="discord" element={<DiscordSettings />} />
         </Route>
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
-        <Route path="scam-detector" element={<StudentScamDetector />} />
-        <Route path="scam-education" element={<ScamEducation />} />
-        <Route path="scam-reports" element={<ScamReportsRepository />} />
-        <Route path="scam-reports/:id" element={<ScamReportDetails />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
@@ -260,10 +208,6 @@ function App() {
         <Route path="leads" element={<LeadsManagement />} />
         <Route path="settings" element={<ManagerSettings />} />
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
-        <Route path="scam-detector" element={<StudentScamDetector />} />
-        <Route path="scam-education" element={<ScamEducation />} />
-        <Route path="scam-reports" element={<ScamReportsRepository />} />
-        <Route path="scam-reports/:id" element={<ScamReportDetails />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />
         <Route path="users" element={<UsersManager />} />

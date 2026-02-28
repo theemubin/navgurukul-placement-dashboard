@@ -41,8 +41,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/student/applications', icon: FileText, label: 'My Applications' },
           { path: '/student/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/student/self-applications', icon: ExternalLink, label: 'Self Applications' },
-          { path: '/student/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
-          { path: '/student/scam-reports', icon: Database, label: 'Scam Reports' }
+          { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
+          { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
         ];
       case 'campus_poc':
         return [
@@ -54,8 +54,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/campus-poc/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' },
           { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests' },
-          { path: '/campus-poc/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
-          { path: '/campus-poc/scam-reports', icon: Database, label: 'Scam Reports' }
+          { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
+          { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
         ];
       case 'coordinator':
         return [
@@ -66,8 +66,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/coordinator/forum', icon: MessageCircle, label: 'Q&A Forum', badge: forumUnreadCount },
           { path: '/coordinator/skills', icon: Settings, label: 'Skill Categories' },
           { path: '/coordinator/job-readiness', icon: Target, label: 'Job Readiness' },
-          { path: '/coordinator/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
-          { path: '/coordinator/scam-reports', icon: Database, label: 'Scam Reports' },
+          { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
+          { path: '/scam-reports', icon: Database, label: 'Scam Reports' },
           { path: '/coordinator/settings', icon: Key, label: 'Settings' }
         ];
       case 'manager':
@@ -80,8 +80,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/manager/reports', icon: BarChart3, label: 'Reports & Export' },
           { path: '/manager/settings', icon: Settings, label: 'Platform Settings' },
           { path: '/manager/job-readiness', icon: Target, label: 'Job Readiness' },
-          { path: '/manager/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
-          { path: '/manager/scam-reports', icon: Database, label: 'Scam Reports' },
+          { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
+          { path: '/scam-reports', icon: Database, label: 'Scam Reports' },
           { path: '/manager/users', icon: Users, label: 'User Management' },
           { path: '/manager/ghar', icon: Home, label: 'Ghar Integration' },
           { path: '/manager/ghar-viewer', icon: Search, label: 'Ghar Explorer' }

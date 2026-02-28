@@ -82,17 +82,6 @@ const ScamReportDetails = () => {
   const [voting, setVoting] = useState(false);
   const [userVote, setUserVote] = useState(null);
 
-  // Determine base path based on user role
-  const getBasePath = () => {
-    const roleMap = {
-      'student': '/student',
-      'campus_poc': '/campus-poc',
-      'coordinator': '/coordinator',
-      'manager': '/manager'
-    };
-    return roleMap[user?.role] || '/student';
-  };
-
   // Comments state
   const [newComment, setNewComment] = useState('');
   const [replyText, setReplyText] = useState('');
@@ -112,7 +101,7 @@ const ScamReportDetails = () => {
     } catch (error) {
       console.error('Error fetching report:', error);
       toast.error('Failed to load report');
-      navigate('/student/scam-reports');
+      navigate('/scam-reports');
     } finally {
       setLoading(false);
     }
@@ -389,7 +378,7 @@ const ScamReportDetails = () => {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-gray-900">Analysis Breakdown</h3>
             <Link
-              to={`${getBasePath()}/scam-education`}
+              to="/scam-education"
               className="text-xs px-3 py-1 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
             >
               Learn How →

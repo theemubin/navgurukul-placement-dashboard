@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
 import {
   Search,
   Filter,
@@ -27,7 +26,6 @@ import { TrustScoreCircle, MiniCircularProgress } from '../../components/Circula
 import toast from 'react-hot-toast';
 
 const ScamReportsRepository = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -163,17 +161,6 @@ const ScamReportsRepository = () => {
       tags: tag
     }));
     fetchReports(1, true);
-  };
-
-  // Get base path based on user role
-  const getBasePath = () => {
-    const roleMap = {
-      'student': '/student',
-      'campus_poc': '/campus-poc',
-      'coordinator': '/coordinator',
-      'manager': '/manager'
-    };
-    return roleMap[user?.role] || '/student';
   };
 
   const getVerdictBadge = (verdict, trustScore) => {
@@ -337,7 +324,7 @@ const ScamReportsRepository = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-indigo-900">{pagination.totalReports} Posts</h2>
               <Link
-                to={`${getBasePath()}/scam-detector`}
+                to="/scam-detector"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
               >
                 <Plus size={16} />
@@ -362,7 +349,7 @@ const ScamReportsRepository = () => {
                 {reports.map((report) => (
                 <div
                   key={report._id}
-                  onClick={() => navigate(`${getBasePath()}/scam-reports/${report._id}`)}
+                  onClick={() => navigate(`/scam-reports/${report._id}`)}
                   className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer relative group"
                 >
                   {/* Author Info */}
