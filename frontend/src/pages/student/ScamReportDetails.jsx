@@ -850,6 +850,17 @@ const ScamReportDetails = () => {
           </div>
         </div>
       </div>
+
+      {/* Mobile Floating Action Button */}
+      <div className="fixed bottom-6 right-6 md:hidden z-40">
+        <Link
+          to="/scam-detector"
+          className="flex items-center justify-center w-14 h-14 bg-primary-600 shadow-[0_4px_14px_0_rgba(0,118,255,0.39)] hover:shadow-[0_6px_20px_rgba(0,118,255,0.23)] text-white rounded-full transition-all hover:scale-105 active:scale-95 group relative group-hover:bg-primary-700"
+        >
+          <Search size={22} className="group-hover:text-amber-300" />
+        </Link>
+      </div>
+
     </div>
   );
 };

@@ -144,11 +144,11 @@ const ScamReportsRepository = () => {
   // Calculate online status based on activity timestamp
   const getOnlineStatus = (lastActivityTime) => {
     if (!lastActivityTime) return 'offline';
-    
+
     const now = new Date();
     const lastActivity = new Date(lastActivityTime);
     const diffMinutes = Math.floor((now - lastActivity) / (1000 * 60));
-    
+
     if (diffMinutes < 5) return 'online';
     if (diffMinutes < 30) return 'recently-active';
     return 'offline';
@@ -368,134 +368,132 @@ const ScamReportsRepository = () => {
             ) : (
               <div className="space-y-3">
                 {reports.map((report) => (
-                <div
-                  key={report._id}
-                  onClick={() => navigate(`/scam-reports/${report._id}`)}
-                  className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer relative group"
-                >
-                  {/* Author Info */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="relative">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm">
-                        {report.reportedBy?.firstName?.charAt(0) || 'A'}
-                      </div>
-                      {/* Online status indicator */}
-                      <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                        getOnlineStatus(report.reportedBy?.lastLogin) === 'online' 
-                          ? 'bg-green-500' 
+                  <div
+                    key={report._id}
+                    onClick={() => navigate(`/scam-reports/${report._id}`)}
+                    className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer relative group"
+                  >
+                    {/* Author Info */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm">
+                          {report.reportedBy?.firstName?.charAt(0) || 'A'}
+                        </div>
+                        {/* Online status indicator */}
+                        <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${getOnlineStatus(report.reportedBy?.lastLogin) === 'online'
+                          ? 'bg-green-500'
                           : getOnlineStatus(report.reportedBy?.lastLogin) === 'recently-active'
-                          ? 'bg-yellow-500'
-                          : 'bg-gray-400'
-                      }`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-900">
-                          {report.reportedBy?.firstName && report.reportedBy?.lastName 
-                            ? `${report.reportedBy.firstName} ${report.reportedBy.lastName}`
-                            : 'Anonymous'}
-                        </span>
-                        <span className="text-sm text-gray-500">{formatDate(report.createdAt)}</span>
+                            ? 'bg-yellow-500'
+                            : 'bg-gray-400'
+                          }`} />
                       </div>
-                    </div>
-                    {/* Score and Category Badge */}
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${
-                          report.verdict === 'DANGER' ? 'bg-red-100 text-red-700' :
-                          report.verdict === 'WARNING' ? 'bg-amber-100 text-amber-700' :
-                          'bg-emerald-100 text-emerald-700'
-                        }`}>
-                          {report.trustScore || 0}% {report.verdict}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900">
+                            {report.reportedBy?.firstName && report.reportedBy?.lastName
+                              ? `${report.reportedBy.firstName} ${report.reportedBy.lastName}`
+                              : 'Anonymous'}
+                          </span>
+                          <span className="text-sm text-gray-500">{formatDate(report.createdAt)}</span>
+                        </div>
+                      </div>
+                      {/* Score and Category Badge */}
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${report.verdict === 'DANGER' ? 'bg-red-100 text-red-700' :
+                            report.verdict === 'WARNING' ? 'bg-amber-100 text-amber-700' :
+                              'bg-emerald-100 text-emerald-700'
+                            }`}>
+                            {report.trustScore || 0}% {report.verdict}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Report Title */}
-                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
-                    {report.companyName} - {report.roleName}
-                  </h3>
+                    {/* Report Title */}
+                    <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
+                      {report.companyName} - {report.roleName}
+                    </h3>
 
-                  {/* Report Summary */}
-                  <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                    {report.summary}
-                  </p>
+                    {/* Report Summary */}
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                      {report.summary}
+                    </p>
 
-                  {/* Tags */}
-                  {report.tags && report.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {report.tags.slice(0, 3).map(tag => (
+                    {/* Tags */}
+                    {report.tags && report.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {report.tags.slice(0, 3).map(tag => (
+                          <button
+                            key={tag}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTagClick(tag);
+                            }}
+                            className="px-2 py-1 bg-indigo-100 text-indigo-600 text-xs rounded-md hover:bg-indigo-200 transition-colors cursor-pointer font-medium"
+                          >
+                            #{tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Footer with engagement metrics */}
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                      <div className="flex items-center gap-4">
+                        {/* Upvote - Agree */}
                         <button
-                          key={tag}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleTagClick(tag);
+                            handleVote(report._id, 'agree');
                           }}
-                          className="px-2 py-1 bg-indigo-100 text-indigo-600 text-xs rounded-md hover:bg-indigo-200 transition-colors cursor-pointer font-medium"
+                          className="flex items-center gap-1 text-sm text-green-600 hover:text-green-700 p-1"
                         >
-                          #{tag}
+                          <ThumbsUp size={16} />
+                          <span className="font-semibold">{report.communityVotes?.agree || 0}</span>
                         </button>
-                      ))}
-                    </div>
-                  )}
 
-                  {/* Footer with engagement metrics */}
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                    <div className="flex items-center gap-4">
-                      {/* Upvote - Agree */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleVote(report._id, 'agree');
-                        }}
-                        className="flex items-center gap-1 text-sm text-green-600 hover:text-green-700 p-1"
-                      >
-                        <ThumbsUp size={16} />
-                        <span className="font-semibold">{report.communityVotes?.agree || 0}</span>
-                      </button>
+                        {/* Downvote - Disagree */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleVote(report._id, 'disagree');
+                          }}
+                          className="flex items-center gap-1 text-sm text-red-600 hover:text-red-700 p-1"
+                        >
+                          <ThumbsDown size={16} />
+                          <span className="font-semibold">{report.communityVotes?.disagree || 0}</span>
+                        </button>
 
-                      {/* Downvote - Disagree */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleVote(report._id, 'disagree');
-                        }}
-                        className="flex items-center gap-1 text-sm text-red-600 hover:text-red-700 p-1"
-                      >
-                        <ThumbsDown size={16} />
-                        <span className="font-semibold">{report.communityVotes?.disagree || 0}</span>
-                      </button>
+                        {/* More options */}
+                        <button
+                          className="p-1 text-gray-400 hover:text-gray-600"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+                      </div>
 
-                      {/* More options */}
-                      <button
-                        className="p-1 text-gray-400 hover:text-gray-600"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal size={16} />
-                      </button>
-                    </div>
+                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                        {/* Views */}
+                        <span className="flex items-center gap-1">
+                          <Eye size={16} />
+                          {report.viewCount || 0}
+                        </span>
 
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                      {/* Views */}
-                      <span className="flex items-center gap-1">
-                        <Eye size={16} />
-                        {report.viewCount || 0}
-                      </span>
+                        {/* Comments */}
+                        <span className="flex items-center gap-1">
+                          <MessageCircle size={16} />
+                          {report.comments?.length || 0}
+                        </span>
 
-                      {/* Comments */}
-                      <span className="flex items-center gap-1">
-                        <MessageCircle size={16} />
-                        {report.comments?.length || 0}
-                      </span>
-
-                      {/* See more link */}
-                      <span className="text-primary-600 hover:underline font-medium">
-                        see more
-                      </span>
+                        {/* See more link */}
+                        <span className="text-primary-600 hover:underline font-medium">
+                          see more
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
                 ))}
               </div>
             )}
@@ -528,13 +526,12 @@ const ScamReportsRepository = () => {
                           {member.name?.charAt(0) || member?._id?.charAt(0) || 'U'}
                         </div>
                         {/* Online status indicator for members */}
-                        <div className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white ${
-                          getOnlineStatus(member.lastLogin) === 'online' 
-                            ? 'bg-green-500' 
-                            : getOnlineStatus(member.lastLogin) === 'recently-active'
+                        <div className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white ${getOnlineStatus(member.lastLogin) === 'online'
+                          ? 'bg-green-500'
+                          : getOnlineStatus(member.lastLogin) === 'recently-active'
                             ? 'bg-yellow-500'
                             : 'bg-gray-400'
-                        }`} />
+                          }`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-gray-900 truncate">{member.name || 'Student'}</div>
@@ -570,6 +567,17 @@ const ScamReportsRepository = () => {
           </aside>
         </div>
       </div>
+
+      {/* Mobile Floating Action Button */}
+      <div className="fixed bottom-6 right-6 md:hidden z-40">
+        <Link
+          to="/scam-detector"
+          className="flex items-center justify-center w-14 h-14 bg-indigo-600 shadow-[0_4px_14px_0_rgba(79,70,229,0.39)] hover:shadow-[0_6px_20px_rgba(79,70,229,0.23)] text-white rounded-full transition-all hover:scale-105 active:scale-95 group relative group-hover:bg-indigo-700 p-0"
+        >
+          <Search size={22} className="group-hover:text-amber-300" />
+        </Link>
+      </div>
+
     </div>
   );
 };
