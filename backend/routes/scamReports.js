@@ -142,7 +142,7 @@ router.get('/public', async (req, res) => {
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit))
-        .populate('reportedBy', 'name campus studentId lastLogin')
+        .populate('reportedBy', 'firstName lastName campus studentId lastLogin')
         .select('-inputData.originalText -inputData.emailHeader') // Exclude sensitive input data
         .lean(),
 
@@ -245,9 +245,9 @@ router.get('/company/:companyName', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const report = await ScamReport.findById(req.params.id)
-      .populate('reportedBy', 'name campus studentId')
-      .populate('moderatedBy', 'name role')
-      .populate('comments.author', 'name campus studentId');
+      .populate('reportedBy', 'firstName lastName campus studentId')
+      .populate('moderatedBy', 'firstName lastName role')
+      .populate('comments.author', 'firstName lastName campus studentId');
 
     if (!report || (!report.isPublic && report.status !== 'active')) {
       return res.status(404).json({ message: 'Report not found' });

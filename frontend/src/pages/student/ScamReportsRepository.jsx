@@ -165,6 +165,17 @@ const ScamReportsRepository = () => {
     fetchReports(1, true);
   };
 
+  // Get base path based on user role
+  const getBasePath = () => {
+    const roleMap = {
+      'student': '/student',
+      'campus_poc': '/campus-poc',
+      'coordinator': '/coordinator',
+      'manager': '/manager'
+    };
+    return roleMap[user?.role] || '/student';
+  };
+
   const getVerdictBadge = (verdict, trustScore) => {
     const config = {
       DANGER: {
@@ -326,7 +337,7 @@ const ScamReportsRepository = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-indigo-900">{pagination.totalReports} Posts</h2>
               <Link
-                to="/student/scam-detector"
+                to={`${getBasePath()}/scam-detector`}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
               >
                 <Plus size={16} />
@@ -351,14 +362,14 @@ const ScamReportsRepository = () => {
                 {reports.map((report) => (
                 <div
                   key={report._id}
-                  onClick={() => navigate(`/student/scam-reports/${report._id}`)}
+                  onClick={() => navigate(`${getBasePath()}/scam-reports/${report._id}`)}
                   className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer relative group"
                 >
                   {/* Author Info */}
                   <div className="flex items-center gap-3 mb-4">
                     <div className="relative">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm">
-                        {report.reportedBy?.name?.charAt(0) || 'A'}
+                        {report.reportedBy?.firstName?.charAt(0) || 'A'}
                       </div>
                       {/* Online status indicator */}
                       <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
@@ -372,7 +383,9 @@ const ScamReportsRepository = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-gray-900">
-                          {report.reportedBy?.name || 'Anonymous'}
+                          {report.reportedBy?.firstName && report.reportedBy?.lastName 
+                            ? `${report.reportedBy.firstName} ${report.reportedBy.lastName}`
+                            : 'Anonymous'}
                         </span>
                         <span className="text-sm text-gray-500">{formatDate(report.createdAt)}</span>
                       </div>

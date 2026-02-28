@@ -347,7 +347,9 @@ const ScamReportDetails = () => {
                 </div>
                 <div>
                   <div className="font-semibold text-gray-900 flex items-center gap-2">
-                    {report.reportedBy?.name || 'Anonymous Student'}
+                    {report.reportedBy?.firstName && report.reportedBy?.lastName
+                      ? `${report.reportedBy.firstName} ${report.reportedBy.lastName}`
+                      : 'Anonymous Student'}
                     {report.reportedBy?.campus && (
                       <span className="bg-primary-100 text-primary-700 px-2 py-1 rounded-full text-xs font-medium">
                         {report.reportedBy.campus}
@@ -744,7 +746,9 @@ const ScamReportDetails = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold text-gray-900 text-sm">
-                        {comment.author?.name || 'Anonymous'}
+                        {comment.author?.firstName && comment.author?.lastName
+                          ? `${comment.author.firstName} ${comment.author.lastName}`
+                          : 'Anonymous'}
                       </span>
                       <span className="text-xs text-gray-500">
                         {formatDate(comment.createdAt)}
@@ -808,7 +812,9 @@ const ScamReportDetails = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-gray-900 text-xs">
-                            {reply.author?.name || 'Anonymous'}
+                            {reply.author?.firstName && reply.author?.lastName
+                              ? `${reply.author.firstName} ${reply.author.lastName}`
+                              : 'Anonymous'}
                           </span>
                           <span className="text-[10px] text-gray-500">
                             {formatDate(reply.createdAt)}
