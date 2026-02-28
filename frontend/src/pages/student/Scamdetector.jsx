@@ -41,7 +41,7 @@ import {
 import { utilsAPI, userAPI, scamReportsAPI } from '../../services/api';
 import { TrustScoreCircle, MiniCircularProgress } from '../../components/CircularProgress';
 import toast from 'react-hot-toast';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const HISTORY_KEY = 'scamradar_history_v2';
@@ -170,6 +170,7 @@ const normalizeResult = (raw = {}) => {
 
 const ScamDetector = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('text');
   const [offerInput, setOfferInput] = useState('');
   const [emailHeaderInput, setEmailHeaderInput] = useState('');
@@ -183,6 +184,7 @@ const ScamDetector = () => {
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
   const [showAllHistory, setShowAllHistory] = useState(false);
+    const [scrollPaused, setScrollPaused] = useState(false);
 
   // API Key Modal State
   const [showKeyModal, setShowKeyModal] = useState(false);
@@ -592,7 +594,6 @@ const ScamDetector = () => {
   const currentReports = result ? getReports(result.company) : { scam: 0, legit: 0, unsure: 0 };
   const reportCount = currentReports.scam + currentReports.legit + currentReports.unsure;
 
-  const navigate = useNavigate();
   const getDashboardPath = () => {
     const role = user?.role;
     const dashboardMap = {
@@ -683,6 +684,58 @@ const ScamDetector = () => {
           </div>
         )}
 
+          {/* Recent Scans - Horizontal Scrollable */}
+          {history.length > 0 && (
+            <div className="bg-gradient-to-r from-slate-50 to-blue-50 border border-yellow-500 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-800 mb-1">Recent Scans</h3>
+                  <p className="text-xs text-gray-500">Quick access to your analysis history</p>
+                </div>
+                {history.length > 0 && (
+                  <Link
+                    to="/scam-reports"
+                    className="text-xs text-primary-600 hover:text-primary-700 font-semibold hover:underline flex items-center gap-1"
+                  >
+                    View All <ArrowUpRight size={14} />
+                  </Link>
+                )}
+              </div>
+              <div
+                className="overflow-x-auto scrollbar-hide"
+                onMouseEnter={() => setScrollPaused(true)}
+                onMouseLeave={() => setScrollPaused(false)}
+              >
+                <style>{`
+                  .scrollbar-hide::-webkit-scrollbar { display: none; }
+                  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+                `}</style>
+                <div className="flex gap-3 pb-2">
+                  {history.map((item, idx) => (
+                    <button
+                      key={`${item.company}-${idx}`}
+                      type="button"
+                      onClick={() => loadHistoryItem(item)}
+                      className="flex-shrink-0 w-48 text-left rounded-xl border border-gray-200 p-3.5 bg-white hover:border-primary-300 hover:shadow-md hover:bg-primary-50 transition-all duration-300 group"
+                    >
+                      <div className="flex items-start gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-gray-800 truncate group-hover:text-primary-700">{item.company}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{item.date}</p>
+                        </div>
+                        <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${item.verdictClass === 'safe' ? 'bg-emerald-100 text-emerald-700' : item.verdictClass === 'danger' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {item.score}
+                        </div>
+                      </div>
+                      <span className={`inline-block text-[11px] px-2 py-1 rounded-md font-semibold ${item.verdictClass === 'safe' ? 'bg-emerald-100 text-emerald-700' : item.verdictClass === 'danger' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {item.verdictClass === 'safe' ? '✓ Safe' : item.verdictClass === 'danger' ? '⚠ Danger' : '! Warning'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         {!result && (
           <>
             <div className="bg-white border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
