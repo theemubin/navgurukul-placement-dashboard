@@ -159,6 +159,10 @@ function App() {
         <Route path="self-applications" element={<POCSelfApplicationsReview />} />
         <Route path="interest-requests" element={<POCInterestRequestsReview />} />
         <Route path="skills" element={<POCSkills />} />
+        <Route path="scam-detector" element={<StudentScamDetector />} />
+        <Route path="scam-education" element={<ScamEducation />} />
+        <Route path="scam-reports" element={<ScamReportsRepository />} />
+        <Route path="scam-reports/:id" element={<ScamReportDetails />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
@@ -186,6 +190,10 @@ function App() {
           <Route path="discord" element={<DiscordSettings />} />
         </Route>
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
+        <Route path="scam-detector" element={<StudentScamDetector />} />
+        <Route path="scam-education" element={<ScamEducation />} />
+        <Route path="scam-reports" element={<ScamReportsRepository />} />
+        <Route path="scam-reports/:id" element={<ScamReportDetails />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
@@ -203,6 +211,10 @@ function App() {
         <Route path="leads" element={<LeadsManagement />} />
         <Route path="settings" element={<ManagerSettings />} />
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
+        <Route path="scam-detector" element={<StudentScamDetector />} />
+        <Route path="scam-education" element={<ScamEducation />} />
+        <Route path="scam-reports" element={<ScamReportsRepository />} />
+        <Route path="scam-reports/:id" element={<ScamReportDetails />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />
         <Route path="users" element={<UsersManager />} />
