@@ -606,18 +606,17 @@ const ScamDetector = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center gap-3 mb-8">
         <button
           onClick={() => navigate(getDashboardPath())}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 transition-colors group font-medium text-sm"
           title="Back to Dashboard"
         >
-          <ArrowLeft size={20} className="text-gray-600 group-hover:text-gray-900" />
+          <ArrowLeft size={18} className="text-gray-600 group-hover:text-gray-900" />
+          Back
         </button>
-        <h1 className="flex-1 text-center text-sm font-semibold text-gray-600">ScamRadar Pro</h1>
-        <div className="w-10"></div>
       </div>
-      <header className="pt-4 pb-6 text-center">
+      <header className="pt-2 pb-6 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary-50 border border-primary-100 text-primary-700 text-xs font-bold uppercase tracking-wider">
           <Shield size={14} /> ScamRadar Pro (Beta)
         </div>
@@ -651,11 +650,42 @@ const ScamDetector = () => {
         </Link>
       </header>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_260px] gap-5">
-        <div className="space-y-5">
-          {!result && (
-            <>
-              <div className="bg-white border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
+      <div className="space-y-5">
+        {/* Recent Scans - Horizontal List */}
+        {history.length > 0 && (
+          <div className="bg-white border border-gray-100 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Recent Scans</h3>
+              {history.length > 5 && (
+                <button
+                  onClick={() => setShowAllHistory(!showAllHistory)}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-semibold"
+                >
+                  {showAllHistory ? 'Show less' : `See all (${history.length})`}
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {(showAllHistory ? history : history.slice(0, 5)).map((item, idx) => (
+                <button
+                  key={`${item.company}-${idx}`}
+                  type="button"
+                  onClick={() => loadHistoryItem(item)}
+                  className="text-left rounded-lg border border-gray-100 p-2.5 hover:border-primary-200 hover:bg-primary-50/40 transition-colors group"
+                >
+                  <p className="text-xs font-semibold text-gray-700 truncate group-hover:text-primary-700">{item.company}</p>
+                  <span className={`inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap ${item.verdictClass === 'safe' ? 'bg-emerald-50 text-emerald-700' : item.verdictClass === 'danger' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                    {item.score}/100
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!result && (
+          <>
+            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
                 <div className="grid grid-cols-3 border-b border-gray-100">
                   <button type="button" onClick={() => setActiveTab('text')} className={`py-3 text-sm font-semibold flex items-center justify-center gap-2 ${activeTab === 'text' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-gray-800'}`}>
                     <FileText size={14} /> Text / Email
@@ -1124,36 +1154,6 @@ const ScamDetector = () => {
             </div>
           )}
         </div>
-
-        <aside className="hidden xl:block sticky top-4 h-fit bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Recent Scans</h3>
-            {history.length > 7 && (
-              <button
-                onClick={() => setShowAllHistory(!showAllHistory)}
-                className="text-xs text-primary-600 hover:text-primary-700 font-semibold"
-              >
-                {showAllHistory ? 'Show less' : `See all (${history.length})`}
-              </button>
-            )}
-          </div>
-          {history.length === 0 ? (
-            <p className="text-xs text-gray-400">No scans yet</p>
-          ) : (
-            <div className="space-y-2">
-              {(showAllHistory ? history : history.slice(0, 7)).map((item, idx) => (
-                <button key={`${item.company}-${idx}`} type="button" onClick={() => loadHistoryItem(item)} className="w-full text-left rounded-lg border border-gray-100 p-3 hover:border-primary-200 hover:bg-primary-50/40 transition-colors">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{item.company}</p>
-                  <p className="text-[11px] text-gray-400 mt-1">{item.date}</p>
-                  <span className={`inline-block mt-2 text-[11px] px-2 py-0.5 rounded-full ${item.verdictClass === 'safe' ? 'bg-emerald-50 text-emerald-700' : item.verdictClass === 'danger' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
-                    {item.score}/100
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </aside>
-      </div>
 
       {/* Analysis Animation Overlay */}
       {analysisAnimation.visible && (
