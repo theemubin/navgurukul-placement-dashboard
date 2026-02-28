@@ -142,8 +142,11 @@ const ScamReportDetails = () => {
   };
 
   const copyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    toast.success('Report link copied to clipboard!');
+    // Generate universal shareable link that works for all roles
+    const origin = window.location.origin;
+    const shareableLink = `${origin}/scam-reports/${id}`;
+    navigator.clipboard.writeText(shareableLink);
+    toast.success('Shareable link copied! Works for all user roles.');
   };
 
   const getVerdictConfig = (verdict) => {

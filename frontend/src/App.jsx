@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
 // Layouts
@@ -112,9 +112,58 @@ const PublicRoute = ({ children }) => {
   return children;
 };
 
+// Redirect scam report links to user's role-specific path
+const ScamReportRedirect = () => {
+  const { user, loading } = useAuth();
+  const { id } = useParams();
+  
+  if (loading) return <LoadingScreen />;
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  const roleMap = {
+    'student': '/student',
+    'campus_poc': '/campus-poc',
+    'coordinator': '/coordinator',
+    'manager': '/manager'
+  };
+  
+  const basePath = roleMap[user.role] || '/student';
+  return <Navigate to={`${basePath}/scam-reports/${id}`} replace />;
+};
+
+// Redirect scam pages to user's role-specific path
+const ScamRadarRedirect = ({ page = 'scam-detector' }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) return <LoadingScreen />;
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  const roleMap = {
+    'student': '/student',
+    'campus_poc': '/campus-poc',
+    'coordinator': '/coordinator',
+    'manager': '/manager'
+  };
+  
+  const basePath = roleMap[user.role] || '/student';
+  return <Navigate to={`${basePath}/${page}`} replace />;
+};
+
 function App() {
   return (
     <Routes>
+      {/* Shared Scam Report Routes - redirect to role-specific paths */}
+      <Route path="/scam-reports/:id" element={<ScamReportRedirect />} />
+      <Route path="/scam-reports" element={<ScamRadarRedirect page="scam-reports" />} />
+      <Route path="/scam-detector" element={<ScamRadarRedirect page="scam-detector" />} />
+      <Route path="/scam-education" element={<ScamRadarRedirect page="scam-education" />} />
+      
       {/* Public Routes */}
       <Route path="/portfolios" element={<Portfolios />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
