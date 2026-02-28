@@ -1,11 +1,11 @@
 import React from 'react';
 
-const CircularProgress = ({ 
-  value, 
-  max = 100, 
-  size = 80, 
-  strokeWidth = 8, 
-  label = '', 
+const CircularProgress = ({
+  value,
+  max = 100,
+  size = 80,
+  strokeWidth = 8,
+  label = '',
   showPercentage = true,
   className = '',
   colors = {
@@ -18,16 +18,16 @@ const CircularProgress = ({
   const circumference = 2 * Math.PI * radius;
   const percentage = Math.max(0, Math.min(100, (value / max) * 100));
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
-  
+
   // Determine color based on value
   const getColor = () => {
     if (percentage >= 70) return colors.safe;
     if (percentage >= 40) return colors.warning;
     return colors.danger;
   };
-  
+
   const color = getColor();
-  
+
   return (
     <div className={`inline-flex flex-col items-center ${className}`}>
       <div className="relative" style={{ width: size, height: size }}>
@@ -46,7 +46,7 @@ const CircularProgress = ({
             strokeWidth={strokeWidth}
           />
         </svg>
-        
+
         {/* Progress circle */}
         <svg
           width={size}
@@ -66,9 +66,9 @@ const CircularProgress = ({
             className="transition-all duration-1000 ease-out"
           />
         </svg>
-        
+
         {/* Center text */}
-        <div 
+        <div
           className="absolute inset-0 flex flex-col items-center justify-center text-center"
           style={{ fontSize: size * 0.2 }}
         >
@@ -78,9 +78,9 @@ const CircularProgress = ({
           </span>
         </div>
       </div>
-      
+
       {label && (
-        <span 
+        <span
           className="mt-2 text-center font-medium text-gray-600"
           style={{ fontSize: size * 0.12 }}
         >
@@ -92,20 +92,21 @@ const CircularProgress = ({
 };
 
 // Trust Score specific circular progress
-export const TrustScoreCircle = ({ 
-  score, 
-  size = 100, 
+export const TrustScoreCircle = ({
+  score,
+  size = 100,
   className = '',
-  showLabel = true 
+  showLabel = true
 }) => {
   const getVerdict = (score) => {
-    if (score >= 70) return { text: 'SAFE', color: '#10b981' };
-    if (score >= 40) return { text: 'WARNING', color: '#f59e0b' };
+    if (score >= 80) return { text: 'SAFE', color: '#10b981' };
+    if (score >= 60) return { text: 'CAUTION', color: '#f59e0b' };
+    if (score >= 40) return { text: 'WARNING', color: '#f97316' };
     return { text: 'DANGER', color: '#ef4444' };
   };
-  
+
   const verdict = getVerdict(score);
-  
+
   return (
     <div className={`flex flex-col items-center ${className}`}>
       <CircularProgress
@@ -121,18 +122,17 @@ export const TrustScoreCircle = ({
         }}
       />
       {showLabel && (
-        <div className="mt-2 text-center">
-          <div 
-            className="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-full"
-            style={{ 
+        <div className="mt-3 text-center">
+          <div
+            className="text-sm font-black tracking-widest px-4 py-1.5 rounded-full"
+            style={{
               color: verdict.color,
-              backgroundColor: `${verdict.color}10`,
-              border: `1px solid ${verdict.color}30`
+              backgroundColor: `${verdict.color}15`,
+              border: `1.5px solid ${verdict.color}40`
             }}
           >
             {verdict.text}
           </div>
-          <div className="text-xs text-gray-500 mt-1">Trust Score</div>
         </div>
       )}
     </div>
@@ -140,9 +140,9 @@ export const TrustScoreCircle = ({
 };
 
 // Mini version for the sub-scores grid
-export const MiniCircularProgress = ({ 
-  value, 
-  label, 
+export const MiniCircularProgress = ({
+  value,
+  label,
   size = 50,
   className = ''
 }) => {

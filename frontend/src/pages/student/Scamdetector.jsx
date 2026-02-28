@@ -33,10 +33,13 @@ import {
   ClipboardList,
   Check,
   User,
-  Image as ImageIcon,
-  Link as LinkIcon,
+  MessageSquare,
+  ThumbsUp,
+  ChevronUp,
+  ChevronDown,
   ArrowUpRight,
-  ArrowLeft
+  ArrowLeft,
+  Image as ImageIcon
 } from 'lucide-react';
 import { utilsAPI, userAPI, scamReportsAPI } from '../../services/api';
 import { TrustScoreCircle, MiniCircularProgress } from '../../components/CircularProgress';
@@ -123,15 +126,33 @@ const getStorage = (key, fallback) => {
 };
 
 const scoreClass = (score) => {
-  if (score >= 70) return 'text-emerald-600';
-  if (score >= 40) return 'text-amber-600';
+  if (score >= 80) return 'text-emerald-600';
+  if (score >= 60) return 'text-amber-500';
+  if (score >= 40) return 'text-orange-500';
   return 'text-red-600';
 };
 
 const verdictClass = (verdict) => {
-  if (verdict === 'SAFE') return 'bg-emerald-50 border-emerald-200 text-emerald-700';
-  if (verdict === 'DANGER') return 'bg-red-50 border-red-200 text-red-700';
-  return 'bg-amber-50 border-amber-200 text-amber-700';
+  if (verdict === 'SAFE') return 'bg-white border-emerald-100/50 shadow-emerald-500/5 shadow-2xl';
+  if (verdict === 'CAUTION') return 'bg-white border-amber-100/50 shadow-amber-500/5 shadow-2xl';
+  if (verdict === 'WARNING') return 'bg-white border-orange-100/50 shadow-orange-500/5 shadow-2xl';
+  return 'bg-white border-red-100/50 shadow-red-500/5 shadow-2xl';
+};
+
+const timeAgo = (date) => {
+  if (!date) return 'Recently';
+  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+  let interval = seconds / 31536000;
+  if (interval > 1) return Math.floor(interval) + "y ago";
+  interval = seconds / 2592000;
+  if (interval > 1) return Math.floor(interval) + "mo ago";
+  interval = seconds / 86400;
+  if (interval > 1) return Math.floor(interval) + "d ago";
+  interval = seconds / 3600;
+  if (interval > 1) return Math.floor(interval) + "h ago";
+  interval = seconds / 60;
+  if (interval > 1) return Math.floor(interval) + "m ago";
+  return "just now";
 };
 
 const normalizeResult = (raw = {}) => {
@@ -172,37 +193,37 @@ const normalizeResult = (raw = {}) => {
 const ScamDetector = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('text');
-  const [offerInput, setOfferInput] = useState('');
-  const [emailHeaderInput, setEmailHeaderInput] = useState('');
-  const [senderEmail, setSenderEmail] = useState('');
-  const [companyUrl, setCompanyUrl] = useState('');
+  const [userInput, setUserInput] = useState('');
   const [imageBase64, setImageBase64] = useState('');
   const [imageMimeType, setImageMimeType] = useState('image/jpeg');
   const [imagePreview, setImagePreview] = useState('');
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [result, setResult] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [showAllHistory, setShowAllHistory] = useState(false);
-  const [scrollPaused, setScrollPaused] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [publicReports, setPublicReports] = useState([]);
+  const [pagination, setPagination] = useState({ totalPages: 1, totalReports: 0 });
+  const [loadingPublic, setLoadingPublic] = useState(false);
   const scrollRef = useRef(null);
 
   // Auto-scroll logic for horizontal layout
+  // Fetch public reports for the "Recent Feed"
+  const fetchRecentScans = async (page = 1) => {
+    try {
+      setLoadingPublic(true);
+      const response = await scamReportsAPI.getPublicReports({ page, limit: 5 });
+      setPublicReports(response.data.reports || []);
+      setPagination(response.data.pagination || { totalPages: 1, totalReports: 0 });
+    } catch (error) {
+      console.error('Failed to fetch public reports:', error);
+    } finally {
+      setLoadingPublic(false);
+    }
+  };
+
   useEffect(() => {
-    if (!scrollRef.current || history.length === 0 || scrollPaused) return;
-    const interval = setInterval(() => {
-      if (scrollRef.current) {
-        const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-        if (scrollLeft + clientWidth >= scrollWidth - 1) {
-          scrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-          scrollRef.current.scrollBy({ left: 1, behavior: 'smooth' });
-        }
-      }
-    }, 30);
-    return () => clearInterval(interval);
-  }, [history.length, scrollPaused]);
+    fetchRecentScans(currentPage);
+  }, [currentPage]);
 
   // API Key Modal State
   const [showKeyModal, setShowKeyModal] = useState(false);
@@ -229,12 +250,13 @@ const ScamDetector = () => {
   const [loadingStats, setLoadingStats] = useState(false);
 
   const prescreenHits = useMemo(() => {
-    if (offerInput.trim().length < 30) return [];
-    return PRESCREEN_PATTERNS.filter((rule) => rule.pattern.test(offerInput)).map((rule) => rule.label);
-  }, [offerInput]);
+    if (userInput.trim().length < 30) return [];
+    return PRESCREEN_PATTERNS.filter((rule) => rule.pattern.test(userInput)).map((rule) => rule.label);
+  }, [userInput]);
 
   useEffect(() => {
-    setHistory(getStorage(HISTORY_KEY, []));
+    // Initial fetch of public reports
+    fetchRecentScans(1);
   }, []);
 
   useEffect(() => {
@@ -349,9 +371,9 @@ const ScamDetector = () => {
   };
 
   const saveHistory = (entry) => {
-    const latest = [entry, ...history].slice(0, 20);
-    setHistory(latest);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(latest));
+    // Refresh the feed after a new analysis
+    fetchRecentScans(1);
+    setCurrentPage(1);
   };
 
   const getReports = (company) => {
@@ -375,38 +397,15 @@ const ScamDetector = () => {
   };
 
   const buildPayload = () => {
-    if (activeTab === 'text') {
-      if (!offerInput.trim()) {
-        throw new Error('Please paste your offer details first.');
-      }
-      return {
-        input: offerInput.trim(),
-        sourceType: 'text'
-      };
-    }
-
-    if (activeTab === 'image') {
-      if (!imageBase64) {
-        throw new Error('Please upload a screenshot first.');
-      }
-      return {
-        input: 'Analyze this uploaded screenshot for job scam signals. Extract all visible text and detect fraud patterns.',
-        imageBase64,
-        imageMimeType,
-        sourceType: 'image'
-      };
-    }
-
-    if (!emailHeaderInput.trim() && !senderEmail.trim()) {
-      throw new Error('Please enter email details first.');
+    if (!userInput.trim() && !imageBase64) {
+      throw new Error('Please provide offer details or a screenshot.');
     }
 
     return {
-      input: `Email body/header:\n${emailHeaderInput || 'Not provided'}\nSender email: ${senderEmail || 'Not provided'}\nCompany URL: ${companyUrl || 'Not provided'}`,
-      emailHeader: emailHeaderInput.trim(),
-      senderEmail: senderEmail.trim(),
-      companyUrl: companyUrl.trim(),
-      sourceType: 'email'
+      input: userInput.trim() || 'Analyze this uploaded screenshot for job scam signals.',
+      imageBase64: imageBase64 || undefined,
+      imageMimeType: imageBase64 ? imageMimeType : undefined,
+      sourceType: imageBase64 ? 'image' : 'text'
     };
   };
 
@@ -500,8 +499,7 @@ const ScamDetector = () => {
   };
 
   const fillExample = (key) => {
-    setActiveTab('text');
-    setOfferInput(EXAMPLES[key]);
+    setUserInput(EXAMPLES[key]);
   };
 
   // Fetch company stats
@@ -545,13 +543,8 @@ const ScamDetector = () => {
           resourceLinks: result.resourceLinks
         },
         inputData: {
-          originalText: activeTab === 'text' ? offerInput :
-            activeTab === 'email' ? `${emailHeaderInput} ${senderEmail} ${companyUrl}` :
-              'Screenshot analysis',
-          emailHeader: emailHeaderInput,
-          senderEmail: senderEmail,
-          companyUrl: companyUrl,
-          sourceType: activeTab
+          originalText: userInput,
+          sourceType: imageBase64 ? 'image' : 'text'
         },
         isPublic: true
       };
@@ -624,664 +617,409 @@ const ScamDetector = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
-      <header className="pt-4 pb-4 text-center relative">
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 hidden md:block">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32 min-h-screen">
+      <header className="pb-16 text-center relative">
+        <div className="absolute left-0 -top-4 hidden md:block">
           <button
             onClick={() => navigate(getDashboardPath())}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors group font-medium text-xs"
-            title="Back to Dashboard"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-gray-100 opacity-50 hover:opacity-100 text-gray-400 hover:text-gray-900 transition-all group font-bold text-xs"
           >
-            <ArrowLeft size={14} className="text-gray-500 group-hover:text-gray-900" />
-            Dashboard
-          </button>
-        </div>
-        <div className="md:hidden flex justify-start mb-4">
-          <button
-            onClick={() => navigate(getDashboardPath())}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors group font-medium text-xs"
-            title="Back to Dashboard"
-          >
-            <ArrowLeft size={14} className="text-gray-500 group-hover:text-gray-900" />
-            Dashboard
+            <ArrowLeft size={14} />
+            DASHBOARD
           </button>
         </div>
 
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary-50 border border-primary-100 text-primary-700 text-xs font-bold uppercase tracking-wider">
-          <Shield size={14} /> ScamRadar Pro (Beta)
-        </div>
-        <h1 className="mt-2 text-2xl sm:text-4xl font-black tracking-tight text-gray-900">
-          Verify Any Offer <span className="text-primary-600">Before You Accept</span>
-        </h1>
-        <p className="mt-2 text-gray-500 text-xs sm:text-sm max-w-2xl mx-auto">
-          Analyze text, screenshots, or email details to detect recruitment scams and risky job offers.
-        </p>
-        <div className="mt-3 flex flex-wrap justify-center gap-2 text-[10px]">
-          <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-500 flex items-center gap-1.5"><Search size={10} /> Web-grounded AI</span>
-          <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-500 flex items-center gap-1.5"><ImageIcon size={10} /> Screenshot Analysis</span>
-          <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-500 flex items-center gap-1.5"><Mail size={10} /> Email Forensics</span>
-          <span className="px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-500 flex items-center gap-1.5"><Users size={10} /> Community Reports</span>
-        </div>
-        <button
-          onClick={() => setShowKeyModal(true)}
-          className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-primary-500 hover:text-primary-700 text-xs font-medium transition-colors"
-          title="Manage API Keys"
-        >
-          <Settings size={14} />
-          API Configuration
-        </button>
-        <Link
-          to="/scam-education"
-          className="mt-3 ml-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300 text-xs font-medium transition-colors"
-          title="Learn how the metrics are calculated"
-        >
-          <HelpCircle size={14} />
-          How It Works
-        </Link>
-      </header>
-
-      <div className="space-y-4">
-        {/* Recent Scans - Horizontal Scrollable */}
-        {history.length > 0 && (
-          <div className="bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-xl p-2.5 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Shield size={14} className="text-gray-400" />
-                <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">Recent Scans</h3>
-              </div>
-              {history.length > 0 && (
-                <Link
-                  to="/scam-reports"
-                  className="text-[10px] text-primary-600 hover:text-primary-700 font-semibold flex items-center gap-1"
-                >
-                  View All <ArrowUpRight size={10} />
-                </Link>
-              )}
-            </div>
-            <div
-              ref={scrollRef}
-              className="overflow-x-auto scrollbar-hide -mx-1 px-1 sm:mx-0 sm:px-0"
-              onMouseEnter={() => setScrollPaused(true)}
-              onMouseLeave={() => setScrollPaused(false)}
-            >
-              <style>{`
-                .scrollbar-hide::-webkit-scrollbar { display: none; }
-                .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-              `}</style>
-              <div className="flex gap-2 sm:gap-3 pb-1">
-                {history.map((item, idx) => (
-                  <button
-                    key={`${item.company}-${idx}`}
-                    type="button"
-                    onClick={() => loadHistoryItem(item)}
-                    className="flex-shrink-0 w-36 sm:w-44 text-left rounded-lg border border-gray-200 p-2.5 bg-white hover:border-primary-300 hover:shadow-sm hover:bg-primary-50 transition-all duration-300 group"
-                  >
-                    <div className="flex items-start justify-between gap-1 mb-1.5">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[11px] sm:text-xs font-bold text-gray-800 truncate group-hover:text-primary-700">{item.company}</p>
-                        <p className="text-[9px] text-gray-400 mt-0.5">{item.date}</p>
-                      </div>
-                      <div className={`flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-md flex items-center justify-center text-[9px] sm:text-[10px] font-bold ${item.verdictClass === 'safe' ? 'bg-emerald-100 text-emerald-700' : item.verdictClass === 'danger' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {item.score}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+        <div className="flex flex-col items-center justify-center">
+          <div className="flex items-center gap-4">
+            <h1 className="text-7xl sm:text-9xl font-black tracking-tighter text-gray-900 leading-[0.8] select-none">
+              Search
+            </h1>
+            <div className="flex flex-col text-left justify-center pt-2">
+              <span className="text-3xl sm:text-5xl font-black text-primary-600 leading-[0.7] uppercase tracking-[0.24em] -mb-1">that</span>
+              <span className="text-3xl sm:text-5xl font-black text-red-600 leading-[0.7] uppercase tracking-tighter">scam.</span>
             </div>
           </div>
-        )}
-        {!result && (
-          <>
-            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
-              <div className="grid grid-cols-3 border-b border-gray-100">
-                <button type="button" onClick={() => setActiveTab('text')} className={`py-3 text-sm font-semibold flex items-center justify-center gap-2 ${activeTab === 'text' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-gray-800'}`}>
-                  <FileText size={14} /> Text / Email
-                </button>
-                <button type="button" onClick={() => setActiveTab('image')} className={`py-3 text-sm font-semibold flex items-center justify-center gap-2 ${activeTab === 'image' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-gray-800'}`}>
-                  <Upload size={14} /> Screenshot
-                </button>
-                <button type="button" onClick={() => setActiveTab('email')} className={`py-3 text-sm font-semibold flex items-center justify-center gap-2 ${activeTab === 'email' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-gray-800'}`}>
-                  <Mail size={14} /> Email Header
-                </button>
+          <p className="text-gray-400 text-[10px] sm:text-xs mt-10 font-black uppercase tracking-[0.4em]">
+            Investigating truth in <span className="text-gray-900 italic font-medium">Recruitment & Job Offers</span>
+          </p>
+        </div>
+
+        <div className="mt-16 max-w-3xl mx-auto relative group">
+          <div className={`bg-white rounded-[2rem] border border-gray-200 shadow-xl shadow-gray-200/50 overflow-hidden transition-all duration-500 focus-within:ring-4 focus-within:ring-primary-500/5 focus-within:border-primary-400 focus-within:shadow-2xl ${userInput.length > 0 || imagePreview ? 'p-3' : 'p-2'}`}>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-3">
+                <textarea
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  placeholder="Paste details or recruiter message..."
+                  className={`w-full p-4 bg-transparent border-none focus:ring-0 text-gray-700 resize-none outline-none leading-relaxed font-bold placeholder:text-gray-300 transition-all duration-300 ${userInput.length === 0 && !imagePreview ? 'h-14 py-3.5' : 'h-auto min-h-[56px]'}`}
+                  rows={userInput.includes('\n') || userInput.length > 50 ? 5 : 1}
+                />
+
+                {(userInput.length === 0 && !imagePreview) && (
+                  <div className="flex items-center gap-2 pr-2">
+                    <label className="p-3 rounded-full hover:bg-gray-50 text-gray-300 hover:text-primary-600 cursor-pointer transition-all">
+                      <ImageIcon size={20} />
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    </label>
+                    <button
+                      onClick={handleAnalyze}
+                      disabled={loading || (!userInput.trim() && !imageBase64)}
+                      className="bg-primary-600 hover:bg-primary-700 disabled:opacity-20 text-white px-6 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg shadow-primary-500/30 transition-all active:scale-95"
+                    >
+                      {loading ? <Loader2 size={16} className="animate-spin" /> : <>Scan <Search size={16} /></>}
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="p-6 space-y-4">
-                {activeTab === 'text' && (
-                  <>
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
-                      <FileText size={13} /> Paste Offer / Recruiter Message
+              {(userInput.length > 0 || imagePreview) && (
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
+                  <div className="flex items-center gap-2 pl-2">
+                    <label className="p-3 rounded-full bg-gray-50 border border-gray-100 text-gray-400 hover:text-primary-600 cursor-pointer transition-all">
+                      <ImageIcon size={20} />
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
                     </label>
-                    <textarea
-                      value={offerInput}
-                      onChange={(e) => setOfferInput(e.target.value)}
-                      className="w-full min-h-[100px] p-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-primary-500 outline-none text-sm text-gray-700"
-                      placeholder="Paste offer letter, recruiter message, internship details..."
-                    />
-
-                    {prescreenHits.length > 0 && (
-                      <div className="p-3 rounded-xl border border-amber-200 bg-amber-50">
-                        <p className="text-xs font-semibold text-amber-700">Instant red flags detected:</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {prescreenHits.map((hit) => (
-                            <span key={hit} className="text-xs px-2 py-1 rounded-md bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1">
-                              <AlertTriangle size={12} /> {hit}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => fillExample('advance')} className="px-3 py-1.5 rounded-full bg-gray-50 border border-gray-200 text-xs font-medium text-gray-600 hover:text-primary-700 hover:border-primary-200 flex items-center gap-1.5">
-                        <DollarSign size={12} /> Advance payment trap
-                      </button>
-                      <button type="button" onClick={() => fillExample('equipment')} className="px-3 py-1.5 rounded-full bg-gray-50 border border-gray-200 text-xs font-medium text-gray-600 hover:text-primary-700 hover:border-primary-200 flex items-center gap-1.5">
-                        <Laptop size={12} /> Equipment reimbursement
-                      </button>
-                      <button type="button" onClick={() => fillExample('crypto')} className="px-3 py-1.5 rounded-full bg-gray-50 border border-gray-200 text-xs font-medium text-gray-600 hover:text-primary-700 hover:border-primary-200 flex items-center gap-1.5">
-                        <Coins size={12} /> Crypto offer
-                      </button>
-                      <button type="button" onClick={() => fillExample('unpaid')} className="px-3 py-1.5 rounded-full bg-gray-50 border border-gray-200 text-xs font-medium text-gray-600 hover:text-primary-700 hover:border-primary-200 flex items-center gap-1.5">
-                        <ClipboardList size={12} /> Suspicious internship
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {activeTab === 'image' && (
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
-                      <Upload size={13} /> Upload Screenshot (WhatsApp / Email / LinkedIn)
-                    </label>
-                    {!imagePreview ? (
-                      <label className="block border-2 border-dashed border-primary-200 bg-primary-50/40 rounded-xl p-8 text-center cursor-pointer hover:bg-primary-50">
-                        <Upload className="w-8 h-8 mx-auto text-primary-500" />
-                        <p className="mt-3 text-sm font-semibold text-gray-700">Drop image or click to upload</p>
-                        <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP supported</p>
-                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                      </label>
-                    ) : (
-                      <div className="space-y-3">
-                        <img src={imagePreview} alt="Offer preview" className="w-full max-h-80 object-contain rounded-xl border border-gray-200 bg-gray-50" />
-                        <button type="button" onClick={removeImage} className="px-3 py-2 text-xs font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Remove image</button>
+                    {imagePreview && (
+                      <div className="flex items-center gap-2 bg-primary-50/50 px-3 py-2 rounded-xl border border-primary-100/50">
+                        <img src={imagePreview} className="w-8 h-8 rounded-lg object-cover shadow-sm" />
+                        <span className="text-[10px] font-black text-primary-700 uppercase tracking-tighter">Image Loaded</span>
+                        <button onClick={removeImage} className="p-1 hover:text-red-500 transition-colors">
+                          <X size={14} />
+                        </button>
                       </div>
                     )}
                   </div>
-                )}
 
-                {activeTab === 'email' && (
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
-                      <Mail size={13} /> Email Header / Body
-                    </label>
-                    <textarea
-                      value={emailHeaderInput}
-                      onChange={(e) => setEmailHeaderInput(e.target.value)}
-                      className="w-full min-h-[80px] p-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-primary-500 outline-none text-sm text-gray-700"
-                      placeholder="Paste full email header/body here..."
-                    />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <input
-                        type="text"
-                        value={senderEmail}
-                        onChange={(e) => setSenderEmail(e.target.value)}
-                        placeholder="Sender email (e.g. hr@company.com)"
-                        className="px-3 py-2 rounded-xl border border-gray-200 focus:border-primary-500 outline-none text-sm"
-                      />
-                      <input
-                        type="url"
-                        value={companyUrl}
-                        onChange={(e) => setCompanyUrl(e.target.value)}
-                        placeholder="Company URL (optional)"
-                        className="px-3 py-2 rounded-xl border border-gray-200 focus:border-primary-500 outline-none text-sm"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <button type="button" onClick={handleAnalyze} disabled={loading} className="flex-1 py-3 sm:py-4 rounded-xl bg-primary-600 text-white font-bold hover:bg-primary-700 disabled:opacity-60 flex items-center justify-center gap-2">
-                    {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                    Analyze Now — Deep Scam Scan
-                  </button>
                   <button
-                    type="button"
-                    onClick={() => setShowKeyModal(true)}
-                    className="px-3 sm:px-4 py-3 sm:py-4 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors"
-                    title="Manage API Keys"
+                    onClick={handleAnalyze}
+                    disabled={loading || (!userInput.trim() && !imageBase64)}
+                    className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white px-10 py-3.5 rounded-2xl font-black flex items-center gap-2 shadow-xl shadow-primary-500/20 transition-all hover:-translate-y-0.5"
                   >
-                    <Key size={16} />
+                    {loading ? <Loader2 size={20} className="animate-spin" /> : <>Start Analysis <Search size={20} /></>}
                   </button>
                 </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <button onClick={() => fillExample('advance')} className="text-[11px] font-bold text-gray-400 hover:text-primary-600 transition-colors uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-full border border-gray-100 italic">"Advance Payment trap"</button>
+            <button onClick={() => fillExample('equipment')} className="text-[11px] font-bold text-gray-400 hover:text-primary-600 transition-colors uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-full border border-gray-100 italic">"Equipment Reimbursement"</button>
+          </div>
+        </div>
+
+        <div className="mt-8 flex justify-center gap-4">
+          <button
+            onClick={() => setShowKeyModal(true)}
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-primary-600 transition-colors text-xs font-bold uppercase tracking-widest"
+          >
+            <Settings size={14} /> API Config
+          </button>
+          <Link
+            to="/scam-education"
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-blue-600 transition-colors text-xs font-bold uppercase tracking-widest"
+          >
+            <HelpCircle size={14} /> How it works
+          </Link>
+        </div>
+      </header>
+
+      <main className="mt-10">
+        {!result ? (
+          <div className="max-w-3xl mx-auto pb-20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-primary-50 border border-primary-100 flex items-center justify-center text-primary-600 shadow-inner">
+                  <Users size={24} />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-gray-900 leading-none">Community Feed</h2>
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Real-time Scam Intel</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 bg-white p-1.5 rounded-xl border border-gray-200 shadow-sm">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || loadingPublic}
+                  className="p-2 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-primary-600 disabled:opacity-20 transition-all"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <div className="px-3 h-8 flex items-center bg-gray-50 rounded-lg">
+                  <span className="text-[10px] font-black text-gray-600 uppercase">Page {currentPage} of {pagination.totalPages}</span>
+                </div>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                  disabled={currentPage === pagination.totalPages || loadingPublic}
+                  className="p-2 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-primary-600 disabled:opacity-20 transition-all"
+                >
+                  <ArrowUpRight size={18} />
+                </button>
               </div>
             </div>
 
-            {loading && (
-              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="text-center mb-4">
-                  <h3 className="text-lg font-extrabold text-gray-900">Deep scanning across signals...</h3>
-                  <p className="text-xs text-gray-500 mt-1">Reddit, public reviews, domain/email risk, and scam patterns</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {STEPS.map((label, index) => {
-                    const isDone = index < step;
-                    const isActive = index === step;
-                    return (
-                      <div key={label} className={`flex items-center gap-2 p-2 rounded-lg border text-xs ${isDone ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : isActive ? 'bg-primary-50 border-primary-200 text-primary-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
-                        {isDone ? <CheckCircle2 size={14} /> : isActive ? <Loader2 size={14} className="animate-spin" /> : <span className="w-2 h-2 rounded-full bg-current" />}
-                        {label}
+            <div className="space-y-4">
+              {loadingPublic ? (
+                Array(3).fill(0).map((_, i) => (
+                  <div key={i} className="h-32 bg-gray-50 rounded-3xl animate-pulse border border-gray-100" />
+                ))
+              ) : publicReports.map((report) => (
+                <div
+                  key={report._id}
+                  className="group bg-white p-4 rounded-[2rem] border border-gray-100 hover:border-gray-200 hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden"
+                  onClick={() => navigate(`/scam-reports/${report._id}`)}
+                >
+                  <div className="flex items-start gap-6">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{new Date(report.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                       </div>
-                    );
-                  })}
+
+                      <h3 className="text-lg font-black text-gray-900 group-hover:text-primary-600 transition-colors mb-1.5 tracking-tight leading-tight">
+                        {report.companyName}
+                      </h3>
+
+                      <div className="bg-gray-50/50 rounded-xl p-2.5 border border-gray-100/50 mb-2.5 line-clamp-1">
+                        <p className="text-[11px] text-gray-500 italic">"{report.scamText || report.originalMessage || report.summary}"</p>
+                      </div>
+
+                      <p className="text-gray-500 text-[13px] leading-relaxed line-clamp-1 mb-2.5">
+                        {report.summary}
+                      </p>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1.5 text-gray-400">
+                            <ThumbsUp size={12} className="group-hover:text-primary-500" />
+                            <span className="text-[9px] font-bold">{report.votes?.up || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-gray-400">
+                            <MessageSquare size={12} className="group-hover:text-primary-500" />
+                            <span className="text-[9px] font-bold">{report.comments?.length || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-4 h-4 rounded-full bg-primary-100 flex items-center justify-center text-[8px] font-black text-primary-600">
+                              {report.reporterName?.[0] || 'U'}
+                            </div>
+                            <span className="text-[9px] text-gray-400 font-bold whitespace-nowrap">
+                              {report.reporterName || 'Someone'} <span className="font-medium text-gray-300 hidden sm:inline">submitted {timeAgo(report.createdAt)}</span>
+                            </span>
+                          </div>
+                        </div>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[9px] font-black text-primary-600 uppercase tracking-widest">
+                          View <ArrowUpRight size={12} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-1 shrink-0 p-2 bg-gray-50 rounded-2xl border border-gray-100 h-fit">
+                      <div className="relative">
+                        <ChevronUp size={12} className="text-gray-300" />
+                        <div className="my-1 flex items-center justify-center">
+                          <TrustScoreCircle score={report.trustScore} size={40} showLabel={false} />
+                        </div>
+                        <ChevronDown size={12} className="text-gray-300" />
+                      </div>
+                      <span className={`text-[8px] font-black uppercase tracking-wider ${scoreClass(report.trustScore)}`}>
+                        {report.trustScore >= 80 ? 'SAFE' : report.trustScore >= 60 ? 'CAUTION' : report.trustScore >= 40 ? 'WARNING' : 'DANGER'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
-          </>
-        )}
+              ))}
 
-        {result && (
-          <div className="space-y-4">
-            {/* Main Result Card with Circular Progress */}
-            <div className={`p-6 rounded-2xl border ${verdictClass(result.verdict)} bg-white relative overflow-hidden`}>
-              {/* Background Pattern */}
-              <div className="absolute inset-0 opacity-5">
-                <div className="w-full h-full" style={{
-                  backgroundImage: `radial-gradient(circle at 20% 80%, currentColor 1px, transparent 1px), 
-                                     radial-gradient(circle at 80% 20%, currentColor 1px, transparent 1px)`,
-                  backgroundSize: '20px 20px'
-                }}></div>
-              </div>
-
-              <div className="relative flex flex-col lg:flex-row lg:items-start gap-6">
-                {/* Trust Score Circle */}
+              {!loadingPublic && publicReports.length === 0 && (
+                <div className="text-center py-20 bg-gray-50 rounded-[3rem] border-2 border-dashed border-gray-200">
+                  <Shield className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                  <p className="text-gray-400 font-bold uppercase tracking-widest">The Feed is empty.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className={`p-8 rounded-[3rem] border-2 ${verdictClass(result.verdict)} bg-white relative`}>
+              <div className="relative flex flex-col lg:flex-row lg:items-start gap-12">
                 <div className="flex justify-center lg:block">
-                  <TrustScoreCircle
-                    score={result.trustScore}
-                    size={120}
-                    className="lg:sticky lg:top-4"
-                  />
+                  <TrustScoreCircle score={result.trustScore} size={160} showLabel={true} className="lg:sticky lg:top-4" />
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  {/* Company & Role Header */}
-                  <div className="flex flex-wrap items-start gap-3 mb-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-2xl lg:text-3xl font-black text-gray-900 mb-2">
-                        {result.company}
-                      </h2>
-                      <p className="text-lg text-gray-600 mb-3">{result.role}</p>
+                      <h2 className="text-3xl lg:text-4xl font-black text-gray-900 mb-2 leading-none">{result.company}</h2>
+                      <p className="text-xl text-gray-600 font-medium italic">{result.role}</p>
                     </div>
 
-                    {/* Action Buttons */}
                     <div className="flex gap-2">
-                      {!result.isHistory && (
+                      {!result.isHistory && (!companyStats || companyStats.stats.totalReports === 0) && !loadingStats && (
                         !reportSaved ? (
-                          <button
-                            onClick={handleSaveReport}
-                            disabled={savingReport}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 transition-colors"
-                          >
-                            {savingReport ? (
-                              <><Loader2 size={16} className="animate-spin" /> Saving...</>
-                            ) : (
-                              <><Save size={16} /> Save Report</>
-                            )}
+                          <button onClick={handleSaveReport} disabled={savingReport} className="px-4 py-2 bg-green-600 text-white rounded-xl font-black text-[10px] hover:bg-green-700 disabled:opacity-50 transition-all flex items-center gap-2">
+                            {savingReport ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} SAVE REPORT
                           </button>
                         ) : (
-                          <div className="px-4 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg inline-flex items-center gap-2">
-                            <CheckCircle2 size={16} /> Report Saved!
+                          <div className="px-4 py-2 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center gap-2 font-black text-[10px]">
+                            <Check size={16} /> SAVED
                           </div>
                         )
                       )}
-
-                      <Link
-                        to="/scam-reports"
-                        className="px-4 py-2 bg-primary-50 border border-primary-200 text-primary-700 rounded-lg hover:bg-primary-100 transition-colors inline-flex items-center gap-2"
-                      >
-                        <Users size={16} /> View All Reports
-                      </Link>
+                      <button onClick={() => setResult(null)} className="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-gray-900 transition-colors">
+                        <X size={20} />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Summary */}
-                  <p className="text-gray-700 leading-relaxed mb-4">{result.summary}</p>
-
-                  {/* Company Stats */}
-                  {companyStats && companyStats.stats.totalReports > 0 && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <TrendingUp size={16} className="text-blue-600" />
-                        <span className="font-semibold text-blue-900">
-                          Community Intelligence for {result.company}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-center">
-                        <div>
-                          <div className="text-lg font-bold text-blue-900">{companyStats.stats.totalReports}</div>
-                          <div className="text-xs text-blue-600">Total Reports</div>
-                        </div>
-                        <div>
-                          <div className="text-lg font-bold text-red-600">{companyStats.stats.dangerCount}</div>
-                          <div className="text-xs text-blue-600">Danger Alerts</div>
-                        </div>
-                        <div>
-                          <div className="text-lg font-bold text-amber-600">{companyStats.stats.warningCount}</div>
-                          <div className="text-xs text-blue-600">Warnings</div>
-                        </div>
-                        <div>
-                          <div className="text-lg font-bold text-green-600">{companyStats.stats.safeCount}</div>
-                          <div className="text-xs text-blue-600">Safe Reports</div>
-                        </div>
-                      </div>
-                      {companyStats.stats.totalReports > 1 && (
-                        <div className="mt-3 text-center">
-                          <Link
-                            to={`/scam-reports?company=${encodeURIComponent(result.company)}`}
-                            className="text-sm text-blue-700 hover:text-blue-800 underline inline-flex items-center gap-1"
-                          >
-                            <Eye size={14} /> View all {companyStats.stats.totalReports} reports for this company
-                          </Link>
-                        </div>
-                      )}
+                  <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                      <MessageSquare size={12} /> Original Submission
                     </div>
-                  )}
+                    <p className="text-sm text-gray-600 italic leading-relaxed">"{userInput}"</p>
+                  </div>
 
-                  {result.analysisWarning && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-                      <p className="text-sm text-amber-800">⚠️ {result.analysisWarning}</p>
+                  <p className="text-gray-700 leading-relaxed mb-6 font-medium">{result.summary}</p>
+
+                  {companyStats && companyStats.stats.totalReports > 0 && (
+                    <div className="bg-blue-50/50 border border-blue-100 rounded-3xl p-6 mb-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <TrendingUp size={16} className="text-blue-600" />
+                        <span className="font-black text-blue-900 uppercase text-xs tracking-tight">Community Intelligence</span>
+                      </div>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                        <div className="p-2 bg-white rounded-2xl border border-blue-100">
+                          <span className="text-xl font-black text-blue-900">{companyStats.stats.totalReports}</span>
+                          <p className="text-[9px] font-black text-gray-400 uppercase">Reports</p>
+                        </div>
+                        <div className="p-2 bg-white rounded-2xl border border-red-100">
+                          <span className="text-xl font-black text-red-600">{companyStats.stats.dangerCount}</span>
+                          <p className="text-[9px] font-black text-gray-400 uppercase">Danger</p>
+                        </div>
+                        <div className="p-2 bg-white rounded-2xl border border-amber-100">
+                          <span className="text-xl font-black text-amber-600">{companyStats.stats.warningCount}</span>
+                          <p className="text-[9px] font-black text-gray-400 uppercase">Warning</p>
+                        </div>
+                        <div className="p-2 bg-white rounded-2xl border border-emerald-100">
+                          <span className="text-xl font-black text-green-600">{companyStats.stats.safeCount}</span>
+                          <p className="text-[9px] font-black text-gray-400 uppercase">Safe</p>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Sub-Scores with Circular Progress */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Detailed Analysis Breakdown</h3>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                <MiniCircularProgress
-                  value={result.subScores.companyLegitimacy}
-                  label="Company Legitimacy"
-                />
-                <MiniCircularProgress
-                  value={result.subScores.offerRealism}
-                  label="Offer Realism"
-                />
-                <MiniCircularProgress
-                  value={result.subScores.processFlags}
-                  label="Process Flags"
-                />
-                <MiniCircularProgress
-                  value={result.subScores.communitySentiment}
-                  label="Community Sentiment"
-                />
-              </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {Object.entries(result.subScores).map(([key, value]) => (
+                <div key={key} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center">
+                  <MiniCircularProgress value={value} size={64} />
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center leading-tight">
+                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                  </span>
+                </div>
+              ))}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white rounded-xl border border-gray-100 p-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-red-500 mb-3 flex items-center gap-2"><AlertTriangle size={14} /> Red Flags</h3>
-                <div className="space-y-2">
-                  {(result.redFlags.length ? result.redFlags : ['No explicit red flags detected.']).map((flag, idx) => (
-                    <div key={idx} className="text-sm text-gray-700 flex items-start gap-2">
-                      <span className="mt-1 w-1.5 h-1.5 rounded-full bg-red-500" />
-                      <span>{flag}</span>
+              <div className="bg-white rounded-3xl border border-gray-100 p-6">
+                <h3 className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-4 flex items-center gap-2"><AlertTriangle size={14} /> Red Flags</h3>
+                <div className="space-y-3">
+                  {result.redFlags.map((f, i) => (
+                    <div key={i} className="text-sm text-gray-700 flex items-start gap-2">
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                      <span>{f}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-3 flex items-center gap-2"><CheckCircle2 size={14} /> Legitimacy Signals</h3>
-                <div className="space-y-2">
-                  {(result.greenFlags.length ? result.greenFlags : ['No strong legitimacy signal found.']).map((flag, idx) => (
-                    <div key={idx} className="text-sm text-gray-700 flex items-start gap-2">
-                      <span className="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span>{flag}</span>
+              <div className="bg-white rounded-3xl border border-gray-100 p-6">
+                <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center gap-2"><CheckCircle2 size={14} /> Safety Signals</h3>
+                <div className="space-y-3">
+                  {result.greenFlags.map((f, i) => (
+                    <div key={i} className="text-sm text-gray-700 flex items-start gap-2">
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                      <span>{f}</span>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-3">Community Intelligence</h3>
-              <div className="space-y-3">
-                {(result.communityFindings.length ? result.communityFindings : [{ source: 'System', icon: 'HelpCircle', finding: 'No community findings available.', sentiment: 'neutral', links: [] }]).map((finding, idx) => (
-                  <div key={idx} className="border border-gray-100 rounded-lg p-3">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-lg bg-gray-50 text-gray-500">
-                        {getIcon(finding.icon, "w-5 h-5")}
+            {result.communityFindings.length > 0 && (
+              <div className="bg-white rounded-3xl border border-gray-100 p-8">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6">Deep Web Context</h3>
+                <div className="space-y-4">
+                  {result.communityFindings.map((f, i) => (
+                    <div key={i} className="p-4 rounded-2xl border border-gray-50 flex gap-4">
+                      <div className="p-3 bg-white rounded-xl border border-gray-100 text-gray-400 shrink-0 h-fit">
+                        {getIcon(f.icon, "w-5 h-5")}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900">{finding.source}</p>
-                          <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border border-gray-200 text-gray-500">{finding.sentiment || 'neutral'}</span>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">{finding.finding}</p>
-                        {Array.isArray(finding.links) && finding.links.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {finding.links.map((link, liIdx) => link?.url ? (
-                              <a
-                                key={liIdx}
-                                href={link.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[11px] px-2.5 py-1.5 rounded-md border border-gray-200 bg-white hover:bg-gray-50 text-blue-600 font-medium inline-flex items-center gap-1.5 transition-colors shadow-sm"
-                              >
-                                <LinkIcon size={12} className="text-gray-400" />
-                                {link.title || 'Source'}
-                                <ArrowUpRight size={12} className="text-gray-400" />
+                      <div>
+                        <p className="font-bold text-gray-900 mb-1">{f.source}</p>
+                        <p className="text-sm text-gray-600 leading-relaxed mb-3">{f.finding}</p>
+                        {f.links?.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {f.links.map((l, li) => (
+                              <a key={li} href={l.url} target="_blank" rel="noopener" className="text-[10px] font-black text-primary-600 hover:text-primary-700 bg-primary-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all">
+                                {l.title} <ArrowUpRight size={12} />
                               </a>
-                            ) : null)}
+                            ))}
                           </div>
                         )}
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {result.salaryCheck && (
-              <div className="bg-white rounded-xl border border-gray-100 p-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-3">Salary Reality Check</h3>
-                <p className="text-sm text-gray-700"><span className="font-semibold">Offered:</span> {result.salaryCheck.offered || 'Not specified'}</p>
-                <p className="text-sm text-gray-700 mt-1"><span className="font-semibold">Market:</span> {result.salaryCheck.marketRate || 'Unknown'}</p>
-                <p className="text-sm text-gray-700 mt-1"><span className="font-semibold">Verdict:</span> {result.salaryCheck.verdict || 'Unknown'} — {result.salaryCheck.explanation || ''}</p>
-              </div>
-            )}
-
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-3">Domain & Email Forensics</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                <div className="rounded-lg border border-gray-100 p-2"><span className="text-gray-400">Domain:</span> <span className="text-gray-700">{result.domainAnalysis.companyDomain || 'Unknown'}</span></div>
-                <div className="rounded-lg border border-gray-100 p-2"><span className="text-gray-400">Age:</span> <span className="text-gray-700">{result.domainAnalysis.domainAge || 'Unknown'}</span></div>
-                <div className="rounded-lg border border-gray-100 p-2"><span className="text-gray-400">Risk:</span> <span className="text-gray-700">{result.domainAnalysis.domainRisk || 'Unknown'}</span></div>
-              </div>
-              {result.emailChecks.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {result.emailChecks.map((check, idx) => (
-                    <div key={idx} className="text-sm rounded-lg border border-gray-100 p-2 text-gray-700">
-                      <span className="font-semibold">{check.check}:</span> {check.detail || check.status}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-3">Community Reports</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                <div className="rounded-lg border border-gray-100 p-3"><p className="text-2xl font-black text-gray-900">{reportCount}</p><p className="text-[10px] text-gray-400 uppercase">Total</p></div>
-                <div className="rounded-lg border border-gray-100 p-3"><p className="text-2xl font-black text-red-600">{currentReports.scam}</p><p className="text-[10px] text-gray-400 uppercase">Scam</p></div>
-                <div className="rounded-lg border border-gray-100 p-3"><p className="text-2xl font-black text-emerald-600">{currentReports.legit}</p><p className="text-[10px] text-gray-400 uppercase">Legit</p></div>
-                <div className="rounded-lg border border-gray-100 p-3"><p className="text-2xl font-black text-amber-600">{currentReports.unsure}</p><p className="text-[10px] text-gray-400 uppercase">Unsure</p></div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" onClick={() => submitReport(result.company, 'scam')} className="px-3 py-2 rounded-lg text-xs font-semibold bg-red-50 border border-red-200 text-red-700 flex items-center gap-1.5">
-                  <AlertTriangle size={14} /> Confirmed Scam
-                </button>
-                <button type="button" onClick={() => submitReport(result.company, 'legit')} className="px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center gap-1.5">
-                  <CheckCircle2 size={14} /> Legitimate
-                </button>
-                <button type="button" onClick={() => submitReport(result.company, 'unsure')} className="px-3 py-2 rounded-lg text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-700 flex items-center gap-1.5">
-                  <HelpCircle size={14} /> Not Sure
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-3">ScamRadar Verdict</h3>
-              <p className="text-sm text-gray-700 leading-relaxed">{result.finalVerdict}</p>
-              {result.actionItems.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {result.actionItems.map((item, idx) => (
-                    <div key={idx} className="text-sm rounded-lg border border-gray-100 p-2 text-gray-700 flex items-start gap-2">
-                      <span className="mt-0.5 px-1.5 py-0.5 text-[10px] rounded bg-primary-100 text-primary-700 font-bold">{idx + 1}</span>
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {result.sources && result.sources.length > 0 && (
-              <div className="bg-white rounded-xl border border-gray-100 p-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-3">Research Sources</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {result.sources.map((source, idx) => (
-                    <a
-                      key={idx}
-                      href={source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-lg border border-primary-100 p-3 hover:border-primary-300 hover:bg-primary-50 transition-all group flex items-start gap-3"
-                    >
-                      <div className="p-2 rounded-lg bg-primary-50 text-primary-500 group-hover:bg-white group-hover:text-primary-600 transition-colors">
-                        <Search size={16} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-900 truncate group-hover:text-primary-700">{source.title}</p>
-                        <p className="text-[10px] text-gray-500 truncate flex items-center gap-1">
-                          <ExternalLink size={10} /> {source.url ? (
-                            (() => {
-                              try {
-                                return new URL(source.url).hostname;
-                              } catch (e) {
-                                return source.url.substring(0, 20) + '...';
-                              }
-                            })()
-                          ) : 'Source'}
-                        </p>
-                      </div>
-                    </a>
                   ))}
                 </div>
               </div>
             )}
-
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-3">Verify Further</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {result.resourceLinks.map((resource, idx) => (
-                  <a key={idx} href={resource.url} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-gray-100 p-3 hover:border-primary-200 hover:bg-primary-50/50 transition-colors flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-primary-50 text-primary-600">
-                      {getIcon(resource.icon, "w-5 h-5")}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{resource.title}</p>
-                      <p className="text-xs text-gray-500 truncate">{resource.desc}</p>
-                    </div>
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            <button type="button" onClick={() => setResult(null)} className="w-full py-3 rounded-xl border border-gray-200 text-gray-600 hover:text-primary-700 hover:border-primary-200 inline-flex justify-center items-center gap-2 font-semibold">
-              <RefreshCw size={16} /> Analyze Another Offer
-            </button>
           </div>
         )}
-      </div>
+      </main>
 
-      {/* Analysis Animation Overlay */}
       {analysisAnimation.visible && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-auto text-center animate-in fade-in duration-300">
-            <div className="mb-6">
-              <Brain className="w-16 h-16 mx-auto text-primary-600 animate-pulse" />
+          <div className="bg-white rounded-[2rem] p-10 max-w-md w-full mx-auto text-center shadow-2xl">
+            <div className="mb-8">
+              <Brain className="w-20 h-20 mx-auto text-primary-600 animate-pulse" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-4">AI Analysis in Progress</h3>
-            <div className="space-y-4">
-              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-primary-500 to-blue-500 rounded-full transition-all duration-1000 ease-out"
-                  style={{ width: `${analysisAnimation.progress}%` }}
-                />
-              </div>
-              <div className="text-sm text-gray-600">
-                <div className="flex items-center justify-center gap-2 animate-pulse">
-                  <Loader size={16} className="animate-spin" />
-                  {analysisAnimation.currentStep}
-                </div>
-                <div className="text-xs text-gray-500 mt-2">
-                  {Math.round(analysisAnimation.progress)}% Complete
-                </div>
-              </div>
+            <h3 className="text-2xl font-black text-gray-900 mb-2">Analyzing Data</h3>
+            <p className="text-gray-400 text-sm font-bold uppercase tracking-widest mb-8">{analysisAnimation.currentStep}</p>
+            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden shadow-inner mb-2">
+              <div className="h-full bg-primary-600 rounded-full transition-all duration-500 shadow-lg shadow-primary-500/40" style={{ width: `${analysisAnimation.progress}%` }} />
             </div>
+            <div className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{Math.round(analysisAnimation.progress)}% Complete</div>
           </div>
         </div>
       )}
 
-      {/* API Key Modal */}
       {showKeyModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full mx-auto animate-in fade-in duration-300">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[3rem] max-w-lg w-full mx-auto shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-8 border-b border-gray-50">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">API Configuration</h3>
-                <p className="text-sm text-gray-500">Configure your AI API key for scam detection</p>
+                <h3 className="text-xl font-black text-gray-900 uppercase">AI Engine</h3>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Configure your Scanning Key</p>
               </div>
-              <button
-                onClick={() => setShowKeyModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X size={20} className="text-gray-500" />
+              <button onClick={() => setShowKeyModal(false)} className="p-3 hover:bg-gray-50 rounded-2xl transition-all">
+                <X size={24} className="text-gray-400" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
-              {/* Current Keys */}
+            <div className="p-8 space-y-8">
               {aiKeys.length > 0 && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">Current Keys</label>
-                  <div className="space-y-2">
-                    {aiKeys.map((keyObj, idx) => (
-                      <div key={keyObj._id || idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <span className="text-sm font-medium text-gray-900">
-                            {keyObj.label || `Key ${idx + 1}`}
-                          </span>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {keyObj.keyPreview || `•••••••••••••${keyObj.key?.slice(-6) || ''}`}
-                          </div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Network Keys</label>
+                  <div className="space-y-3">
+                    {aiKeys.map((k, i) => (
+                      <div key={i} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-gray-900 truncate">{k.label || 'Standard Engine'}</p>
+                          <p className="text-[10px] text-gray-400 font-medium tracking-tight mt-0.5">{k.keyPreview}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {keyObj.isActive !== undefined && (
-                            <button
-                              onClick={() => handleToggleKey(keyObj._id, keyObj.isActive)}
-                              className={`px-2 py-1 rounded-md text-xs font-semibold ${keyObj.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
-                            >
-                              {keyObj.isActive ? 'Active' : 'Inactive'}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => removeAiKey(keyObj._id || idx)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {k.isActive && <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-[9px] font-black rounded-lg uppercase">Active</span>}
+                          <button onClick={() => removeAiKey(k._id || i)} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18} /></button>
                         </div>
                       </div>
                     ))}
@@ -1289,86 +1027,37 @@ const ScamDetector = () => {
                 </div>
               )}
 
-              {/* Add New Key */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">Add New API Key</label>
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Enter Gemini API Key"
-                    value={newKey.key}
-                    onChange={(e) => setNewKey(prev => ({ ...prev, key: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Label (optional)"
-                    value={newKey.label}
-                    onChange={(e) => setNewKey(prev => ({ ...prev, label: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleTestKey}
-                      disabled={!newKey.key || testingKey}
-                      className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                      {testingKey ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        <>
-                          <Shield size={16} />
-                          Test Key
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={handleSaveKey}
-                      disabled={!newKey.key || savingKey}
-                      className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                      {savingKey ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={16} />
-                          Save Key
-                        </>
-                      )}
-                    </button>
+              <div className="space-y-4">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Register New Key</label>
+                <div className="space-y-4">
+                  <input type="password" placeholder="GEMINI_API_KEY" value={newKey.key} onChange={(e) => setNewKey(p => ({ ...p, key: e.target.value }))} className="w-full h-14 px-6 rounded-2xl bg-gray-50 border border-transparent focus:bg-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all font-mono text-sm" />
+                  <input type="text" placeholder="KEY_LABEL" value={newKey.label} onChange={(e) => setNewKey(p => ({ ...p, label: e.target.value }))} className="w-full h-14 px-6 rounded-2xl bg-gray-50 border border-transparent focus:bg-white focus:border-primary-500 transition-all font-black text-xs uppercase tracking-widest" />
+                  <div className="flex gap-4">
+                    <button onClick={handleTestKey} className="flex-1 h-12 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all">Test Engine</button>
+                    <button onClick={handleSaveKey} className="flex-1 h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary-500/20 transition-all">Deploy Key</button>
                   </div>
                 </div>
-              </div>
-
-              {/* Test Result */}
-              {keyTestResult && (
-                <div className={`p-3 rounded-lg border ${keyTestResult.success
-                  ? 'bg-green-50 border-green-200 text-green-700'
-                  : 'bg-red-50 border-red-200 text-red-700'
-                  }`}>
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    {keyTestResult.success ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-                    {keyTestResult.message}
-                  </div>
-                </div>
-              )}
-
-              {/* Help Text */}
-              <div className="text-xs text-gray-500 space-y-1">
-                <p>• Get your free Gemini API key from <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">Google AI Studio</a></p>
-                <p>• Keys are stored securely and only used for scam analysis</p>
               </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+
+      <div className="fixed bottom-8 right-6 md:hidden z-40">
+        <button
+          onClick={() => {
+            setResult(null);
+            setUserInput('');
+            setImagePreview('');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className="flex items-center justify-center w-16 h-16 bg-primary-600 shadow-2xl shadow-primary-500/40 text-white rounded-full transition-all border-4 border-white"
+        >
+          <Plus size={28} />
+          <div className="absolute top-0 right-0 -mr-1 -mt-1 w-5 h-5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+        </button>
+      </div>
+    </div >
   );
 };
 
