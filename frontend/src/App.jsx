@@ -112,17 +112,30 @@ const PublicRoute = ({ children }) => {
   return children;
 };
 
-// Public ScamRadar routes - accessible to all authenticated users
-// These use universal URLs that don't change based on user role
-
 function App() {
   return (
     <Routes>
-      {/* Shared Scam Report Routes - redirect to role-specific paths */}
-      <Route path="/scam-reports/:id" element={<ScamReportRedirect />} />
-      <Route path="/scam-reports" element={<ScamRadarRedirect page="scam-reports" />} />
-      <Route path="/scam-detector" element={<ScamRadarRedirect page="scam-detector" />} />
-      <Route path="/scam-education" element={<ScamRadarRedirect page="scam-education" />} />
+      {/* Universal ScamRadar routes (accessible to all authenticated users) */}
+      <Route path="/scam-reports/:id" element={
+        <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
+          <ScamReportDetails />
+        </ProtectedRoute>
+      } />
+      <Route path="/scam-reports" element={
+        <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
+          <ScamReportsRepository />
+        </ProtectedRoute>
+      } />
+      <Route path="/scam-detector" element={
+        <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
+          <StudentScamDetector />
+        </ProtectedRoute>
+      } />
+      <Route path="/scam-education" element={
+        <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
+          <ScamEducation />
+        </ProtectedRoute>
+      } />
       
       {/* Public Routes */}
       <Route path="/portfolios" element={<Portfolios />} />
