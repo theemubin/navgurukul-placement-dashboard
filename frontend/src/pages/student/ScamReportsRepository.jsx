@@ -18,15 +18,18 @@ import {
   MessageCircle,
   MoreHorizontal,
   Plus,
-  ChevronDown
+  ChevronDown,
+  ArrowLeft
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { scamReportsAPI } from '../../services/api';
 import { TrustScoreCircle, MiniCircularProgress } from '../../components/CircularProgress';
 import toast from 'react-hot-toast';
 
 const ScamReportsRepository = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -212,6 +215,17 @@ const ScamReportsRepository = () => {
     }).format(date);
   };
 
+  const getDashboardPath = () => {
+    const role = user?.role;
+    const dashboardMap = {
+      student: '/student',
+      campus_poc: '/campus-poc',
+      coordinator: '/coordinator',
+      manager: '/manager'
+    };
+    return dashboardMap[role] || '/student';
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -219,7 +233,14 @@ const ScamReportsRepository = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-gray-900">Forum / Technology / Computer / Latest</h1>
+              <button
+                onClick={() => navigate(getDashboardPath())}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors group -ml-2"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft size={20} className="text-gray-600 group-hover:text-gray-900" />
+              </button>
+              <h1 className="text-xl font-bold text-gray-900">Scam Reports</h1>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm">

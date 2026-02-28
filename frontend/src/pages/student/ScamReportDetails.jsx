@@ -267,16 +267,27 @@ const ScamReportDetails = () => {
   const verdictConfig = getVerdictConfig(report.verdict);
   const Icon = verdictConfig.icon;
 
+  const getDashboardPath = () => {
+    const role = user?.role;
+    const dashboardMap = {
+      student: '/student',
+      campus_poc: '/campus-poc',
+      coordinator: '/coordinator',
+      manager: '/manager'
+    };
+    return dashboardMap[role] || '/student';
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <button
-          onClick={() => navigate(-1)}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          title="Go back"
+          onClick={() => navigate(getDashboardPath())}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+          title="Back to Dashboard"
         >
-          <ArrowLeft size={20} className="text-gray-600" />
+          <ArrowLeft size={20} className="text-gray-600 group-hover:text-gray-900" />
         </button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Scam Report Details</h1>

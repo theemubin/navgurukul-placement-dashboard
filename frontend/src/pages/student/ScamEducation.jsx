@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { ArrowLeft, BarChart3, Lightbulb, Shield, AlertTriangle, CheckCircle2, TrendingUp, HelpCircle, Layout, Settings, BookOpen, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { MiniCircularProgress } from '../../components/CircularProgress';
 
 const ScamEducation = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedExample, setExpandedExample] = useState(null);
 
@@ -140,17 +142,29 @@ const ScamEducation = () => {
     }
   ];
 
+  const getDashboardPath = () => {
+    const role = user?.role;
+    const dashboardMap = {
+      student: '/student',
+      campus_poc: '/campus-poc',
+      coordinator: '/coordinator',
+      manager: '/manager'
+    };
+    return dashboardMap[role] || '/student';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-blue-50">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8">
         <div className="max-w-6xl mx-auto px-4">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate(getDashboardPath())}
             className="flex items-center gap-2 mb-4 hover:opacity-80 transition"
+            title="Back to Dashboard"
           >
             <ArrowLeft className="w-5 h-5" />
-            Back
+            Back to Dashboard
           </button>
           <h1 className="text-4xl font-bold mb-2">Scam Detector (Beta): Educational Guide</h1>
           <p className="text-blue-100 text-lg">Understand how ScamRadar analyzes job offers to keep you safe.</p>

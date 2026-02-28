@@ -35,12 +35,13 @@ import {
   User,
   Image as ImageIcon,
   Link as LinkIcon,
-  ArrowUpRight
+  ArrowUpRight,
+  ArrowLeft
 } from 'lucide-react';
 import { utilsAPI, userAPI, scamReportsAPI } from '../../services/api';
 import { TrustScoreCircle, MiniCircularProgress } from '../../components/CircularProgress';
 import toast from 'react-hot-toast';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const HISTORY_KEY = 'scamradar_history_v2';
@@ -591,9 +592,32 @@ const ScamDetector = () => {
   const currentReports = result ? getReports(result.company) : { scam: 0, legit: 0, unsure: 0 };
   const reportCount = currentReports.scam + currentReports.legit + currentReports.unsure;
 
+  const navigate = useNavigate();
+  const getDashboardPath = () => {
+    const role = user?.role;
+    const dashboardMap = {
+      student: '/student',
+      campus_poc: '/campus-poc',
+      coordinator: '/coordinator',
+      manager: '/manager'
+    };
+    return dashboardMap[role] || '/student';
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-      <header className="pt-8 pb-6 text-center">
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={() => navigate(getDashboardPath())}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+          title="Back to Dashboard"
+        >
+          <ArrowLeft size={20} className="text-gray-600 group-hover:text-gray-900" />
+        </button>
+        <h1 className="flex-1 text-center text-sm font-semibold text-gray-600">ScamRadar Pro</h1>
+        <div className="w-10"></div>
+      </div>
+      <header className="pt-4 pb-6 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary-50 border border-primary-100 text-primary-700 text-xs font-bold uppercase tracking-wider">
           <Shield size={14} /> ScamRadar Pro (Beta)
         </div>
