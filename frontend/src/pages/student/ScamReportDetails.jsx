@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   ArrowLeft,
   Calendar,
@@ -75,10 +76,22 @@ const getIcon = (name, className = "w-4 h-4") => {
 const ScamReportDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
   const [userVote, setUserVote] = useState(null);
+
+  // Determine base path based on user role
+  const getBasePath = () => {
+    const roleMap = {
+      'student': '/student',
+      'campus_poc': '/campus-poc',
+      'coordinator': '/coordinator',
+      'manager': '/manager'
+    };
+    return roleMap[user?.role] || '/student';
+  };
 
   // Comments state
   const [newComment, setNewComment] = useState('');
@@ -248,12 +261,12 @@ const ScamReportDetails = () => {
         <div className="text-center py-12">
           <AlertTriangle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Report Not Found</h3>
-          <Link
-            to="/student/scam-reports"
-            className="text-primary-600 hover:text-primary-700 underline"
+          <button
+            onClick={() => navigate(-1)}
+            className="text-primary-600 hover:text-primary-700 underline font-medium"
           >
-            ← Back to Reports
-          </Link>
+            ← Go Back
+          </button>
         </div>
       </div>
     );
@@ -266,12 +279,13 @@ const ScamReportDetails = () => {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <Link
-          to="/student/scam-reports"
+        <button
+          onClick={() => navigate(-1)}
           className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          title="Go back"
         >
           <ArrowLeft size={20} className="text-gray-600" />
-        </Link>
+        </button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Scam Report Details</h1>
           <p className="text-gray-500">Community-verified job scam analysis</p>
@@ -370,7 +384,7 @@ const ScamReportDetails = () => {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-gray-900">Analysis Breakdown</h3>
             <Link
-              to="/student/scam-education"
+              to={`${getBasePath()}/scam-education`}
               className="text-xs px-3 py-1 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
             >
               Learn How →

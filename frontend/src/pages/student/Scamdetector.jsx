@@ -41,6 +41,7 @@ import { utilsAPI, userAPI, scamReportsAPI } from '../../services/api';
 import { TrustScoreCircle, MiniCircularProgress } from '../../components/CircularProgress';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const HISTORY_KEY = 'scamradar_history_v2';
 const REPORTS_KEY = 'scamradar_reports_v2';
@@ -167,6 +168,7 @@ const normalizeResult = (raw = {}) => {
 };
 
 const ScamDetector = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('text');
   const [offerInput, setOfferInput] = useState('');
   const [emailHeaderInput, setEmailHeaderInput] = useState('');
@@ -204,6 +206,17 @@ const ScamDetector = () => {
   const [reportSaved, setReportSaved] = useState(false);
   const [companyStats, setCompanyStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+
+  // Get base path based on user role
+  const getBasePath = () => {
+    const roleMap = {
+      'student': '/student',
+      'campus_poc': '/campus-poc',
+      'coordinator': '/coordinator',
+      'manager': '/manager'
+    };
+    return roleMap[user?.role] || '/student';
+  };
 
   const prescreenHits = useMemo(() => {
     if (offerInput.trim().length < 30) return [];
@@ -616,7 +629,7 @@ const ScamDetector = () => {
           API Configuration
         </button>
         <Link
-          to="/student/scam-education"
+          to={`${getBasePath()}/scam-education`}
           className="mt-4 ml-2 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300 text-sm font-medium transition-colors"
           title="Learn how the metrics are calculated"
         >
@@ -830,7 +843,7 @@ const ScamDetector = () => {
                         )}
 
                         <Link
-                          to="/student/scam-reports"
+                          to={`${getBasePath()}/scam-reports`}
                           className="px-4 py-2 bg-primary-50 border border-primary-200 text-primary-700 rounded-lg hover:bg-primary-100 transition-colors inline-flex items-center gap-2"
                         >
                           <Users size={16} /> View All Reports
