@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Settings = require('../models/Settings');
 const { auth, authorize } = require('../middleware/auth');
+const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 
 // Get all settings (public - for dropdowns and forms)
 router.get('/', auth, async (req, res) => {
@@ -617,10 +618,9 @@ router.put('/ai-config', auth, authorize('manager'), async (req, res) => {
 // Get AI runtime status (manager only) - shows whether API key is valid and model accessible
 router.get('/ai-status', auth, authorize('manager'), async (req, res) => {
   try {
-    const settings = await Settings.getSettings();
-    const apiKey = settings.aiConfig?.googleApiKey;
     const AIService = require('../services/aiService');
-    const ai = new AIService(apiKey);
+    const { keys } = await resolveAIKeysForUser(req.userId);
+    const ai = new AIService(keys);
     const status = await ai.getStatus();
     res.json({ success: true, data: status });
   } catch (error) {

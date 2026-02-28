@@ -28,19 +28,19 @@ const CATEGORY_ICONS = {
 };
 
 const MOTIVATIONAL_MESSAGES = [
-  "You're doing great! Keep it up! 🚀",
-  "One step closer to your dream job! 💪",
-  "Amazing progress! You're unstoppable! ⭐",
-  "You're on fire! Keep going! 🔥",
-  "Fantastic work! Almost there! 🎯",
-  "You're crushing it! 💯"
+  "You're doing great! Keep it up!",
+  "One step closer to your dream job!",
+  "Amazing progress! You're unstoppable!",
+  "You're on fire! Keep going!",
+  "Fantastic work! Almost there!",
+  "You're crushing it!"
 ];
 
 const MILESTONE_MESSAGES = {
-  25: { emoji: '🌱', message: 'Great start! You\'re building momentum!' },
-  50: { emoji: '🚀', message: 'Halfway there! You\'re doing amazing!' },
-  75: { emoji: '⚡', message: 'Almost ready! Final push!' },
-  100: { emoji: '🏆', message: 'You did it! You\'re Job Ready!' }
+  25: { message: 'Great start! You\'re building momentum!' },
+  50: { message: 'Halfway there! You\'re doing amazing!' },
+  75: { message: 'Almost ready! Final push!' },
+  100: { message: 'You did it! You\'re Job Ready!' }
 };
 
 function JobReadiness() {
@@ -155,7 +155,7 @@ function JobReadiness() {
   const getStatusBadge = (criterion) => {
     if (criterion.verificationStatus === 'verified') {
       return <Badge variant="success" className="flex items-center gap-1 animate-pulse">
-        <CheckIcon className="w-3 h-3" /> Verified ✨
+        <CheckIcon className="w-3 h-3" /> Verified
       </Badge>;
     }
     if (criterion.verificationStatus === 'pending') {
@@ -188,7 +188,7 @@ function JobReadiness() {
   const getMotivationalMessage = (percentage) => {
     const milestones = [25, 50, 75, 100];
     const milestone = milestones.find(m => percentage >= m && percentage < m + 25) || 0;
-    return MILESTONE_MESSAGES[milestone] || { emoji: '💪', message: MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)] };
+    return MILESTONE_MESSAGES[milestone] || { message: MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)] };
   };
 
   if (loading) {
@@ -244,7 +244,9 @@ function JobReadiness() {
       {/* Confetti Effect */}
       {showConfetti && (
         <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
-          <div className="text-6xl animate-bounce">🎉</div>
+          <div className="bg-white/20 backdrop-blur-sm rounded-full p-8 animate-bounce">
+            <TrophyIcon className="w-16 h-16 text-yellow-400" />
+          </div>
         </div>
       )}
 
@@ -257,7 +259,7 @@ function JobReadiness() {
           </h1>
           <SparklesIcon className="w-8 h-8 text-purple-600" />
         </div>
-        <p className="text-gray-600 text-lg">Level up your skills and become job-ready! 🚀</p>
+        <p className="text-gray-600 text-lg">Level up your skills and become job-ready!</p>
       </div>
 
       {error && <Alert type="error" className="mb-6">{error}</Alert>}
@@ -275,7 +277,7 @@ function JobReadiness() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                  {motivationalMsg.emoji} Level {Math.floor(progress.percentage / 25) + 1}
+                  Level {Math.floor(progress.percentage / 25) + 1}
                 </h2>
                 <p className="text-white/90 text-lg">{motivationalMsg.message}</p>
               </div>
@@ -359,7 +361,7 @@ function JobReadiness() {
               <div className="flex-1">
                 <h3 className="text-xl font-bold text-gray-900 capitalize flex items-center gap-2">
                   {category}
-                  {categoryProgress === 100 && <span className="text-2xl">✨</span>}
+                  {categoryProgress === 100 && <TrophyIcon className="w-5 h-5 text-yellow-500" />}
                 </h3>
                 <div className="flex items-center gap-3 mt-1">
                   <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
@@ -419,7 +421,7 @@ function JobReadiness() {
                             <p className="text-sm text-gray-900 font-medium">{criterion.selfReportedValue}</p>
                             {criterion.notes && (
                               <div className="mt-3 pt-3 border-t border-gray-100">
-                                <p className="text-xs text-gray-500 font-bold mb-1 uppercase tracking-wide">💭 Your Reflection</p>
+                                <p className="text-xs text-gray-500 font-bold mb-1 uppercase tracking-wide">Your Reflection</p>
                                 <p className="text-sm text-gray-700 italic">{criterion.notes}</p>
                               </div>
                             )}
@@ -431,9 +433,10 @@ function JobReadiness() {
                             variant={criterion.selfReportedValue ? "secondary" : "primary"}
                             size="md"
                             onClick={() => handleStartEditing(criterion)}
-                            className="mt-2 font-bold shadow-md hover:shadow-lg transition-all"
+                            className="mt-2 font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2"
                           >
-                            {criterion.selfReportedValue ? '✏️ Edit Response' : '🚀 Start This Task'}
+                            {criterion.selfReportedValue ? <BriefcaseIcon className="w-4 h-4" /> : <RocketLaunchIcon className="w-4 h-4" />}
+                            {criterion.selfReportedValue ? 'Edit Response' : 'Start This Task'}
                           </Button>
                         )}
                       </div>
@@ -445,7 +448,7 @@ function JobReadiness() {
                         {criterion.type === 'answer' && (
                           <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">
-                              ✍️ Your Answer
+                              Your Answer
                             </label>
                             <input
                               type="text"
@@ -464,7 +467,7 @@ function JobReadiness() {
                         {criterion.type === 'link' && (
                           <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">
-                              🔗 Link/URL
+                              Link/URL
                             </label>
                             <input
                               type="url"
@@ -483,7 +486,7 @@ function JobReadiness() {
                         {criterion.type === 'yes/no' && (
                           <div>
                             <label className="block text-sm font-bold text-gray-700 mb-3">
-                              ✅ Your Response
+                              Your Response
                             </label>
                             <div className="flex gap-4">
                               <button
@@ -496,7 +499,7 @@ function JobReadiness() {
                                   : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-green-500'
                                   }`}
                               >
-                                👍 Yes
+                                Yes
                               </button>
                               <button
                                 onClick={() => setFormValues({
@@ -508,7 +511,7 @@ function JobReadiness() {
                                   : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-red-500'
                                   }`}
                               >
-                                👎 No
+                                No
                               </button>
                             </div>
                           </div>
@@ -517,7 +520,7 @@ function JobReadiness() {
                         {criterion.type === 'comment' && (
                           <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">
-                              💬 Your Comment
+                              Your Comment
                             </label>
                             <textarea
                               value={formValues[criterion.criteriaId] || ''}
@@ -537,7 +540,7 @@ function JobReadiness() {
                         <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-5 rounded-xl border-2 border-purple-200">
                           <label className="block text-sm font-bold text-purple-900 mb-2 flex items-center gap-2">
                             <SparklesIcon className="w-5 h-5" />
-                            💭 Reflection: What did you learn?
+                            Reflection: What did you learn?
                           </label>
                           <textarea
                             value={reflections[criterion.criteriaId] || ''}
@@ -550,7 +553,7 @@ function JobReadiness() {
                             placeholder="Reflect on what you learned, challenges you faced, or how this helps your growth..."
                           />
                           <p className="text-xs text-purple-700 mt-2 italic">
-                            💡 Tip: Reflecting helps you internalize your learning and shows your growth mindset!
+                            Tip: Reflecting helps you internalize your learning and shows your growth mindset!
                           </p>
                         </div>
 
@@ -578,7 +581,7 @@ function JobReadiness() {
                             ) : (
                               <>
                                 <RocketLaunchIcon className="w-5 h-5" />
-                                Submit for Review 🎉
+                                Submit for Review
                               </>
                             )}
                           </Button>
@@ -591,7 +594,7 @@ function JobReadiness() {
                       <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl">
                         <p className="text-sm text-blue-900 font-bold mb-3 flex items-center gap-2">
                           <ChatBubbleBottomCenterTextIcon className="w-5 h-5" />
-                          💬 Feedback from your PoC
+                          Feedback from your PoC
                         </p>
                         {criterion.pocRating && (
                           <div className="flex items-center gap-2 mb-2">
@@ -626,10 +629,10 @@ function JobReadiness() {
       {progress.percentage < 100 && (
         <Card className="mt-8 bg-gradient-to-r from-indigo-100 to-purple-100 border-indigo-200 text-center">
           <p className="text-lg font-bold text-indigo-900 mb-2">
-            🌟 Keep going! You're {100 - progress.percentage}% away from being Job Ready!
+            Keep going! You're {100 - progress.percentage}% away from being Job Ready!
           </p>
           <p className="text-sm text-indigo-700">
-            Every criterion you complete brings you closer to your dream career! 💪
+            Every criterion you complete brings you closer to your dream career!
           </p>
         </Card>
       )}

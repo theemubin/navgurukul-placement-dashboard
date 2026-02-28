@@ -1302,7 +1302,7 @@ router.delete('/me/export-presets/:presetId', auth, async (req, res) => {
 });
 
 // Get user's AI API keys
-router.get('/me/ai-keys', auth, authorize('coordinator', 'manager'), async (req, res) => {
+router.get('/me/ai-keys', auth, async (req, res) => {
   try {
     const user = await User.findById(req.userId).select('aiApiKeys');
     // Return keys with masked values for security
@@ -1321,7 +1321,7 @@ router.get('/me/ai-keys', auth, authorize('coordinator', 'manager'), async (req,
 });
 
 // Add AI API key
-router.post('/me/ai-keys', auth, authorize('coordinator', 'manager'), async (req, res) => {
+router.post('/me/ai-keys', auth, async (req, res) => {
   try {
     const { key, label } = req.body;
 
@@ -1363,7 +1363,7 @@ router.post('/me/ai-keys', auth, authorize('coordinator', 'manager'), async (req
 });
 
 // Update AI API key (toggle active status or update label)
-router.patch('/me/ai-keys/:keyId', auth, authorize('coordinator', 'manager'), async (req, res) => {
+router.patch('/me/ai-keys/:keyId', auth, async (req, res) => {
   try {
     const { keyId } = req.params;
     const { isActive, label } = req.body;
@@ -1401,7 +1401,7 @@ router.patch('/me/ai-keys/:keyId', auth, authorize('coordinator', 'manager'), as
 });
 
 // Delete AI API key
-router.delete('/me/ai-keys/:keyId', auth, authorize('coordinator', 'manager'), async (req, res) => {
+router.delete('/me/ai-keys/:keyId', auth, async (req, res) => {
   try {
     const { keyId } = req.params;
     const user = await User.findById(req.userId);

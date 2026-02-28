@@ -3,6 +3,7 @@ const pdfParseModule = require('pdf-parse');
 const pdfParse = pdfParseModule && (pdfParseModule.default || pdfParseModule);
 const cheerio = require('cheerio');
 const axios = require('axios');
+const { searchWeb } = require('../utils/searchHelper');
 
 class AIService {
   constructor(apiKeys) {
@@ -17,6 +18,8 @@ class AIService {
     this.currentKeyIndex = 0;
     this.apiKey = this.apiKeys[0] || null;
     this.genAI = this.apiKey ? new GoogleGenerativeAI(this.apiKey) : null;
+    const keyPreview = this.apiKey ? `...${this.apiKey.slice(-8)}` : 'NONE';
+    console.log(`[AIService] Initialized with ${this.apiKeys.length} key(s), using key #1 (${keyPreview})`);
   }
 
   // Rotate to next available API key
@@ -26,7 +29,8 @@ class AIService {
     this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
     this.apiKey = this.apiKeys[this.currentKeyIndex];
     this.genAI = this.apiKey ? new GoogleGenerativeAI(this.apiKey) : null;
-    console.log(`Rotated to API key #${this.currentKeyIndex + 1}`);
+    const keyPreview = `...${this.apiKey.slice(-8)}`;
+    console.log(`[AIService] Rotated to API key #${this.currentKeyIndex + 1} (${keyPreview})`);
     return true;
   }
 
@@ -334,13 +338,30 @@ class AIService {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        // Use gemini-2.0-flash-exp or gemini-pro as fallback (gemini-1.5-flash deprecated)
-        let model;
-        try {
-          model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-        } catch (e) {
-          // Fallback to gemini-pro if 2.0 not available
-          model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+        // Try models in order of preference with proper model names
+        const availableModels = [
+          'models/gemini-flash-latest',
+          'models/gemini-pro-latest',
+          'models/gemini-2.5-flash',
+          'models/gemini-2.0-flash'
+        ];
+        let model = null;
+        let modelUsed = null;
+
+        for (const modelName of availableModels) {
+          try {
+            model = this.genAI.getGenerativeModel({ model: modelName });
+            modelUsed = modelName;
+            console.log(`[AIService] Using model: ${modelName}`);
+            break;
+          } catch (e) {
+            console.log(`Model ${modelName} not available, trying next...`);
+            continue;
+          }
+        }
+
+        if (!model) {
+          throw new Error('No compatible Gemini models available for this API key');
         }
 
         const skillsList = existingSkills.length > 0
@@ -543,6 +564,463 @@ JSON STRUCTURE:
     throw err;
   }
 
+  // Specialized entity extraction for scam analysis search queries
+  async extractEntities(text) {
+    if (!this.genAI) return { company: '', manager: '', domain: '' };
+
+    try {
+      const model = this.genAI.getGenerativeModel({ model: 'models/gemini-flash-latest' });
+      const prompt = `
+        Extract the following entities from this job offer/email text for web searching. 
+        Return ONLY valid JSON:
+        {
+          "company": "Company Name",
+          "manager": "Hiring Manager Name (Full Name if available)",
+          "domain": "Company domain if mentioned (e.g. google.com)"
+        }
+        
+        TEXT:
+        ${text.substring(0, 3000)}
+      `;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      let responseText = response.text()
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+
+      return JSON.parse(responseText);
+    } catch (error) {
+      console.error('Entity extraction error:', error);
+      return { company: '', manager: '', domain: '' };
+    }
+  }
+
+  // Analyze for scam signals using Gemini with optional screenshot/email context
+  async analyzeScam(payload) {
+    if (!this.genAI) {
+      throw new Error('AI service not configured. Please add your Google AI API key in Settings.');
+    }
+
+    const normalized = typeof payload === 'string'
+      ? { input: payload }
+      : (payload || {});
+
+    const safeInput = typeof normalized.input === 'string' ? normalized.input.trim() : '';
+    const safeEmailHeader = typeof normalized.emailHeader === 'string' ? normalized.emailHeader.trim() : '';
+    const safeSenderEmail = typeof normalized.senderEmail === 'string' ? normalized.senderEmail.trim() : '';
+    const safeCompanyUrl = typeof normalized.companyUrl === 'string' ? normalized.companyUrl.trim() : '';
+    const safeImageBase64 = typeof normalized.imageBase64 === 'string' ? normalized.imageBase64.trim() : '';
+    const imageMimeType = normalized.imageMimeType || 'image/jpeg';
+
+    const compositeText = [
+      safeInput,
+      safeEmailHeader ? `Email Header/Body:\n${safeEmailHeader}` : '',
+      safeSenderEmail ? `Sender Email: ${safeSenderEmail}` : '',
+      safeCompanyUrl ? `Company URL: ${safeCompanyUrl}` : ''
+    ].filter(Boolean).join('\n\n');
+
+    if (!compositeText && !safeImageBase64) {
+      throw new Error('Offer details are required');
+    }
+
+    // 1. EXTRACT ENTITIES & SEARCH WEB
+    let searchContext = '';
+    const sourcesFound = [];
+
+    try {
+      console.log('[ScamAnalysis] Extracting entities for search...');
+      // If we have an image but no text, we might need to extract text from image first for entities
+      // but let's assume compositeText has some info or the image is analyzed later.
+      const entities = await this.extractEntities(compositeText || 'New Job Offer');
+
+      const searchQueries = [];
+      if (entities.company) {
+        searchQueries.push(`${entities.company} company scam OR warning`);
+        searchQueries.push(`${entities.company} glassdoor OR ambitionbox reviews`);
+        searchQueries.push(`${entities.company} reddit internship scam`);
+        searchQueries.push(`${entities.company} quora reviews`);
+      }
+      if (entities.manager) {
+        searchQueries.push(`${entities.manager} ${entities.company || ''} linkedin`);
+      }
+      if (entities.domain) {
+        searchQueries.push(`whois ${entities.domain} registration date`);
+      }
+
+      if (searchQueries.length > 0) {
+        console.log(`[ScamAnalysis] Performing ${searchQueries.length} web searches...`);
+        const searchPromises = searchQueries.map(q => searchWeb(q, 3));
+        const searchResults = await Promise.all(searchPromises);
+
+        const flattened = searchResults.flat();
+        flattened.forEach(res => {
+          if (!sourcesFound.some(s => s.link === res.link)) {
+            sourcesFound.push(res);
+          }
+        });
+
+        searchContext = "WEB SEARCH RESULTS (FOR CONTEXT):\n" +
+          flattened.map(res => `SOURCE: ${res.title}\nLINK: ${res.link}\nCONTENT: ${res.snippet}`).join('\n---\n');
+      }
+    } catch (searchErr) {
+      console.warn('[ScamAnalysis] Search phase failed, proceeding with text-only analysis:', searchErr.message);
+    }
+
+    const maxRetries = this.apiKeys.length;
+    let lastError = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const modelConfigs = [
+          { model: 'models/gemini-flash-latest' },
+          { model: 'models/gemini-pro-latest' },
+          { model: 'models/gemini-2.5-flash' },
+          { model: 'models/gemini-2.0-flash' }
+        ];
+
+        const prompt = `
+You are ScamRadar, an expert at detecting job scams, fake internships, and fraudulent offers. 
+
+CURRENT DATE: ${new Date().toLocaleDateString()}
+CONTEXT: You are auditing a job offer for a student in India. 2024 was about 2 years ago, which is generally enough time for a legitimate small business to establish itself, though still "young". 
+
+CRITICAL INSTRUCTION: Only include SPECIFIC VERIFIED FINDINGS. 
+When providing links, use the ACTUAL LINKS provided in the search context if they are relevant.
+
+YOUR MISSION:
+1. Extract exact company name, domain, sender email, hiring manager name.
+2. RESEARCH: Analyze the provided Web Search Results. 
+   - Check if the LinkedIn profile found matches the hiring manager.
+   - Check the domain registration info.
+   - Look for reviews on Glassdoor/AmbitionBox/etc.
+3. BE FAIR ABOUT SALARY: Low internship stipend (even ₹10-15k) or unpaid roles are common in India and NOT necessarily a scam. Judge based on bait (uncharacteristically HIGH salary) rather than low pay.
+4. DOMAIN AGE: A domain from 2024 is NOT necessarily a red flag in 2026. It's a red flag only if it's < 6 months old or registered just days before the offer.
+5. Be HONEST & SKEPTICAL. If you cannot verify something, SAY SO clearly.
+
+SEARCH CONTEXT PROVIDED:
+${searchContext || 'No real-time search results available.'}
+
+INPUT DETAILS FROM USER:
+"""
+${compositeText || 'Image provided without extra text'}
+"""
+
+You MUST respond with ONLY valid JSON in exactly this structure:
+{
+  "company": "Company name",
+  "role": "Job title/role",
+  "trustScore": <number 0-100>,
+  "verdict": "SAFE" | "WARNING" | "DANGER",
+  "summary": "2-3 sentence honest summary of findings",
+  "subScores": {
+    "companyLegitimacy": <0-100>,
+    "offerRealism": <0-100>,
+    "processFlags": <0-100>,
+    "communitySentiment": <0-100>
+  },
+  "redFlags": ["flag1", "flag2", ...],
+  "greenFlags": ["flag1", "flag2", ...],
+  "communityFindings": [
+    {
+      "source": "Reddit / Student Communities",
+      "icon": "Users",
+      "finding": "E.g. 'Multiple Reddit users reported this as a fake internship asking for enrollment fees.'",
+      "sentiment": "negative",
+      "links": [{"title": "Reddit Discussion", "url": "url from context"}]
+    },
+    {
+      "source": "Glassdoor / AmbitionBox / Reviews",
+      "icon": "BarChart3",
+      "finding": "E.g. 'Company has a 1.2 star rating. Reviews warn about advance payments.'",
+      "sentiment": "negative",
+      "links": [{"title": "Glassdoor Reviews", "url": "url"}]
+    },
+    {
+      "source": "LinkedIn Verification",
+      "icon": "User",
+      "finding": "E.g. 'Found Manager Name on LinkedIn' or 'Widespread scam warnings on LinkedIn'",
+      "sentiment": "positive" | "negative",
+      "links": [{"title": "LinkedIn Profile/Post", "url": "url"}]
+    },
+    {
+      "source": "Domain Age / General Web Search",
+      "icon": "Globe",
+      "finding": "E.g. 'Domain registered recently. No official presence found.'",
+      "sentiment": "neutral",
+      "links": []
+    }
+    // You can add more findings like Quora, Google Reviews, FTC Complaints, etc. based on search context.
+  ],
+  "salaryCheck": {
+    "offered": "String salary",
+    "marketRate": "Comparison",
+    "verdict": "Realistic" | "Slightly High" | "Unrealistically High" | "Too Low" | "Unknown",
+    "explanation": "Brief explanation"
+  },
+  "domainAnalysis": {
+    "companyDomain": "e.g. company.com",
+    "domainAge": "Year",
+    "domainRisk": "Low | Medium | High",
+    "senderDomainMatch": "Match | Mismatch | Unknown",
+    "explanation": "Details"
+  },
+  "emailChecks": [
+    { "check": "Domain Match", "status": "pass|fail", "detail": "Details" }
+  ],
+  "resourceLinks": [
+    { "icon": "ExternalLink", "title": "Glassdoor Review", "url": "Actual URL if found", "desc": "Check company feedback" }
+  ],
+  "sources": [
+    { "title": "Source Title", "url": "Actual URL from context" }
+  ],
+  "finalVerdict": "Detailed 3-4 sentence verdict",
+  "actionItems": ["Action 1"]
+}
+`;
+
+        let parsed = null;
+        let modelError = null;
+
+        for (const config of modelConfigs) {
+          const keyPreview = this.apiKey ? `...${this.apiKey.slice(-8)}` : 'NONE';
+          try {
+            console.log(`[ScamAnalysis] Trying model: ${config.model} with key #${this.currentKeyIndex + 1} (${keyPreview})`);
+            const model = this.genAI.getGenerativeModel(config);
+            const parts = [{ text: prompt }];
+            if (safeImageBase64) {
+              parts.unshift({
+                inlineData: {
+                  data: safeImageBase64,
+                  mimeType: imageMimeType
+                }
+              });
+            }
+
+            const result = await model.generateContent(parts);
+            const response = await result.response;
+            let responseText = response.text();
+
+            responseText = responseText
+              .replace(/```json\n?/g, '')
+              .replace(/```\n?/g, '')
+              .trim();
+
+            parsed = JSON.parse(responseText);
+            console.log(`[ScamAnalysis] ✅ SUCCESS with model: ${config.model} (key #${this.currentKeyIndex + 1}: ${keyPreview})`);
+            break;
+          } catch (err) {
+            const errorMsg = err?.message || 'Unknown error';
+            console.error(`[ScamAnalysis] ❌ Model ${config.model} failed with key #${this.currentKeyIndex + 1} (${keyPreview}):`, errorMsg.substring(0, 200));
+            modelError = err;
+            continue;
+          }
+        }
+
+        if (parsed) {
+          return parsed;
+        }
+
+        throw modelError || new Error('AI model unavailable for scam analysis');
+
+      } catch (error) {
+        console.error(`Scam analysis error (attempt ${attempt + 1}/${maxRetries}):`, error);
+        lastError = error;
+
+        if (attempt < maxRetries - 1 && this.rotateKey()) {
+          continue;
+        }
+        const errorMessage = error?.message || '';
+        const normalizedMessage = /supported methods|not found|invalid|permission|access|quota|429|403|404/i.test(errorMessage)
+          ? 'AI request failed. Please verify your Google AI Studio key has Gemini access, then try again.'
+          : errorMessage;
+        throw new Error(normalizedMessage || 'Failed to analyze for scam signals');
+      }
+    }
+
+    throw new Error(lastError?.message || 'Failed to analyze for scam signals');
+  }
+
+  // Fallback: heuristic scam analysis when AI/web search is unavailable
+  analyzeScamFallback(payload, reason = '') {
+    const normalized = typeof payload === 'string' ? { input: payload } : (payload || {});
+    const safeInput = typeof normalized.input === 'string' ? normalized.input : '';
+    const safeEmailHeader = typeof normalized.emailHeader === 'string' ? normalized.emailHeader : '';
+    const safeSenderEmail = typeof normalized.senderEmail === 'string' ? normalized.senderEmail : '';
+    const safeCompanyUrl = typeof normalized.companyUrl === 'string' ? normalized.companyUrl : '';
+
+    const baseText = [safeInput, safeEmailHeader, safeSenderEmail, safeCompanyUrl]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    const text = baseText.toLowerCase();
+
+    const redRules = [
+      { regex: /pay|fee|deposit|verification fee|background check.*\$|registration fee|security amount/, flag: 'Asked to pay money upfront before onboarding.' },
+      { regex: /zelle|gift card|crypto|usdt|bitcoin|wire transfer/, flag: 'Requests payment through high-risk or irreversible channels.' },
+      { regex: /send.*bank details|ssn|aadhaar|otp|password|upi pin/, flag: 'Sensitive personal/financial data requested too early.' },
+      { regex: /whatsapp|telegram.*(offer|interview)|dm me/, flag: 'Recruitment appears to happen via informal channels.' },
+      { regex: /too good to be true|easy money|guaranteed salary|no interview/, flag: 'Offer language indicates unrealistic promises.' },
+      { regex: /check.*equipment|equipment reimbursement|advance check/, flag: 'Classic fake check / equipment reimbursement pattern detected.' },
+      { regex: /unpaid.*40 hours|free work|no salary/, flag: 'Heavy unpaid workload with weak employer assurances.' }
+    ];
+
+    const greenRules = [
+      { regex: /official website|careers page|company email|@/, flag: 'Some signs of formal company communication are present.' },
+      { regex: /offer letter|interview round|hr round|joining date/, flag: 'Structured hiring process indicators are present.' },
+      { regex: /no payment required|background check by company|on payroll/, flag: 'No upfront payment requirement is stated.' }
+    ];
+
+    const redFlags = redRules.filter(rule => rule.regex.test(text)).map(rule => rule.flag);
+    const greenFlags = greenRules.filter(rule => rule.regex.test(text)).map(rule => rule.flag);
+
+    let trustScore = 62;
+    trustScore -= redFlags.length * 12;
+    trustScore += greenFlags.length * 6;
+
+    if (/urgent|immediately|within 1 hour|today only/.test(text)) {
+      redFlags.push('Urgency pressure detected in communication style.');
+      trustScore -= 8;
+    }
+
+    if (/company website was created|new website|domain.*new|no linkedin/.test(text)) {
+      redFlags.push('Low company credibility signals (new/weak web presence).');
+      trustScore -= 10;
+    }
+
+    trustScore = Math.max(5, Math.min(95, trustScore));
+
+    let verdict = 'WARNING';
+    if (trustScore >= 72 && redFlags.length <= 1) verdict = 'SAFE';
+    if (trustScore <= 39 || redFlags.length >= 3) verdict = 'DANGER';
+
+    const companyMatch = baseText.match(/from\s+([A-Za-z0-9\s&.-]{2,60})/i) || baseText.match(/company[:\s]+([^\n,]+)/i);
+    const roleMatch = baseText.match(/role[:\s]+([^\n,]+)/i) || baseText.match(/for\s+a?n?\s+([A-Za-z0-9\s-]{2,60})/i);
+
+    const company = companyMatch ? companyMatch[1].trim() : 'Unknown Company';
+    const role = roleMatch ? roleMatch[1].trim() : 'Unknown Role';
+
+    const domainFromEmail = safeSenderEmail.includes('@') ? safeSenderEmail.split('@')[1].toLowerCase() : '';
+    const domainFromUrl = (() => {
+      try {
+        return safeCompanyUrl ? new URL(safeCompanyUrl).hostname.replace(/^www\./, '').toLowerCase() : '';
+      } catch {
+        return '';
+      }
+    })();
+
+    const domainMatch = domainFromEmail && domainFromUrl
+      ? (domainFromEmail === domainFromUrl || domainFromEmail.endsWith(`.${domainFromUrl}`) ? 'Match' : 'Mismatch')
+      : 'Unknown';
+
+    const subScores = {
+      companyLegitimacy: Math.max(5, Math.min(95, trustScore + (greenFlags.length * 2) - (redFlags.length * 3))),
+      offerRealism: Math.max(5, Math.min(95, trustScore + (greenFlags.length * 3) - (redFlags.length * 4))),
+      processFlags: Math.max(5, Math.min(95, trustScore + (greenFlags.length * 1) - (redFlags.length * 5))),
+      communitySentiment: Math.max(5, Math.min(95, trustScore + (greenFlags.length * 2) - (redFlags.length * 2)))
+    };
+
+    const summary = verdict === 'DANGER'
+      ? 'Multiple high-risk scam indicators were detected in this offer text.'
+      : verdict === 'SAFE'
+        ? 'No major scam pattern was detected from the provided details, but verification is still recommended.'
+        : 'Some suspicious indicators were found; verify independently before sharing documents or money.';
+
+    const actionItems = [
+      'Do not pay any upfront fee for onboarding, verification, or equipment.',
+      'Verify company domain, LinkedIn presence, and official careers page.',
+      'Ask for a formal offer letter from an official company email domain.',
+      'Confirm role legitimacy with at least one public company contact channel.'
+    ];
+
+    if (redFlags.some(flag => /payment|money|fee|check/i.test(flag))) {
+      actionItems.unshift('Pause all money transfers immediately until independent verification is complete.');
+    }
+
+    return {
+      company,
+      role,
+      trustScore,
+      verdict,
+      summary,
+      subScores,
+      redFlags: redFlags.length ? redFlags : ['No explicit red flags detected from text-only heuristic scan.'],
+      greenFlags: greenFlags.length ? greenFlags : ['No strong legitimacy indicators were found in provided details.'],
+      communityFindings: [
+        {
+          source: 'Heuristic Analysis',
+          icon: '🧠',
+          finding: 'This result is generated from deterministic scam-pattern rules because AI web analysis was unavailable.',
+          sentiment: 'neutral'
+        },
+        {
+          source: 'Payment Risk Patterns',
+          icon: '🚨',
+          finding: redFlags.filter(flag => /pay|fee|deposit|check|money|crypto|zelle/i.test(flag)).join(' ') || 'No direct payment scam pattern detected.',
+          sentiment: redFlags.some(flag => /pay|fee|deposit|check|money|crypto|zelle/i.test(flag)) ? 'negative' : 'neutral'
+        },
+        {
+          source: 'Identity & Data Safety',
+          icon: '🔐',
+          finding: redFlags.filter(flag => /Sensitive|personal|financial/i.test(flag)).join(' ') || 'No direct credential-harvesting pattern detected.',
+          sentiment: redFlags.some(flag => /Sensitive|personal|financial/i.test(flag)) ? 'negative' : 'neutral'
+        },
+        {
+          source: 'Reliability Note',
+          icon: 'ℹ️',
+          finding: reason ? `AI unavailable reason: ${reason}` : 'AI web-grounded mode unavailable; using fallback scoring.',
+          sentiment: 'neutral'
+        }
+      ],
+      salaryCheck: {
+        offered: /\$|inr|rs\.?|lpa|stipend/i.test(baseText) ? 'Detected in input' : 'Not specified',
+        marketRate: 'Unknown',
+        verdict: trustScore <= 39 ? 'Unrealistically High' : trustScore >= 72 ? 'Realistic' : 'Unknown',
+        explanation: 'Fallback mode cannot verify live salary benchmarks without external web-grounding.'
+      },
+      domainAnalysis: {
+        companyDomain: domainFromUrl || domainFromEmail || 'Unknown',
+        domainAge: 'Unknown',
+        domainRisk: domainMatch === 'Mismatch' ? 'High' : domainMatch === 'Match' ? 'Low' : 'Unknown',
+        senderDomainMatch: domainMatch,
+        explanation: domainMatch === 'Mismatch'
+          ? 'Sender email domain does not match the provided company domain.'
+          : domainMatch === 'Match'
+            ? 'Sender domain appears to align with the provided company domain.'
+            : 'Insufficient domain information for full forensic verification.'
+      },
+      emailChecks: [
+        {
+          check: 'Sender domain matches company',
+          status: domainMatch === 'Match' ? 'pass' : domainMatch === 'Mismatch' ? 'fail' : 'unknown',
+          detail: domainMatch === 'Unknown' ? 'Missing sender email or company URL.' : `Result: ${domainMatch}`
+        },
+        {
+          check: 'No personal email used for hiring',
+          status: /@gmail\.com|@yahoo\.com|@hotmail\.com/i.test(safeSenderEmail) ? 'warn' : safeSenderEmail ? 'pass' : 'unknown',
+          detail: safeSenderEmail || 'Sender email not provided.'
+        }
+      ],
+      resourceLinks: [
+        { icon: '🏛️', title: 'Cyber Crime Portal', desc: 'Report to Indian authorities', url: 'https://www.cybercrime.gov.in/' },
+        { icon: '📱', title: 'National Helpline 1930', desc: 'Call for cyber fraud help', url: 'tel:1930' },
+        { icon: '📊', title: 'AmbitionBox Reviews', desc: 'Check Indian company reviews', url: 'https://www.ambitionbox.com/' },
+        { icon: '💬', title: 'Reddit r/DevelopersIndia', desc: 'Indian developer community', url: 'https://reddit.com/r/developersIndia' },
+        { icon: '🎯', title: 'Naukri Fraud Alert', desc: 'Official job portal warnings', url: 'https://www.naukri.com/fraud-alert' }
+      ],
+      finalVerdict: verdict === 'DANGER'
+        ? 'This offer appears high risk based on known scam patterns. Do not share money or sensitive documents until independently verified through official company channels.'
+        : verdict === 'SAFE'
+          ? 'This offer looks relatively safer from text-level checks, but you should still verify recruiter identity and company channels before proceeding.'
+          : 'Proceed cautiously. The offer includes suspicious signals that require manual verification before you accept or share sensitive information.',
+      actionItems: Array.from(new Set(actionItems)).slice(0, 5),
+      analysisMode: 'fallback',
+      analysisWarning: reason || 'AI web-grounded analysis unavailable. Returned heuristic result.'
+    };
+  }
+
   // Health check for AI service
   async getStatus() {
     if (!this.apiKey || !this.genAI) {
@@ -550,10 +1028,13 @@ JSON STRUCTURE:
     }
 
     try {
-      // A lightweight check: try to get model instance (does not consume tokens)
-      this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+      // Actually try to call the API briefly to verify key validity
+      const model = this.genAI.getGenerativeModel({ model: 'models/gemini-flash-latest' });
+      const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: 'Hello' }] }], generationConfig: { maxOutputTokens: 1 } });
+      await result.response;
       return { configured: true, enabled: true, working: true };
     } catch (error) {
+      console.log('AI Health Check failed:', error.message);
       return { configured: true, enabled: true, working: false, message: error.message || 'AI model unavailable' };
     }
   }

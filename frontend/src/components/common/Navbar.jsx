@@ -124,10 +124,14 @@ const Navbar = ({ onMenuClick }) => {
           >
             <Menu className="w-6 h-6" />
           </button>
-          <div className="md:hidden flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">P</span>
-            </div>
+          <div className="md:hidden flex flex-col items-center gap-0.5">
+            <img 
+              src="/ng-logo-horizontal.avif" 
+              alt="NavGurukul" 
+              className="h-6 w-auto object-contain"
+              onError={(e) => e.target.style.display = 'none'}
+            />
+            <span className="text-gray-900 font-semibold text-[10px] leading-tight whitespace-nowrap">Placement Dashboard</span>
           </div>
         </div>
 

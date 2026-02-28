@@ -19,6 +19,10 @@ import StudentApplications from './pages/student/Applications';
 import JobDetails from './pages/student/JobDetails';
 import StudentJobReadiness from './pages/student/JobReadiness';
 import StudentSelfApplications from './pages/student/SelfApplications';
+import StudentScamDetector from './pages/student/Scamdetector';
+import ScamReportsRepository from './pages/student/ScamReportsRepository';
+import ScamReportDetails from './pages/student/ScamReportDetails';
+import ScamEducation from './pages/student/ScamEducation';
 
 // Campus POC Pages
 import POCDashboard from './pages/campus-poc/Dashboard';
@@ -57,6 +61,7 @@ import PartnerManagement from './pages/manager/PartnerManagement';
 import LeadsManagement from './pages/manager/LeadsManagement';
 import GharIntegration from './pages/manager/GharIntegration';
 import GharDataViewer from './pages/manager/GharDataViewer';
+import LoginBackgrounds from './pages/manager/LoginBackgrounds';
 
 // Common Pages
 import Notifications from './pages/common/Notifications';
@@ -131,6 +136,10 @@ function App() {
         <Route path="applications" element={<StudentApplications />} />
         <Route path="job-readiness" element={<StudentJobReadiness />} />
         <Route path="self-applications" element={<StudentSelfApplications />} />
+        <Route path="scam-detector" element={<StudentScamDetector />} />
+        <Route path="scam-education" element={<ScamEducation />} />
+        <Route path="scam-reports" element={<ScamReportsRepository />} />
+        <Route path="scam-reports/:id" element={<ScamReportDetails />} />
         <Route path="notifications" element={<Notifications />} />
 
       </Route>
@@ -189,6 +198,7 @@ function App() {
         <Route index element={<ManagerDashboard />} />
         <Route path="reports" element={<ManagerReports />} />
         <Route path="carousel" element={<CarouselManagement />} />
+        <Route path="login-backgrounds" element={<LoginBackgrounds />} />
         <Route path="partners" element={<PartnerManagement />} />
         <Route path="leads" element={<LeadsManagement />} />
         <Route path="settings" element={<ManagerSettings />} />

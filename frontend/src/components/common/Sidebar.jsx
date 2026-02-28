@@ -4,8 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { questionAPI } from '../../services/api';
 import {
   Home, User, Briefcase, FileText, Users, CheckSquare, BarChart3, Settings,
-  X, GraduationCap, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle,
-  Image as ImageIcon, Globe, Search
+  X, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle,
+  Image as ImageIcon, Globe, Search, ShieldCheck, Database
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -40,7 +40,9 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/student/jobs', icon: Briefcase, label: 'Job Listings' },
           { path: '/student/applications', icon: FileText, label: 'My Applications' },
           { path: '/student/job-readiness', icon: Target, label: 'Job Readiness' },
-          { path: '/student/self-applications', icon: ExternalLink, label: 'Self Applications' }
+          { path: '/student/self-applications', icon: ExternalLink, label: 'Self Applications' },
+          { path: '/student/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
+          { path: '/student/scam-reports', icon: Database, label: 'Scam Reports' }
         ];
       case 'campus_poc':
         return [
@@ -68,13 +70,14 @@ const Sidebar = ({ isOpen, onClose }) => {
         return [
           { path: '/manager', icon: Home, label: 'Dashboard', exact: true },
           { path: '/manager/carousel', icon: ImageIcon, label: 'Hero Carousel' },
+          { path: '/manager/login-backgrounds', icon: ImageIcon, label: 'Login Backgrounds' },
           { path: '/manager/partners', icon: Globe, label: 'Hiring Partners' },
           { path: '/manager/leads', icon: MessageCircle, label: 'Recruitment Leads' },
           { path: '/manager/reports', icon: BarChart3, label: 'Reports & Export' },
           { path: '/manager/settings', icon: Settings, label: 'Platform Settings' },
           { path: '/manager/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/manager/users', icon: Users, label: 'User Management' },
-          { path: '/manager/ghar', icon: GraduationCap, label: 'Ghar Integration' },
+          { path: '/manager/ghar', icon: Home, label: 'Ghar Integration' },
           { path: '/manager/ghar-viewer', icon: Search, label: 'Ghar Explorer' }
         ];
       default:
@@ -101,12 +104,16 @@ const Sidebar = ({ isOpen, onClose }) => {
       md:translate-x-0
     `}>
       {/* Header */}
-      <div className="flex items-center justify-between h-16 px-4 border-b">
-        <div className="flex items-center gap-2">
-          <GraduationCap className="w-8 h-8 text-primary-600" />
-          <div>
-            <h1 className="font-bold text-gray-900">Placement</h1>
-            <p className="text-xs text-gray-500">Dashboard</p>
+      <div className="flex items-center justify-between h-20 px-4 border-b">
+        <div className="flex flex-col items-center gap-1 flex-1">
+          <img
+            src="/ng-logo-horizontal.avif"
+            alt="NavGurukul"
+            className="h-8 w-auto object-contain"
+            onError={(e) => e.target.style.display = 'none'}
+          />
+          <div className="text-center">
+            <h1 className="font-bold text-gray-900 text-xs leading-tight">Placement Dashboard</h1>
           </div>
         </div>
         <button

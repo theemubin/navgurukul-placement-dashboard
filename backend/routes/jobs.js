@@ -10,6 +10,7 @@ const InterestRequest = require('../models/InterestRequest');
 const Application = require('../models/Application');
 const { auth, authorize } = require('../middleware/auth');
 const AIService = require('../services/aiService');
+const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 const { calculateMatch, getJobsWithMatch } = require('../services/matchService');
 const discordService = require('../services/discordService');
 const multer = require('multer');
@@ -69,20 +70,8 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
       return res.status(400).json({ message: 'Please provide either a PDF file, a URL, or raw text' });
     }
 
-    // Get AI config from settings (global keys)
     const settings = await Settings.getSettings();
-    const globalKeys = (settings.aiConfig?.googleApiKeys || [])
-      .filter(k => k.isActive)
-      .map(k => k.key);
-
-    // Get user's personal AI keys (for coordinators)
-    const user = await User.findById(req.userId);
-    const userKeys = (user?.aiApiKeys || [])
-      .filter(k => k.isActive)
-      .map(k => k.key);
-
-    // Combine all keys: user keys first (higher priority), then global keys
-    const allKeys = [...userKeys, ...globalKeys].filter(k => k);
+    const { keys: allKeys } = await resolveAIKeysForUser(req.userId);
 
     // Get existing skills for better matching
     let existingSkills = [];

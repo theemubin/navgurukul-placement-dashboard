@@ -285,7 +285,35 @@ export const campusAPI = {
 
 // Utilities
 export const utilsAPI = {
-  checkUrl: (url) => api.post('/utils/check-url', { url })
+  checkUrl: (url) => api.post('/utils/check-url', { url }),
+  analyzeScam: (data) => api.post('/utils/analyze-scam', data),
+  testAIKey: () => api.post('/utils/test-ai-key')
+};
+
+// Scam Reports API
+export const scamReportsAPI = {
+  // Save a new scam report
+  saveReport: (data) => api.post('/scam-reports', data),
+  
+  // Get public reports for browsing
+  getPublicReports: (params) => api.get('/scam-reports/public', { params }),
+  
+  // Get reports for a specific company
+  getCompanyReports: (companyName, params) => api.get(`/scam-reports/company/${encodeURIComponent(companyName)}`, { params }),
+  
+  // Get specific report by ID
+  getReport: (id) => api.get(`/scam-reports/${id}`),
+  
+  // Vote on a report
+  voteOnReport: (id, voteType) => api.post(`/scam-reports/${id}/vote`, { voteType }),
+  
+  // Delete report (author or admin only)
+  deleteReport: (id) => api.delete(`/scam-reports/${id}`),
+  
+  // Comments API
+  addComment: (reportId, content) => api.post(`/scam-reports/${reportId}/comments`, { content }),
+  deleteComment: (reportId, commentId) => api.delete(`/scam-reports/${reportId}/comments/${commentId}`),
+  likeComment: (reportId, commentId) => api.post(`/scam-reports/${reportId}/comments/${commentId}/like`)
 };
 
 // Self Application APIs (for external jobs)
@@ -411,6 +439,19 @@ export const gharAPI = {
   syncStudent: (email) => api.post('/ghar/sync-student', { email }),
   batchSync: (campusId) => api.post('/ghar/batch-sync', { campusId }),
   getAttendanceConfig: (isDev) => api.get(`/ghar/attendance-config?isDev=${isDev}`)
+};
+
+// Login Background APIs
+export const loginBackgroundAPI = {
+  getBackgrounds: () => api.get('/login-backgrounds'),
+  uploadBackground: (file) => {
+    const formData = new FormData();
+    formData.append('background', file);
+    return api.post('/login-backgrounds/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  deleteBackground: (filename) => api.delete(`/login-backgrounds/${encodeURIComponent(filename)}`)
 };
 
 // Public APIs (No auth required)

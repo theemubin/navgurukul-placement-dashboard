@@ -2,15 +2,19 @@ import { useState, useEffect } from 'react';
 // import { useSearchParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { GraduationCap, Mail, Lock, Eye, EyeOff, RefreshCw, Database, Server, Clock, AlertCircle, CheckCircle, Wifi } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, RefreshCw, Database, Server, Clock, AlertCircle, CheckCircle, Wifi, Menu, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../services/api';
+import api, { loginBackgroundAPI } from '../../services/api';
 
 const Login = () => {
   const { login } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showQuickPanel, setShowQuickPanel] = useState(false);
+  const [animateToBottom, setAnimateToBottom] = useState(false);
+  const [backgroundImages, setBackgroundImages] = useState([]);
+  const [selectedBackground, setSelectedBackground] = useState(null);
   const isLocalHost = (typeof window !== 'undefined' && (() => {
     try {
       const h = window.location.hostname || '';
@@ -47,6 +51,31 @@ const Login = () => {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [productionUri, setProductionUri] = useState('');
   const [syncing, setSyncing] = useState(false);
+
+  // Fetch login backgrounds from API
+  useEffect(() => {
+    const fetchBackgrounds = async () => {
+      try {
+        const response = await loginBackgroundAPI.getBackgrounds();
+        const backgrounds = response.data.backgrounds || [];
+        console.log('Fetched backgrounds:', backgrounds.length, 'images');
+        setBackgroundImages(backgrounds);
+        
+        if (backgrounds.length > 0) {
+          const randomBg = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+          setSelectedBackground(randomBg.url);
+          console.log('Selected background:', randomBg.url);
+        } else {
+          console.log('No backgrounds available, using gradient fallback');
+        }
+      } catch (error) {
+        console.error('Error fetching backgrounds:', error.response?.data || error.message);
+        // Silently fail - login page still works without background
+      }
+    };
+    
+    fetchBackgrounds();
+  }, []);
 
   const checkHealth = async () => {
     setStatusLoading(true);
@@ -113,6 +142,14 @@ const Login = () => {
     }
   }, [showStatus]);
 
+  useEffect(() => {
+    // Trigger animation after component mounts
+    const timer = setTimeout(() => {
+      setAnimateToBottom(true);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -128,125 +165,143 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-600 to-primary-800 p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full mb-4">
-            <GraduationCap className="w-10 h-10 text-primary-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">Placement Dashboard</h1>
-          <p className="text-primary-200 mt-1">Welcome back! Please sign in.</p>
-        </div>
+    <div className="relative min-h-screen overflow-hidden">
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={selectedBackground ? { backgroundImage: `url(${selectedBackground})` } : undefined}
+      />
+      {!selectedBackground && <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />}
+      <div className="absolute inset-0 bg-black/45" />
 
-        {/* Login Form */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="pl-10"
-                  placeholder="Enter your email"
-                  autoComplete="email"
-                  required
-                />
-              </div>
+      <div className="relative z-10 min-h-screen flex flex-col items-center px-4 pb-3 sm:pb-4" style={{ justifyContent: animateToBottom ? 'flex-end' : 'center', transition: 'justify-content 8s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        <div className="w-full max-w-md">
+          {/* Glassmorphism container */}
+          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl p-6 shadow-2xl">
+            {/* Logo */}
+            <div className="flex justify-center mb-4">
+              <img 
+                src="/ng-logo-horizontal.avif" 
+                alt="Logo" 
+                className="h-12 w-auto object-contain"
+                onError={(e) => e.target.style.display = 'none'}
+              />
             </div>
+            
+            {/* Title */}
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-wide text-white text-center mb-6">
+              Placement Dashboard
+            </h1>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="pl-10 pr-10"
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
+            {/* Google Sign-in Button */}
             <button
-              type="submit"
-              disabled={loading}
-              className="btn btn-primary w-full py-3 disabled:opacity-50"
+              type="button"
+              onClick={() => {
+                const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:5001').replace(/\/$/, '');
+                const authUrl = apiBase.endsWith('/api') ? `${apiBase}/auth/google` : `${apiBase}/api/auth/google`;
+                window.location.href = authUrl;
+              }}
+              className="w-full flex items-center justify-center px-5 py-3 border border-white/40 rounded-xl text-base font-medium text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-white/40 transition-all duration-300"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              <svg className="w-6 h-6 mr-3" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Continue with Google
             </button>
-          </form>
-
-          {/* Divider */}
-          <div className="mt-6 mb-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
-              </div>
-            </div>
           </div>
+        </div>
+      </div>
 
-          {/* Google Login Button */}
-          <button
-            type="button"
-            onClick={() => {
-              const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:5001').replace(/\/$/, '');
-              const authUrl = apiBase.endsWith('/api') ? `${apiBase}/auth/google` : `${apiBase}/api/auth/google`;
-              window.location.href = authUrl;
-            }}
-            className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+      <button
+        type="button"
+        onClick={() => setShowQuickPanel(!showQuickPanel)}
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur text-white border border-white/30 shadow-lg flex items-center justify-center transition"
+      >
+        {showQuickPanel ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+      </button>
+
+      {showQuickPanel && (
+        <div className="fixed inset-0 z-40 bg-black/35" onClick={() => setShowQuickPanel(false)}>
+          <div
+            className="absolute right-4 bottom-24 w-[min(92vw,430px)] max-h-[80vh] overflow-y-auto rounded-2xl border border-white/25 bg-white/15 backdrop-blur-md shadow-2xl p-5 text-white"
+            onClick={(e) => e.stopPropagation()}
           >
-            <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            Continue with Google
-          </button>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Quick Access</h2>
+              <button
+                type="button"
+                onClick={() => setShowQuickPanel(false)}
+                className="p-1 rounded hover:bg-white/20"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-primary-600 font-medium hover:underline">
-                Register here
-              </Link>
-            </p>
-          </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-white/90 mb-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-300" />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="pl-10 bg-white/90 text-gray-900"
+                    placeholder="Enter your email"
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+              </div>
 
-          {/* Demo Accounts (visible in development only) */}
-          {isLocalHost && (
-          <div className="mt-6 pt-6 border-t">
-            <p className="text-sm text-gray-500 text-center mb-3">Demo Accounts:</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="demo-login-list mb-4 p-3 bg-gray-50 rounded shadow">
-                <div className="font-semibold mb-2">Quick Login (Demo Accounts):</div>
-                <ul className="space-y-1">
+              <div>
+                <label className="block text-sm font-medium text-white/90 mb-1">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-300" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="pl-10 pr-10 bg-white/90 text-gray-900"
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn btn-primary w-full py-3 disabled:opacity-50"
+              >
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+            </form>
+
+            <div className="mt-4 text-sm text-white/90">
+              Don&apos;t have an account?{' '}
+              <Link to="/register" className="font-medium underline hover:text-white">Register here</Link>
+            </div>
+
+            {isLocalHost && (
+              <div className="mt-4 pt-4 border-t border-white/25">
+                <p className="text-sm mb-2">Demo Accounts (click to autofill):</p>
+                <ul className="space-y-1 max-h-40 overflow-y-auto pr-1">
                   {demoAccounts.map((acc) => (
                     <li key={acc.email}>
                       <button
                         type="button"
-                        className="px-3 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-800 text-sm mr-2"
+                        className="w-full text-left px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-white text-sm"
                         onClick={() => handleDemoLogin(acc.email)}
                       >
                         {acc.role}: {acc.email}
@@ -254,140 +309,105 @@ const Login = () => {
                     </li>
                   ))}
                 </ul>
-                <div className="text-xs text-gray-500 mt-2">Password for all demo accounts: <span className="font-mono">password123</span></div>
+                <p className="text-xs text-white/80 mt-2">Password for all demo accounts: password123</p>
               </div>
-              <div className="p-2 bg-gray-50 rounded">
-                <p className="font-medium">Student</p>
-                <p className="text-gray-500">john.doe@student.edu</p>
-              </div>
-              <div className="p-2 bg-gray-50 rounded">
-                <p className="font-medium">Campus POC</p>
-                <p className="text-gray-500">poc.jashpur@placement.edu</p>
-              </div>
-              <div className="p-2 bg-gray-50 rounded">
-                <p className="font-medium">Coordinator</p>
-                <p className="text-gray-500">coordinator@placement.edu</p>
-              </div>
-              <div className="p-2 bg-gray-50 rounded">
-                <p className="font-medium">Manager</p>
-                <p className="text-gray-500">manager@placement.edu</p>
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 text-center mt-2">Password: password123</p>
-          </div>
-          )}
-        </div>
-
-        {/* Status & Sync Section */}
-        <div className="mt-4 space-y-2">
-            <div className="flex gap-2">
-            <button
-              onClick={() => setShowStatus(!showStatus)}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors"
-            >
-              <Server className="w-4 h-4" />
-              {showStatus ? 'Hide Status' : 'Check Status'}
-            </button>
-            {isLocalHost && (
-              <button
-                onClick={() => setShowSyncModal(true)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Sync from Production
-              </button>
             )}
-          </div>
 
-          {/* Status Panel */}
-          {showStatus && (
-            <div className="bg-white/10 backdrop-blur rounded-lg p-4 text-white text-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-medium flex items-center gap-2">
-                  <Wifi className="w-4 h-4" />
-                  System Status
-                </h3>
+            <div className="mt-4 space-y-2 pt-4 border-t border-white/25">
+              <div className="flex gap-2">
                 <button
-                  onClick={checkHealth}
-                  disabled={statusLoading}
-                  className="p-1 hover:bg-white/10 rounded"
+                  onClick={() => setShowStatus(!showStatus)}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm transition-colors"
                 >
-                  <RefreshCw className={`w-4 h-4 ${statusLoading ? 'animate-spin' : ''}`} />
+                  <Server className="w-4 h-4" />
+                  {showStatus ? 'Hide Status' : 'Check Status'}
                 </button>
+                {isLocalHost && (
+                  <button
+                    onClick={() => setShowSyncModal(true)}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Sync
+                  </button>
+                )}
               </div>
 
-              {statusLoading && (
-                <div className="text-center py-4 text-primary-200">Checking status...</div>
-              )}
-
-              {statusError && (
-                <div className="flex items-center gap-2 text-red-300 bg-red-500/20 p-3 rounded">
-                  <AlertCircle className="w-5 h-5" />
-                  <div>
-                    <p className="font-medium">Connection Failed</p>
-                    <p className="text-xs opacity-80">{statusError}</p>
-                  </div>
-                </div>
-              )}
-
-              {healthStatus && (
-                <div className="space-y-3">
-                  {/* Server Status */}
-                  <div className="flex items-center justify-between p-2 bg-white/5 rounded">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                      <span>Server</span>
-                    </div>
-                    <span className="text-green-400 text-xs">{healthStatus.status}</span>
+              {showStatus && (
+                <div className="bg-white/10 rounded-lg p-3 text-white text-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-medium flex items-center gap-2">
+                      <Wifi className="w-4 h-4" />
+                      System Status
+                    </h3>
+                    <button
+                      onClick={checkHealth}
+                      disabled={statusLoading}
+                      className="p-1 hover:bg-white/10 rounded"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${statusLoading ? 'animate-spin' : ''}`} />
+                    </button>
                   </div>
 
-                  {/* Database Status */}
-                  <div className="flex items-center justify-between p-2 bg-white/5 rounded">
-                    <div className="flex items-center gap-2">
-                      <Database className={`w-4 h-4 ${healthStatus.database?.status === 'connected' ? 'text-green-400' : 'text-red-400'}`} />
-                      <span>Database</span>
-                    </div>
-                    <div className="text-right text-xs">
-                      <p className={healthStatus.database?.status === 'connected' ? 'text-green-400' : 'text-red-400'}>
-                        {healthStatus.database?.status}
-                      </p>
-                      <p className="text-primary-200">{healthStatus.database?.type}</p>
-                    </div>
-                  </div>
+                  {statusLoading && (
+                    <div className="text-center py-2 text-white/80">Checking status...</div>
+                  )}
 
-                  {/* Latency */}
-                  <div className="flex items-center justify-between p-2 bg-white/5 rounded">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-yellow-400" />
-                      <span>Latency</span>
+                  {statusError && (
+                    <div className="flex items-center gap-2 text-red-200 bg-red-500/20 p-3 rounded">
+                      <AlertCircle className="w-5 h-5" />
+                      <div>
+                        <p className="font-medium">Connection Failed</p>
+                        <p className="text-xs opacity-80">{statusError}</p>
+                      </div>
                     </div>
-                    <div className="text-right text-xs">
-                      <p>Client → Server: <span className="text-yellow-400">{healthStatus.clientLatency}</span></p>
-                      <p>Server → DB: <span className="text-yellow-400">{healthStatus.database?.latency || 'N/A'}</span></p>
-                    </div>
-                  </div>
+                  )}
 
-                  {/* Memory & Uptime */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2 bg-white/5 rounded">
-                      <p className="text-primary-200">Memory</p>
-                      <p>{healthStatus.server?.memoryUsage}</p>
-                    </div>
-                    <div className="p-2 bg-white/5 rounded">
-                      <p className="text-primary-200">Uptime</p>
-                      <p>{Math.round(healthStatus.server?.uptime / 60)} min</p>
-                    </div>
-                  </div>
+                  {healthStatus && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-2 bg-white/5 rounded">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-green-300" />
+                          <span>Server</span>
+                        </div>
+                        <span className="text-green-300 text-xs">{healthStatus.status}</span>
+                      </div>
 
-                  {/* DB Name */}
-                  <div className="text-xs text-primary-200 text-center">
-                    Database: {healthStatus.database?.name || 'Unknown'}
-                  </div>
+                      <div className="flex items-center justify-between p-2 bg-white/5 rounded">
+                        <div className="flex items-center gap-2">
+                          <Database className={`w-4 h-4 ${healthStatus.database?.status === 'connected' ? 'text-green-300' : 'text-red-300'}`} />
+                          <span>Database</span>
+                        </div>
+                        <div className="text-right text-xs">
+                          <p className={healthStatus.database?.status === 'connected' ? 'text-green-300' : 'text-red-300'}>
+                            {healthStatus.database?.status}
+                          </p>
+                          <p className="text-white/80">{healthStatus.database?.type}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2 bg-white/5 rounded">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-yellow-300" />
+                          <span>Latency</span>
+                        </div>
+                        <div className="text-right text-xs">
+                          <p>Client → Server: <span className="text-yellow-300">{healthStatus.clientLatency}</span></p>
+                          <p>Server → DB: <span className="text-yellow-300">{healthStatus.database?.latency || 'N/A'}</span></p>
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-white/80 text-center">
+                        Database: {healthStatus.database?.name || 'Unknown'}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
+      )}
 
         {/* Sync Modal (localhost only) */}
         {isLocalHost && showSyncModal && (
@@ -440,7 +460,6 @@ const Login = () => {
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 };
