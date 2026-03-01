@@ -166,6 +166,7 @@ const normalizeResult = (raw = {}) => {
   return {
     company: raw.company || 'Unknown Company',
     role: raw.role || 'Unknown Role',
+    searchQueries: Array.isArray(raw.searchQueries) ? raw.searchQueries : [],
     trustScore,
     verdict,
     summary: raw.summary || 'Scam analysis completed using available detection signals.',
@@ -243,11 +244,18 @@ const ScamDetector = () => {
   const [testingKey, setTestingKey] = useState(false);
   const [keyTestResult, setKeyTestResult] = useState(null);
 
+  // Search API configuration (Google Custom Search)
+  const SEARCH_CONFIG_KEY = 'scamradar_search_config';
+  const [searchConfig, setSearchConfig] = useState({ apiKey: '' });
+  const [testingSearch, setTestingSearch] = useState(false);
+  const [searchTestResult, setSearchTestResult] = useState(null);
+
   // New state for saving reports and company stats
   const [savingReport, setSavingReport] = useState(false);
   const [reportSaved, setReportSaved] = useState(false);
   const [companyStats, setCompanyStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [showFullInput, setShowFullInput] = useState(false);
 
   const prescreenHits = useMemo(() => {
     if (userInput.trim().length < 30) return [];
@@ -281,6 +289,15 @@ const ScamDetector = () => {
 
   useEffect(() => {
     fetchAIKeys();
+    // load saved search config from localStorage
+    try {
+      const stored = JSON.parse(localStorage.getItem(SEARCH_CONFIG_KEY) || '{}');
+      if (stored.apiKey) {
+        setSearchConfig({ apiKey: stored.apiKey });
+      }
+    } catch {
+      // ignore parse errors
+    }
   }, []);
 
   const handleAddKey = async (e) => {
@@ -418,12 +435,17 @@ const ScamDetector = () => {
         return;
       }
 
-      const payload = buildPayload();
+      const payload = {
+        ...buildPayload(),
+        // attach only the API key; CSE ID will be injected server-side
+        searchConfig: searchConfig.apiKey ? { apiKey: searchConfig.apiKey } : undefined
+      };
 
       setLoading(true);
       setStep(0);
       setResult(null);
       setReportSaved(false); // Reset save status
+      setShowFullInput(false);
 
       // Start analysis animation
       setAnalysisAnimation({
@@ -588,6 +610,52 @@ const ScamDetector = () => {
       toast.error(error.response?.data?.message || 'Failed to save API key');
     } finally {
       setSavingKey(false);
+    }
+  };
+
+  // search api config handlers
+  const handleSaveSearchConfig = () => {
+    localStorage.setItem(SEARCH_CONFIG_KEY, JSON.stringify({ apiKey: searchConfig.apiKey }));
+    toast.success('Search API configuration saved');
+  };
+
+  const handleTestSearch = async () => {
+    if (!searchConfig.apiKey) {
+      toast.error('Provide an API key');
+      return;
+    }
+    try {
+      setTestingSearch(true);
+      setSearchTestResult(null);
+      // attempt simple call using manager's CSE ID if available
+      let cseId = '';
+      try {
+        const cfg = await settingsAPI.getAIConfig();
+        cseId = cfg.data.data.customSearchEngineId || '';
+      } catch {
+        // ignore
+      }
+      if (!cseId) {
+        toast('Key saved; manager has not configured a shared search engine yet.');
+        setSearchTestResult({ success: true });
+      } else {
+        const res = await fetch(`https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(
+          searchConfig.apiKey
+        )}&cx=${encodeURIComponent(cseId)}&q=test`);
+        const data = await res.json();
+        if (data.items) {
+          toast.success('Search API key works with shared engine!');
+          setSearchTestResult({ success: true });
+        } else {
+          throw new Error(data.error?.message || 'no results');
+        }
+      }
+    } catch (err) {
+      const msg = err.message || 'Search API test failed';
+      toast.error(msg);
+      setSearchTestResult({ success: false, error: msg });
+    } finally {
+      setTestingSearch(false);
     }
   };
 
@@ -875,10 +943,43 @@ const ScamDetector = () => {
                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                       <MessageSquare size={12} /> Original Submission
                     </div>
-                    <p className="text-sm text-gray-600 italic leading-relaxed">"{userInput}"</p>
+                    <p className="text-sm text-gray-600 italic leading-relaxed">
+                    "{showFullInput ? userInput :
+                      (userInput.length > 200 ? userInput.slice(0, 200) + '...' : userInput)}"
+                  </p>
+                  {userInput.length > 200 && (
+                    <button
+                      onClick={() => setShowFullInput(prev => !prev)}
+                      className="text-xs text-primary-600 hover:underline mt-1"
+                    >
+                      {showFullInput ? 'Show less' : 'Show more'}
+                    </button>
+                  )}
                   </div>
 
                   <p className="text-gray-700 leading-relaxed mb-6 font-medium">{result.summary}</p>
+                  {result.searchQueries && result.searchQueries.length > 0 && (
+                    <div className="mb-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <h4 className="font-black text-gray-900 mb-2">Search terms used:</h4>
+                      <ul className="list-disc list-inside text-sm text-gray-600">
+                        {result.searchQueries.map((q, i) => <li key={i}>{q}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {result.sources && result.sources.length > 0 && (
+                    <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <h4 className="font-black text-gray-900 mb-2">Search links used:</h4>
+                      <ul className="list-disc list-inside text-sm text-blue-600">
+                        {result.sources.map((s, idx) => (
+                          <li key={idx}>
+                            <a href={s.link} target="_blank" rel="noopener noreferrer" className="underline">
+                              {s.link}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {companyStats && companyStats.stats.totalReports > 0 && (
                     <div className="bg-blue-50/50 border border-blue-100 rounded-3xl p-6 mb-6">
@@ -1035,6 +1136,34 @@ const ScamDetector = () => {
                   <div className="flex gap-4">
                     <button onClick={handleTestKey} className="flex-1 h-12 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all">Test Engine</button>
                     <button onClick={handleSaveKey} className="flex-1 h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary-500/20 transition-all">Deploy Key</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* advanced section for custom search api */}
+              <div className="pt-6 border-t border-gray-100 space-y-4">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Custom Search API (advanced)</label>
+                <div className="space-y-4">
+                  <input
+                    type="text"
+                    placeholder="SEARCH_API_KEY"
+                    value={searchConfig.apiKey}
+                    onChange={(e) => setSearchConfig(p => ({ ...p, apiKey: e.target.value }))}
+                    className="w-full h-14 px-6 rounded-2xl bg-gray-50 border border-transparent focus:bg-white focus:border-primary-500 transition-all font-mono text-sm"
+                  />
+                  <div className="flex gap-4">
+                    <button
+                      onClick={handleTestSearch}
+                      className="flex-1 h-12 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
+                    >
+                      {testingSearch ? 'Testing...' : 'Test Key'}
+                    </button>
+                    <button
+                      onClick={handleSaveSearchConfig}
+                      className="flex-1 h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary-500/20 transition-all"
+                    >
+                      Save Search Key
+                    </button>
                   </div>
                 </div>
               </div>
