@@ -4,8 +4,23 @@ const Lead = require('../models/Lead');
 const { auth, authorize } = require('../middleware/auth');
 
 /**
- * GET /api/leads
- * Get all leads (manager only)
+ * @swagger
+ * tags:
+ *   name: Leads
+ *   description: Management of contact inquiries
+ */
+
+/**
+ * @swagger
+ * /api/leads:
+ *   get:
+ *     summary: Get all leads (manager only)
+ *     tags: [Leads]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of leads
  */
 router.get('/', auth, authorize('manager'), async (req, res) => {
     try {
@@ -20,8 +35,28 @@ router.get('/', auth, authorize('manager'), async (req, res) => {
 });
 
 /**
- * PATCH /api/leads/:id
- * Update lead status or notes (manager only)
+ * @swagger
+ * /api/leads/{id}:
+ *   patch:
+ *     summary: Update lead status or notes
+ *     tags: [Leads]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Lead updated
  */
 router.patch('/:id', auth, authorize('manager'), async (req, res) => {
     try {

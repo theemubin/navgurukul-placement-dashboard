@@ -124,7 +124,9 @@ const settingsSchema = new mongoose.Schema({
       lastUsed: { type: Date },
       isActive: { type: Boolean, default: true }
     }],
-    enabled: { type: Boolean, default: true }
+    enabled: { type: Boolean, default: true },
+    // optional ID of shared google custom search engine (CSE)
+    customSearchEngineId: { type: String, default: '' }
   },
   // Discord Integration Settings
   discordConfig: {

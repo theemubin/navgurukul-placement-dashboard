@@ -10,6 +10,13 @@ const SelfApplication = require('../models/SelfApplication');
 const Notification = require('../models/Notification');
 const { auth, authorize } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: BulkUpload
+ *   description: Import data via CSV files
+ */
+
 // Configure multer for CSV uploads
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -49,6 +56,18 @@ const generatePassword = () => {
 };
 
 // GET sample CSV template for students
+/**
+ * @swagger
+ * /api/bulk-upload/sample/students:
+ *   get:
+ *     summary: Download student import CSV template
+ *     tags: [BulkUpload]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: CSV template file
+ */
 router.get('/sample/students', auth, authorize('campus_poc', 'coordinator', 'manager'), (req, res) => {
   const csvContent = `firstName,lastName,email,phone,campus,school,batch,tenthGrade,twelfthGrade,highestDegree,specialization,currentStatus,github,portfolio
 John,Doe,john.doe@example.com,9876543210,Bangalore,School of Programming,2024,85.5,78.2,B.Tech,Computer Science,Active,https://github.com/johndoe,https://johndoe.com
@@ -61,6 +80,18 @@ Rahul,Kumar,rahul.kumar@example.com,9876543212,Bangalore,School of Business,2025
 });
 
 // GET sample CSV template for self-applications
+/**
+ * @swagger
+ * /api/bulk-upload/sample/self-applications:
+ *   get:
+ *     summary: Download self-application import CSV template
+ *     tags: [BulkUpload]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: CSV template file
+ */
 router.get('/sample/self-applications', auth, authorize('campus_poc', 'student'), (req, res) => {
   const csvContent = `companyName,jobTitle,jobUrl,location,salary,applicationDate,status,source,notes
 Google,Software Engineer,https://careers.google.com/job123,Bangalore,25 LPA,2024-01-15,applied,LinkedIn,Applied via LinkedIn Easy Apply
@@ -73,6 +104,18 @@ Amazon,SDE-1,https://amazon.jobs/job789,Hyderabad,22 LPA,2024-01-05,offer_receiv
 });
 
 // POST bulk upload students
+/**
+ * @swagger
+ * /api/bulk-upload/students:
+ *   post:
+ *     summary: Bulk upload students from CSV
+ *     tags: [BulkUpload]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Import results
+ */
 router.post('/students', auth, authorize('campus_poc', 'coordinator', 'manager'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -224,6 +267,18 @@ router.post('/students', auth, authorize('campus_poc', 'coordinator', 'manager')
 });
 
 // POST bulk upload self-applications (for students)
+/**
+ * @swagger
+ * /api/bulk-upload/self-applications:
+ *   post:
+ *     summary: Bulk upload self-applications (for authenticated student)
+ *     tags: [BulkUpload]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Import results
+ */
 router.post('/self-applications', auth, authorize('student'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -324,6 +379,18 @@ router.post('/self-applications', auth, authorize('student'), upload.single('fil
 });
 
 // POST bulk upload self-applications by Campus PoC (for their students)
+/**
+ * @swagger
+ * /api/bulk-upload/self-applications/campus:
+ *   post:
+ *     summary: Bulk upload self-applications for campus students (PoC only)
+ *     tags: [BulkUpload]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Import results
+ */
 router.post('/self-applications/campus', auth, authorize('campus_poc'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -451,6 +518,18 @@ router.post('/self-applications/campus', auth, authorize('campus_poc'), upload.s
 });
 
 // GET sample CSV for campus PoC self-applications
+/**
+ * @swagger
+ * /api/bulk-upload/sample/self-applications-campus:
+ *   get:
+ *     summary: Download PoC self-application import CSV template
+ *     tags: [BulkUpload]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: CSV template file
+ */
 router.get('/sample/self-applications-campus', auth, authorize('campus_poc'), (req, res) => {
   const csvContent = `studentEmail,companyName,jobTitle,jobUrl,location,salary,applicationDate,status,source,notes
 student1@navgurukul.org,Google,Software Engineer,https://careers.google.com/job123,Bangalore,25 LPA,2024-01-15,offer_received,LinkedIn,
@@ -463,6 +542,18 @@ student3@navgurukul.org,Amazon,SDE-1,https://amazon.jobs/job789,Hyderabad,22 LPA
 });
 
 // GET sample CSV for attendance bulk upload
+/**
+ * @swagger
+ * /api/bulk-upload/sample/attendance:
+ *   get:
+ *     summary: Download attendance import CSV template
+ *     tags: [BulkUpload]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: CSV template file
+ */
 router.get('/sample/attendance', auth, authorize('campus_poc', 'coordinator', 'manager'), (req, res) => {
   const csvContent = `email,attendancePercentage,dateOfJoining
 student1@navgurukul.org,85.5,2024-01-15
@@ -475,6 +566,18 @@ student3@navgurukul.org,78.0,2023-11-20`;
 });
 
 // POST bulk upload attendance data
+/**
+ * @swagger
+ * /api/bulk-upload/attendance:
+ *   post:
+ *     summary: Bulk upload attendance and joining dates
+ *     tags: [BulkUpload]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Import results
+ */
 router.post('/attendance', auth, authorize('campus_poc', 'coordinator', 'manager'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {

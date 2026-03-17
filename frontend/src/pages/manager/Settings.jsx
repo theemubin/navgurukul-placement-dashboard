@@ -51,8 +51,9 @@ const Settings = () => {
   const [campuses, setCampuses] = useState([]);
 
   // AI Config states
-  const [aiConfig, setAiConfig] = useState({ hasApiKey: false, enabled: true, apiKeyPreview: null });
+  const [aiConfig, setAiConfig] = useState({ hasApiKey: false, enabled: true, apiKeyPreview: null, customSearchEngineId: '' });
   const [newApiKey, setNewApiKey] = useState('');
+  const [newSearchEngineId, setNewSearchEngineId] = useState('');
   const [savingAiConfig, setSavingAiConfig] = useState(false);
 
   // New Dynamic Lists states
@@ -105,6 +106,7 @@ const Settings = () => {
     try {
       const response = await settingsAPI.getAIConfig();
       setAiConfig(response.data.data);
+      setNewSearchEngineId(response.data.data.customSearchEngineId || '');
     } catch (err) {
       console.error('Error fetching AI config:', err);
     }
@@ -124,7 +126,8 @@ const Settings = () => {
       setSavingAiConfig(true);
       await settingsAPI.updateAIConfig({
         googleApiKey: newApiKey || undefined,
-        enabled: aiConfig.enabled
+        enabled: aiConfig.enabled,
+        customSearchEngineId: newSearchEngineId || undefined
       });
       setSuccess('AI configuration saved successfully');
       setNewApiKey('');
@@ -1358,6 +1361,22 @@ node scripts/promote_normalized_index_unique.js`;
                     <input type="password" placeholder={aiConfig.hasApiKey ? '••••••••••••••••' : 'Enter API Key'} value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} />
                     <Button onClick={saveAiConfig} disabled={savingAiConfig}>Update</Button>
                   </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Shared CSE ID (optional)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Search Engine ID"
+                      value={newSearchEngineId}
+                      onChange={(e) => setNewSearchEngineId(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button onClick={saveAiConfig} disabled={savingAiConfig}>Update</Button>
+                  </div>
+                  {aiConfig.customSearchEngineId && (
+                    <p className="text-xs text-gray-500 mt-1">Current: {aiConfig.customSearchEngineId}</p>
+                  )}
                 </div>
               </div>
             </Card>

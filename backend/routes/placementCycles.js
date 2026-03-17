@@ -6,7 +6,31 @@ const User = require('../models/User');
 const Application = require('../models/Application');
 const { auth, authorize } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: PlacementCycles
+ *   description: Placement cycle management for students
+ */
+
 // Get all placement cycles (global - visible to all authorized users)
+/**
+ * @swagger
+ * /api/placement-cycles:
+ *   get:
+ *     summary: Get all placement cycles
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: activeOnly
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of cycles
+ */
 router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { activeOnly } = req.query;
@@ -60,7 +84,36 @@ router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager
   }
 });
 
-// Create a new placement cycle (Manager only - global cycles)
+/**
+ * @swagger
+ * /api/placement-cycles:
+ *   post:
+ *     summary: Create a new placement cycle
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - month
+ *               - year
+ *             properties:
+ *               month:
+ *                 type: integer
+ *               year:
+ *                 type: integer
+ *               description:
+ *                 type: string
+ *               targetPlacements:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Cycle created
+ */
 router.post('/',
   auth,
   authorize('manager'),
@@ -108,6 +161,30 @@ router.post('/',
 );
 
 // Update placement cycle (Manager only)
+/**
+ * @swagger
+ * /api/placement-cycles/{cycleId}:
+ *   put:
+ *     summary: Update a placement cycle
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cycleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Cycle updated
+ */
 router.put('/:cycleId', auth, authorize('manager'), async (req, res) => {
   try {
     const { status, description, targetPlacements, isActive } = req.body;
@@ -132,6 +209,24 @@ router.put('/:cycleId', auth, authorize('manager'), async (req, res) => {
 });
 
 // Delete placement cycle (Manager only)
+/**
+ * @swagger
+ * /api/placement-cycles/{cycleId}:
+ *   delete:
+ *     summary: Delete a placement cycle
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cycleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Cycle deleted
+ */
 router.delete('/:cycleId', auth, authorize('manager'), async (req, res) => {
   try {
     const cycle = await PlacementCycle.findById(req.params.cycleId);
@@ -156,6 +251,37 @@ router.delete('/:cycleId', auth, authorize('manager'), async (req, res) => {
 });
 
 // Assign students to a placement cycle (POC for their campus, Coordinator/Manager for all)
+/**
+ * @swagger
+ * /api/placement-cycles/{cycleId}/students:
+ *   post:
+ *     summary: Assign students to a placement cycle
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cycleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - studentIds
+ *             properties:
+ *               studentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Students assigned
+ */
 router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { studentIds } = req.body;
@@ -189,6 +315,37 @@ router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', '
 });
 
 // Remove students from a placement cycle
+/**
+ * @swagger
+ * /api/placement-cycles/{cycleId}/students:
+ *   delete:
+ *     summary: Remove students from a placement cycle
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cycleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - studentIds
+ *             properties:
+ *               studentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Students removed
+ */
 router.delete('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { studentIds } = req.body;
@@ -223,6 +380,23 @@ router.delete('/:cycleId/students', auth, authorize('campus_poc', 'coordinator',
 });
 
 // Get unassigned students (POC sees their campus, others can filter)
+/**
+ * @swagger
+ * /api/placement-cycles/unassigned/students:
+ *   get:
+ *     summary: Get students not yet assigned to any cycle
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of unassigned students
+ */
 router.get('/unassigned/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     let query = {
@@ -252,6 +426,28 @@ router.get('/unassigned/students', auth, authorize('campus_poc', 'coordinator', 
 });
 
 // Get students in a placement cycle (with campus filter for POC)
+/**
+ * @swagger
+ * /api/placement-cycles/{cycleId}/students:
+ *   get:
+ *     summary: Get students in a specific placement cycle
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cycleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of students in cycle
+ */
 router.get('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const cycle = await PlacementCycle.findById(req.params.cycleId);
@@ -295,6 +491,29 @@ router.get('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'm
 });
 
 // Student can select their own placement cycle
+/**
+ * @swagger
+ * /api/placement-cycles/my-cycle:
+ *   put:
+ *     summary: Update own placement cycle (for students)
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - cycleId
+ *             properties:
+ *               cycleId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Cycle updated and profile submitted for approval
+ */
 router.put('/my-cycle', auth, authorize('student'), async (req, res) => {
   try {
     console.log(`Update my-cycle request from user ${req.userId} role=${req.user?.role}`);
@@ -354,6 +573,24 @@ router.put('/my-cycle', auth, authorize('student'), async (req, res) => {
 });
 
 // Update student's cycle to current month on successful placement
+/**
+ * @swagger
+ * /api/placement-cycles/student/{studentId}/placement-success:
+ *   put:
+ *     summary: Auto-assign placed student to current cycle
+ *     tags: [PlacementCycles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Student cycle updated
+ */
 router.put('/student/:studentId/placement-success', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { studentId } = req.params;

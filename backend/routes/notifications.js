@@ -3,7 +3,39 @@ const router = express.Router();
 const Notification = require('../models/Notification');
 const { auth } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Notifications
+ *   description: User notifications
+ */
+
 // Get user's notifications
+/**
+ * @swagger
+ * /api/notifications:
+ *   get:
+ *     summary: Get user's notifications
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: unread
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of notifications
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const { unread, page = 1, limit = 20 } = req.query;
@@ -40,6 +72,18 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get unread count
+/**
+ * @swagger
+ * /api/notifications/unread-count:
+ *   get:
+ *     summary: Get unread notification count
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Unread count
+ */
 router.get('/unread-count', auth, async (req, res) => {
   try {
     const count = await Notification.countDocuments({
@@ -55,6 +99,24 @@ router.get('/unread-count', auth, async (req, res) => {
 });
 
 // Mark notification as read
+/**
+ * @swagger
+ * /api/notifications/{id}/read:
+ *   put:
+ *     summary: Mark a notification as read
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Notification marked as read
+ */
 router.put('/:id/read', auth, async (req, res) => {
   try {
     const notification = await Notification.findOne({
@@ -78,6 +140,18 @@ router.put('/:id/read', auth, async (req, res) => {
 });
 
 // Mark all notifications as read
+/**
+ * @swagger
+ * /api/notifications/read-all:
+ *   put:
+ *     summary: Mark all notifications as read
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All notifications marked as read
+ */
 router.put('/read-all', auth, async (req, res) => {
   try {
     await Notification.updateMany(
@@ -93,6 +167,24 @@ router.put('/read-all', auth, async (req, res) => {
 });
 
 // Delete notification
+/**
+ * @swagger
+ * /api/notifications/{id}:
+ *   delete:
+ *     summary: Delete a notification
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Notification deleted
+ */
 router.delete('/:id', auth, async (req, res) => {
   try {
     const notification = await Notification.findOneAndDelete({
@@ -112,6 +204,18 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // Delete all read notifications
+/**
+ * @swagger
+ * /api/notifications/clear/read:
+ *   delete:
+ *     summary: Clear all read notifications
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Read notifications cleared
+ */
 router.delete('/clear/read', auth, async (req, res) => {
   try {
     await Notification.deleteMany({

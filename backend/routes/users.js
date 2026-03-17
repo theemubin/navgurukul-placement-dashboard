@@ -7,7 +7,43 @@ const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Users
+ *   description: User profile and student management
+ */
+
 // Get all students (for Campus POCs, Coordinators, Managers)
+/**
+ * @swagger
+ * /api/users/students:
+ *   get:
+ *     summary: Get all students with filtering and pagination
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: school
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of students
+ */
 router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     // Accept pagination, filters and sorting
@@ -122,6 +158,24 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
 });
 
 // Get student by ID
+/**
+ * @swagger
+ * /api/users/students/{studentId}:
+ *   get:
+ *     summary: Get specific student profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Student details
+ */
 router.get('/students/:studentId', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, async (req, res) => {
   try {
     const student = await User.findOne({ _id: req.params.studentId, role: 'student' })
@@ -183,6 +237,18 @@ router.put('/students/:studentId/status', auth, authorize('campus_poc', 'coordin
  * PUT /api/users/profile/avatar
  * Upload profile picture
  */
+/**
+ * @swagger
+ * /api/users/profile/avatar:
+ *   put:
+ *     summary: Upload profile avatar
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Avatar updated
+ */
 router.put('/profile/avatar', auth, upload.single('avatar'), async (req, res) => {
   try {
     if (!req.file) {
@@ -214,6 +280,18 @@ router.put('/profile/avatar', auth, upload.single('avatar'), async (req, res) =>
 });
 
 // Update profile (students and staff) - allow coordinators/managers/campus_poc to update their own discord and basic info
+/**
+ * @swagger
+ * /api/users/profile:
+ *   put:
+ *     summary: Update own profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ */
 router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'campus_poc'), upload.single('resume'), async (req, res) => {
   try {
     const updates = req.body;
@@ -1054,6 +1132,18 @@ router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (
   }
 });
 // Get list of active coordinators (used for job assignment and filters)
+/**
+ * @swagger
+ * /api/users/coordinators:
+ *   get:
+ *     summary: Get list of recruitment coordinators
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of coordinators
+ */
 router.get('/coordinators', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const coordinators = await User.find({ role: 'coordinator', isActive: true })
@@ -1069,6 +1159,18 @@ router.get('/coordinators', auth, authorize('coordinator', 'manager'), async (re
 
 // === Admin / Manager User Management ===
 // List all users (manager only)
+/**
+ * @swagger
+ * /api/users:
+ *   get:
+ *     summary: Get all users (Admin/Manager only)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of all users
+ */
 router.get('/', auth, authorize('manager'), async (req, res) => {
   try {
     const { page = 1, limit = 50, search, role } = req.query;
@@ -1302,6 +1404,18 @@ router.delete('/me/export-presets/:presetId', auth, async (req, res) => {
 });
 
 // Get user's AI API keys
+/**
+ * @swagger
+ * /api/users/me/ai-keys:
+ *   get:
+ *     summary: Get user's personal AI keys
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of AI keys
+ */
 router.get('/me/ai-keys', auth, async (req, res) => {
   try {
     const user = await User.findById(req.userId).select('aiApiKeys');
@@ -1321,6 +1435,24 @@ router.get('/me/ai-keys', auth, async (req, res) => {
 });
 
 // Add AI API key
+/**
+ * @swagger
+ * /api/users/me/ai-keys:
+ *   post:
+ *     summary: Add a personal AI key
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: Key added
+ */
 router.post('/me/ai-keys', auth, async (req, res) => {
   try {
     const { key, label } = req.body;

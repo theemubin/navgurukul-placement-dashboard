@@ -4,6 +4,13 @@ const { auth, authorize } = require('../middleware/auth');
 const discordService = require('../services/discordService');
 const User = require('../models/User');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Discord
+ *   description: Discord bot integration
+ */
+
 // Middleware to ensure Discord is initialized
 const ensureDiscordReady = async (req, res, next) => {
     const isReady = await discordService.ensureReady();
@@ -17,6 +24,18 @@ const ensureDiscordReady = async (req, res, next) => {
  * @route   POST /api/discord/test-connection
  * @desc    Test Discord bot connection by sending a message
  * @access  Manager
+ */
+/**
+ * @swagger
+ * /api/discord/test-connection:
+ *   post:
+ *     summary: Test Discord bot connection
+ *     tags: [Discord]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Connection test result
  */
 router.post('/test-connection', auth, authorize('manager'), ensureDiscordReady, async (req, res) => {
     try {
@@ -37,6 +56,18 @@ router.post('/test-connection', auth, authorize('manager'), ensureDiscordReady, 
  * @desc    Get Discord server information (channels, roles)
  * @access  Manager
  */
+/**
+ * @swagger
+ * /api/discord/server-info:
+ *   get:
+ *     summary: Get Discord server info
+ *     tags: [Discord]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Server details
+ */
 router.get('/server-info', auth, authorize('manager'), ensureDiscordReady, async (req, res) => {
     try {
         const info = await discordService.getServerInfo();
@@ -55,6 +86,29 @@ router.get('/server-info', auth, authorize('manager'), ensureDiscordReady, async
  * @route   POST /api/discord/verify-user
  * @desc    Verify a user's Discord ID (initiated by user)
  * @access  Private
+ */
+/**
+ * @swagger
+ * /api/discord/verify-user:
+ *   post:
+ *     summary: Link and verify Discord user ID
+ *     tags: [Discord]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - discordUserId
+ *             properties:
+ *               discordUserId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Discord linked
  */
 router.post('/verify-user', auth, async (req, res) => {
     try {
@@ -89,6 +143,18 @@ router.post('/verify-user', auth, async (req, res) => {
  * @route   DELETE /api/discord/disconnect
  * @desc    Remove Discord ID from user profile
  * @access  Private
+ */
+/**
+ * @swagger
+ * /api/discord/disconnect:
+ *   delete:
+ *     summary: Unlink Discord from profile
+ *     tags: [Discord]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Discord unlinked
  */
 router.delete('/disconnect', auth, async (req, res) => {
     try {

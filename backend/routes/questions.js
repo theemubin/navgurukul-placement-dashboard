@@ -7,7 +7,31 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { auth, authorize } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Questions
+ *   description: Q&A forum for job postings
+ */
+
 // Get questions for a company
+/**
+ * @swagger
+ * /api/questions:
+ *   get:
+ *     summary: Get questions for a company
+ *     tags: [Questions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: company
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of questions
+ */
 router.get('/', auth, async (req, res) => {
     try {
         const { company } = req.query;
@@ -42,6 +66,32 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Post a question
+/**
+ * @swagger
+ * /api/questions:
+ *   post:
+ *     summary: Post a new question for a job
+ *     tags: [Questions]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - jobId
+ *               - question
+ *             properties:
+ *               jobId:
+ *                 type: string
+ *               question:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Question submitted
+ */
 router.post('/', auth, authorize('student'), [
     body('jobId').notEmpty(),
     body('question').trim().isLength({ min: 10 }).withMessage('Question must be at least 10 characters')
@@ -91,6 +141,35 @@ router.post('/', auth, authorize('student'), [
 });
 
 // Answer a question (Coordinator only)
+/**
+ * @swagger
+ * /api/questions/{id}/answer:
+ *   patch:
+ *     summary: Answer a question (Coordinators/Managers)
+ *     tags: [Questions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - answer
+ *             properties:
+ *               answer:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Answer submitted
+ */
 router.patch('/:id/answer', auth, authorize('coordinator', 'manager'), [
     body('answer').trim().notEmpty()
 ], async (req, res) => {
@@ -124,6 +203,24 @@ router.patch('/:id/answer', auth, authorize('coordinator', 'manager'), [
 });
 
 // Delete a question (Coordinator only)
+/**
+ * @swagger
+ * /api/questions/{id}:
+ *   delete:
+ *     summary: Delete a question (soft delete)
+ *     tags: [Questions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Question deleted
+ */
 router.delete('/:id', auth, authorize('coordinator', 'manager'), async (req, res) => {
     try {
         const question = await Question.findById(req.params.id);

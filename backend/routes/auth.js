@@ -286,7 +286,54 @@ const loginValidation = [
   body('password').notEmpty()
 ];
 
+/**
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: User authentication and registration
+ */
+
 // Register new user
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - firstName
+ *               - lastName
+ *               - role
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: student@navgurukul.org
+ *               password:
+ *                 type: string
+ *                 example: password123
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [student, campus_poc, coordinator, manager]
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *       400:
+ *         description: Validation error or user already exists
+ *       403:
+ *         description: Domain not allowed
+ */
 router.post('/register', registerValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -389,6 +436,34 @@ router.post('/register', registerValidation, async (req, res) => {
 });
 
 // Login
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Login user with email and password
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: student@navgurukul.org
+ *               password:
+ *                 type: string
+ *                 example: password123
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *       401:
+ *         description: Invalid credentials or account deactivated
+ */
 router.post('/login', loginValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -450,6 +525,20 @@ router.post('/login', loginValidation, async (req, res) => {
 });
 
 // Get current user
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Get details of currently logged in user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Success
+ *       401:
+ *         description: Not authorized
+ */
 router.get('/me', auth, async (req, res) => {
   try {
     // Debug: log cookie header to see if browser sent auth_token

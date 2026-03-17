@@ -136,7 +136,7 @@ function App() {
           <ScamEducation />
         </ProtectedRoute>
       } />
-      
+
       {/* Public Routes */}
       <Route path="/portfolios" element={<Portfolios />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />

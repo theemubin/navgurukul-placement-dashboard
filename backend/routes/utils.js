@@ -5,9 +5,41 @@ const { auth } = require('../middleware/auth');
 const AIService = require('../services/aiService');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Utils
+ *   description: Utility endpoints for URL checking and AI analysis
+ */
+
 // POST /api/utils/check-url
 // Body: { url: string }
 // Returns: { ok: boolean, status: number, statusText?: string }
+/**
+ * @swagger
+ * /api/utils/check-url:
+ *   post:
+ *     summary: Verify if a URL is accessible
+ *     tags: [Utils]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - url
+ *             properties:
+ *               url:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: URL check result
+ *       400:
+ *         description: Invalid URL
+ */
 router.post('/check-url', auth, async (req, res) => {
   try {
     const { url } = req.body;
@@ -39,6 +71,18 @@ router.post('/check-url', auth, async (req, res) => {
 // Returns: Scam analysis JSON
 // POST /api/utils/test-ai-key
 // Test if the Google AI key works with Gemini
+/**
+ * @swagger
+ * /api/utils/test-ai-key:
+ *   post:
+ *     summary: Test configured Google AI keys
+ *     tags: [Utils]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Test result
+ */
 router.post('/test-ai-key', auth, async (req, res) => {
   let aiRuntime = null;
 
@@ -206,6 +250,37 @@ Your scam analysis will work now. The free tier allows 15 requests per minute, w
   }
 });
 
+/**
+ * @swagger
+ * /api/utils/analyze-scam:
+ *   post:
+ *     summary: Analyze a job offer for potential scam indicators
+ *     tags: [Utils]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               input:
+ *                 type: string
+ *               imageBase64:
+ *                 type: string
+ *               imageMimeType:
+ *                 type: string
+ *               emailHeader:
+ *                 type: string
+ *               senderEmail:
+ *                 type: string
+ *               companyUrl:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Scam analysis result
+ */
 router.post('/analyze-scam', auth, async (req, res) => {
   try {
     const {

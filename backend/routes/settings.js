@@ -4,7 +4,26 @@ const Settings = require('../models/Settings');
 const { auth, authorize } = require('../middleware/auth');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Settings
+ *   description: System-wide configurations and dropdown values
+ */
+
 // Get all settings (public - for dropdowns and forms)
+/**
+ * @swagger
+ * /api/settings:
+ *   get:
+ *     summary: Get all system settings and dropdown options
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Settings data
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const settings = await Settings.getSettings();
@@ -28,7 +47,9 @@ router.get('/', auth, async (req, res) => {
       // Include discord settings so UI can display and edit them
       discordConfig: settings.discordConfig || { enabled: false, channels: {} },
       hiringPartners: settings.hiringPartners || [],
-      testimonials: settings.testimonials || []
+      testimonials: settings.testimonials || [],
+      // Publicly shareable AI config parts
+      customSearchEngineId: settings.aiConfig?.customSearchEngineId || ''
     };
 
     res.json({ success: true, data: response });
@@ -39,6 +60,24 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Update all settings (manager/coordinator only)
+/**
+ * @swagger
+ * /api/settings:
+ *   put:
+ *     summary: Update global settings (Managers/Coordinators)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Settings updated
+ */
 router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     // Diagnostic logging to help debug accidental overwrites in production
@@ -125,6 +164,35 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
 });
 
 // Add module to a school (manager/coordinator only)
+/**
+ * @swagger
+ * /api/settings/schools/{school}/modules:
+ *   post:
+ *     summary: Add a module to a school
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: school
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - module
+ *             properties:
+ *               module:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Module added
+ */
 router.post('/schools/:school/modules', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { school } = req.params;
@@ -154,6 +222,29 @@ router.post('/schools/:school/modules', auth, authorize('manager', 'coordinator'
 });
 
 // Remove module from a school (manager/coordinator only)
+/**
+ * @swagger
+ * /api/settings/schools/{school}/modules/{module}:
+ *   delete:
+ *     summary: Remove a module from a school
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: school
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: module
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Module removed
+ */
 router.delete('/schools/:school/modules/:module', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { school, module } = req.params;
@@ -353,6 +444,18 @@ router.post('/course-skills', auth, async (req, res) => {
 // ==================== PIPELINE STAGES ROUTES ====================
 
 // Get all pipeline stages (public for dropdowns)
+/**
+ * @swagger
+ * /api/settings/pipeline-stages:
+ *   get:
+ *     summary: Get all customized job pipeline stages
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of stages
+ */
 router.get('/pipeline-stages', auth, async (req, res) => {
   try {
     const settings = await Settings.getSettings();
@@ -369,6 +472,34 @@ router.get('/pipeline-stages', auth, async (req, res) => {
 });
 
 // Create a new pipeline stage (coordinator/manager only)
+/**
+ * @swagger
+ * /api/settings/pipeline-stages:
+ *   post:
+ *     summary: Create a new pipeline stage
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - label
+ *             properties:
+ *               name:
+ *                 type: string
+ *               label:
+ *                 type: string
+ *               color:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Stage created
+ */
 router.post('/pipeline-stages', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { id, label, description, color, order, visibleToStudents, studentLabel } = req.body;
@@ -567,7 +698,8 @@ router.get('/ai-config', auth, authorize('manager'), async (req, res) => {
         // Don't send the actual API key for security
         apiKeyPreview: settings.aiConfig?.googleApiKey
           ? `${settings.aiConfig.googleApiKey.substring(0, 8)}...${settings.aiConfig.googleApiKey.slice(-4)}`
-          : null
+          : null,
+        customSearchEngineId: settings.aiConfig?.customSearchEngineId || ''
       }
     });
   } catch (error) {
@@ -577,9 +709,27 @@ router.get('/ai-config', auth, authorize('manager'), async (req, res) => {
 });
 
 // Update AI config (manager only)
+/**
+ * @swagger
+ * /api/settings/ai-config:
+ *   put:
+ *     summary: Update AI configuration (Manager only)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: AI config updated
+ */
 router.put('/ai-config', auth, authorize('manager'), async (req, res) => {
   try {
-    const { googleApiKey, enabled } = req.body;
+    const { googleApiKey, enabled, customSearchEngineId } = req.body;
 
     const settings = await Settings.getSettings();
 
@@ -595,6 +745,10 @@ router.put('/ai-config', auth, authorize('manager'), async (req, res) => {
       settings.aiConfig.enabled = enabled;
     }
 
+    if (customSearchEngineId !== undefined) {
+      settings.aiConfig.customSearchEngineId = customSearchEngineId;
+    }
+
     settings.lastUpdatedBy = req.userId;
     await settings.save();
 
@@ -606,7 +760,8 @@ router.put('/ai-config', auth, authorize('manager'), async (req, res) => {
         enabled: settings.aiConfig.enabled !== false,
         apiKeyPreview: settings.aiConfig.googleApiKey
           ? `${settings.aiConfig.googleApiKey.substring(0, 8)}...${settings.aiConfig.googleApiKey.slice(-4)}`
-          : null
+          : null,
+        customSearchEngineId: settings.aiConfig.customSearchEngineId || ''
       }
     });
   } catch (error) {

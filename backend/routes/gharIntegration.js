@@ -4,6 +4,13 @@ const gharApiService = require('../services/gharApiService');
 const User = require('../models/User');
 const { auth, authorize } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Ghar
+ *   description: Ghar Dashboard (Internal) integration
+ */
+
 // Helper middlewares using the existing authorize function
 const isManager = authorize('manager');
 const isAuthenticated = auth;
@@ -12,6 +19,18 @@ const isAuthenticated = auth;
  * @route   GET /api/ghar/attendance-config
  * @desc    Get all attendance configurations from Ghar Dashboard
  * @access  Manager, Campus POC
+ */
+/**
+ * @swagger
+ * /api/ghar/attendance-config:
+ *   get:
+ *     summary: Get attendance configurations from Ghar Dashboard
+ *     tags: [Ghar]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Config data
  */
 router.get('/attendance-config', isAuthenticated, async (req, res) => {
     try {
@@ -36,6 +55,29 @@ router.get('/attendance-config', isAuthenticated, async (req, res) => {
  * @route   POST /api/ghar/sync-student
  * @desc    Sync single student data from Ghar API to local additive section
  * @access  Manager, Campus POC
+ */
+/**
+ * @swagger
+ * /api/ghar/sync-student:
+ *   post:
+ *     summary: Sync single student data from Ghar API
+ *     tags: [Ghar]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *               userId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Sync successful
  */
 router.post('/sync-student', isAuthenticated, async (req, res) => {
     try {
@@ -101,6 +143,31 @@ router.post('/sync-student', isAuthenticated, async (req, res) => {
  * @desc    Batch sync multiple students from Ghar API
  * @access  Manager only
  */
+/**
+ * @swagger
+ * /api/ghar/batch-sync:
+ *   post:
+ *     summary: Batch sync students from Ghar API
+ *     tags: [Ghar]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               emails:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               campusId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Batch sync result
+ */
 router.post('/batch-sync', isAuthenticated, isManager, async (req, res) => {
     try {
         const { emails, campusId } = req.body;
@@ -161,6 +228,18 @@ router.post('/batch-sync', isAuthenticated, isManager, async (req, res) => {
  * @desc    Check if Ghar API is accessible
  * @access  Manager only
  */
+/**
+ * @swagger
+ * /api/ghar/connection-status:
+ *   get:
+ *     summary: Check Ghar API connection status
+ *     tags: [Ghar]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Connection status
+ */
 router.get('/connection-status', isAuthenticated, isManager, async (req, res) => {
     try {
         const isConnected = await gharApiService.checkConnection();
@@ -186,6 +265,24 @@ router.get('/connection-status', isAuthenticated, isManager, async (req, res) =>
  * @route   GET /api/ghar/student-preview/:email
  * @desc    Fetch raw student data from Ghar API (no DB sync)
  * @access  Manager only
+ */
+/**
+ * @swagger
+ * /api/ghar/student-preview/{email}:
+ *   get:
+ *     summary: Preview student data from Ghar API (no sync)
+ *     tags: [Ghar]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: email
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Preview data
  */
 router.get('/student-preview/:email', isAuthenticated, isManager, async (req, res) => {
     try {

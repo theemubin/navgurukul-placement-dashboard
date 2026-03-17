@@ -9,8 +9,23 @@ const upload = require('../middleware/upload');
 const isManager = authorize('manager');
 
 /**
- * GET /api/featured-placements
- * Get all featured placements (for manager dashboard)
+ * @swagger
+ * tags:
+ *   name: FeaturedPlacements
+ *   description: Management of featured placements for home page
+ */
+
+/**
+ * @swagger
+ * /api/featured-placements:
+ *   get:
+ *     summary: Get all featured placements
+ *     tags: [FeaturedPlacements]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of featured placements
  */
 router.get('/', auth, isManager, async (req, res) => {
     try {
@@ -49,8 +64,22 @@ router.get('/', auth, isManager, async (req, res) => {
 });
 
 /**
- * POST /api/featured-placements
- * Create a new featured placement
+ * @swagger
+ * /api/featured-placements:
+ *   post:
+ *     summary: Create a new featured placement
+ *     tags: [FeaturedPlacements]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: Placement featured
  */
 router.post('/', auth, isManager, async (req, res) => {
     try {
@@ -137,8 +166,28 @@ router.post('/', auth, isManager, async (req, res) => {
 });
 
 /**
- * PUT /api/featured-placements/:id
- * Update a featured placement
+ * @swagger
+ * /api/featured-placements/{id}:
+ *   put:
+ *     summary: Update a featured placement
+ *     tags: [FeaturedPlacements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Featured placement updated
  */
 router.put('/:id', auth, isManager, async (req, res) => {
     try {
@@ -185,8 +234,22 @@ router.put('/:id', auth, isManager, async (req, res) => {
 });
 
 /**
- * DELETE /api/featured-placements/:id
- * Remove a placement from featured list
+ * @swagger
+ * /api/featured-placements/{id}:
+ *   delete:
+ *     summary: Remove a placement from featured list
+ *     tags: [FeaturedPlacements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Placement removed
  */
 router.delete('/:id', auth, isManager, async (req, res) => {
     try {
@@ -213,8 +276,29 @@ router.delete('/:id', auth, isManager, async (req, res) => {
 });
 
 /**
- * PUT /api/featured-placements/reorder/batch
- * Reorder featured placements
+ * @swagger
+ * /api/featured-placements/reorder/batch:
+ *   put:
+ *     summary: Reorder featured placements
+ *     tags: [FeaturedPlacements]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - placements
+ *             properties:
+ *               placements:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       200:
+ *         description: Reordered successfully
  */
 router.put('/reorder/batch', auth, isManager, async (req, res) => {
     try {
@@ -248,8 +332,16 @@ router.put('/reorder/batch', auth, isManager, async (req, res) => {
 });
 
 /**
- * GET /api/featured-placements/available
- * Get accepted applications that can be featured
+ * @swagger
+ * /api/featured-placements/available:
+ *   get:
+ *     summary: Get accepted applications that can be featured
+ *     tags: [FeaturedPlacements]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of available applications
  */
 router.get('/available', auth, isManager, async (req, res) => {
     try {
@@ -288,8 +380,22 @@ router.get('/available', auth, isManager, async (req, res) => {
 });
 
 /**
- * PUT /api/featured-placements/:id/image
- * Upload a hero image for a featured placement
+ * @swagger
+ * /api/featured-placements/{id}/image:
+ *   put:
+ *     summary: Upload a hero image for a featured placement
+ *     tags: [FeaturedPlacements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Image uploaded
  */
 router.put('/:id/image', auth, isManager, upload.single('heroImage'), async (req, res) => {
     try {

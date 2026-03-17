@@ -5,6 +5,7 @@ import { StatsCard, LoadingSpinner } from '../../components/common/UIComponents'
 import UserApprovals from '../../components/manager/UserApprovals';
 import ManagerStudents from '../../components/manager/ManagerStudents';
 import ManagerStaff from '../../components/manager/ManagerStaff';
+import ReadinessDetailedModal from '../../components/manager/ReadinessDetailedModal';
 import {
   Users, Briefcase, Building2, Award, TrendingUp,
   CheckCircle, Clock, BarChart3, PieChart, Download, UserCog
@@ -21,6 +22,9 @@ const Dashboard = () => {
   const [pendingCount, setPendingCount] = useState(0);
   const [campusRows, setCampusRows] = useState([]);
   const [loadingCampusRows, setLoadingCampusRows] = useState(true);
+  const [isReadinessModalOpen, setIsReadinessModalOpen] = useState(false);
+  const [readinessData, setReadinessData] = useState([]);
+  const [loadingReadiness, setLoadingReadiness] = useState(false);
   const schoolToAcronym = (school) => {
     if (!school) return 'Unknown';
     const trimmed = school.trim();
@@ -139,6 +143,21 @@ const Dashboard = () => {
     }
   };
 
+  const handleAllStudentsClick = async () => {
+    setIsReadinessModalOpen(true);
+    if (readinessData.length > 0) return; // Only fetch once or if empty
+
+    try {
+      setLoadingReadiness(true);
+      const response = await api.get('/stats/manager/students-readiness');
+      setReadinessData(response.data);
+    } catch (error) {
+      toast.error('Failed to load detailed readiness data');
+    } finally {
+      setLoadingReadiness(false);
+    }
+  };
+
   const exportData = (format) => {
     if (format === 'pdf') {
       window.print();
@@ -211,6 +230,7 @@ const Dashboard = () => {
           icon={Users}
           color="primary"
           trend={{ value: 12, isPositive: true }}
+          onClick={handleAllStudentsClick}
         />
         <StatsCard
           title="Active Jobs"
@@ -571,6 +591,13 @@ const Dashboard = () => {
           </table>
         </div>
       </div>
+
+      <ReadinessDetailedModal 
+        isOpen={isReadinessModalOpen}
+        onClose={() => setIsReadinessModalOpen(false)}
+        students={readinessData}
+        loading={loadingReadiness}
+      />
     </div>
   );
 };

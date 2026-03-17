@@ -7,7 +7,31 @@ const Campus = require('../models/Campus');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Stats
+ *   description: Statistics, reporting, and analytics
+ */
+
 // Get detailed reports and analytics
+/**
+ * @swagger
+ * /api/stats/reports:
+ *   get:
+ *     summary: Get detailed analytical reports (Manager only)
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateRange
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Analytical data
+ */
 router.get('/reports', auth, authorize('manager'), async (req, res) => {
   try {
     const { dateRange = 'year' } = req.query;
@@ -193,6 +217,18 @@ router.get('/reports', auth, authorize('manager'), async (req, res) => {
 const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing'];
 
 // Get dashboard stats (Managers and Coordinators)
+/**
+ * @swagger
+ * /api/stats/dashboard:
+ *   get:
+ *     summary: Get main dashboard statistics
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard stats
+ */
 router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { campus } = req.query;
@@ -354,6 +390,23 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
 });
 
 // Get campus-wise stats
+/**
+ * @swagger
+ * /api/stats/campus:
+ *   get:
+ *     summary: Get campus-wise statistics
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: campusId
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Campus stats
+ */
 router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const campuses = await Campus.find({ isActive: true });
@@ -416,6 +469,18 @@ router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res
 });
 
 // Export stats as CSV
+/**
+ * @swagger
+ * /api/stats/export:
+ *   get:
+ *     summary: Export statistical data
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Export successful
+ */
 router.get('/export', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { type = 'placements', campus } = req.query;
@@ -492,6 +557,18 @@ router.get('/export', auth, authorize('coordinator', 'manager'), async (req, res
 });
 
 // Student dashboard stats
+/**
+ * @swagger
+ * /api/stats/student:
+ *   get:
+ *     summary: Get statistics for authenticated student
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Student stats
+ */
 router.get('/student', auth, authorize('student'), async (req, res) => {
   try {
     const applications = await Application.find({ student: req.userId })
@@ -516,6 +593,18 @@ router.get('/student', auth, authorize('student'), async (req, res) => {
 });
 
 // Coordinator stats - Which coordinator is handling how many jobs
+/**
+ * @swagger
+ * /api/stats/coordinator-stats:
+ *   get:
+ *     summary: Get coordinator performance stats
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Performance data
+ */
 router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) => {
   try {
     // Get all coordinators
@@ -594,6 +683,18 @@ router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) =>
 });
 
 // Campus POC dashboard stats
+/**
+ * @swagger
+ * /api/stats/campus-poc:
+ *   get:
+ *     summary: Get main POC dashboard statistics
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: POC dashboard stats
+ */
 router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const campusId = req.user.campus;
@@ -690,6 +791,24 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
 });
 
 // Get eligible students for a specific job (Campus POC)
+/**
+ * @swagger
+ * /api/stats/campus-poc/job/{jobId}/eligible-students:
+ *   get:
+ *     summary: List eligible students for a job in POC's campus
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of eligible students
+ */
 router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const campusId = req.user.campus;
@@ -779,6 +898,18 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
 });
 
 // Get all eligible active jobs for Campus POC (jobs their students can apply to)
+/**
+ * @swagger
+ * /api/stats/campus-poc/eligible-jobs:
+ *   get:
+ *     summary: Get jobs eligible for POC's students
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of eligible jobs
+ */
 router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const campusId = req.user.campus;
@@ -852,6 +983,18 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
 });
 
 // Company-wise application tracking for POC
+/**
+ * @swagger
+ * /api/stats/campus-poc/company-tracking:
+ *   get:
+ *     summary: Track company-wise student status (POC)
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Company tracking data
+ */
 router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const campusId = req.user.campus;
@@ -960,6 +1103,18 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
 });
 
 // School-wise (Navgurukul schools) application tracking for POC
+/**
+ * @swagger
+ * /api/stats/campus-poc/school-tracking:
+ *   get:
+ *     summary: Track school-wise student status (POC)
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: School tracking data
+ */
 router.get('/campus-poc/school-tracking', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const campusId = req.user.campus;
@@ -1048,6 +1203,18 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc'), async (
 });
 
 // Student application summary for POC (quick overview)
+/**
+ * @swagger
+ * /api/stats/campus-poc/student-summary:
+ *   get:
+ *     summary: Summary of all students for current POC
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Student summary
+ */
 router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const campusId = req.user.campus;
@@ -1145,6 +1312,18 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
 });
 
 // Get cycle-wise stats for POC
+/**
+ * @swagger
+ * /api/stats/campus-poc/cycle-stats:
+ *   get:
+ *     summary: Cycle-wise statistics for current POC
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cycle stats
+ */
 router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), async (req, res) => {
   try {
     const campusId = req.user.campus;
@@ -1192,6 +1371,49 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), async (req,
   } catch (error) {
     console.error('Get cycle stats error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/stats/manager/students-readiness:
+ *   get:
+ *     summary: Get detailed student readiness for manager modal
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Detailed readiness statistics
+ */
+router.get('/manager/students-readiness', auth, authorize('manager'), async (req, res) => {
+  try {
+    const students = await User.find({ role: 'student', isActive: true })
+      .select('firstName lastName email campus studentProfile.currentSchool studentProfile.openForRoles')
+      .populate('campus', 'name');
+
+    const readinessRecords = await StudentJobReadiness.find();
+
+    const result = students.map(student => {
+      const readiness = readinessRecords.find(r => r.student.toString() === student._id.toString());
+      return {
+        id: student._id,
+        name: `${student.firstName} ${student.lastName}`,
+        email: student.email,
+        campus: student.campus?.name || 'Unassigned',
+        school: student.studentProfile?.currentSchool || 'Unknown',
+        roles: student.studentProfile?.openForRoles || [],
+        readinessPercentage: readiness?.readinessPercentage || 0,
+        isJobReady: readiness?.isJobReady || false,
+        approvedAt: readiness?.approvedAt || null,
+        readinessStatus: readiness?.readinessStatus || 'Not Job Ready'
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching manager student readiness:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 

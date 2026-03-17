@@ -10,10 +10,20 @@
     "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "seed": "cd backend && npm run seed"
   },
-  "keywords": ["placement", "dashboard", "react", "nodejs", "mongodb"],
+  "keywords": [
+    "placement",
+    "dashboard",
+    "react",
+    "nodejs",
+    "mongodb"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   }
 }

@@ -31,6 +31,10 @@ const scamReportsRoutes = require('./routes/scamReports');
 const gharIntegrationRoutes = require('./routes/gharIntegration');
 const loginBackgroundRoutes = require('./routes/loginBackgrounds');
 
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpecs = require('./config/swagger');
+
+
 const app = express();
 // trust proxy so secure cookies work behind proxies (Render, Heroku, etc.)
 app.set('trust proxy', 1);
@@ -81,6 +85,15 @@ app.use(session({
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+  swaggerOptions: {
+    persistAuthorization: true,
+  },
+  customSiteTitle: 'Placement Dashboard API Docs',
+}));
+
 
 // Routes
 app.use('/api/auth', authRoutes);

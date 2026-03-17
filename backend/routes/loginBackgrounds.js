@@ -38,7 +38,24 @@ const upload = multer({
   }
 });
 
+/**
+ * @swagger
+ * tags:
+ *   name: LoginBackgrounds
+ *   description: Management of login page background images
+ */
+
 // Get all login background images (public endpoint - no auth needed for login page)
+/**
+ * @swagger
+ * /api/login-backgrounds:
+ *   get:
+ *     summary: Get all available login backgrounds
+ *     tags: [LoginBackgrounds]
+ *     responses:
+ *       200:
+ *         description: List of background images
+ */
 router.get('/', async (req, res) => {
   try {
     const bgPath = path.join(__dirname, '../../frontend/public/login-backgrounds');
@@ -77,6 +94,18 @@ router.get('/', async (req, res) => {
 });
 
 // Upload new login background
+/**
+ * @swagger
+ * /api/login-backgrounds/upload:
+ *   post:
+ *     summary: Upload a new login background image
+ *     tags: [LoginBackgrounds]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Image uploaded
+ */
 router.post('/upload', auth, authorize('manager'), upload.single('background'), async (req, res) => {
   try {
     if (!req.file) {
@@ -99,6 +128,24 @@ router.post('/upload', auth, authorize('manager'), upload.single('background'), 
 });
 
 // Delete login background
+/**
+ * @swagger
+ * /api/login-backgrounds/{filename}:
+ *   delete:
+ *     summary: Delete a login background image
+ *     tags: [LoginBackgrounds]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: filename
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Background deleted
+ */
 router.delete('/:filename', auth, authorize('manager'), async (req, res) => {
   try {
     const { filename } = req.params;

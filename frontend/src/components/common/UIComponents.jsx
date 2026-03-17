@@ -1,4 +1,4 @@
-export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = 'primary', trend }) => {
+export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = 'primary', trend, onClick }) => {
   const colorClasses = {
     primary: 'bg-blue-100 text-blue-600',
     secondary: 'bg-purple-100 text-purple-600',
@@ -17,7 +17,10 @@ export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = '
   const displayLabel = title || label;
 
   return (
-    <div className="card hover:shadow-md transition-shadow">
+    <div 
+      className={`card transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-1 border-transparent hover:border-primary-300' : 'hover:shadow-md'}`}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{displayLabel}</p>

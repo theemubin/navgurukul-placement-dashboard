@@ -5,9 +5,34 @@ const Campus = require('../models/Campus');
 const Skill = require('../models/Skill');
 
 /**
- * GET /api/public/portfolios
- * Public endpoint to fetch approved student portfolios
- * No authentication required
+ * @swagger
+ * tags:
+ *   name: Public
+ *   description: Publicly accessible endpoints
+ */
+
+/**
+ * @swagger
+ * /api/public/portfolios:
+ *   get:
+ *     summary: Get public student portfolios
+ *     tags: [Public]
+ *     parameters:
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: skills
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of student portfolios
  */
 router.get('/portfolios', async (req, res) => {
     try {
@@ -119,8 +144,14 @@ router.get('/portfolios', async (req, res) => {
 });
 
 /**
- * GET /api/public/filters
- * Get available filter options (campuses, skills, roles)
+ * @swagger
+ * /api/public/filters:
+ *   get:
+ *     summary: Get filter options for public portfolio explorer
+ *     tags: [Public]
+ *     responses:
+ *       200:
+ *         description: Filter options
  */
 router.get('/filters', async (req, res) => {
     try {
@@ -169,9 +200,14 @@ router.get('/filters', async (req, res) => {
 });
 
 /**
- * GET /api/public/placements
- * Get placements for hero carousel
- * Prioritizes featured placements set by managers, falls back to recent accepted applications
+ * @swagger
+ * /api/public/placements:
+ *   get:
+ *     summary: Get placement data for public carousel
+ *     tags: [Public]
+ *     responses:
+ *       200:
+ *         description: Carousel data
  */
 router.get('/placements', async (req, res) => {
     try {
@@ -286,8 +322,14 @@ router.get('/placements', async (req, res) => {
 });
 
 /**
- * GET /api/public/hiring-partners
- * Get hiring partners logos for the public showcase
+ * @swagger
+ * /api/public/hiring-partners:
+ *   get:
+ *     summary: Get hiring partner logos and testimonials
+ *     tags: [Public]
+ *     responses:
+ *       200:
+ *         description: Partner data
  */
 router.get('/hiring-partners', async (req, res) => {
     try {
@@ -309,8 +351,34 @@ router.get('/hiring-partners', async (req, res) => {
 });
 
 /**
- * POST /api/public/leads
- * Submit a 'Get in Touch' inquiry
+ * @swagger
+ * /api/public/leads:
+ *   post:
+ *     summary: Submit a contact inquiry
+ *     tags: [Public]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - phone
+ *               - company
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               company:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Inquiry submitted
  */
 router.post('/leads', async (req, res) => {
     try {

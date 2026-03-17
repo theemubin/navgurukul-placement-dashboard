@@ -7,7 +7,38 @@ const Notification = require('../models/Notification');
 const upload = require('../middleware/upload');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 // ...existing code...
+/**
+ * @swagger
+ * tags:
+ *   name: JobReadiness
+ *   description: Job readiness criteria and student tracking
+ */
+
 // Add a new criterion to the config (PoC/Manager)
+/**
+ * @swagger
+ * /api/job-readiness/config/{configId}/criteria:
+ *   post:
+ *     summary: Add a new criterion to a configuration
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: configId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Criterion added
+ */
 router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { configId } = req.params;
@@ -50,6 +81,29 @@ router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordin
 });
 
 // Edit a criterion in the config (PoC/Manager)
+/**
+ * @swagger
+ * /api/job-readiness/config/{configId}/criteria/{criteriaId}:
+ *   put:
+ *     summary: Update an existing criterion
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: configId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: criteriaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Criterion updated
+ */
 router.put('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { configId, criteriaId } = req.params;
@@ -82,6 +136,29 @@ router.put('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc
 });
 
 // Delete a criterion from the config (PoC/Manager)
+/**
+ * @swagger
+ * /api/job-readiness/config/{configId}/criteria/{criteriaId}:
+ *   delete:
+ *     summary: Delete a criterion from configuration
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: configId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: criteriaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Criterion deleted
+ */
 router.delete('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { configId, criteriaId } = req.params;
@@ -100,6 +177,18 @@ router.delete('/config/:configId/criteria/:criteriaId', auth, authorize('campus_
 // === Config Routes (for PoC/Manager) ===
 
 // Get readiness config for a school/campus
+/**
+ * @swagger
+ * /api/job-readiness/config:
+ *   get:
+ *     summary: Get all readiness configurations
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of configurations
+ */
 router.get('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { school, campus } = req.query;
@@ -129,11 +218,35 @@ router.get('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), a
 });
 
 // Get default criteria options
+/**
+ * @swagger
+ * /api/job-readiness/config/defaults:
+ *   get:
+ *     summary: Get default criteria templates
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Default criteria
+ */
 router.get('/config/defaults', auth, async (req, res) => {
   res.json(DEFAULT_CRITERIA);
 });
 
 // Seed detailed criteria (Manager Only)
+/**
+ * @swagger
+ * /api/job-readiness/config/seed:
+ *   post:
+ *     summary: Seed default configurations (Manager only)
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Seeding successful
+ */
 router.post('/config/seed', auth, authorize('manager'), async (req, res) => {
   try {
     const { school = 'School of Programming' } = req.body;
@@ -246,6 +359,18 @@ router.post('/config/seed', auth, authorize('manager'), async (req, res) => {
 });
 
 // Create/Update readiness config
+/**
+ * @swagger
+ * /api/job-readiness/config:
+ *   post:
+ *     summary: Create a new readiness configuration
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Config created
+ */
 router.post('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), [
   body('school').notEmpty().withMessage('School is required'),
   body('criteria').isArray().withMessage('Criteria must be an array')
@@ -287,6 +412,18 @@ router.post('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), 
 // === Student Progress Routes ===
 
 // Get my readiness status (Student)
+/**
+ * @swagger
+ * /api/job-readiness/my-status:
+ *   get:
+ *     summary: Get current student's readiness status
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Own status
+ */
 router.get('/my-status', auth, authorize('student'), async (req, res) => {
   try {
     const student = await User.findById(req.userId);
@@ -366,6 +503,24 @@ router.get('/my-status', auth, authorize('student'), async (req, res) => {
 });
 
 // --- Manager/PoC: Get readiness for a specific student ---
+/**
+ * @swagger
+ * /api/job-readiness/student/{studentId}:
+ *   get:
+ *     summary: Get a specific student's readiness status
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Student status
+ */
 router.get('/student/:studentId', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -441,6 +596,18 @@ router.get('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
 });
 
 // --- Manager/PoC: Update readiness for a specific student ---
+/**
+ * @swagger
+ * /api/job-readiness/student/{studentId}:
+ *   put:
+ *     summary: Update a student's readiness criteria status (PoC only)
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Status updated
+ */
 router.put('/student/:studentId', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -519,6 +686,24 @@ router.put('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
 });
 
 // Update my criterion status (Student)
+/**
+ * @swagger
+ * /api/job-readiness/my-status/{criteriaId}:
+ *   patch:
+ *     summary: Submit proof for a criterion (Student only)
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: criteriaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Proof submitted
+ */
 router.patch('/my-status/:criteriaId', auth, authorize('student'), upload.single('proofFile'), [
   body('completed').optional().isBoolean(),
   body('status').optional().isString(),
@@ -591,6 +776,18 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), upload.single
 });
 
 // Get campus students' readiness (Campus PoC)
+/**
+ * @swagger
+ * /api/job-readiness/campus-students:
+ *   get:
+ *     summary: Get readiness overview for all students in campus
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Campus overview
+ */
 router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { school, isJobReady, page = 1, limit = 20 } = req.query;
@@ -636,6 +833,29 @@ router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'man
 
 
 // Verify criterion (Campus PoC)
+/**
+ * @swagger
+ * /api/job-readiness/student/{studentId}/verify/{criteriaId}:
+ *   patch:
+ *     summary: Verify/Reject student's criterion submission
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: criteriaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Verification successful
+ */
 router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), [
   body('verified').isBoolean(),
   body('verificationNotes').optional().trim()
@@ -699,6 +919,18 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
 });
 
 // Add PoC comment to a student's criterion (Campus PoC)
+/**
+ * @swagger
+ * /api/job-readiness/student/{studentId}/comment/{criteriaId}:
+ *   post:
+ *     summary: Add a comment to student's criterion
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Comment added
+ */
 router.post('/student/:studentId/comment/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, [
   body('comment').trim().notEmpty()
 ], async (req, res) => {
@@ -737,6 +969,18 @@ router.post('/student/:studentId/comment/:criteriaId', auth, authorize('campus_p
 });
 
 // Add PoC rating to a student's criterion (Campus PoC)
+/**
+ * @swagger
+ * /api/job-readiness/student/{studentId}/rate/{criteriaId}:
+ *   post:
+ *     summary: Rate student's performance on a criterion
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Rating updated
+ */
 router.post('/student/:studentId/rate/:criteriaId', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, [
   body('rating').isInt({ min: 1, max: 10 })
 ], async (req, res) => {
@@ -775,6 +1019,18 @@ router.post('/student/:studentId/rate/:criteriaId', auth, authorize('campus_poc'
 });
 
 // Approve student as job ready (Campus PoC)
+/**
+ * @swagger
+ * /api/job-readiness/student/{studentId}/approve:
+ *   patch:
+ *     summary: Overall approval of student's job readiness
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Approval status updated
+ */
 router.patch('/student/:studentId/approve', auth, authorize('campus_poc', 'coordinator', 'manager'), [
   body('approved').isBoolean(),
   body('approvalNotes').optional().trim()

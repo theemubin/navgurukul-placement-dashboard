@@ -3,7 +3,24 @@ const router = express.Router();
 const Campus = require('../models/Campus');
 const { auth, authorize } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Campuses
+ *   description: Campus management
+ */
+
 // Get all campuses (public)
+/**
+ * @swagger
+ * /api/campuses:
+ *   get:
+ *     summary: Get all active campuses
+ *     tags: [Campuses]
+ *     responses:
+ *       200:
+ *         description: List of campuses
+ */
 router.get('/', async (req, res) => {
   try {
     const campuses = await Campus.find({ isActive: true }).sort({ name: 1 });
@@ -15,6 +32,24 @@ router.get('/', async (req, res) => {
 });
 
 // Get single campus
+/**
+ * @swagger
+ * /api/campuses/{id}:
+ *   get:
+ *     summary: Get a single campus by ID
+ *     tags: [Campuses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Campus details
+ *       404:
+ *         description: Campus not found
+ */
 router.get('/:id', async (req, res) => {
   try {
     const campus = await Campus.findById(req.params.id);
@@ -29,6 +64,42 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create campus (Manager only)
+/**
+ * @swagger
+ * /api/campuses:
+ *   post:
+ *     summary: Create a new campus
+ *     tags: [Campuses]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - code
+ *             properties:
+ *               name:
+ *                 type: string
+ *               code:
+ *                 type: string
+ *               location:
+ *                 type: string
+ *               contactEmail:
+ *                 type: string
+ *               contactPhone:
+ *                 type: string
+ *               discordChannelId:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Campus created
+ *       400:
+ *         description: Duplicate code
+ */
 router.post('/', auth, authorize('manager'), async (req, res) => {
   try {
     const { name, code, location, contactEmail, contactPhone, discordChannelId } = req.body;
@@ -56,6 +127,30 @@ router.post('/', auth, authorize('manager'), async (req, res) => {
 });
 
 // Update campus (Manager only)
+/**
+ * @swagger
+ * /api/campuses/{id}:
+ *   put:
+ *     summary: Update a campus
+ *     tags: [Campuses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Campus updated
+ */
 router.put('/:id', auth, authorize('manager'), async (req, res) => {
   try {
     const { name, location, contactEmail, contactPhone, isActive, discordChannelId } = req.body;
@@ -81,6 +176,24 @@ router.put('/:id', auth, authorize('manager'), async (req, res) => {
 });
 
 // Delete campus (Manager only)
+/**
+ * @swagger
+ * /api/campuses/{id}:
+ *   delete:
+ *     summary: Deactivate a campus (soft delete)
+ *     tags: [Campuses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Campus deactivated
+ */
 router.delete('/:id', auth, authorize('manager'), async (req, res) => {
   try {
     const campus = await Campus.findById(req.params.id);

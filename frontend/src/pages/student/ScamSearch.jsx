@@ -1377,39 +1377,17 @@ const ScamDetector = () => {
                 </div>
               </div>
 
-              {/* advanced section for custom search api */}
+              {/* Notice for Grounding */}
               <div className="pt-6 border-t border-gray-100 space-y-4">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Legacy Search Engine (Optional)</label>
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[8px] font-black rounded uppercase">Restricted API</span>
-                </div>
-                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                  <p className="text-[10px] text-amber-700 font-bold leading-snug">
-                    <span className="font-black">Notice:</span> Google has restricted the Custom Search JSON API for new users.
-                    We recommend using <span className="underline">AI-Powered Grounding</span> (built into your Gemini Key) which is now enabled by default.
-                  </p>
-                </div>
-                <div className="space-y-4 opacity-60 hover:opacity-100 transition-opacity">
-                  <input
-                    type="text"
-                    placeholder="LEGACY_SEARCH_API_KEY"
-                    value={searchConfig.apiKey}
-                    onChange={(e) => setSearchConfig(p => ({ ...p, apiKey: e.target.value }))}
-                    className="w-full h-14 px-6 rounded-2xl bg-gray-50 border border-transparent focus:bg-white focus:border-primary-500 transition-all font-mono text-sm"
-                  />
-                  <div className="flex gap-4">
-                    <button
-                      onClick={handleTestSearch}
-                      className="flex-1 h-12 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
-                    >
-                      {testingSearch ? 'Testing...' : 'Test Legacy API'}
-                    </button>
-                    <button
-                      onClick={handleSaveSearchConfig}
-                      className="flex-1 h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
-                    >
-                      Save Key
-                    </button>
+                <div className="p-4 bg-primary-50 rounded-2xl border border-primary-100 flex items-start gap-3">
+                  <div className="p-2 bg-white rounded-xl text-primary-600 shadow-sm shrink-0">
+                    <Globe size={14} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-primary-900 font-bold leading-snug uppercase tracking-tight">AI SEARCH GROUNDING ACTIVE</p>
+                    <p className="text-[10px] text-primary-700/80 leading-snug mt-1">
+                      Your ScamRadar engine now uses native Google Search Grounding. No separate search keys are required.
+                    </p>
                   </div>
                 </div>
               </div>

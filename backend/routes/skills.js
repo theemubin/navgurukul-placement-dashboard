@@ -6,7 +6,39 @@ const User = require('../models/User');
 const { auth, authorize } = require('../middleware/auth');
 const Settings = require('../models/Settings');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Skills
+ *   description: Skill taxonomy management
+ */
+
 // Get all skills with optional filters
+/**
+ * @swagger
+ * /api/skills:
+ *   get:
+ *     summary: Get all skills
+ *     tags: [Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: active
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of skills
+ */
 router.get('/', auth, async (req, res) => {
   try {
     const { category, search, active = 'true', school, common } = req.query;
@@ -50,6 +82,18 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get skill categories
+/**
+ * @swagger
+ * /api/skills/categories:
+ *   get:
+ *     summary: Get skill categories
+ *     tags: [Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of categories
+ */
 router.get('/categories', auth, async (req, res) => {
   try {
     const categories = [
@@ -70,6 +114,24 @@ router.get('/categories', auth, async (req, res) => {
 });
 
 // Get single skill
+/**
+ * @swagger
+ * /api/skills/{id}:
+ *   get:
+ *     summary: Get a single skill
+ *     tags: [Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Skill details
+ */
 router.get('/:id', auth, async (req, res) => {
   try {
     const skill = await Skill.findById(req.params.id)
@@ -87,6 +149,40 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create skill (Coordinators only)
+/**
+ * @swagger
+ * /api/skills:
+ *   post:
+ *     summary: Create a new skill
+ *     tags: [Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - category
+ *             properties:
+ *               name:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               isCommon:
+ *                 type: boolean
+ *               schools:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       201:
+ *         description: Skill created
+ */
 router.post('/', auth, authorize('coordinator', 'manager', 'campus_poc'), [
   body('name').trim().notEmpty(),
   body('category').isIn(['technical', 'soft_skill', 'office', 'language', 'certification', 'domain', 'other'])
@@ -142,6 +238,30 @@ router.post('/', auth, authorize('coordinator', 'manager', 'campus_poc'), [
 });
 
 // Update skill
+/**
+ * @swagger
+ * /api/skills/{id}:
+ *   put:
+ *     summary: Update a skill
+ *     tags: [Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Skill updated
+ */
 router.put('/:id', auth, authorize('coordinator', 'manager', 'campus_poc'), async (req, res) => {
   try {
     const skill = await Skill.findById(req.params.id);
@@ -193,6 +313,24 @@ router.put('/:id', auth, authorize('coordinator', 'manager', 'campus_poc'), asyn
 });
 
 // Delete skill
+/**
+ * @swagger
+ * /api/skills/{id}:
+ *   delete:
+ *     summary: Deactivate a skill
+ *     tags: [Skills]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Skill deactivated
+ */
 router.delete('/:id', auth, authorize('coordinator', 'manager', 'campus_poc'), async (req, res) => {
   try {
     const skill = await Skill.findById(req.params.id);
