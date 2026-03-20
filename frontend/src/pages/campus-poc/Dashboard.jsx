@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { formatDistanceToNow, isPast, format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { statsAPI, placementCycleAPI, userAPI, campusAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
@@ -37,11 +38,13 @@ const POCDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
     fetchCampusData();
+    fetchTrackingData();
   }, []);
 
   useEffect(() => {
     fetchDashboardData();
-  }, [statusFilter]);
+    fetchTrackingData();
+  }, [statusFilter, selectedCycle]);
 
   const fetchCampusData = async () => {
     try {
@@ -115,6 +118,61 @@ const POCDashboard = () => {
     }
   };
 
+  const getCategorizedCompanyTracking = () => {
+    // Process companies and their jobs
+    const processedCompanies = companyTracking.map(company => {
+      const sortedJobs = [...company.jobs].sort((a, b) => {
+        const aDeadline = a.applicationDeadline ? new Date(a.applicationDeadline).getTime() : Infinity;
+        const bDeadline = b.applicationDeadline ? new Date(b.applicationDeadline).getTime() : Infinity;
+        
+        // Both past - sort by most recent deadline first
+        if (isPast(aDeadline) && isPast(bDeadline)) return bDeadline - aDeadline;
+        // A past - put b first
+        if (isPast(aDeadline)) return 1;
+        // B past - put a first
+        if (isPast(bDeadline)) return -1;
+        
+        // Both future - sort by soonest deadline first
+        return aDeadline - bDeadline;
+      });
+
+      // Determine company-level status (best job status)
+      let status = 'closed';
+      if (sortedJobs.some(j => !isPast(new Date(j.applicationDeadline)) && (j.status === 'active' || j.status === 'application_stage'))) {
+        status = 'open';
+      } else if (sortedJobs.some(j => (j.status !== 'closed' && j.status !== 'filled') || !isPast(new Date(j.applicationDeadline)))) {
+        status = 'active';
+      }
+
+      return { ...company, jobs: sortedJobs, companyStatus: status };
+    });
+
+    // Grouping
+    const groups = {
+      open: processedCompanies.filter(c => c.companyStatus === 'open'),
+      active: processedCompanies.filter(c => c.companyStatus === 'active'),
+      closed: processedCompanies.filter(c => c.companyStatus === 'closed')
+    };
+
+    // Sort companies within each group by their earliest deadline (for open/active)
+    const sortFn = (a, b) => {
+      const aMin = Math.min(...a.jobs.map(j => new Date(j.applicationDeadline).getTime() || Infinity));
+      const bMin = Math.min(...b.jobs.map(j => new Date(j.applicationDeadline).getTime() || Infinity));
+      return aMin - bMin;
+    };
+
+    groups.open.sort(sortFn);
+    groups.active.sort(sortFn);
+    groups.closed.sort((a, b) => {
+      // For closed, sort by most recent deadline descending
+      const aMax = Math.max(...a.jobs.map(j => new Date(j.applicationDeadline).getTime() || 0));
+      const bMax = Math.max(...b.jobs.map(j => new Date(j.applicationDeadline).getTime() || 0));
+      return bMax - aMax;
+    });
+
+    return groups;
+  };
+
   const fetchEligibleStudents = async (job) => {
     setEligibleStudentsModal({ open: true, job, students: [], loading: true });
     try {
@@ -130,6 +188,42 @@ const POCDashboard = () => {
     } catch (error) {
       console.error('Error fetching eligible students:', error);
       toast.error('Failed to load eligible students');
+      setEligibleStudentsModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const fetchAllApprovedStudents = async () => {
+    setEligibleStudentsModal({
+      open: true,
+      job: { title: 'All Approved Students', company: { name: 'Campus Summary' } },
+      students: [],
+      loading: true
+    });
+    try {
+      const response = await statsAPI.getStudentSummary({ cycleId: selectedCycle });
+      // Map summary data to match the modal's expected student format
+      const students = (response.data.students || []).map(s => ({
+        _id: s.studentId,
+        firstName: s.name.split(' ')[0],
+        lastName: s.name.split(' ').slice(1).join(' '),
+        email: s.email,
+        school: s.school,
+        hasApplied: s.totalApplications > 0,
+        applicationStatus: s.placementStatus,
+        skillMatch: 100 // Default for general list
+      }));
+
+      setEligibleStudentsModal(prev => ({
+        ...prev,
+        students,
+        total: response.data.summary?.total || students.length,
+        applied: response.data.summary?.placed + response.data.summary?.inProgress,
+        notApplied: response.data.summary?.notApplied,
+        loading: false
+      }));
+    } catch (error) {
+      console.error('Error fetching student summary:', error);
+      toast.error('Failed to load student list');
       setEligibleStudentsModal(prev => ({ ...prev, loading: false }));
     }
   };
@@ -530,7 +624,13 @@ const POCDashboard = () => {
               return (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
                   <StatsCard icon={Users} label="Active Jobs" value={activeJobsCount} color="secondary" />
-                  <StatsCard icon={Building2} label="Eligible Students" value={eligibleStudentsCount} color="primary" />
+                  <StatsCard 
+                    icon={Building2} 
+                    label="Eligible Students" 
+                    value={eligibleStudentsCount} 
+                    color="primary" 
+                    onClick={fetchAllApprovedStudents}
+                  />
                   <StatsCard icon={Clock} label="Applications" value={totalApplications} color="accent" />
                   <StatsCard icon={CheckCircle} label="Selected" value={selectedCount} color="success" />
                 </div>
@@ -623,126 +723,195 @@ const POCDashboard = () => {
 
       {activeTab === 'company' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center mb-4">
             <h3 className="font-semibold text-gray-900">Company-wise Application Tracking</h3>
-            <span className="text-sm text-gray-500">{companyTracking.length} companies</span>
+            <div className="flex gap-2 text-xs">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Open</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Active</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-400"></span> Closed</span>
+            </div>
           </div>
 
-          {companyTracking.length > 0 ? (
-            <div className="space-y-3">
-              {companyTracking.map((company) => (
-                <div key={company.company} className="card">
-                  <button
-                    onClick={() => setExpandedCompany(expandedCompany === company.company ? null : company.company)}
-                    className="w-full"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                          <Building2 className="w-5 h-5 text-gray-500" />
-                        </div>
-                        <div className="text-left">
-                          <p className="font-semibold">{company.company}</p>
-                          <p className="text-sm text-gray-500">
-                            {company.jobs.length} positions • {company.totalApplications} applications
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="flex gap-2">
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                            {company.statusCounts.selected} selected
-                          </span>
-                          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
-                            {company.statusCounts.in_progress + company.statusCounts.shortlisted} in progress
-                          </span>
-                          <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
-                            {company.statusCounts.rejected} rejected
-                          </span>
-                        </div>
-                        {expandedCompany === company.company ? (
-                          <ChevronUp className="w-5 h-5 text-gray-400" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-gray-400" />
-                        )}
-                      </div>
-                    </div>
-                  </button>
+          <div className="space-y-8">
+            {(() => {
+              const groups = getCategorizedCompanyTracking();
+              const sections = [
+                { id: 'open', label: 'Open for Application', companies: groups.open, color: 'text-green-700 bg-green-50' },
+                { id: 'active', label: 'Ongoing Process / Active', companies: groups.active, color: 'text-blue-700 bg-blue-50' },
+                { id: 'closed', label: 'Closed / Completed', companies: groups.closed, color: 'text-gray-600 bg-gray-50' }
+              ];
 
-                  {expandedCompany === company.company && (
-                    <div className="mt-4 pt-4 border-t space-y-4">
-                      {company.jobs.map((job) => (
-                        <div key={job.jobId} className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <p className="font-medium">{job.title}</p>
-                              <div className="flex items-center gap-3 mt-1">
-                                <p className="text-xs text-gray-500 capitalize">{job.jobType?.replace('_', ' ')}</p>
-                                {job.eligibleCount !== undefined && (
-                                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
-                                    {job.eligibleCount} eligible students
-                                  </span>
+              return sections.map(section => (
+                <div key={section.id} className="space-y-3">
+                  <div className={`px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wider flex items-center justify-between ${section.color}`}>
+                    {section.label}
+                    <Badge variant={section.id === 'open' ? 'success' : section.id === 'active' ? 'primary' : 'default'}>
+                      {section.companies.length}
+                    </Badge>
+                  </div>
+                  
+                  {section.companies.length > 0 ? (
+                    <div className="space-y-3 pl-2">
+                      {section.companies.map((company) => (
+                        <div key={company.company} className="card p-0 overflow-hidden border-l-4 border-l-indigo-500">
+                          <button
+                            className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                            onClick={() => setExpandedCompany(expandedCompany === company.company ? null : company.company)}
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-white rounded-lg border flex items-center justify-center p-1 overflow-hidden">
+                                {company.logo ? (
+                                  <img src={company.logo} alt={company.company} className="w-full h-full object-contain" />
+                                ) : (
+                                  <Building2 className="w-6 h-6 text-gray-300" />
                                 )}
                               </div>
+                              <div className="text-left">
+                                <h4 className="text-lg font-bold text-gray-900">{company.company}</h4>
+                                <div className="flex items-center gap-3 mt-1">
+                                  {Object.entries(company.statusCounts)
+                                    .filter(([_, count]) => count > 0)
+                                    .map(([status, count]) => (
+                                      <span key={status} className="text-xs text-gray-500 flex items-center gap-1">
+                                        {count} {status}
+                                      </span>
+                                    ))}
+                                </div>
+                              </div>
                             </div>
-                            <span className="text-sm font-semibold text-gray-700">
-                              {job.applications.length} applicant{job.applications.length !== 1 ? 's' : ''}
-                            </span>
-                          </div>
-                          {job.applications.length > 0 ? (
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full text-sm">
-                                <thead>
-                                  <tr className="text-left text-gray-500">
-                                    <th className="pb-2 font-medium">Student</th>
-                                    <th className="pb-2 font-medium">School</th>
-                                    <th className="pb-2 font-medium">Status</th>
-                                    <th className="pb-2 font-medium">Round</th>
-                                    <th className="pb-2 font-medium">Applied</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                  {job.applications.map((app) => (
-                                    <tr key={app.applicationId}>
-                                      <td className="py-2">
-                                        <Link
-                                          to={`/campus-poc/students/${app.studentId}`}
-                                          className="text-primary-600 hover:underline"
-                                        >
-                                          {app.studentName}
-                                        </Link>
-                                      </td>
-                                      <td className="py-2 text-gray-600">{app.school || 'N/A'}</td>
-                                      <td className="py-2">{getStatusBadge(app.status)}</td>
-                                      <td className="py-2">
-                                        {app.currentRound + 1}/{app.totalRounds || '?'}
-                                      </td>
-                                      <td className="py-2 text-gray-500">
-                                        {new Date(app.appliedAt).toLocaleDateString()}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right hidden sm:block">
+                                <p className="text-sm font-bold text-indigo-600">{company.totalApplications}</p>
+                                <p className="text-[10px] text-gray-500 uppercase">Applications</p>
+                              </div>
+                              {expandedCompany === company.company ? (
+                                <ChevronUp className="w-5 h-5 text-gray-400" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5 text-gray-400" />
+                              )}
                             </div>
-                          ) : (
-                            <div className="text-center py-4 text-gray-500">
-                              <p className="text-sm">No applications yet</p>
+                          </button>
+
+                          {expandedCompany === company.company && (
+                            <div className="px-6 pb-6 bg-white border-t">
+                              <div className="mt-4 space-y-4">
+                                {company.jobs.map((job) => (
+                                  <div key={job.jobId} className="bg-gray-50 rounded-lg p-4 border border-gray-100 hover:border-indigo-100 transition-colors">
+                                    <div className="flex items-start justify-between mb-4">
+                                      <div>
+                                        <h5 className="font-bold text-gray-900 flex items-center gap-2">
+                                          {job.title}
+                                          {!isPast(new Date(job.applicationDeadline)) && (
+                                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                          )}
+                                        </h5>
+                                        <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                                          <p className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-md font-medium uppercase tracking-tight">
+                                            {job.jobType?.replace('_', ' ')}
+                                          </p>
+                                          <Link 
+                                            to={`/campus-poc/jobs/${job.jobId}`}
+                                            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline"
+                                            target="_blank"
+                                          >
+                                            <Eye className="w-3.5 h-3.5" />
+                                            View Details
+                                          </Link>
+                                          {job.eligibleCount !== undefined && (
+                                            <button
+                                              onClick={() => fetchEligibleStudents({ ...job, _id: job.jobId })}
+                                              className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+                                              title="Click to view eligible students"
+                                            >
+                                              <Users className="w-3 h-3" />
+                                              {job.eligibleCount} Eligible
+                                            </button>
+                                          )}
+                                          {job.applicationDeadline && (
+                                            <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border ${isPast(new Date(job.applicationDeadline))
+                                              ? 'bg-red-50 text-red-600 border-red-100'
+                                              : 'bg-orange-50 text-orange-600 border-orange-100 shadow-sm'
+                                              }`}>
+                                              <Clock className="w-3 h-3" />
+                                              {isPast(new Date(job.applicationDeadline)) ? (
+                                                <span>Closed ({format(new Date(job.applicationDeadline), 'MMM dd')})</span>
+                                              ) : (
+                                                <span className="font-bold uppercase tracking-tight">
+                                                  Closing {formatDistanceToNow(new Date(job.applicationDeadline), { addSuffix: true })}
+                                                </span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="text-right flex flex-col items-end gap-2.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${job.status === 'active' || job.status === 'application_stage' ? 'bg-green-100 text-green-700 border border-green-200' :
+                                            job.status === 'closed' || isPast(new Date(job.applicationDeadline)) ? 'bg-red-100 text-red-700 border border-red-200' :
+                                              'bg-blue-100 text-blue-700 border border-blue-200'
+                                            }`}>
+                                            {isPast(new Date(job.applicationDeadline)) ? 'Deadline Passed' : job.status?.replace('_', ' ')}
+                                          </span>
+                                        </div>
+                                        <div className="bg-white px-3 py-1.5 rounded-lg border shadow-sm">
+                                          <span className="text-sm font-bold text-gray-800">
+                                            {job.applications.length}
+                                          </span>
+                                          <span className="ml-1.5 text-xs text-gray-500 font-medium">Applicants</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    {job.applications.length > 0 ? (
+                                      <div className="overflow-x-auto rounded-lg border border-gray-100 shadow-inner">
+                                        <table className="w-full text-left text-sm">
+                                          <thead className="bg-gray-100 text-gray-700 border-b">
+                                            <tr>
+                                              <th className="px-4 py-2 font-semibold">Student Name</th>
+                                              <th className="px-4 py-2 font-semibold">School</th>
+                                              <th className="px-4 py-2 font-semibold text-center">Current Status</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y bg-white">
+                                            {job.applications.map((app) => (
+                                              <tr key={app.applicationId} className="hover:bg-indigo-50/30 transition-colors">
+                                                <td className="px-4 py-2.5 font-medium text-gray-900">{app.studentName}</td>
+                                                <td className="px-4 py-2.5 text-gray-600">{app.school}</td>
+                                                <td className="px-4 py-2.5 text-center">
+                                                  <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${app.status === 'selected' ? 'bg-green-100 text-green-700' :
+                                                    app.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                                      'bg-blue-100 text-blue-700'
+                                                    }`}>
+                                                    {app.status}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    ) : (
+                                      <div className="text-center py-4 bg-white rounded-lg border border-dashed text-gray-400 text-xs">
+                                        No applications yet for this campus
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
                       ))}
                     </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-400 text-sm italic bg-gray-50/50 rounded-lg">
+                      No companies in this category
+                    </div>
                   )}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>No company applications yet</p>
-            </div>
-          )}
+              ));
+            })()}
+          </div>
         </div>
       )}
 

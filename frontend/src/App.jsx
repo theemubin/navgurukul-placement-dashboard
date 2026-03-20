@@ -178,6 +178,7 @@ function App() {
         <Route path="interest-requests" element={<POCInterestRequestsReview />} />
         <Route path="skills" element={<POCSkills />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="jobs/:id" element={<JobDetails />} />
       </Route>
 
       {/* Coordinator Routes */}

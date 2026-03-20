@@ -7,6 +7,13 @@ const Campus = require('../models/Campus');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
 
+// Helper to get all campus IDs a POC is authorized to manage
+const getPOCManagedCampusIds = (user) => {
+  const ids = (user.managedCampuses || []).map(id => id.toString());
+  if (user.campus) ids.push(user.campus.toString());
+  return [...new Set(ids)];
+};
+
 /**
  * @swagger
  * tags:
@@ -697,12 +704,12 @@ router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) =>
  */
 router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
   try {
-    const campusId = req.user.campus;
+    const campusIds = getPOCManagedCampusIds(req.user);
     const { status: filterStatus } = req.query; // Filter by Active/Placed etc
 
     let studentQuery = {
       role: 'student',
-      campus: campusId,
+      campus: { $in: campusIds },
       isActive: true
     };
 
@@ -811,7 +818,7 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
  */
 router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_poc'), async (req, res) => {
   try {
-    const campusId = req.user.campus;
+    const campusIds = getPOCManagedCampusIds(req.user);
     const { jobId } = req.params;
 
     // Get the job
@@ -825,7 +832,7 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
     // Get students for this campus
     const students = await User.find({
       role: 'student',
-      campus: campusId,
+      campus: { $in: campusIds },
       isActive: true,
       'studentProfile.profileStatus': 'approved'
     })
@@ -906,25 +913,37 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
  *     tags: [Stats]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: cycleId
+ *         schema:
+ *           type: string
+ *         description: Optional placement cycle ID to filter jobs
  *     responses:
  *       200:
  *         description: List of eligible jobs
  */
 router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (req, res) => {
   try {
-    const campusId = req.user.campus;
+    const campusIds = getPOCManagedCampusIds(req.user);
     // Support both legacy 'active' and pipeline stages
     const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing'];
 
-    // Get all active jobs that are eligible for this campus
-    const jobs = await Job.find({
+    const { cycleId } = req.query;
+    const query = {
       status: { $in: activeStatuses },
-      applicationDeadline: { $gte: new Date() },
       $or: [
         { 'eligibility.campuses': { $size: 0 } },  // Open for all campuses
-        { 'eligibility.campuses': campusId }       // Specifically includes this campus
+        { 'eligibility.campuses': { $in: campusIds } }       // Specifically includes any of managed campuses
       ]
-    })
+    };
+
+    if (cycleId) {
+      query.placementCycle = cycleId;
+    }
+
+    // Get all active jobs that are eligible for this campus
+    const jobs = await Job.find(query)
       .populate('eligibility.campuses', 'name')
       .select('title company jobType applicationDeadline maxPositions eligibility createdAt')
       .sort({ createdAt: -1 });
@@ -932,7 +951,7 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
     // Get approved students count for this campus (matches the detail view criteria)
     const studentCount = await User.countDocuments({
       role: 'student',
-      campus: campusId,
+      campus: { $in: campusIds },
       isActive: true,
       'studentProfile.profileStatus': 'approved'
     });
@@ -940,7 +959,7 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
     // Get application counts for each job — only approved students
     const studentIds = await User.find({
       role: 'student',
-      campus: campusId,
+      campus: { $in: campusIds },
       isActive: true,
       'studentProfile.profileStatus': 'approved'
     }).select('_id');
@@ -997,13 +1016,13 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
  */
 router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async (req, res) => {
   try {
-    const campusId = req.user.campus;
+    const campusIds = getPOCManagedCampusIds(req.user);
     const { cycleId } = req.query;
 
-    // Get students for this campus (optionally filtered by cycle)
+    // Get students for these campuses (optionally filtered by cycle)
     let studentQuery = {
       role: 'student',
-      campus: campusId,
+      campus: { $in: campusIds },
       isActive: true
     };
 
@@ -1022,7 +1041,7 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
       student: { $in: studentIds }
     })
       .populate('student', 'firstName lastName email studentProfile.currentSchool')
-      .populate('job', 'title company.name company.logo jobType status interviewRounds eligibility');
+      .populate('job', 'title company.name company.logo jobType status interviewRounds eligibility applicationDeadline');
 
     // Group by company
     const companyMap = {};
@@ -1058,7 +1077,7 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
         // If job has specific campus restrictions, count accordingly
         if (jobEligibility.campuses && jobEligibility.campuses.length > 0) {
           const campusMatches = jobEligibility.campuses.some(c =>
-            c.toString() === campusId.toString()
+            campusIds.includes(c.toString())
           );
           eligibleCount = campusMatches ? totalEligibleStudents : 0;
         }
@@ -1067,6 +1086,8 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
           jobId: app.job?._id,
           title: jobTitle,
           jobType: app.job?.jobType,
+          applicationDeadline: app.job?.applicationDeadline,
+          status: app.job?.status,
           eligibleCount: eligibleCount,
           applications: []
         };
@@ -1117,12 +1138,12 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
  */
 router.get('/campus-poc/school-tracking', auth, authorize('campus_poc'), async (req, res) => {
   try {
-    const campusId = req.user.campus;
+    const campusIds = getPOCManagedCampusIds(req.user);
     const { cycleId } = req.query;
 
     let studentQuery = {
       role: 'student',
-      campus: campusId,
+      campus: { $in: campusIds },
       isActive: true
     };
 
@@ -1165,7 +1186,18 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc'), async (
 
     // Populate school data
     students.forEach(student => {
-      const school = student.studentProfile?.currentSchool || 'Unassigned';
+      let school = student.studentProfile?.currentSchool || 'Unassigned';
+      if (!schoolMap[school]) {
+        schoolMap[school] = {
+          school,
+          students: [],
+          totalStudents: 0,
+          totalApplications: 0,
+          placed: 0,
+          inProgress: 0,
+          rejected: 0
+        };
+      }
       const studentApps = applications.filter(a => a.student.toString() === student._id.toString());
 
       const placed = studentApps.some(a => a.status === 'selected');
@@ -1217,12 +1249,12 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc'), async (
  */
 router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (req, res) => {
   try {
-    const campusId = req.user.campus;
+    const campusIds = getPOCManagedCampusIds(req.user);
     const { cycleId, status, school } = req.query;
 
     let studentQuery = {
       role: 'student',
-      campus: campusId,
+      campus: { $in: campusIds },
       isActive: true
     };
 
@@ -1326,7 +1358,7 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
  */
 router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), async (req, res) => {
   try {
-    const campusId = req.user.campus;
+    const campusIds = getPOCManagedCampusIds(req.user);
     const PlacementCycle = require('../models/PlacementCycle');
 
     // Placement cycles are global (not campus-specific), so fetch all
@@ -1334,10 +1366,10 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), async (req,
       .sort({ year: -1, month: -1 });
 
     const cycleStats = await Promise.all(cycles.map(async (cycle) => {
-      // Get students from this POC's campus assigned to this cycle
+      // Get students from this POC's managed campuses assigned to this cycle
       const students = await User.find({
         role: 'student',
-        campus: campusId,
+        campus: { $in: campusIds },
         placementCycle: cycle._id
       }).select('_id');
 
