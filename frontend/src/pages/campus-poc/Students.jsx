@@ -80,7 +80,7 @@ const POCStudents = () => {
 
     try {
       const response = await gharAPI.syncStudent(email);
-      const updatedData = response.data.student;
+      const updatedData = response.data.data?.student;
       toast.success('Synced with Ghar successfully');
       
       // Update local state instead of full reload

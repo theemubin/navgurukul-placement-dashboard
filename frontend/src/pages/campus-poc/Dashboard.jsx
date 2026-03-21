@@ -85,7 +85,7 @@ const POCDashboard = () => {
     try {
       toast.loading('Syncing with Ghar...', { id: 'ghar-sync' });
       const response = await gharAPI.syncStudent(email);
-      const updatedData = response.data.student;
+      const updatedData = response.data.data?.student;
       toast.success('Synced with Ghar successfully', { id: 'ghar-sync' });
       
       // Update local state instead of full dashboard re-fetch
