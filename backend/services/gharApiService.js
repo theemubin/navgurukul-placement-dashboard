@@ -27,7 +27,7 @@ class GharApiService {
                     const cleanToken = this.token.includes('eyJhbGci')
                         ? 'eyJhbGci' + this.token.split('eyJhbGci').pop()
                         : this.token;
-                    config.headers['Authorization'] = `Bearer ${cleanToken.trim()}`;
+                    config.headers['Authorization'] = cleanToken.trim();
                 }
                 return config;
             },
