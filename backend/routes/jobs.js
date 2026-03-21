@@ -227,7 +227,9 @@ router.get('/', auth, async (req, res) => {
       const studentVisibleStatuses = [...visibleStages, 'active'];
 
       query.status = { $in: studentVisibleStatuses };
-      query.applicationDeadline = { $gte: new Date() };
+      if (req.query.past !== 'true') {
+        query.applicationDeadline = { $gte: new Date() };
+      }
 
       const campusFilter = req.user.campus ? {
         $or: [

@@ -5,7 +5,7 @@ import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Badge } from '../.
 import {
   Briefcase, MapPin, IndianRupee, Calendar, Search, Star,
   AlertCircle, GraduationCap, Clock, CheckCircle, Heart,
-  DollarSign, X, SlidersHorizontal
+  DollarSign, X, SlidersHorizontal, History
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -72,22 +72,23 @@ const StudentJobs = () => {
     if (activeTab === 'matching') {
       fetchMatchingJobs();
     } else if (activeCategory === 'jobs') {
-      fetchJobs();
+      fetchJobs(activeTab === 'past');
     } else if (activeCategory === 'internships') {
-      fetchInternships();
+      fetchInternships(activeTab === 'past');
     } else if (activeCategory === 'paid-projects') {
-      fetchPaidProjects();
+      fetchPaidProjects(activeTab === 'past');
     }
   }, [activeCategory, activeTab, jobPagination.current, internshipPagination.current, filters]);
 
-  const fetchJobs = async () => {
+  const fetchJobs = async (isPast = false) => {
     setLoading(true);
     try {
       const response = await jobAPI.getJobs({
         page: jobPagination.current, limit: 10,
         search: filters.search || undefined,
         roleCategory: filters.roleCategory || undefined,
-        jobType: 'full_time,part_time,contract'
+        jobType: 'full_time,part_time,contract',
+        past: isPast ? true : undefined
       });
       setJobs(response.data.jobs);
       setJobPagination(response.data.pagination);
@@ -95,14 +96,15 @@ const StudentJobs = () => {
     finally { setLoading(false); }
   };
 
-  const fetchInternships = async () => {
+  const fetchInternships = async (isPast = false) => {
     setLoading(true);
     try {
       const response = await jobAPI.getJobs({
         page: internshipPagination.current, limit: 10,
         search: filters.search || undefined,
         roleCategory: filters.roleCategory || undefined,
-        jobType: 'internship'
+        jobType: 'internship',
+        past: isPast ? true : undefined
       });
       setInternships(response.data.jobs);
       setInternshipPagination(response.data.pagination);
@@ -110,14 +112,15 @@ const StudentJobs = () => {
     finally { setLoading(false); }
   };
 
-  const fetchPaidProjects = async () => {
+  const fetchPaidProjects = async (isPast = false) => {
     setLoading(true);
     try {
       const response = await jobAPI.getJobs({
         page: internshipPagination.current, limit: 10,
         search: filters.search || undefined,
         roleCategory: filters.roleCategory || undefined,
-        jobType: 'paid_project'
+        jobType: 'paid_project',
+        past: isPast ? true : undefined
       });
       setInternships(response.data.jobs);
       setInternshipPagination(response.data.pagination);
@@ -249,8 +252,9 @@ const StudentJobs = () => {
       <div className="border-b border-gray-200">
         <nav className="flex gap-0 -mb-px">
           {[
-            { id: 'all', label: `All ${categoryLabel}` },
-            { id: 'matching', label: `⭐ Matching ${categoryLabel}` },
+            { id: 'all', label: `Active ${categoryLabel}` },
+            { id: 'matching', label: `⭐ Matching` },
+            { id: 'past', label: `Past Jobs` },
           ].map(({ id, label }) => (
             <button
               key={id}
