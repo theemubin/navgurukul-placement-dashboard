@@ -73,7 +73,8 @@ const POCDashboard = () => {
       fetchCampusData();
       fetchDashboardData();
     } catch (error) {
-      toast.error('Failed to update managed campuses');
+      console.error('Error updating managed campuses:', error);
+      toast.error(error.response?.data?.message || 'Failed to update managed campuses');
     } finally {
       setSavingCampuses(false);
     }

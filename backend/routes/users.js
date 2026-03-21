@@ -490,16 +490,22 @@ router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
 });
 
 // Update managed campuses (for Campus POCs)
-router.put('/managed-campuses', auth, authorize('campus_poc'), async (req, res) => {
+router.put('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { campusIds } = req.body;
+    console.log(`[UpdateManagedCampuses] User: ${req.userId}, Role: ${req.user.role}, CampusIds:`, campusIds);
 
     if (!Array.isArray(campusIds)) {
       return res.status(400).json({ message: 'campusIds must be an array' });
     }
 
     const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
     user.managedCampuses = campusIds;
+    user.markModified('managedCampuses');
     await user.save();
 
     const updatedUser = await User.findById(req.userId)
@@ -512,12 +518,12 @@ router.put('/managed-campuses', auth, authorize('campus_poc'), async (req, res) 
     });
   } catch (error) {
     console.error('Update managed campuses error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error: ' + (error.message || 'Unknown error') });
   }
 });
 
 // Get managed campuses (for Campus POCs)
-router.get('/managed-campuses', auth, authorize('campus_poc'), async (req, res) => {
+router.get('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const user = await User.findById(req.userId)
       .populate('managedCampuses', 'name code')
