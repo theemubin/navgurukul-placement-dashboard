@@ -544,7 +544,13 @@ userSchema.statics.syncGharData = async function (email, externalData) {
 
   const statusValue = externalData.Academic_Status || externalData.Status;
   if (statusValue) {
-    gharData.currentStatus = { value: statusValue.toString().trim(), lastUpdated: now };
+    const trimmedStatus = statusValue.toString().trim();
+    gharData.currentStatus = { value: trimmedStatus, lastUpdated: now };
+    
+    // Explicitly update local status if Ghar says Placed, to ensure it's truly persistent
+    if (trimmedStatus === 'Placed') {
+      user.studentProfile.currentStatus = 'Placed';
+    }
   }
 
   if (externalData.Gender) {
