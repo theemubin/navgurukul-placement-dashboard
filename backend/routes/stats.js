@@ -1267,7 +1267,7 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
     }
 
     const students = await User.find(studentQuery)
-      .select('firstName lastName email studentProfile.currentSchool studentProfile.profileStatus placementCycle')
+      .select('firstName lastName email studentProfile.currentSchool studentProfile.currentStatus studentProfile.externalData studentProfile.profileStatus placementCycle')
       .populate('placementCycle', 'name')
       .populate('campus', 'name');
 
@@ -1285,8 +1285,12 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
       const selectedApp = studentApps.find(a => a.status === 'selected');
       const inProgressApps = studentApps.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status));
 
+      // Resolve status: prioritize explicitly marked "Placed" in profile (e.g. from Ghar)
+      // or if they have a selected application in this system
+      const resolvedStatus = student.resolvedProfile?.currentStatus || student.studentProfile?.currentStatus;
+      
       let placementStatus = 'not_applied';
-      if (selectedApp) placementStatus = 'placed';
+      if (selectedApp || resolvedStatus === 'Placed' || resolvedStatus === 'placed') placementStatus = 'placed';
       else if (inProgressApps.length > 0) placementStatus = 'in_progress';
       else if (studentApps.length > 0) placementStatus = 'rejected';
 

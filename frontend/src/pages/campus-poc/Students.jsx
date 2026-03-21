@@ -86,10 +86,8 @@ const POCStudents = () => {
       // Update local state instead of full reload (case-insensitive email matching)
       setStudents(prev => prev.map(s => s.email?.toLowerCase() === email?.toLowerCase() ? {
         ...s,
-        studentProfile: {
-          ...s.studentProfile,
-          currentStatus: updatedData.resolvedProfile?.currentStatus || s.studentProfile.currentStatus
-        }
+        ...updatedData,
+        resolvedProfile: updatedData.resolvedProfile || s.resolvedProfile
       } : s));
       
       // Still refresh stats and full list as they depend on overall counts
@@ -255,7 +253,7 @@ const POCStudents = () => {
                         <div className="flex items-center gap-1 group/sync">
                           <select
                             disabled
-                            value={student.studentProfile?.currentStatus || 'Active'}
+                            value={student.resolvedProfile?.currentStatus || student.studentProfile?.currentStatus || 'Active'}
                             onChange={(e) => handleStatusChange(e, student._id, e.target.value)}
                             className="text-[10px] font-bold py-0.5 px-1.5 h-auto border-gray-200 rounded bg-gray-50 focus:bg-white opacity-80 cursor-not-allowed"
                             onClick={(e) => e.stopPropagation()}

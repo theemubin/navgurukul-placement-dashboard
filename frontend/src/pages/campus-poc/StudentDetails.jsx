@@ -149,10 +149,8 @@ const POCStudentDetails = () => {
       // Update local state instead of full data re-fetch
       setStudent(prev => ({
         ...prev,
-        studentProfile: {
-          ...prev.studentProfile,
-          currentStatus: updatedData.resolvedProfile?.currentStatus || prev.studentProfile.currentStatus
-        }
+        ...updatedData,
+        resolvedProfile: updatedData.resolvedProfile || prev.resolvedProfile
       }));
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
@@ -192,7 +190,10 @@ const POCStudentDetails = () => {
 
   if (!student) return null;
 
-  const profile = student.studentProfile || {};
+  const profile = { 
+    ...(student.studentProfile || {}), 
+    ...(student.resolvedProfile || {}) 
+  };
 
   const InfoRow = ({ label, value, icon: Icon }) => (
     <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
