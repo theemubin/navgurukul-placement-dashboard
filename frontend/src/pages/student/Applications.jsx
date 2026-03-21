@@ -103,6 +103,13 @@ const StudentApplications = () => {
     };
   };
 
+  const formatDate = (date, formatStr = 'MMM dd, yyyy') => {
+    if (!date) return 'N/A';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'N/A';
+    return format(d, formatStr);
+  };
+
   const getDaysInfo = (date) => {
     if (!date) return null;
     const targetDate = new Date(date);
@@ -198,7 +205,7 @@ const StudentApplications = () => {
                         </span>
                         <span className="flex items-center gap-1.5 text-xs text-gray-400">
                           <Clock className="w-3 h-3" />
-                          Applied {format(new Date(app.createdAt), 'MMM dd')}
+                          Applied {formatDate(app.createdAt, 'MMM dd')}
                         </span>
                       </div>
                     </div>
@@ -269,7 +276,7 @@ const StudentApplications = () => {
                               </p>
                               {nextStep.scheduledDate ? (
                                 <p className="text-sm text-gray-600">
-                                  Scheduled: {format(new Date(nextStep.scheduledDate), 'MMM dd, yyyy h:mm a')}
+                                  Scheduled: {formatDate(nextStep.scheduledDate, 'MMM dd, yyyy h:mm a')}
                                 </p>
                               ) : (
                                 <p className="text-sm text-gray-500">Date to be announced</p>
@@ -418,7 +425,7 @@ const StudentApplications = () => {
                           }`}>{round.status}</span>
                       </div>
                       {round.feedback && <p className="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded-lg italic">"{round.feedback}"</p>}
-                      {round.evaluatedAt && <p className="text-[10px] text-gray-400 mt-2">{format(new Date(round.evaluatedAt), 'MMM dd, yyyy')}</p>}
+                      {round.evaluatedAt && <p className="text-[10px] text-gray-400 mt-2">{formatDate(round.evaluatedAt)}</p>}
                     </div>
                   </div>
                 ))}
@@ -430,7 +437,7 @@ const StudentApplications = () => {
                   </div>
                   <div className="bg-gray-50 p-4 rounded-2xl">
                     <span className="text-sm font-bold text-gray-700">Application Submitted</span>
-                    <p className="text-[10px] text-gray-400 mt-1">{selectedApp && format(new Date(selectedApp.createdAt), 'MMM dd, yyyy')}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{selectedApp && formatDate(selectedApp.createdAt)}</p>
                   </div>
                 </div>
               </div>
