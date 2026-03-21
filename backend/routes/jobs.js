@@ -266,7 +266,27 @@ router.get('/', auth, async (req, res) => {
     if (req.query.myLeads === 'true' && req.user) query.coordinator = req.userId;
     if (req.query.coordinator) query.coordinator = req.query.coordinator;
     if (roleCategory) query.roleCategory = roleCategory;
-    if (search) query.$text = { $search: search };
+    if (search) {
+      const searchOr = [
+        { title: { $regex: search, $options: 'i' } },
+        { 'company.name': { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } },
+        { roleCategory: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+
+      if (query.$and || query.$or) {
+        // If we already have complex filtering (like campus/house), use $and to append search
+        if (!query.$and) {
+          const existingOr = query.$or;
+          delete query.$or;
+          query.$and = [{ $or: existingOr }];
+        }
+        query.$and.push({ $or: searchOr });
+      } else {
+        query.$or = searchOr;
+      }
+    }
 
     let sortOptions = { createdAt: -1 };
     if (sortBy === 'deadline_asc') sortOptions = { applicationDeadline: 1 };

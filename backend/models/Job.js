@@ -246,6 +246,13 @@ const jobSchema = new mongoose.Schema({
 });
 
 // Index for searching
-jobSchema.index({ title: 'text', 'company.name': 'text', description: 'text' });
+jobSchema.index({ 
+  title: 'text', 
+  'company.name': 'text', 
+  description: 'text',
+  location: 'text',
+  requirements: 'text',
+  responsibilities: 'text'
+});
 
 module.exports = mongoose.model('Job', jobSchema);

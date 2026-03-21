@@ -5,7 +5,8 @@ import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Badge } from '../.
 import {
   Briefcase, MapPin, IndianRupee, Calendar, Search, Star,
   AlertCircle, GraduationCap, Clock, CheckCircle, Heart,
-  DollarSign, X, SlidersHorizontal, History, LayoutDashboard, ChevronRight
+  DollarSign, X, SlidersHorizontal, History, LayoutDashboard, ChevronRight,
+  Settings2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -39,6 +40,7 @@ const StudentJobs = () => {
   const [pipelineStages, setPipelineStages] = useState([]);
   const [readiness, setReadiness] = useState(null);
   const [openForRoles, setOpenForRoles] = useState([]); // roles from student profile
+  const [showRoleFilters, setShowRoleFilters] = useState(false);
   const searchRef = useRef(null);
   const searchTimer = useRef(null);
 
@@ -295,50 +297,65 @@ const StudentJobs = () => {
           </div>
         )}
 
-        {/* Role Filters Panel */}
+        {/* Role Filters Panel - Collapsible */}
         {openForRoles.length > 0 && activeTab === 'all' && (
-          <div className="space-y-4 pt-2">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
-                <SlidersHorizontal size={14} />
+          <div className="space-y-4 pt-2 border-t border-gray-100 mt-4">
+            <button
+              onClick={() => setShowRoleFilters(!showRoleFilters)}
+              className="flex items-center gap-3 w-full group outline-none"
+            >
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${showRoleFilters ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-600'}`}>
+                <Settings2 size={14} />
               </div>
-              <div>
+              <div className="text-left">
                 <span className="text-[10px] font-black uppercase tracking-widest text-primary-600">Smart Filter</span>
-                <p className="text-xs text-gray-400 font-medium">Opportunities tailored to your career preferences</p>
+                <p className="text-xs text-gray-400 font-medium tracking-tight">
+                  {filters.roleCategory ? `Currently filtered by "${filters.roleCategory}"` : 'Filter opportunities by your career preferences'}
+                </p>
               </div>
-              {filters.roleCategory && (
+              <div className="ml-auto flex items-center gap-2">
+                 {filters.roleCategory && !showRoleFilters && (
+                    <span className="px-2 py-0.5 rounded-md bg-primary-100 text-primary-700 text-[10px] font-bold">
+                       {filters.roleCategory}
+                    </span>
+                 )}
+                 {showRoleFilters ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+              </div>
+            </button>
+            
+            {showRoleFilters && (
+              <div className="flex flex-wrap gap-2 pt-2 animate-slideDown">
                 <button
                   onClick={() => handleRoleFilter('')}
-                  className="ml-auto text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-primary-600 transition-colors flex items-center gap-1.5"
-                >
-                   Clear Filter <X size={10} />
-                </button>
-              )}
-            </div>
-            
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => handleRoleFilter('')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${!filters.roleCategory
-                  ? 'bg-primary-600 text-white border-primary-600 shadow-lg shadow-primary-200 scale-105'
-                  : 'bg-white text-gray-500 border-gray-100 hover:border-primary-200 hover:bg-primary-50/50'
-                  }`}
-              >
-                All Roles
-              </button>
-              {openForRoles.map((role) => (
-                <button
-                  key={role}
-                  onClick={() => handleRoleFilter(role)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${filters.roleCategory === role
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${!filters.roleCategory
                     ? 'bg-primary-600 text-white border-primary-600 shadow-lg shadow-primary-200 scale-105'
                     : 'bg-white text-gray-500 border-gray-100 hover:border-primary-200 hover:bg-primary-50/50'
                     }`}
                 >
-                  {role}
+                  All Roles
                 </button>
-              ))}
-            </div>
+                {openForRoles.map((role) => (
+                  <button
+                    key={role}
+                    onClick={() => handleRoleFilter(role)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${filters.roleCategory === role
+                      ? 'bg-primary-600 text-white border-primary-600 shadow-lg shadow-primary-200 scale-105'
+                      : 'bg-white text-gray-500 border-gray-100 hover:border-primary-200 hover:bg-primary-50/50'
+                      }`}
+                  >
+                    {role}
+                  </button>
+                ))}
+                {filters.roleCategory && (
+                  <button
+                    onClick={() => handleRoleFilter('')}
+                    className="ml-2 px-3 py-2 text-xs font-bold text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                     Reset
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
