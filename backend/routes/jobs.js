@@ -429,7 +429,31 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    res.json(job);
+    // Add application status counts
+    const statusCounts = await Application.aggregate([
+      { $match: { job: job._id } },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    const statusMap = Object.assign({
+      applied: 0,
+      shortlisted: 0,
+      in_progress: 0,
+      selected: 0,
+      rejected: 0,
+      interested: 0
+    }, statusCounts.reduce((acc, curr) => {
+      acc[curr._id] = curr.count;
+      return acc;
+    }, {}));
+
+    const jobObj = job.toObject();
+    jobObj.statusCounts = statusMap;
+    // applicationCount for backward compatibility with dashboard
+    jobObj.applicationCount = Object.values(statusMap).reduce((a, b) => a + b, 0);
+    jobObj.selectedCount = statusMap.selected || 0;
+
+    res.json(jobObj);
   } catch (error) {
     console.error('Get job error:', error);
     res.status(500).json({ message: 'Server error' });

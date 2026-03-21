@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI } from '../../services/api';
-import { LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
+import { useAuth } from '../../context/AuthContext';
+import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI, campusAPI } from '../../services/api';
+import { LoadingSpinner, StatusBadge, Modal } from '../../components/common/UIComponents';
 import {
   ArrowLeft, Briefcase, MapPin, IndianRupee, Calendar, Clock,
   Users, Building, Globe, CheckCircle, AlertCircle, Heart, XCircle,
-  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History, Check, Trash
+  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History, Check, Trash, Home, Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -83,6 +83,10 @@ const JobDetails = () => {
   const [hasApplied, setHasApplied] = useState(false);
   const [interestRequest, setInterestRequest] = useState(null);
   const [profileStatus, setProfileStatus] = useState('draft');
+  const { user } = useAuth();
+  
+  // Eligible students modal state (for POC view)
+  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ open: false, students: [], loading: false });
 
   // Debug helper to log decision variables (removed in production)
   const debugDecision = (msg, vars = {}) => {
@@ -286,6 +290,18 @@ const JobDetails = () => {
     return `Up to ${format(salary.max)}`;
   };
 
+  const fetchEligibleStudents = async () => {
+    setEligibleStudentsModal(prev => ({ ...prev, open: true, loading: true }));
+    try {
+      const response = await campusAPI.getEligibleStudents(id);
+      setEligibleStudentsModal(prev => ({ ...prev, students: response.data, loading: false }));
+    } catch (error) {
+      console.error('Error fetching eligible students:', error);
+      toast.error('Failed to load eligible students');
+      setEligibleStudentsModal(prev => ({ ...prev, open: false, loading: false }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -302,11 +318,11 @@ const JobDetails = () => {
     <div className="space-y-6 animate-fadeIn">
       {/* Back Button */}
       <button
-        onClick={() => navigate('/student/jobs')}
-        className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+        onClick={() => navigate(user?.role === 'student' ? '/student/jobs' : '/campus-poc')}
+        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold uppercase tracking-widest text-[10px]"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to Jobs
+        {user?.role === 'student' ? 'Back to Jobs' : 'Back to Dashboard'}
       </button>
 
       {/* Header */}
@@ -377,136 +393,146 @@ const JobDetails = () => {
           </div>
         )}
 
-        {/* Apply Button */}
+        {/* POC Action Center or Apply Button */}
         <div className="mt-6 pt-6 border-t flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-gray-500">
             <Calendar className="w-4 h-4" />
-            <span>Application Deadline: {format(new Date(job.applicationDeadline), 'MMMM dd, yyyy')}</span>
+            <span className="text-sm font-medium">Application Deadline: {format(new Date(job.applicationDeadline), 'MMMM dd, yyyy')}</span>
             {isDeadlinePassed && (
-              <span className="text-red-500 text-sm">(Passed)</span>
+              <span className="text-red-500 text-sm font-bold">(Passed)</span>
             )}
           </div>
 
-          {hasApplied ? (
-            <div className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="w-5 h-5" />
-              <span>Already Applied</span>
-            </div>
-          ) : isDeadlinePassed ? (
-            <div className="flex items-center gap-2 text-red-500">
-              <AlertCircle className="w-5 h-5" />
-              <span>Applications Closed</span>
-            </div>
-          ) : profileStatus !== 'approved' ? (
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex items-center gap-2 text-yellow-600">
-                <AlertCircle className="w-5 h-5" />
-                <span>Profile Approval Required</span>
+          {user?.role === 'campus_poc' ? (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={fetchEligibleStudents}
+                className="btn btn-primary flex items-center gap-2 shadow-lg hover:translate-y-[-1px] transition-transform"
+              >
+                <Users className="w-4 h-4" />
+                View Eligible Students
+              </button>
+              <div className="bg-gray-50 px-4 py-2 rounded-xl border flex gap-4">
+                 <div className="text-center">
+                    <p className="text-lg font-bold text-blue-600">{job.applicationCount || 0}</p>
+                    <p className="text-[10px] text-gray-400 font-black uppercase">Applied</p>
+                 </div>
+                 <div className="w-px h-8 bg-gray-200" />
+                 <div className="text-center">
+                    <p className="text-lg font-bold text-green-600">{job.selectedCount || 0}</p>
+                    <p className="text-[10px] text-gray-400 font-black uppercase">Selected</p>
+                 </div>
               </div>
-              <Link to="/student/profile" className="text-sm text-primary-600 hover:underline">
-                Complete your profile →
-              </Link>
-            </div>
-          ) : interestRequest?.status === 'pending' ? (
-            <div className="flex items-center gap-2 text-yellow-600">
-              <Clock className="w-5 h-5" />
-              <span>Interest request pending approval</span>
-            </div>
-          ) : interestRequest?.status === 'rejected' ? (
-            <div className="flex items-center gap-2 text-red-600">
-              <XCircle className="w-5 h-5" />
-              <span>Interest request not approved</span>
             </div>
           ) : (
-            <div className="flex gap-3">
-              {(() => {
-                const studentPct = readiness?.readinessPercentage || 0;
-                const requirement = job.eligibility?.readinessRequirement || 'yes';
+            <>
+              {hasApplied ? (
+                <div className="flex items-center gap-2 text-green-600 bg-green-50 px-4 py-2 rounded-xl border border-green-100">
+                  <CheckCircle className="w-5 h-5" />
+                  <span className="font-bold">Already Applied</span>
+                </div>
+              ) : isDeadlinePassed ? (
+                <div className="flex items-center gap-2 text-red-500 bg-red-50 px-4 py-2 rounded-xl border border-red-100">
+                  <AlertCircle className="w-5 h-5" />
+                  <span className="font-bold">Applications Closed</span>
+                </div>
+              ) : profileStatus !== 'approved' ? (
+                <div className="flex flex-col items-end gap-2">
+                  <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-xl border border-amber-100">
+                    <AlertCircle className="w-5 h-5" />
+                    <span className="font-bold">Profile Approval Required</span>
+                  </div>
+                  <Link to="/student/profile" className="text-xs font-bold text-primary-600 hover:underline uppercase tracking-tighter">
+                    Complete your profile →
+                  </Link>
+                </div>
+              ) : interestRequest?.status === 'pending' ? (
+                <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-xl border border-amber-100">
+                  <Clock className="w-5 h-5" />
+                  <span className="font-bold">Interest request pending approval</span>
+                </div>
+              ) : interestRequest?.status === 'rejected' ? (
+                <div className="flex items-center gap-2 text-red-600 bg-red-50 px-4 py-2 rounded-xl border border-red-100">
+                  <XCircle className="w-5 h-5" />
+                  <span className="font-bold">Interest request not approved</span>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  {(() => {
+                    const studentPct = readiness?.readinessPercentage || 0;
+                    const requirement = job.eligibility?.readinessRequirement || 'yes';
 
-                // Readiness gate
-                let meetsReadiness = false;
-                if (requirement === 'yes') {
-                  meetsReadiness = studentPct === 100;
-                } else if (requirement === 'in_progress') {
-                  meetsReadiness = studentPct >= 30;
-                } else {
-                  meetsReadiness = true;
-                }
-
-                // Allow applying even if overall match is low when the only unmet piece is custom requirements
-                let allowApplyEvenIfMatchLow = false;
-                if (matchDetails && !matchDetails.canApply) {
-                  const skillsOk = (matchDetails.breakdown?.skills?.percentage || 0) === 100;
-                  const eligibilityOk = (matchDetails.breakdown?.eligibility?.percentage || 0) === 100;
-                  const requirementsNotOk = (matchDetails.breakdown?.requirements?.percentage || 100) < 100;
-
-                  if (skillsOk && eligibilityOk && requirementsNotOk) {
-                    allowApplyEvenIfMatchLow = true;
-                  }
-                }
-
-                // Prefer showing Apply Now if the match engine explicitly allows it, even if readiness is not fully met.
-                const canApplyUi = (matchDetails?.canApply === true) || (meetsReadiness && allowApplyEvenIfMatchLow);
-
-                // If match details are still loading, avoid showing Show Interest prematurely
-                if (matchLoading) {
-                  debugDecision('Match still loading, showing placeholder for apply area', { matchLoading });
-                  return (
-                    <div className="flex items-center gap-3">
-                      <button className="btn btn-primary opacity-50" disabled>Loading…</button>
-                    </div>
-                  );
-                }
-
-                // Debug log when we choose to show Show Interest (helps reproduce issues)
-                if (!canApplyUi) {
-                  debugDecision('Deciding to show Show Interest', {
-                    canApply: matchDetails?.canApply,
-                    allowApplyEvenIfMatchLow,
-                    meetsReadiness,
-                    studentPct,
-                    matchDetailsSummary: {
-                      skillsPct: matchDetails?.breakdown?.skills?.percentage,
-                      eligibilityPct: matchDetails?.breakdown?.eligibility?.percentage,
-                      requirementsPct: matchDetails?.breakdown?.requirements?.percentage
+                    // Readiness gate
+                    let meetsReadiness = false;
+                    if (requirement === 'yes') {
+                      meetsReadiness = studentPct === 100;
+                    } else if (requirement === 'in_progress') {
+                      meetsReadiness = studentPct >= 30;
+                    } else {
+                      meetsReadiness = true;
                     }
-                  });
-                }
 
-                if (canApplyUi) {
-                  return (
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setShowApplyModal(true)}
-                        className="btn btn-primary"
-                      >
-                        Apply Now
-                      </button>
-                      {allowApplyEvenIfMatchLow && (
-                        <span className="text-sm text-yellow-700">You will need to confirm job requirements when applying</span>
-                      )}
-                    </div>
-                  );
-                } else {
-                  return (
-                    <button
-                      onClick={handleInterestExpression}
-                      disabled={applying}
-                      className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2"
-                    >
-                      <Heart className="w-4 h-4" />
-                      {applying ? 'Submitting...' : 'Show Interest'}
-                    </button>
-                  );
-                }
-              })()}
-            </div>
+                    // Allow applying even if overall match is low when the only unmet piece is custom requirements
+                    let allowApplyEvenIfMatchLow = false;
+                    if (matchDetails && !matchDetails.canApply) {
+                      const skillsOk = (matchDetails.breakdown?.skills?.percentage || 0) === 100;
+                      const eligibilityOk = (matchDetails.breakdown?.eligibility?.percentage || 0) === 100;
+                      const requirementsNotOk = (matchDetails.breakdown?.requirements?.percentage || 100) < 100;
+
+                      if (skillsOk && eligibilityOk && requirementsNotOk) {
+                        allowApplyEvenIfMatchLow = true;
+                      }
+                    }
+
+                    // Prefer showing Apply Now if the match engine explicitly allows it, even if readiness is not fully met.
+                    const canApplyUi = (matchDetails?.canApply === true) || (meetsReadiness && allowApplyEvenIfMatchLow);
+
+                    // If match details are still loading, avoid showing Show Interest prematurely
+                    if (matchLoading) {
+                      debugDecision('Match still loading, showing placeholder for apply area', { matchLoading });
+                      return (
+                        <div className="flex items-center gap-3">
+                          <button className="btn btn-primary opacity-50" disabled>Loading…</button>
+                        </div>
+                      );
+                    }
+
+                    if (canApplyUi) {
+                      return (
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setShowApplyModal(true)}
+                            className="btn btn-primary shadow-lg shadow-primary-200"
+                          >
+                            Apply Now
+                          </button>
+                          {allowApplyEvenIfMatchLow && (
+                            <span className="text-xs text-amber-700 font-bold bg-amber-50 px-2 py-1 rounded-lg">Confirm job requirements when applying</span>
+                          )}
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <button
+                          onClick={handleInterestExpression}
+                          disabled={applying}
+                          className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2 shadow-lg shadow-orange-100"
+                        >
+                          <Heart className="w-4 h-4" />
+                          {applying ? 'Submitting...' : 'Show Interest'}
+                        </button>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Match Details Card - Show only if we have match details */}
-      {matchDetails && (
+      {/* Match Details Card - Show only for students */}
+      {user?.role === 'student' && matchDetails && (
         <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div className="text-center">
@@ -1169,6 +1195,78 @@ const JobDetails = () => {
           </div>
         </div>
       )}
+      {/* Modal for Eligible Students (POC View) */}
+      <Modal
+        isOpen={eligibleStudentsModal.open}
+        onClose={() => setEligibleStudentsModal(prev => ({ ...prev, open: false }))}
+        title={`Eligible Students for ${job.title}`}
+        size="xl"
+      >
+        <div className="space-y-4">
+          {eligibleStudentsModal.loading ? (
+            <div className="flex justify-center p-8">
+              <LoadingSpinner />
+            </div>
+          ) : eligibleStudentsModal.students.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b">
+                  <tr>
+                    <th className="px-4 py-3">Student</th>
+                    <th className="px-4 py-3">Skills</th>
+                    <th className="px-4 py-3 text-center">Eligibility</th>
+                    <th className="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {eligibleStudentsModal.students.map((student) => (
+                    <tr key={student._id} className="hover:bg-gray-50 transition-colors group">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-primary-50 text-primary-700 flex items-center justify-center font-bold text-xs">
+                            {student.firstName?.[0]}{student.lastName?.[0]}
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900 text-sm">{student.firstName} {student.lastName}</p>
+                            <p className="text-[10px] text-gray-500 font-medium">{student.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {student.studentProfile?.technicalSkills?.slice(0, 2).map((s, i) => (
+                             <span key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-600">{s.skillName}</span>
+                          ))}
+                          {student.studentProfile?.technicalSkills?.length > 2 && <span className="text-[10px] text-gray-400">+{student.studentProfile.technicalSkills.length - 2}</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <div className="inline-flex items-center px-1.5 py-0.5 bg-green-50 text-green-700 rounded-lg text-[10px] font-black">
+                           100% MATCH
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <Link 
+                          to={`/campus-poc/students/${student._id}`}
+                          className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+               <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+               <p className="font-bold">No eligible students found on your campus.</p>
+               <p className="text-sm">Either no students match the criteria or all have already applied.</p>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };

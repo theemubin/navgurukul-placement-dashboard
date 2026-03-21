@@ -732,11 +732,20 @@ const POCDashboard = () => {
                           <p className="text-xs text-gray-500 capitalize mt-1">{job.jobType?.replace('_', ' ')}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-500">Deadline</p>
-                        <p className="text-sm font-medium text-gray-700">
-                          {new Date(job.applicationDeadline).toLocaleDateString()}
-                        </p>
+                      <div className="flex flex-col items-end gap-2">
+                        <Link 
+                          to={`/campus-poc/jobs/${job._id}`}
+                          className="text-xs bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg border border-primary-100 hover:bg-primary-100 transition-all font-bold flex items-center gap-1.5"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          View Details
+                        </Link>
+                        <div className="text-right">
+                          <p className="text-[10px] text-gray-500 uppercase tracking-tighter">Deadline</p>
+                          <p className="text-xs font-bold text-gray-700">
+                             {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
