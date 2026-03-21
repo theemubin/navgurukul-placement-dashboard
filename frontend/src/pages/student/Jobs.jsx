@@ -5,7 +5,7 @@ import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Badge } from '../.
 import {
   Briefcase, MapPin, IndianRupee, Calendar, Search, Star,
   AlertCircle, GraduationCap, Clock, CheckCircle, Heart,
-  DollarSign, X, SlidersHorizontal, History
+  DollarSign, X, SlidersHorizontal, History, LayoutDashboard, ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -182,272 +182,309 @@ const StudentJobs = () => {
     : activeCategory === 'internships' ? 'Internships' : 'Paid Projects';
 
   return (
-    <div className="space-y-5 animate-fadeIn">
-      {/* Profile Approval Warning */}
-      {profileStatus !== 'approved' && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5 shrink-0" />
+    <div className="max-w-[1200px] mx-auto space-y-8 animate-fadeIn pb-12">
+      {/* ── Top Header Section ── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600 to-primary-800 p-8 shadow-2xl shadow-primary-200">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-32 h-32 bg-primary-400/20 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
+        
+        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div>
-            <h4 className="font-medium text-yellow-800">Profile Approval Required</h4>
-            <p className="text-yellow-700 text-sm mt-0.5">
-              {profileStatus === 'pending_approval'
-                ? 'Your profile is pending approval. You can browse but cannot apply yet.'
-                : 'Submit your profile for Campus POC approval before applying. '}
-              <Link to="/student/profile" className="underline font-medium">Go to Profile</Link>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-[10px] font-black uppercase tracking-widest border border-white/20">
+                Opportunities
+              </div>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+              Job Listings
+            </h1>
+            <p className="text-primary-100/80 text-sm mt-2 max-w-md font-medium leading-relaxed">
+              Discover your next career move across our network of verified hiring partners.
             </p>
           </div>
-        </div>
-      )}
 
-      {/* ── Header + Search Row ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Job Listings</h1>
-          <p className="text-gray-500 text-sm">Find full-time, part-time, internship &amp; paid project opportunities</p>
-        </div>
-        {/* Inline search */}
-        <div className="relative w-full md:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            ref={searchRef}
-            type="text"
-            placeholder={`Search ${categoryLabel.toLowerCase()}…`}
-            defaultValue={filters.search}
-            onChange={handleSearchChange}
-            className="pl-9 pr-4 py-2 w-full rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent shadow-sm"
-          />
-          {filters.search && (
-            <button
-              onClick={() => { setFilters(f => ({ ...f, search: '' })); if (searchRef.current) searchRef.current.value = ''; }}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── Type tabs: Jobs / Internships / Paid Projects ── */}
-      <div className="flex gap-2 flex-wrap">
-        {[
-          { id: 'jobs', label: 'Jobs', icon: Briefcase },
-          { id: 'internships', label: 'Internships', icon: GraduationCap },
-          { id: 'paid-projects', label: 'Paid Projects', icon: DollarSign },
-        ].map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => handleCategoryChange(id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all border ${activeCategory === id
-              ? 'bg-primary-600 text-white border-primary-600 shadow-md shadow-primary-100'
-              : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300 hover:text-primary-600'
-              }`}
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── All / Matching sub-tabs ── */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-0 -mb-px">
-          {[
-            { id: 'all', label: `Active ${categoryLabel}` },
-            { id: 'matching', label: `⭐ Matching` },
-            { id: 'past', label: `Past Jobs` },
-          ].map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${activeTab === id
-                ? 'border-primary-600 text-primary-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* ── Role Filter Pills — only show roles from student profile ── */}
-      {openForRoles.length > 0 && activeTab === 'all' && (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span className="font-medium">Filter by your open roles</span>
-            {filters.roleCategory && (
-              <button
-                onClick={() => handleRoleFilter('')}
-                className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
-              >
-                <X className="w-3 h-3" /> Clear filter
-              </button>
-            )}
+          <div className="flex flex-col sm:flex-row gap-3">
+             {/* Search box within glass panel */}
+            <div className="relative group min-w-0 sm:min-w-[300px]">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 group-focus-within:text-white transition-colors" />
+              <input
+                ref={searchRef}
+                type="text"
+                placeholder={`Search ${categoryLabel.toLowerCase()}…`}
+                defaultValue={filters.search}
+                onChange={handleSearchChange}
+                className="w-full pl-11 pr-10 py-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 focus:bg-white/20 transition-all text-sm font-medium"
+              />
+              {filters.search && (
+                <button
+                  onClick={() => { setFilters(f => ({ ...f, search: '' })); if (searchRef.current) searchRef.current.value = ''; }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => handleRoleFilter('')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${!filters.roleCategory
-                ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300 hover:text-primary-600'
-                }`}
-            >
-              All
-            </button>
-            {openForRoles.map((role) => (
+        </div>
+      </div>
+
+      {/* ── Navigation & Filter Shell ── */}
+      <div className="bg-white/50 backdrop-blur-xl border border-white rounded-[2rem] p-4 md:p-6 shadow-xl shadow-gray-200/50 space-y-6">
+        {/* Category Navigation (Segmented Control style) */}
+        <div className="flex flex-wrap items-center justify-between gap-6 pb-2">
+          <div className="flex p-1 bg-gray-100/80 rounded-2xl w-full sm:w-auto">
+            {[
+              { id: 'jobs', label: 'Jobs', icon: Briefcase },
+              { id: 'internships', label: 'Internships', icon: GraduationCap },
+              { id: 'paid-projects', label: 'Projects', icon: DollarSign },
+            ].map(({ id, label, icon: Icon }) => (
               <button
-                key={role}
-                onClick={() => handleRoleFilter(role)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${filters.roleCategory === role
-                  ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300 hover:text-primary-600'
-                  }`}
+                key={id}
+                onClick={() => handleCategoryChange(id)}
+                className={`flex items-center justify-center gap-2 flex-1 sm:flex-none sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                  activeCategory === id 
+                  ? 'bg-white text-primary-700 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-800'
+                }`}
               >
-                {role}
+                <Icon className="w-4 h-4" />
+                {label}
               </button>
             ))}
           </div>
-          {/* Show a tip if no profile roles are set */}
-        </div>
-      )}
 
-      {/* If no openForRoles set, show prompt */}
-      {openForRoles.length === 0 && activeTab === 'all' && (
-        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>
-            Add roles you're open to in your{' '}
-            <Link to="/student/profile" className="underline font-medium">profile</Link>{' '}
-            to enable role-based filtering here.
-          </span>
+          <div className="flex items-center gap-4 border-l border-gray-100 pl-2 lg:pl-6 overflow-x-auto no-scrollbar">
+            {[
+              { id: 'all', label: `Active`, icon: LayoutDashboard },
+              { id: 'matching', label: `Matching`, icon: Star },
+              { id: 'past', label: `Past Jobs`, icon: History },
+            ].map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${
+                  activeTab === id 
+                  ? 'border-primary-600 text-primary-800' 
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
 
-      {/* ── Jobs List ── */}
-      {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <LoadingSpinner size="lg" />
-        </div>
-      ) : displayJobs.length > 0 ? (
-        <div className="space-y-3">
-          {displayJobs.map((job) => (
-            <Link
-              key={job._id}
-              to={`/student/jobs/${job._id}`}
-              className="block"
-            >
-              <div className="bg-white rounded-xl border border-gray-200 p-4 hover:border-primary-300 hover:shadow-md transition-all group">
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-                  {/* Left: logo + details */}
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className="w-11 h-11 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
-                      {job.company?.logo ? (
-                        <img src={job.company.logo} alt={job.company.name} className="w-8 h-8 object-contain" />
-                      ) : job.jobType === 'internship' ? (
-                        <GraduationCap className="w-5 h-5 text-purple-400" />
-                      ) : (
-                        <Briefcase className="w-5 h-5 text-gray-400" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-gray-900 group-hover:text-primary-700 transition-colors truncate">{job.title}</h3>
-                      <p className="text-sm text-gray-500">{job.company?.name}</p>
-                      <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-gray-400">
-                        <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{job.location}</span>
-                        <span className="flex items-center gap-1"><IndianRupee className="w-3.5 h-3.5" />{formatSalary(job.salary)}</span>
-                        {job.jobType === 'internship' && job.duration && (
-                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{job.duration}</span>
+        {/* Profile Status Alert */}
+        {profileStatus !== 'approved' && (
+          <div className="relative group overflow-hidden bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-100 rounded-2xl p-4 flex items-center gap-4 animate-fadeIn">
+            <div className="absolute top-0 right-0 p-2 opacity-5">
+               <AlertCircle size={80} />
+            </div>
+            <div className="p-3 bg-white rounded-xl shadow-sm">
+              <AlertCircle size={20} className="text-amber-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-bold text-amber-900 text-sm">Approval Required</h4>
+              <p className="text-amber-700/80 text-xs mt-0.5 font-medium leading-relaxed">
+                {profileStatus === 'pending_approval'
+                  ? 'Your profile is currently being reviewed. You can browse all active jobs but cannot submit applications yet.'
+                  : 'Complete your profile and submit for POC approval to unlock application features. '}
+                <Link to="/student/profile" className="text-amber-900 font-bold underline decoration-amber-200 hover:decoration-amber-400 decoration-2 underline-offset-2 transition-all ml-1">Go to Profile</Link>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Role Filters Panel */}
+        {openForRoles.length > 0 && activeTab === 'all' && (
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
+                <SlidersHorizontal size={14} />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-primary-600">Smart Filter</span>
+                <p className="text-xs text-gray-400 font-medium">Opportunities tailored to your career preferences</p>
+              </div>
+              {filters.roleCategory && (
+                <button
+                  onClick={() => handleRoleFilter('')}
+                  className="ml-auto text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-primary-600 transition-colors flex items-center gap-1.5"
+                >
+                   Clear Filter <X size={10} />
+                </button>
+              )}
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleRoleFilter('')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${!filters.roleCategory
+                  ? 'bg-primary-600 text-white border-primary-600 shadow-lg shadow-primary-200 scale-105'
+                  : 'bg-white text-gray-500 border-gray-100 hover:border-primary-200 hover:bg-primary-50/50'
+                  }`}
+              >
+                All Roles
+              </button>
+              {openForRoles.map((role) => (
+                <button
+                  key={role}
+                  onClick={() => handleRoleFilter(role)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${filters.roleCategory === role
+                    ? 'bg-primary-600 text-white border-primary-600 shadow-lg shadow-primary-200 scale-105'
+                    : 'bg-white text-gray-500 border-gray-100 hover:border-primary-200 hover:bg-primary-50/50'
+                    }`}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Main Content Area ── */}
+      <div className="space-y-6">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 animate-pulse">
+            <div className="w-16 h-16 rounded-full border-4 border-primary-100 border-t-primary-600 animate-spin" />
+            <p className="text-sm font-bold text-gray-400 mt-4 uppercase tracking-widest">Loading database...</p>
+          </div>
+        ) : displayJobs.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4">
+            {displayJobs.map((job) => (
+              <Link
+                key={job._id}
+                to={`/student/jobs/${job._id}`}
+                className="group relative"
+              >
+                <div className="bg-white rounded-[1.5rem] border border-gray-100 p-5 md:p-6 transition-all duration-300 hover:border-primary-300 hover:shadow-2xl hover:shadow-gray-200/50 hover:-translate-y-1">
+                  <div className="flex flex-col md:flex-row md:items-start gap-6">
+                    {/* Company Brand Column */}
+                    <div className="flex flex-row md:flex-col items-center gap-4 shrink-0">
+                      <div className="w-16 h-16 rounded-2xl border border-gray-50 bg-gray-50/50 flex items-center justify-center shrink-0 overflow-hidden shadow-sm group-hover:scale-110 transition-transform duration-300">
+                        {job.company?.logo ? (
+                          <img src={job.company.logo} alt={job.company.name} className="w-12 h-12 object-contain" />
+                        ) : (
+                           <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                             <Briefcase className="w-6 h-6 text-gray-400" />
+                           </div>
                         )}
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5" />
-                          Deadline: {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
-                        </span>
                       </div>
-                      {/* Skill chips */}
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {job.requiredSkills?.slice(0, 5).map((s) => (
-                          <span
-                            key={s.skill?._id}
-                            className={`text-[11px] px-2 py-0.5 rounded-md ${s.required ? 'bg-primary-50 text-primary-700 border border-primary-100' : 'bg-gray-100 text-gray-600'}`}
-                          >
-                            {s.skill?.name}
-                          </span>
+                      <div className="md:hidden flex-1">
+                        <h3 className="text-lg font-black text-gray-900 leading-tight">{job.title}</h3>
+                        <p className="text-sm font-medium text-primary-600">{job.company?.name}</p>
+                      </div>
+                    </div>
+
+                    {/* Content Body */}
+                    <div className="flex-1 min-w-0">
+                      <div className="hidden md:block mb-1">
+                        <div className="flex items-center gap-2 mb-1">
+                           <span className="text-[10px] font-black uppercase tracking-widest text-primary-500">{job.jobType.replace('_', ' ')}</span>
+                        </div>
+                        <h3 className="text-xl font-black text-gray-900 tracking-tight group-hover:text-primary-700 transition-colors truncate">
+                          {job.title}
+                        </h3>
+                        <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">{job.company?.name}</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-6 mt-4">
+                        <div className="flex items-center gap-2.5 text-xs text-gray-500 font-medium">
+                          <div className="w-6 h-6 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
+                             <MapPin size={12} />
+                          </div>
+                          {job.location}
+                        </div>
+                        <div className="flex items-center gap-2.5 text-xs text-gray-500 font-medium">
+                          <div className="w-6 h-6 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
+                             <IndianRupee size={12} />
+                          </div>
+                          {formatSalary(job.salary)}
+                        </div>
+                        <div className="flex items-center gap-2.5 text-xs text-gray-500 font-medium">
+                          <div className="w-6 h-6 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
+                             <Calendar size={12} />
+                          </div>
+                          Expires {format(new Date(job.applicationDeadline), 'MMM dd')}
+                        </div>
+                      </div>
+
+                      {/* Tags row */}
+                      <div className="mt-5 flex flex-wrap items-center gap-2">
+                        {job.requiredSkills?.slice(0, 4).map((s) => (
+                           <span key={s.skill?._id} className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gray-50 text-gray-600 text-[10px] font-bold border border-gray-100">
+                              {s.skill?.name}
+                           </span>
                         ))}
-                        {job.requiredSkills?.length > 5 && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-600">+{job.requiredSkills.length - 5} more</span>
+                        {job.requiredSkills?.length > 4 && (
+                           <span className="text-[10px] font-bold text-gray-400 ml-1">+{job.requiredSkills.length - 4} more</span>
                         )}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Right: status + match */}
-                  <div className="flex flex-row md:flex-col items-center md:items-end gap-2 shrink-0">
-                    <JobStatusBadge status={job.status} stages={pipelineStages} />
-                    <StatusBadge status={job.jobType} />
-
-                    {/* Match percentage */}
-                    {job.matchDetails?.overallPercentage !== undefined && (
-                      <span className={`text-base font-bold ${job.matchDetails.overallPercentage >= 80 ? 'text-green-600'
-                        : job.matchDetails.overallPercentage >= 60 ? 'text-blue-600'
-                          : job.matchDetails.overallPercentage >= 40 ? 'text-yellow-600' : 'text-red-500'
-                        }`}>
-                        {job.matchDetails.overallPercentage}% Match
-                      </span>
-                    )}
-                    {!job.matchDetails && job.matchPercentage !== undefined && (
-                      <span className={`text-sm font-medium ${job.matchPercentage >= 70 ? 'text-green-600' : job.matchPercentage >= 40 ? 'text-yellow-600' : 'text-red-500'}`}>
-                        {job.matchPercentage}% Match
-                      </span>
-                    )}
-
-                    {/* Eligibility label */}
-                    <div className="text-[11px] font-medium">
-                      {(() => {
-                        const pct = readiness?.readinessPercentage || 0;
-                        const req = job.eligibility?.readinessRequirement || 'yes';
-                        if (req === 'yes') {
-                          return pct === 100
-                            ? <span className="flex items-center gap-1 text-green-600"><CheckCircle className="w-3 h-3" />Ready to Apply</span>
-                            : <span className="flex items-center gap-1 text-amber-600"><Heart className="w-3 h-3" />Expression of Interest</span>;
-                        } else if (req === 'in_progress') {
-                          return pct >= 100
-                            ? <span className="flex items-center gap-1 text-green-600"><CheckCircle className="w-3 h-3" />Ready to Apply</span>
-                            : pct >= 30
-                              ? <span className="flex items-center gap-1 text-indigo-600"><Clock className="w-3 h-3" />Eligible (In Process)</span>
-                              : <span className="flex items-center gap-1 text-amber-600"><Heart className="w-3 h-3" />Expression of Interest</span>;
-                        } else {
-                          return <span className="flex items-center gap-1 text-green-600"><CheckCircle className="w-3 h-3" />Open to Apply</span>;
-                        }
-                      })()}
+                    {/* Action Column */}
+                    <div className="flex md:flex-col items-center justify-between md:justify-center gap-4 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6">
+                       <div className="flex flex-col items-end gap-1">
+                          <div className="flex items-center gap-2">
+                             <JobStatusBadge status={job.status} stages={pipelineStages} />
+                             {activeTab === 'past' && <Badge variant="danger">Closed</Badge>}
+                          </div>
+                          
+                          <div className="mt-2 text-right">
+                            {job.matchDetails?.overallPercentage !== undefined ? (
+                               <div className="flex flex-col items-end">
+                                  <span className={`text-2xl font-black ${
+                                    job.matchDetails.overallPercentage >= 80 ? 'text-green-600' :
+                                    job.matchDetails.overallPercentage >= 60 ? 'text-blue-600' : 'text-amber-500'
+                                  }`}>
+                                    {job.matchDetails.overallPercentage}<span className="text-xs ml-0.5">% Match</span>
+                                  </span>
+                               </div>
+                            ) : job.matchPercentage !== undefined && (
+                                <span className="text-lg font-black text-primary-600">{job.matchPercentage}%</span>
+                            )}
+                          </div>
+                       </div>
+                       
+                       <div className="flex items-center gap-2 text-primary-600 group-hover:translate-x-1 transition-transform">
+                          <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">View Details</span>
+                          <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center">
+                            <ChevronRight size={16} />
+                          </div>
+                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            ))}
 
-          {activeTab === 'all' && (
-            <Pagination
-              current={pagination.current}
-              total={pagination.pages}
-              onPageChange={(page) => setPagination(p => ({ ...p, current: page }))}
+            {activeTab !== 'matching' && (
+              <div className="pt-4 flex justify-center">
+                <Pagination
+                  current={pagination.current}
+                  total={pagination.pages}
+                  onPageChange={(page) => setPagination(p => ({ ...p, current: page }))}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="py-20 flex justify-center bg-gray-50/50 rounded-[2rem] border border-dashed border-gray-200">
+            <EmptyState
+              icon={activeCategory === 'jobs' ? Briefcase : (activeCategory === 'internships' ? GraduationCap : DollarSign)}
+              title={`No ${categoryLabel} Found`}
+              description={
+                activeTab === 'matching'
+                  ? 'Update your skills and get them verified by POC to unlock matching opportunities.'
+                  : filters.roleCategory
+                    ? `No current openings match the "${filters.roleCategory}" filter.`
+                    : `We couldn't find any ${categoryLabel.toLowerCase()} in the ${activeTab} database.`
+              }
             />
-          )}
-        </div>
-      ) : (
-        <EmptyState
-          icon={activeCategory === 'jobs' ? Briefcase : GraduationCap}
-          title={`No ${categoryLabel.toLowerCase()} found`}
-          description={
-            activeTab === 'matching'
-              ? 'Add and get your skills approved to see matching opportunities'
-              : filters.roleCategory
-                ? `No ${categoryLabel.toLowerCase()} found for "${filters.roleCategory}" — try clearing the filter`
-                : `No ${categoryLabel.toLowerCase()} available at the moment`
-          }
-        />
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
