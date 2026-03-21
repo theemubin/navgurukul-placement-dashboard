@@ -1,4 +1,4 @@
-export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = 'primary', trend, onClick }) => {
+export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = 'primary', trend, onClick, compact = false }) => {
   const colorClasses = {
     primary: 'bg-blue-100 text-blue-600',
     secondary: 'bg-purple-100 text-purple-600',
@@ -18,25 +18,25 @@ export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = '
 
   return (
     <div 
-      className={`card transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-1 border-transparent hover:border-primary-300' : 'hover:shadow-md'}`}
+      className={`card transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-1 border-transparent hover:border-primary-300' : 'hover:shadow-md'} ${compact ? '!p-2.5' : ''}`}
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{displayLabel}</p>
-          <div className="flex items-baseline gap-2 mt-2">
-            <p className="text-2xl font-bold text-gray-900">{value}</p>
+          <p className={`text-gray-500 uppercase tracking-wider ${compact ? 'text-[10px] font-bold' : 'text-sm font-medium'}`}>{displayLabel}</p>
+          <div className={`flex items-baseline gap-2 ${compact ? 'mt-1' : 'mt-2'}`}>
+            <p className={`font-bold text-gray-900 ${compact ? 'text-xl' : 'text-2xl'}`}>{value}</p>
             {trend && (
               <span className={`text-xs font-bold flex items-center gap-0.5 ${trend.isPositive ? 'text-green-600' : 'text-red-600'}`}>
                 {trend.isPositive ? '↑' : '↓'}{Math.abs(trend.value)}%
               </span>
             )}
           </div>
-          {subValue && <p className="text-sm text-gray-500 mt-1">{subValue}</p>}
+          {subValue && <p className={`text-gray-500 ${compact ? 'text-[10px] mt-0.5' : 'text-sm mt-1'}`}>{subValue}</p>}
         </div>
         {Icon && (
-          <div className={`p-3 rounded-xl ${colorClasses[color] || colorClasses.primary} flex-shrink-0`}>
-            <Icon className="w-6 h-6" />
+          <div className={`${compact ? 'p-1.5 rounded-lg' : 'p-3 rounded-xl'} ${colorClasses[color] || colorClasses.primary} flex-shrink-0`}>
+            <Icon className={`${compact ? 'w-4 h-4' : 'w-6 h-6'}`} />
           </div>
         )}
       </div>

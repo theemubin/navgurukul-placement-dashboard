@@ -6,13 +6,15 @@ import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common
 import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
-  CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw
+  CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
+  MessageSquare, ClipboardList
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const POCDashboard = () => {
   const [stats, setStats] = useState(null);
   const [pendingSkills, setPendingSkills] = useState([]);
+  const [pendingProfilesCount, setPendingProfilesCount] = useState(0);
   const [companyTracking, setCompanyTracking] = useState([]);
   const [schoolTracking, setSchoolTracking] = useState([]);
   const [eligibleJobs, setEligibleJobs] = useState([]);
@@ -21,9 +23,10 @@ const POCDashboard = () => {
   const [selectedCycle, setSelectedCycle] = useState('');
   const [studentSummary, setStudentSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('jobs');
+  const [activeTab, setActiveTab] = useState('jobs'); // Active jobs first as default
+  const [expandedStudent, setExpandedStudent] = useState(null);
   const [expandedCompany, setExpandedCompany] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('all');
   const [showCycleModal, setShowCycleModal] = useState(false);
   // Campus selection state
   const [showCampusModal, setShowCampusModal] = useState(false);
@@ -44,7 +47,7 @@ const POCDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
     fetchTrackingData();
-  }, [statusFilter, selectedCycle]);
+  }, [selectedStatus, selectedCycle]);
 
   const fetchCampusData = async () => {
     try {
@@ -80,9 +83,21 @@ const POCDashboard = () => {
     if (!email) return;
     try {
       toast.loading('Syncing with Ghar...', { id: 'ghar-sync' });
-      await gharAPI.syncStudent(email);
+      const response = await gharAPI.syncStudent(email);
+      const updatedData = response.data.student;
       toast.success('Synced with Ghar successfully', { id: 'ghar-sync' });
-      fetchDashboardData();
+      
+      // Update local state instead of full dashboard re-fetch
+      setStudentSummary(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          students: prev.students.map(s => s.email === email ? {
+            ...s,
+            placementStatus: updatedData.resolvedProfile?.currentStatus || s.placementStatus
+          } : s)
+        };
+      });
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
       toast.error(error.response?.data?.message || 'Failed to sync with Ghar', { id: 'ghar-sync' });
@@ -100,13 +115,14 @@ const POCDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const [statsResponse, pendingResponse, cyclesResponse, jobsResponse] = await Promise.all([
-        statsAPI.getCampusPocStats(statusFilter),
+        statsAPI.getCampusPocStats(selectedStatus),
         userAPI.getPendingSkills(),
         statsAPI.getCycleStats(),
         statsAPI.getEligibleJobs()
       ]);
       setStats(statsResponse.data);
       setPendingSkills(pendingResponse.data.slice(0, 5));
+      setPendingProfilesCount(statsResponse.data.pendingProfileApprovals || 0);
       setCycles(cyclesResponse.data);
       setEligibleJobs(jobsResponse.data.jobs || []);
     } catch (error) {
@@ -121,7 +137,7 @@ const POCDashboard = () => {
       const [companyRes, schoolRes, summaryRes] = await Promise.all([
         statsAPI.getCompanyTracking(selectedCycle),
         statsAPI.getSchoolTracking(selectedCycle),
-        statsAPI.getStudentSummary({ cycleId: selectedCycle, status: statusFilter || undefined })
+        statsAPI.getStudentSummary({ cycleId: selectedCycle, status: selectedStatus === 'all' ? undefined : selectedStatus })
       ]);
       setCompanyTracking(companyRes.data);
       setSchoolTracking(schoolRes.data);
@@ -179,7 +195,7 @@ const POCDashboard = () => {
     groups.closed.sort((a, b) => {
       // For closed, sort by most recent deadline descending
       const aMax = Math.max(...a.jobs.map(j => new Date(j.applicationDeadline).getTime() || 0));
-      const bMax = Math.max(...b.jobs.map(j => new Date(j.applicationDeadline).getTime() || 0));
+      const bMax = Math.max(...b.jobs.map(j => new Date(b.applicationDeadline).getTime() || 0));
       return bMax - aMax;
     });
 
@@ -265,50 +281,90 @@ const POCDashboard = () => {
     return <Badge variant={config.color}>{config.label}</Badge>;
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  const StatusBadge = ({ color, count, label }) => (
+    <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${color === 'blue' ? 'bg-blue-100 text-blue-700' : color === 'amber' ? 'bg-amber-100 text-amber-700' : color === 'orange' ? 'bg-orange-100 text-orange-700' : color === 'green' ? 'bg-green-100 text-green-700' : color === 'indigo' ? 'bg-indigo-100 text-indigo-700' : color === 'purple' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>
+      <span className="font-bold">{count}</span>
+      <span>{label}</span>
+    </div>
+  );
+
+  if (loading && !stats) return <LoadingSpinner size="lg" />;
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Campus POC Dashboard</h1>
-          <p className="text-gray-600">Track and manage student placements for your campus</p>
-          {/* Managed Campuses Display */}
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-gray-500">Managing:</span>
-            {managedCampuses.length > 0 ? (
-              managedCampuses.map(campus => (
-                <span key={campus._id} className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs font-medium">
-                  {campus.name}
-                </span>
-              ))
-            ) : (
-              <span className="text-sm text-gray-400">No campuses selected</span>
-            )}
+    <div className="space-y-4 animate-fadeIn pb-12">
+      {/* Dynamic Header & Toolbar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Campus PoC Dashboard</h1>
             <button
-              onClick={() => setShowCampusModal(true)}
-              className="text-primary-600 hover:text-primary-800 text-sm font-medium flex items-center gap-1"
+              onClick={() => setShowCycleModal(true)}
+              className="px-2 py-1 bg-primary-50 text-primary-600 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-primary-100 transition-colors"
             >
-              <Settings className="w-3 h-3" />
-              Change
+              <Plus className="w-3 h-3 inline mr-1" /> New Cycle
+            </button>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
+            <span className="font-medium">Managing:</span>
+            {managedCampuses.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {managedCampuses.map(campus => (
+                  <span key={campus._id} className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-[10px] font-bold">{campus.name}</span>
+                ))}
+              </div>
+            ) : (
+              <span className="font-bold text-gray-700">Loading...</span>
+            )}
+            <button onClick={() => setShowCampusModal(true)} className="text-primary-600 hover:underline flex items-center gap-1 font-bold ml-1">
+              <Settings className="w-3 h-3" /> Change
             </button>
           </div>
         </div>
-        <button
-          onClick={() => setShowCycleModal(true)}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          New Placement Cycle
-        </button>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-gray-50 px-2 py-1.5 rounded-xl border border-gray-100">
+            <Filter className="w-3.5 h-3.5 text-gray-400" />
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="bg-transparent border-none text-xs font-bold text-gray-700 p-0 focus:ring-0 min-w-[120px]"
+            >
+              <option value="all">All Students</option>
+              <option value="placed">Placed</option>
+              <option value="ready">Ready to Place</option>
+              <option value="under-process">Under Process</option>
+              <option value="dropout">Dropout</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 bg-gray-50 px-2 py-1.5 rounded-xl border border-gray-100">
+            <Calendar className="w-3.5 h-3.5 text-gray-400" />
+            <select
+              value={selectedCycle}
+              onChange={(e) => setSelectedCycle(e.target.value)}
+              className="bg-transparent border-none text-xs font-bold text-gray-700 p-0 focus:ring-0 min-w-[120px]"
+            >
+              <option value="">All placement cycles</option>
+              {cycles.map(cycle => (
+                <option key={cycle._id} value={cycle._id}>
+                  {cycle.name || `${format(new Date(), 'MMMM')} ${format(new Date(), 'yyyy')}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
+
+      {/* Compact Status Strip */}
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <StatusBadge color="blue" count={studentSummary?.total || 0} label="Total" />
+        <StatusBadge color="amber" count={pendingSkills.length} label="Pending Skills" />
+        <StatusBadge color="orange" count={pendingProfilesCount} label="Pending Profiles" />
+        <StatusBadge color="green" count={stats?.readinessPool?.['Job Ready'] || 0} label="Job Ready" />
+        <StatusBadge color="indigo" count={stats?.readinessPool?.['Job Ready Under Process'] || 0} label="In Process" />
+        <StatusBadge color="purple" count={stats?.interestCount || 0} label="Interested" />
+      </div>
+
 
       {/* Campus Selection Modal */}
       {showCampusModal && (
@@ -355,7 +411,7 @@ const POCDashboard = () => {
                 Cancel
               </button>
               <button
-                onClick={handleSaveCampuses}
+                onClick={handleUpdateManagedCampuses}
                 disabled={savingCampuses || selectedCampuses.length === 0}
                 className="btn btn-primary"
               >
@@ -367,102 +423,104 @@ const POCDashboard = () => {
       )}
 
       {/* Eligible Students Modal */}
-      <EligibleStudentsModal
+      <Modal
         isOpen={eligibleStudentsModal.open}
         onClose={() => {
           setEligibleStudentsModal({ open: false, job: null, students: [], loading: false });
           setStudentFilter('all');
         }}
-        job={eligibleStudentsModal.job}
-        students={eligibleStudentsModal.students}
-        loading={eligibleStudentsModal.loading}
-        total={eligibleStudentsModal.total}
-        applied={eligibleStudentsModal.applied}
-        notApplied={eligibleStudentsModal.notApplied}
-        studentFilter={studentFilter}
-        setStudentFilter={setStudentFilter}
-        getFilteredStudents={getFilteredEligibleStudents}
-      />
+        title={eligibleStudentsModal.job?.title || 'Eligible Students'}
+        description={eligibleStudentsModal.job?.company?.name}
+      >
+        <div className="mt-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-lg font-semibold text-gray-800">Students ({getFilteredEligibleStudents().length})</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setStudentFilter('all')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${studentFilter === 'all' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                All ({eligibleStudentsModal.total || 0})
+              </button>
+              <button
+                onClick={() => setStudentFilter('applied')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${studentFilter === 'applied' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                Applied ({eligibleStudentsModal.applied || 0})
+              </button>
+              <button
+                onClick={() => setStudentFilter('not-applied')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${studentFilter === 'not-applied' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                Not Applied ({eligibleStudentsModal.notApplied || 0})
+              </button>
+            </div>
+          </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">Filter By Status:</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              // fetchDashboardData will be called with the new filter
-            }}
-            className="input text-sm min-w-[150px]"
-          >
-            <option value="">All Students</option>
-            <option value="Active">Active</option>
-            <option value="Placed">Placed</option>
-            <option value="Dropout">Dropout</option>
-            <option value="Internship Paid">Internship Paid</option>
-            <option value="Internship UnPaid">Internship UnPaid</option>
-            <option value="Paid Project">Paid Project</option>
-          </select>
+          {eligibleStudentsModal.loading ? (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner />
+            </div>
+          ) : getFilteredEligibleStudents().length > 0 ? (
+            <div className="max-h-96 overflow-y-auto border rounded-lg">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {getFilteredEligibleStudents().map((student) => (
+                    <tr key={student._id}>
+                      <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <Link to={`/campus-poc/students/${student._id}`} className="text-primary-600 hover:underline">
+                          {student.firstName} {student.lastName}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{student.email}</td>
+                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                        {getStatusBadge(student.applicationStatus?.toLowerCase().replace(' ', '_') || 'not_applied')}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                        {student.hasApplied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-red-500" />}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>No students found for this filter.</p>
+            </div>
+          )}
         </div>
+      </Modal>
 
-        {cycles.length > 0 && (
-          <div className="flex items-center gap-2 border-l pl-4">
-            <Calendar className="w-4 h-4 text-gray-500" />
-            <span className="text-sm font-medium text-gray-700">Placement Cycle:</span>
-            <select
-              value={selectedCycle}
-              onChange={(e) => setSelectedCycle(e.target.value)}
-              className="input text-sm min-w-[150px]"
-            >
-              <option value="">All Cycles</option>
-              {cycles.map(cycle => (
-                <option key={cycle.cycleId} value={cycle.cycleId}>
-                  {cycle.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-
-      {/* Compact Stats Bar */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          { label: 'Total Students', value: stats?.totalStudents || 0, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
-          { label: 'Pending Skills', value: stats?.pendingSkillApprovals || 0, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-100' },
-          { label: 'Pending Profiles', value: stats?.pendingProfileApprovals || 0, color: 'text-orange-600', bg: 'bg-orange-50 border-orange-100' },
-          { label: 'Job Ready', value: stats?.readinessPool?.['Job Ready'] || 0, color: 'text-green-600', bg: 'bg-green-50 border-green-100' },
-          { label: 'Under Process', value: stats?.readinessPool?.['Job Ready Under Process'] || 0, color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-100' },
-          { label: 'Interested', value: stats?.interestCount || 0, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-100' },
-        ].map(({ label, value, color, bg }) => (
-          <div key={label} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${bg} flex-shrink-0`}>
-            <span className={`text-lg font-bold leading-none ${color}`}>{value}</span>
-            <span className="text-xs text-gray-500 leading-tight">{label}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-4 overflow-x-auto">
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-100">
+        <nav className="flex gap-2 overflow-x-auto -mb-px">
           {[
             { id: 'jobs', label: 'Active Jobs', icon: Briefcase },
             { id: 'overview', label: 'Overview', icon: Eye },
             { id: 'company', label: 'Company-wise', icon: Building2 },
             { id: 'school', label: 'School-wise', icon: GraduationCap },
-            { id: 'students', label: 'Student Summary', icon: Users },
-            { id: 'cycles', label: 'Placement Cycles', icon: Calendar }
-          ].map(tab => (
+            { id: 'summary', label: 'Student Summary', icon: Users },
+            { id: 'cycles', label: 'Placement Cycles', icon: Calendar },
+          ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === tab.id
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'border-primary-600 text-primary-600 bg-primary-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
             >
-              <tab.icon className="w-4 h-4" />
+              <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? 'text-primary-600' : 'text-gray-400'}`} />
               {tab.label}
             </button>
           ))}
@@ -471,12 +529,12 @@ const POCDashboard = () => {
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Quick Actions */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             <h3 className="font-semibold text-gray-900">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-3">
-              <Link to="/campus-poc/skill-approvals" className="card hover:shadow-md transition-shadow p-4">
+              <Link to="/campus-poc/skill-approvals" className="card hover:shadow-md transition-shadow p-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-yellow-100 rounded-lg">
                     <CheckSquare className="w-5 h-5 text-yellow-600" />
@@ -487,18 +545,18 @@ const POCDashboard = () => {
                   </div>
                 </div>
               </Link>
-              <Link to="/campus-poc/profile-approvals" className="card hover:shadow-md transition-shadow p-4">
+              <Link to="/campus-poc/profile-approvals" className="card hover:shadow-md transition-shadow p-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-orange-100 rounded-lg">
                     <FileText className="w-5 h-5 text-orange-600" />
                   </div>
                   <div>
                     <p className="font-medium text-sm">Profile Approvals</p>
-                    <p className="text-xs text-gray-500">{stats?.pendingProfileApprovals || 0} pending</p>
+                    <p className="text-xs text-gray-500">{pendingProfilesCount} pending</p>
                   </div>
                 </div>
               </Link>
-              <Link to="/campus-poc/students" className="card hover:shadow-md transition-shadow p-4">
+              <Link to="/campus-poc/students" className="card hover:shadow-md transition-shadow p-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <Users className="w-5 h-5 text-blue-600" />
@@ -509,7 +567,7 @@ const POCDashboard = () => {
                   </div>
                 </div>
               </Link>
-              <Link to="/campus-poc/job-readiness-criteria" className="card hover:shadow-md transition-shadow p-4">
+              <Link to="/campus-poc/job-readiness-criteria" className="card hover:shadow-md transition-shadow p-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-green-100 rounded-lg">
                     <CheckSquare className="w-5 h-5 text-green-600" />
@@ -520,7 +578,7 @@ const POCDashboard = () => {
                   </div>
                 </div>
               </Link>
-              <button onClick={() => setActiveTab('cycles')} className="card hover:shadow-md transition-shadow p-4 text-left">
+              <button onClick={() => setActiveTab('cycles')} className="card hover:shadow-md transition-shadow p-3 text-left">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-purple-100 rounded-lg">
                     <Calendar className="w-5 h-5 text-purple-600" />
@@ -536,14 +594,14 @@ const POCDashboard = () => {
 
           {/* Pending Skill Approvals */}
           <div className="card">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold">Pending Skill Approvals</h3>
               <Link to="/campus-poc/skill-approvals" className="text-primary-600 text-sm hover:underline">
                 View all
               </Link>
             </div>
             {pendingSkills.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {pendingSkills.map((student) => (
                   <div key={student._id} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between">
@@ -572,27 +630,27 @@ const POCDashboard = () => {
           {/* Placement Summary by Status */}
           {studentSummary && (
             <div className="card lg:col-span-2">
-              <h3 className="font-semibold mb-4">Student Placement Overview</h3>
-              <div className="grid grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-green-600">{studentSummary.summary.placed}</p>
-                  <p className="text-sm text-gray-600">Placed</p>
+              <h3 className="font-semibold mb-3">Student Placement Overview</h3>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <CheckCircle className="w-7 h-7 text-green-500 mx-auto mb-1" />
+                  <p className="text-xl font-bold text-green-600">{studentSummary.summary.placed}</p>
+                  <p className="text-xs text-gray-600">Placed</p>
                 </div>
-                <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                  <Clock className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-yellow-600">{studentSummary.summary.inProgress}</p>
-                  <p className="text-sm text-gray-600">In Progress</p>
+                <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                  <Clock className="w-7 h-7 text-yellow-500 mx-auto mb-1" />
+                  <p className="text-xl font-bold text-yellow-600">{studentSummary.summary.inProgress}</p>
+                  <p className="text-xs text-gray-600">In Progress</p>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-gray-600">{studentSummary.summary.notApplied}</p>
-                  <p className="text-sm text-gray-600">Not Applied</p>
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <Users className="w-7 h-7 text-gray-400 mx-auto mb-1" />
+                  <p className="text-xl font-bold text-gray-600">{studentSummary.summary.notApplied}</p>
+                  <p className="text-xs text-gray-600">Not Applied</p>
                 </div>
-                <div className="text-center p-4 bg-red-50 rounded-lg">
-                  <XCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-red-600">{studentSummary.summary.rejected}</p>
-                  <p className="text-sm text-gray-600">Rejected</p>
+                <div className="text-center p-3 bg-red-50 rounded-lg">
+                  <XCircle className="w-7 h-7 text-red-400 mx-auto mb-1" />
+                  <p className="text-xl font-bold text-red-600">{studentSummary.summary.rejected}</p>
+                  <p className="text-xs text-gray-600">Rejected</p>
                 </div>
               </div>
             </div>
@@ -635,18 +693,19 @@ const POCDashboard = () => {
               const selectedCount = filteredJobs.reduce((acc, j) => acc + (j.statusCounts?.selected || 0), 0);
 
               return (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-                  <StatsCard icon={Users} label="Active Jobs" value={activeJobsCount} color="secondary" />
-                  <StatsCard 
-                    icon={Building2} 
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatsCard icon={Briefcase} label="Active Jobs" value={activeJobsCount} color="secondary" compact />
+            <StatsCard 
+                    icon={Users} 
                     label="Eligible Students" 
                     value={eligibleStudentsCount} 
                     color="primary" 
                     onClick={fetchAllApprovedStudents}
+                    compact
                   />
-                  <StatsCard icon={Clock} label="Applications" value={totalApplications} color="accent" />
-                  <StatsCard icon={CheckCircle} label="Selected" value={selectedCount} color="success" />
-                </div>
+            <StatsCard icon={Clock} label="Applications" value={totalApplications} color="accent" compact />
+            <StatsCard icon={CheckCircle} label="Selected" value={selectedCount} color="success" compact />
+          </div>
               );
             })()
           )}
@@ -994,116 +1053,178 @@ const POCDashboard = () => {
         </div>
       )}
 
-      {activeTab === 'students' && (
+      {activeTab === 'summary' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-semibold text-gray-900">Student Application Summary</h3>
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-500" />
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  fetchTrackingData();
-                }}
-                className="input text-sm"
-              >
-                <option value="">All Status</option>
-                <option value="placed">Placed</option>
-                <option value="in_progress">In Progress</option>
-                <option value="not_applied">Not Applied</option>
-                <option value="rejected">All Rejected</option>
-              </select>
+          <div className="flex justify-between items-center mb-2">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Student Placement Summary</h3>
+              <p className="text-xs text-gray-500">Comprehensive overview of all student applications and progress</p>
             </div>
           </div>
 
-          {studentSummary && studentSummary.students.length > 0 ? (
-            <div className="card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">School</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cycle</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Applications</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Latest Activity</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {studentSummary.students.map((student) => (
-                      <tr key={student.studentId} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
+          {!studentSummary || studentSummary.students.length === 0 ? (
+            <div className="card text-center py-12">
+              <Users className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-500">No students found matching current filters</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {studentSummary.students.map((student) => {
+                const isExpanded = expandedStudent === student.studentId;
+                return (
+                  <div 
+                    key={student.studentId} 
+                    className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'}`}
+                  >
+                    {/* Accordion Header */}
+                    <div 
+                      className="p-4 cursor-pointer flex items-center justify-between"
+                      onClick={() => setExpandedStudent(isExpanded ? null : student.studentId)}
+                    >
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center text-primary-600 font-bold">
+                          {student.name.charAt(0)}
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 flex-1">
                           <div>
-                            <Link
+                            <Link 
                               to={`/campus-poc/students/${student.studentId}`}
-                              className="font-medium text-primary-600 hover:underline"
+                              className="font-bold text-gray-900 hover:text-primary-600 truncate block"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               {student.name}
                             </Link>
-                            <p className="text-xs text-gray-500">{student.email}</p>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{student.email}</p>
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{student.school}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{student.cycle}</td>
-                        <td className="px-4 py-3">
-                          {getStatusBadge(student.placementStatus)}
-                          {student.placedAt && (
-                            <p className="text-xs text-gray-500 mt-1">@ {student.placedAt}</p>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm font-medium">{student.totalApplications}</span>
-                          {student.activeApplications > 0 && (
-                            <span className="text-xs text-green-600 ml-1">
-                              ({student.activeApplications} active)
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {student.applications[0] ? (
-                            <div className="text-xs">
-                              <p className="font-medium">{student.applications[0].company}</p>
-                              <p className="text-gray-500">{student.applications[0].job}</p>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">No applications</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleGharSync(student.email)}
-                              className="p-1 hover:bg-indigo-50 rounded-md text-gray-400 hover:text-indigo-600 transition-colors"
-                              title="Sync status with Ghar"
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                            </button>
-                            <Link
-                              to={`/campus-poc/students/${student.studentId}`}
-                              className="text-primary-600 hover:text-primary-800"
-                            >
-                              <ArrowRight className="w-4 h-4" />
-                            </Link>
+                          <div>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Placement Status</p>
+                            <div className="mt-0.5">{getStatusBadge(student.placementStatus)}</div>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>No students found matching the criteria</p>
+                          <div className="hidden md:block">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Navgurukul School</p>
+                            <p className="text-xs font-semibold text-gray-700 mt-0.5">{student.school}</p>
+                          </div>
+                          <div className="text-right pr-4">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Applications</p>
+                            <p className="text-sm font-bold text-gray-900 mt-0.5">
+                              {student.totalApplications} <span className="text-xs font-medium text-gray-500">Total</span>
+                              {student.activeApplications > 0 && <span className="ml-1 text-green-600 text-xs">({student.activeApplications} Active)</span>}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                           <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGharSync(student.email);
+                            }}
+                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-primary-600 transition-colors"
+                            title="Sync status with Ghar"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                      </div>
+                    </div>
+
+                    {/* Accordion Content */}
+                    {isExpanded && (
+                      <div className="p-4 border-t border-gray-50 bg-gray-50/30 rounded-b-xl animate-fadeIn">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <ClipboardList className="w-3.5 h-3.5" />
+                          Application History
+                        </h4>
+                        
+                        {student.applications.length === 0 ? (
+                          <div className="text-center py-6 bg-white rounded-lg border border-dashed border-gray-200">
+                            <p className="text-sm text-gray-500">No applications found for this student.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {student.applications.map((app) => (
+                              <div key={app.applicationId} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                                  <div className="flex items-start gap-3">
+                                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
+                                      <Building2 className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <h5 className="font-bold text-gray-900">{app.company}</h5>
+                                      <p className="text-sm text-gray-600">{app.job}</p>
+                                      <p className="text-[10px] text-gray-400 uppercase font-bold mt-1">Applied on {new Date(app.appliedAt).toLocaleDateString()}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                    <div className="text-right">
+                                      <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Current Status</p>
+                                      {getStatusBadge(app.status)}
+                                    </div>
+                                    <Link 
+                                      to={`/campus-poc/jobs/${app.jobId || ''}`}
+                                      className="p-2 hover:bg-gray-100 rounded-lg text-primary-600 transition-colors"
+                                      title="View Job Details"
+                                    >
+                                      <ArrowRight className="w-4 h-4" />
+                                    </Link>
+                                  </div>
+                                </div>
+
+                                {/* Progress & Round Results */}
+                                {app.roundResults && app.roundResults.length > 0 && (
+                                  <div className="mt-4 pt-4 border-t border-gray-50">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Interview Progress</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {app.roundResults.map((round, idx) => (
+                                        <div key={idx} className={`px-3 py-2 rounded-lg border text-xs ${
+                                          round.status === 'passed' ? 'bg-green-50 border-green-100 text-green-700' :
+                                          round.status === 'failed' ? 'bg-red-50 border-red-100 text-red-700' :
+                                          'bg-blue-50 border-blue-100 text-blue-700'
+                                        }`}>
+                                          <div className="font-bold flex items-center gap-1">
+                                            <span>R{round.round}: {round.roundName}</span>
+                                            {round.status === 'passed' ? <CheckCircle className="w-3 h-3" /> : round.status === 'failed' ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                          </div>
+                                          {round.feedback && <p className="mt-1 text-[10px] opacity-80 italic italic">"{round.feedback}"</p>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Recruiter Comments */}
+                                {app.feedback && (
+                                  <div className="mt-4 p-3 bg-indigo-50/50 rounded-lg flex items-start gap-3">
+                                    <MessageSquare className="w-4 h-4 text-indigo-500 mt-1" />
+                                    <div>
+                                      <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Overall Recruiter Feedback</p>
+                                      <p className="text-sm text-gray-700 italic">"{app.feedback}"</p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-4 text-center">
+                          <Link 
+                            to={`/campus-poc/students/${student.studentId}`}
+                            className="text-xs font-bold text-primary-600 hover:underline flex items-center justify-center gap-1"
+                          >
+                            View Full Student Profile <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       )}
-
       {activeTab === 'cycles' && (
         <CycleManagement
           cycles={cycles}

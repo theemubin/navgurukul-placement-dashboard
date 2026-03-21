@@ -1301,12 +1301,15 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
         placedAt: selectedApp?.job?.company?.name || null,
         totalApplications: studentApps.length,
         activeApplications: inProgressApps.length,
-        applications: studentApps.slice(0, 5).map(a => ({
+        applications: studentApps.map(a => ({
           applicationId: a._id,
           company: a.job?.company?.name,
           job: a.job?.title,
           jobType: a.job?.jobType,
           status: a.status,
+          currentRound: a.currentRound,
+          roundResults: a.roundResults,
+          feedback: a.feedback,
           deadline: a.job?.applicationDeadline,
           appliedAt: a.createdAt,
           lastUpdated: a.updatedAt

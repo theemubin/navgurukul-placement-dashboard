@@ -79,9 +79,20 @@ const POCStudents = () => {
     }
 
     try {
-      await gharAPI.syncStudent(email);
+      const response = await gharAPI.syncStudent(email);
+      const updatedData = response.data.student;
       toast.success('Synced with Ghar successfully');
-      fetchStudents();
+      
+      // Update local state instead of full reload
+      setStudents(prev => prev.map(s => s.email === email ? {
+        ...s,
+        studentProfile: {
+          ...s.studentProfile,
+          currentStatus: updatedData.resolvedProfile?.currentStatus || s.studentProfile.currentStatus
+        }
+      } : s));
+      
+      // Still refresh stats as they depend on overall counts
       fetchStats();
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
@@ -242,9 +253,10 @@ const POCStudents = () => {
                         <span className="text-gray-400 font-bold uppercase tracking-tighter block mb-0.5">Status</span>
                         <div className="flex items-center gap-1 group/sync">
                           <select
+                            disabled
                             value={student.studentProfile?.currentStatus || 'Active'}
                             onChange={(e) => handleStatusChange(e, student._id, e.target.value)}
-                            className="text-[10px] font-bold py-0.5 px-1.5 h-auto border-gray-200 rounded bg-gray-50 focus:bg-white"
+                            className="text-[10px] font-bold py-0.5 px-1.5 h-auto border-gray-200 rounded bg-gray-50 focus:bg-white opacity-80 cursor-not-allowed"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <option value="Active">Active</option>

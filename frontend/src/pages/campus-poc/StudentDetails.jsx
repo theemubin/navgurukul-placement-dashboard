@@ -142,9 +142,18 @@ const POCStudentDetails = () => {
   const handleGharSync = async () => {
     if (!student?.email) return;
     try {
-      await gharAPI.syncStudent(student.email);
+      const response = await gharAPI.syncStudent(student.email);
+      const updatedData = response.data.student;
       toast.success('Synced with Ghar successfully');
-      fetchStudentData();
+      
+      // Update local state instead of full data re-fetch
+      setStudent(prev => ({
+        ...prev,
+        studentProfile: {
+          ...prev.studentProfile,
+          currentStatus: updatedData.resolvedProfile?.currentStatus || prev.studentProfile.currentStatus
+        }
+      }));
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
       toast.error(error.response?.data?.message || 'Failed to sync with Ghar');
@@ -277,9 +286,10 @@ const POCStudentDetails = () => {
               <div className="text-center md:text-right">
                 <div className="flex items-center gap-2">
                   <select
+                    disabled
                     value={profile.currentStatus || 'Active'}
                     onChange={(e) => handleStatusChange(e.target.value)}
-                    className="text-xs font-bold py-2 px-3 border-2 border-primary-100 rounded-xl bg-white focus:ring-4 focus:ring-primary-50 appearance-none text-primary-700 shadow-sm"
+                    className="text-xs font-bold py-2 px-3 border-2 border-primary-100 rounded-xl bg-white focus:ring-4 focus:ring-primary-50 appearance-none text-primary-700 shadow-sm opacity-80 cursor-not-allowed"
                   >
                     <option value="Active">🟢 Active</option>
                     <option value="Placed">🎉 Placed</option>
