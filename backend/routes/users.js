@@ -1562,4 +1562,54 @@ router.delete('/me/ai-keys/:keyId', auth, async (req, res) => {
   }
 });
 
+// Sync student data from Ghar API (External Zoho integration)
+router.post('/sync-student', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
+  try {
+    const { email, userId } = req.body;
+    const gharApiService = require('../services/gharApiService');
+
+    if (!email && !userId) {
+      return res.status(400).json({ success: false, message: 'Email or userId is required' });
+    }
+
+    // Find student (case-insensitive search by email or direct ID)
+    const student = userId
+      ? await User.findById(userId)
+      : await User.findOne({ 
+          email: new RegExp(`^${(email || '').trim()}$`, 'i'), 
+          role: 'student' 
+        });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: `Student with email ${email} not found in our database.` });
+    }
+
+    // Sync data from Ghar API
+    const externalData = await gharApiService.syncStudentData(student.email);
+
+    if (externalData) {
+      // Re-fetch student to get updated virtuals/resolved data
+      const updatedStudent = await User.findById(student._id);
+
+      res.json({
+        success: true,
+        message: 'Student data synced from Ghar successfully and updated in MongoDB',
+        data: {
+          student: updatedStudent,
+          resolvedProfile: updatedStudent.resolvedProfile,
+          externalData
+        }
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: `No data found for ${student.email} in the external Ghar system (Zoho).`
+      });
+    }
+  } catch (error) {
+    console.error('Error in student sync:', error);
+    res.status(500).json({ success: false, message: 'Internal server error during sync' });
+  }
+});
+
 module.exports = router;

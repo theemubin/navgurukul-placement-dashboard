@@ -436,7 +436,7 @@ export const featuredPlacementAPI = {
 export const gharAPI = {
   connectionStatus: () => api.get('/ghar/connection-status'),
   studentPreview: (email, isDev) => api.get(`/ghar/student-preview/${email}?isDev=${isDev}`),
-  syncStudent: (email) => api.post('/ghar/sync-student', { email }),
+  syncStudent: (email) => api.post('/users/sync-student', { email }),
   batchSync: (campusId) => api.post('/ghar/batch-sync', { campusId }),
   getAttendanceConfig: (isDev) => api.get(`/ghar/attendance-config?isDev=${isDev}`)
 };
