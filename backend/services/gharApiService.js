@@ -86,40 +86,51 @@ class GharApiService {
      * @returns {Promise<Object>} Synced data or null
      */
     async syncStudentData(email) {
+        if (!email) return null;
+        
         try {
-            // Be very explicit about production mode
+            // Normalize email: trim and lowercase
+            const normalizedEmail = email.trim().toLowerCase();
             const isDev = process.env.NODE_ENV !== 'production';
 
-            console.log(`[GharAPI] Attempting sync for ${email} (isDev: ${isDev})`);
+            console.log(`[GharAPI] Attempting sync for: "${normalizedEmail}" (Original: "${email}", isDev: ${isDev})`);
 
-            let response = await this.client.get('/gharZoho/students/By/NgEmail', {
-                params: {
-                    isDev,
-                    Student_ng_email: email
-                }
-            });
-
-            // If no data found in primary environment, try the other one
-            if (!response.data || !response.data.data || !Array.isArray(response.data.data) || response.data.data.length === 0) {
-                console.log(`[GharAPI] No data in primary env, trying fallback (isDev: ${!isDev}) for ${email}`);
-                response = await this.client.get('/gharZoho/students/By/NgEmail', {
+            const tryFetch = async (envMode) => {
+                const res = await this.client.get('/gharZoho/students/By/NgEmail', {
                     params: {
-                        isDev: !isDev,
-                        Student_ng_email: email
+                        isDev: envMode,
+                        Student_ng_email: normalizedEmail
                     }
                 });
+                return res;
+            };
+
+            // Try primary environment
+            let response = await tryFetch(isDev);
+
+            // If no data found in primary, try the fallback
+            if (!response.data || !response.data.data || !Array.isArray(response.data.data) || response.data.data.length === 0) {
+                console.log(`[GharAPI] No data in primary env (${isDev}), trying fallback (${!isDev}) for ${normalizedEmail}`);
+                response = await tryFetch(!isDev);
             }
 
-            // The API returns an array in data, take the first match
+            // Process response
             if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
                 const externalData = response.data.data[0];
+                console.log(`[GharAPI] Found data for ${normalizedEmail}. Status: ${externalData.Status}`);
+                
                 const User = require('../models/User');
-                await User.syncGharData(email, externalData);
+                await User.syncGharData(normalizedEmail, externalData);
                 return externalData;
             }
+
+            console.warn(`[GharAPI] Student not found in any environment for email: ${normalizedEmail}`);
             return null;
         } catch (error) {
-            console.error(`Sync failed for ${email}:`, error.message);
+            console.error(`[GharAPI] Sync failed for ${email}:`, error.message);
+            if (error.response) {
+                console.error(`[GharAPI] Response data:`, error.response.data);
+            }
             return null;
         }
     }
