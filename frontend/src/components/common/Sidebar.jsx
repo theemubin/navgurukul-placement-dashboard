@@ -12,11 +12,18 @@ const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const location = useLocation();
   const [forumUnreadCount, setForumUnreadCount] = useState(0);
+  const [pendingProfilesCount, setPendingProfilesCount] = useState(0);
+  const [pendingSkillsCount, setPendingSkillsCount] = useState(0);
 
   useEffect(() => {
     if (user?.role === 'coordinator') {
       fetchUnreadCount();
       const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+    if (user?.role === 'campus_poc') {
+      fetchPoCCounts();
+      const interval = setInterval(fetchPoCCounts, 30000);
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -28,6 +35,19 @@ const Sidebar = ({ isOpen, onClose }) => {
       setForumUnreadCount(count);
     } catch (error) {
       console.error('Error fetching forum unread count:', error);
+    }
+  };
+
+  const fetchPoCCounts = async () => {
+    try {
+      const [profilesRes, skillsRes] = await Promise.all([
+        userAPI.getPendingProfiles(),
+        userAPI.getPendingSkills()
+      ]);
+      setPendingProfilesCount(profilesRes.data?.length || 0);
+      setPendingSkillsCount(skillsRes.data?.length || 0);
+    } catch (error) {
+      console.error('Error fetching PoC counts:', error);
     }
   };
 
@@ -48,9 +68,8 @@ const Sidebar = ({ isOpen, onClose }) => {
         return [
           { path: '/campus-poc', icon: Home, label: 'Dashboard', exact: true },
           { path: '/campus-poc/students', icon: Users, label: 'Students' },
-          { path: '/campus-poc/profile-approvals', icon: ClipboardCheck, label: 'Profile Approvals' },
-          { path: '/campus-poc/skill-approvals', icon: CheckSquare, label: 'Skill Approvals' },
-          { path: '/campus-poc/skills', icon: Settings, label: 'Skill Categories' },
+          { path: '/campus-poc/profile-approvals', icon: ClipboardCheck, label: 'Profile Approvals', badge: pendingProfilesCount },
+          { path: '/campus-poc/skills', icon: CheckSquare, label: 'Skill Management', badge: pendingSkillsCount },
           { path: '/campus-poc/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' },
           { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests' },

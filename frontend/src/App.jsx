@@ -171,7 +171,6 @@ function App() {
         <Route index element={<POCDashboard />} />
         <Route path="students" element={<POCStudents />} />
         <Route path="students/:id" element={<POCStudentDetails />} />
-        <Route path="skill-approvals" element={<POCSkillApprovals />} />
         <Route path="profile-approvals" element={<POCProfileApprovals />} />
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="self-applications" element={<POCSelfApplicationsReview />} />

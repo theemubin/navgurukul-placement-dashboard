@@ -1,15 +1,21 @@
 import { useState, useEffect } from 'react';
-import { skillAPI, settingsAPI } from '../../services/api';
+import { skillAPI, settingsAPI, userAPI } from '../../services/api';
 import { LoadingSpinner, EmptyState, Modal, ConfirmDialog } from '../../components/common/UIComponents';
-import { Search, Plus, Edit2, Trash2, Tag, Layers, Globe, School } from 'lucide-react';
+import { 
+  Search, Plus, Edit2, Trash2, Tag, Layers, Globe, School, 
+  CheckSquare, CheckCircle, XCircle, Clock, LayoutGrid, ClipboardCheck 
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const POCSkills = () => {
+const POCSkillManagement = () => {
+  const [activeTab, setActiveTab] = useState('approvals');
+  const [loading, setLoading] = useState(true);
+  
+  // States for Skill Categories (formerly Skills.jsx)
   const [skills, setSkills] = useState([]);
   const [categories, setCategories] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [schools, setSchools] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -24,42 +30,55 @@ const POCSkills = () => {
     schools: []
   });
 
+  // States for Skill Approvals (formerly SkillApprovals.jsx)
+  const [pendingStudents, setPendingStudents] = useState([]);
+  const [processing, setProcessing] = useState({});
+
   useEffect(() => {
-    fetchSkills();
-    fetchCategoryOptions();
-    fetchSchools();
+    fetchData();
   }, []);
 
-  const fetchSkills = async () => {
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await skillAPI.getSkills();
-      const skillsData = response.data || [];
-      setSkills(skillsData);
-      const uniqueCategories = [...new Set(skillsData.map(s => s.category).filter(Boolean))];
-      setCategories(uniqueCategories);
+      await Promise.all([
+        fetchSkills(),
+        fetchCategoryOptions(),
+        fetchSchools(),
+        fetchPendingSkills()
+      ]);
     } catch (error) {
-      toast.error('Error fetching skills');
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchSkills = async () => {
+    const response = await skillAPI.getSkills();
+    const skillsData = response.data || [];
+    setSkills(skillsData);
+    const uniqueCategories = [...new Set(skillsData.map(s => s.category).filter(Boolean))];
+    setCategories(uniqueCategories);
+  };
+
   const fetchCategoryOptions = async () => {
-    try {
-      const res = await skillAPI.getCategories();
-      setCategoryOptions(res.data || []);
-    } catch (e) { }
+    const res = await skillAPI.getCategories();
+    setCategoryOptions(res.data || []);
   };
 
   const fetchSchools = async () => {
-    try {
-      const res = await settingsAPI.getSettings();
-      const list = res.data?.data?.schools || Object.keys(res.data?.data?.schoolModules || {});
-      setSchools(list);
-    } catch (e) { }
+    const res = await settingsAPI.getSettings();
+    const list = res.data?.data?.schools || Object.keys(res.data?.data?.schoolModules || {});
+    setSchools(list);
   };
 
+  const fetchPendingSkills = async () => {
+    const response = await userAPI.getPendingSkills();
+    setPendingStudents(response.data);
+  };
+
+  // Handlers for Skill Categories
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -72,52 +91,47 @@ const POCSkills = () => {
       }
       setShowModal(false);
       resetForm();
-      // Refresh schools first (in case skill was moved to a different school)
-      await fetchSchools();
-      await fetchSkills();
+      fetchSkills();
     } catch (error) {
-      const msg = error.response?.data?.message ||
-        (error.response?.data?.errors ? error.response.data.errors.map(e => e.msg).join(', ') : null) ||
-        'Error saving skill';
-      toast.error(msg);
+      toast.error('Error saving skill');
     }
   };
 
   const handleDelete = async () => {
-    if (!selectedSkill) return;
     try {
       await skillAPI.deleteSkill(selectedSkill._id);
       toast.success('Skill deleted successfully');
       setShowDeleteDialog(false);
-      setSelectedSkill(null);
-      await fetchSchools();
-      await fetchSkills();
+      fetchSkills();
     } catch (error) {
       toast.error('Error deleting skill');
     }
   };
 
-  const openEditModal = (skill) => {
-    setSelectedSkill(skill);
-    setFormData({
-      name: skill.name,
-      category: skill.category || '',
-      description: skill.description || '',
-      isCommon: Boolean(skill.isCommon),
-      schools: Array.isArray(skill.schools) ? skill.schools : []
-    });
-    setShowModal(true);
-  };
-
-  const openCreateModal = () => {
-    setSelectedSkill(null);
-    resetForm();
-    setShowModal(true);
-  };
-
   const resetForm = () => {
     setFormData({ name: '', category: '', description: '', isCommon: false, schools: [] });
     setSelectedSkill(null);
+  };
+
+  // Handlers for Skill Approvals
+  const handleApproval = async (studentId, skillId, status) => {
+    const key = `${studentId}-${skillId}`;
+    setProcessing(prev => ({ ...prev, [key]: true }));
+    try {
+      await userAPI.approveSkill(studentId, skillId, status);
+      toast.success(`Skill ${status === 'approved' ? 'approved' : 'rejected'} successfully`);
+      fetchPendingSkills();
+    } catch (error) {
+      toast.error('Error processing skill approval');
+    } finally {
+      setProcessing(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleBulkApprove = async (studentId, skillsList) => {
+    for (const skill of skillsList) {
+      await handleApproval(studentId, skill.skill._id, 'approved');
+    }
   };
 
   const filteredSkills = skills.filter(skill => {
@@ -133,258 +147,232 @@ const POCSkills = () => {
     return acc;
   }, {});
 
-  const handleAddSchool = async () => {
-    const name = newSchool.trim();
-    if (!name) return;
-    try {
-      await settingsAPI.addSchool(name);
-      toast.success('School added');
-      setNewSchool('');
-      await fetchSchools();
-      // Refresh skills in case UI grouping depends on updated schools
-      await fetchSkills();
-    } catch (e) {
-      toast.error(e.response?.data?.message || 'Error adding school');
-    }
-  };
+  if (loading) return <LoadingSpinner size="lg" />;
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Skill Management (Campus POC)</h1>
-          <p className="text-gray-600">Manage common and school-wise skills</p>
+          <h1 className="text-2xl font-bold text-gray-900">Skill Management</h1>
+          <p className="text-gray-600">Review approvals and manage skill categories</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Add new school"
-            value={newSchool}
-            onChange={(e) => setNewSchool(e.target.value)}
-            className="w-48"
-          />
-          <button onClick={handleAddSchool} className="btn btn-secondary" title="Add school">
-            Add School
-          </button>
-          <button onClick={openCreateModal} className="btn btn-primary flex items-center gap-2" title="Add skill">
-            <Plus className="w-4 h-4" />
-            Add Skill
-          </button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="card">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search skills..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 w-full"
-            />
-          </div>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="md:w-48"
+        {activeTab === 'categories' && (
+          <button 
+            onClick={() => { setSelectedSkill(null); resetForm(); setShowModal(true); }} 
+            className="btn btn-primary flex items-center gap-2"
           >
-            <option value="">All Categories</option>
-            {categories.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-        </div>
+            <Plus className="w-4 h-4" /> Add New Skill
+          </button>
+        )}
       </div>
 
-      {/* Common Skills */}
-      <div className="card">
-        <div className="flex items-center gap-2 mb-4">
-          <Globe className="w-5 h-5 text-gray-500" />
-          <h2 className="text-lg font-semibold text-gray-900">Common Skills</h2>
-          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-            {filteredCommonSkills.length} skills
-          </span>
+      {/* Tabs */}
+      <div className="flex gap-4 border-b">
+        <button
+          onClick={() => setActiveTab('approvals')}
+          className={`px-4 py-2 border-b-2 font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 ${
+            activeTab === 'approvals' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500'
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4" />
+          Pending Approvals
+          {pendingStudents.length > 0 && (
+            <span className="bg-primary-600 text-white px-1.5 py-0.5 rounded-full text-[10px] ml-1">
+              {pendingStudents.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('categories')}
+          className={`px-4 py-2 border-b-2 font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 ${
+            activeTab === 'categories' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500'
+          }`}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          Skill Categories
+        </button>
+      </div>
+
+      {activeTab === 'approvals' ? (
+        /* Skill Approvals Tab Content */
+        <div className="space-y-4">
+          {pendingStudents.length > 0 ? (
+            pendingStudents.map((student) => (
+              <div key={student._id} className="card">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center font-bold text-primary-700">
+                      {student.firstName?.[0]}{student.lastName?.[0]}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">{student.firstName} {student.lastName}</h3>
+                      <p className="text-xs text-gray-500">{student.email}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleBulkApprove(student._id, student.pendingSkills)}
+                    className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-100 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-green-100 transition-colors"
+                  >
+                    Approve All ({student.pendingSkills?.length})
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {student.pendingSkills?.map((skillItem) => {
+                    const key = `${student._id}-${skillItem.skill?._id}`;
+                    const isProcessing = processing[key];
+                    return (
+                      <div key={skillItem.skill?._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                        <div className="flex items-center gap-3">
+                          <Clock className="w-4 h-4 text-amber-500" />
+                          <div>
+                            <p className="font-bold text-sm text-gray-800">{skillItem.skill?.name}</p>
+                            <p className="text-[10px] text-gray-500 uppercase font-bold">{skillItem.skill?.category?.replace('_', ' ')}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleApproval(student._id, skillItem.skill?._id, 'rejected')}
+                            disabled={isProcessing}
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                          >
+                            <XCircle className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleApproval(student._id, skillItem.skill?._id, 'approved')}
+                            disabled={isProcessing}
+                            className="p-1.5 text-green-500 hover:bg-green-50 rounded-lg disabled:opacity-50"
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          ) : (
+            <EmptyState icon={CheckSquare} title="No pending approvals" description="All student skills have been reviewed" />
+          )}
         </div>
-        {filteredCommonSkills.length === 0 ? (
-          <p className="text-sm text-gray-500">No common skills found.</p>
-        ) : (
-          <div className="flex flex-wrap gap-3">
-            {filteredCommonSkills.map((skill) => (
-              <div
-                key={skill._id}
-                className={`group relative px-4 py-2 rounded-lg border bg-gray-100 text-gray-800 border-gray-200 flex items-center gap-3`}
+      ) : (
+        /* Skill Categories Tab Content */
+        <div className="space-y-6">
+          <div className="card">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search skills..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-full"
+                />
+              </div>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="md:w-48 text-sm"
               >
-                <span className="font-medium">{skill.name}</span>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                  <button
-                    onClick={() => openEditModal(skill)}
-                    className="p-1.5 hover:bg-white/50 rounded"
-                    title="Edit"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedSkill(skill);
-                      setShowDeleteDialog(true);
-                    }}
-                    className="p-1.5 hover:bg-white/50 rounded text-red-600"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                <option value="">All Categories</option>
+                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center gap-2 mb-4">
+              <Globe className="w-4 h-4 text-gray-500" />
+              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Common Skills</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {filteredCommonSkills.map((skill) => (
+                <div key={skill._id} className="group relative px-3 py-1.5 rounded-lg border bg-white border-gray-200 flex items-center gap-2 hover:border-primary-300 transition-colors shadow-sm">
+                  <span className="text-sm font-medium text-gray-700">{skill.name}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                    <button onClick={() => { setSelectedSkill(skill); setFormData({ name: skill.name, category: skill.category || '', description: skill.description || '', isCommon: true, schools: skill.schools || [] }); setShowModal(true); }} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-primary-600"><Edit2 className="w-3 h-3" /></button>
+                    <button onClick={() => { setSelectedSkill(skill); setShowDeleteDialog(true); }} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600"><Trash2 className="w-3 h-3" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {schools.map((school) => (
+              <div key={school} className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <School className="w-4 h-4 text-gray-500" />
+                    <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">{school}</h2>
+                  </div>
+                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-full">
+                    {filteredSchoolSkills[school]?.length || 0} Skills
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(filteredSchoolSkills[school] || []).map((skill) => (
+                    <div key={skill._id} className="group relative px-3 py-1.5 rounded-lg border bg-white border-gray-200 flex items-center gap-2 hover:border-primary-300 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-gray-700">{skill.name}</span>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                        <button onClick={() => { setSelectedSkill(skill); setFormData({ name: skill.name, category: skill.category || '', description: skill.description || '', isCommon: false, schools: skill.schools || [] }); setShowModal(true); }} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-primary-600"><Edit2 className="w-3 h-3" /></button>
+                        <button onClick={() => { setSelectedSkill(skill); setShowDeleteDialog(true); }} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600"><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* School-wise Skills */}
-      <div className="card">
-        <div className="flex items-center gap-2 mb-4">
-          <School className="w-5 h-5 text-gray-500" />
-          <h2 className="text-lg font-semibold text-gray-900">School-wise Skills</h2>
         </div>
-        <div className="space-y-4">
-          {schools.map((school) => (
-            <div key={school}>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium text-gray-700">{school}</span>
-                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                  {filteredSchoolSkills[school]?.length || 0} skills
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                {(filteredSchoolSkills[school] || []).map((skill) => (
-                  <div
-                    key={skill._id}
-                    className={`group relative px-4 py-2 rounded-lg border bg-gray-100 text-gray-800 border-gray-200 flex items-center gap-3`}
-                  >
-                    <span className="font-medium">{skill.name}</span>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                      <button
-                        onClick={() => openEditModal(skill)}
-                        className="p-1.5 hover:bg-white/50 rounded"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedSkill(skill);
-                          setShowDeleteDialog(true);
-                        }}
-                        className="p-1.5 hover:bg-white/50 rounded text-red-600"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
-      {/* Add/Edit Modal */}
-      <Modal
-        isOpen={showModal}
-        onClose={() => {
-          setShowModal(false);
-          resetForm();
-        }}
-        title={selectedSkill ? 'Edit Skill' : 'Add New Skill'}
-      >
+      {/* Shared Modals */}
+      <Modal isOpen={showModal} onClose={() => { setShowModal(false); resetForm(); }} title={selectedSkill ? 'Edit Skill' : 'Add New Skill'}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Skill Name *
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g., JavaScript, Python, React"
-              required
-            />
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Skill Name *</label>
+            <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., JavaScript" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category
-            </label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              required
-            >
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+            <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} required>
               <option value="">Select category</option>
-              {categoryOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
+              {categoryOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              id="isCommon"
-              type="checkbox"
-              checked={formData.isCommon}
-              onChange={(e) => setFormData({ ...formData, isCommon: e.target.checked })}
-            />
+            <input id="isCommon" type="checkbox" checked={formData.isCommon} onChange={(e) => setFormData({ ...formData, isCommon: e.target.checked })} />
             <label htmlFor="isCommon" className="text-sm text-gray-700">Mark as Common Skill</label>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              School Tags
-            </label>
-            <select
-              multiple
-              value={formData.schools}
-              onChange={(e) => {
+          {!formData.isCommon && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">School Tags</label>
+              <select multiple value={formData.schools} onChange={(e) => {
                 const options = Array.from(e.target.selectedOptions).map(opt => opt.value);
                 setFormData({ ...formData, schools: options });
-              }}
-              className="w-full"
-            >
-              {schools.map(school => (
-                <option key={school} value={school}>{school}</option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">Hold Cmd/Ctrl to select multiple schools</p>
-          </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => {
-                setShowModal(false);
-                resetForm();
-              }}
-              className="btn btn-secondary"
-            >
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary">
-              {selectedSkill ? 'Update Skill' : 'Add Skill'}
-            </button>
+              }} className="w-full h-32">
+                {schools.map(school => <option key={school} value={school}>{school}</option>)}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-1">Hold Cmd/Ctrl to select multiple schools</p>
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="btn btn-secondary">Cancel</button>
+            <button type="submit" className="btn btn-primary">{selectedSkill ? 'Update Skill' : 'Add Skill'}</button>
           </div>
         </form>
       </Modal>
 
-      {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={showDeleteDialog}
-        onClose={() => {
-          setShowDeleteDialog(false);
-          setSelectedSkill(null);
-        }}
+        onClose={() => { setShowDeleteDialog(false); setSelectedSkill(null); }}
         onConfirm={handleDelete}
         title="Delete Skill"
-        message={`Are you sure you want to delete "${selectedSkill?.name}"? This action cannot be undone and may affect jobs and student profiles.`}
+        message={`Are you sure you want to delete "${selectedSkill?.name}"?`}
         confirmLabel="Delete"
         type="danger"
       />
@@ -392,5 +380,4 @@ const POCSkills = () => {
   );
 };
 
-export const POCSkillsComponent = POCSkills;
-export default POCSkills;
+export default POCSkillManagement;

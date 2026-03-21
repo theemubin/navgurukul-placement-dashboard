@@ -534,14 +534,14 @@ const POCDashboard = () => {
           <div className="space-y-3">
             <h3 className="font-semibold text-gray-900">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-3">
-              <Link to="/campus-poc/skill-approvals" className="card hover:shadow-md transition-shadow p-3">
+              <Link to="/campus-poc/skills" className="card hover:shadow-md transition-shadow p-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-yellow-100 rounded-lg">
                     <CheckSquare className="w-5 h-5 text-yellow-600" />
                   </div>
                   <div>
-                    <p className="font-medium text-sm">Skill Approvals</p>
-                    <p className="text-xs text-gray-500">{stats?.pendingSkillApprovals || 0} pending</p>
+                    <p className="font-medium text-sm">Skill Management</p>
+                    <p className="text-xs text-gray-500">{pendingSkills.length} pending</p>
                   </div>
                 </div>
               </Link>
