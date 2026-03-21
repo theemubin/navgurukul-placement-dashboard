@@ -402,6 +402,7 @@ const userSchema = new mongoose.Schema({
         attendancePercentage: { value: Number, lastUpdated: Date },
         currentSchool: { value: String, lastUpdated: Date },
         currentModule: { value: String, lastUpdated: Date },
+        currentStatus: { value: String, lastUpdated: Date },
         admissionDate: { value: Date, lastUpdated: Date },
         gender: { value: String, lastUpdated: Date },
         englishSpeaking: { value: String, lastUpdated: Date },
