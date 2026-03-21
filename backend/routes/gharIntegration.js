@@ -93,7 +93,7 @@ router.post('/sync-student', isAuthenticated, async (req, res) => {
         // Find local student
         const student = userId
             ? await User.findById(userId)
-            : await User.findOne({ email, role: 'student' });
+            : await User.findOne({ email: new RegExp(`^${email}$`, 'i'), role: 'student' });
 
         if (!student) {
             return res.status(404).json({
