@@ -1581,7 +1581,8 @@ router.post('/sync-student', auth, authorize('campus_poc', 'coordinator', 'manag
         });
 
     if (!student) {
-      return res.status(404).json({ success: false, message: `Student with email ${email} not found in our database.` });
+      console.warn(`[StudentSync] No student found with email: "${email}" or ID: "${userId}"`);
+      return res.status(400).json({ success: false, message: `Student with email ${email} not found in our database.` });
     }
 
     // Sync data from Ghar API
