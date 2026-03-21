@@ -411,7 +411,7 @@ const POCDashboard = () => {
                 Cancel
               </button>
               <button
-                onClick={handleUpdateManagedCampuses}
+                onClick={() => handleUpdateManagedCampuses(selectedCampuses)}
                 disabled={savingCampuses || selectedCampuses.length === 0}
                 className="btn btn-primary"
               >
