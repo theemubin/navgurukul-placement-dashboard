@@ -83,8 +83,8 @@ const POCStudents = () => {
       const updatedData = response.data.data?.student;
       toast.success('Synced with Ghar successfully');
       
-      // Update local state instead of full reload
-      setStudents(prev => prev.map(s => s.email === email ? {
+      // Update local state instead of full reload (case-insensitive email matching)
+      setStudents(prev => prev.map(s => s.email?.toLowerCase() === email?.toLowerCase() ? {
         ...s,
         studentProfile: {
           ...s.studentProfile,
@@ -92,8 +92,9 @@ const POCStudents = () => {
         }
       } : s));
       
-      // Still refresh stats as they depend on overall counts
+      // Still refresh stats and full list as they depend on overall counts
       fetchStats();
+      fetchStudents();
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
       toast.error(error.response?.data?.message || 'Failed to sync with Ghar');

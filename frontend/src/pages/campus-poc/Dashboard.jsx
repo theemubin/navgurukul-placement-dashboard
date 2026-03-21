@@ -93,12 +93,15 @@ const POCDashboard = () => {
         if (!prev) return prev;
         return {
           ...prev,
-          students: prev.students.map(s => s.email === email ? {
+          students: prev.students.map(s => s.email?.toLowerCase() === email?.toLowerCase() ? {
             ...s,
             placementStatus: updatedData.resolvedProfile?.currentStatus || s.placementStatus
           } : s)
         };
       });
+
+      // Also refresh the overall stats in the background
+      fetchDashboardData();
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
       toast.error(error.response?.data?.message || 'Failed to sync with Ghar', { id: 'ghar-sync' });
@@ -278,7 +281,8 @@ const POCDashboard = () => {
       placed: { color: 'green', label: 'Placed' },
       not_applied: { color: 'gray', label: 'Not Applied' }
     };
-    const config = statusConfig[status] || { color: 'gray', label: status };
+    const statusKey = (status || '').toLowerCase().replace(' ', '_');
+    const config = statusConfig[statusKey] || { color: 'gray', label: status };
     return <Badge variant={config.color}>{config.label}</Badge>;
   };
 
