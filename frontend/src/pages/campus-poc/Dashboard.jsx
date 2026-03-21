@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow, isPast, format } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { statsAPI, placementCycleAPI, userAPI, campusAPI } from '../../services/api';
+import { statsAPI, placementCycleAPI, userAPI, campusAPI, gharAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
 import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
-  CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings
+  CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -61,18 +61,31 @@ const POCDashboard = () => {
     }
   };
 
-  const handleSaveCampuses = async () => {
-    setSavingCampuses(true);
+  const handleUpdateManagedCampuses = async (campusIds) => {
+    setSavingCampuses(true); // Assuming this is still relevant for the new function
     try {
-      await userAPI.updateManagedCampuses(selectedCampuses);
-      toast.success('Managed campuses updated successfully');
-      setShowCampusModal(false);
+      await userAPI.updateManagedCampuses(campusIds);
+      toast.success('Managed campuses updated');
+      setShowCampusModal(false); // Changed from setShowCampusSelector to setShowCampusModal
       fetchCampusData();
-      fetchDashboardData(); // Refresh stats for new campuses
+      fetchDashboardData();
     } catch (error) {
       toast.error('Failed to update managed campuses');
     } finally {
       setSavingCampuses(false);
+    }
+  };
+
+  const handleGharSync = async (email) => {
+    if (!email) return;
+    try {
+      toast.loading('Syncing with Ghar...', { id: 'ghar-sync' });
+      await gharAPI.syncStudent(email);
+      toast.success('Synced with Ghar successfully', { id: 'ghar-sync' });
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error syncing with Ghar:', error);
+      toast.error(error.response?.data?.message || 'Failed to sync with Ghar', { id: 'ghar-sync' });
     }
   };
 
@@ -1060,12 +1073,21 @@ const POCDashboard = () => {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <Link
-                            to={`/campus-poc/students/${student.studentId}`}
-                            className="text-primary-600 hover:text-primary-800"
-                          >
-                            <ArrowRight className="w-4 h-4" />
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleGharSync(student.email)}
+                              className="p-1 hover:bg-indigo-50 rounded-md text-gray-400 hover:text-indigo-600 transition-colors"
+                              title="Sync status with Ghar"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                            <Link
+                              to={`/campus-poc/students/${student.studentId}`}
+                              className="text-primary-600 hover:text-primary-800"
+                            >
+                              <ArrowRight className="w-4 h-4" />
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     ))}

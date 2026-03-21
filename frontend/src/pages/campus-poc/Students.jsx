@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { userAPI, statsAPI } from '../../services/api';
+import { userAPI, statsAPI, gharAPI } from '../../services/api';
 import { LoadingSpinner, Pagination, EmptyState, StatusBadge, Button, StatsCard } from '../../components/common/UIComponents';
 import { BulkUploadModal } from '../../components/common/BulkUpload';
-import { Users, Search, ChevronRight, GraduationCap, Upload, Filter, UserCheck, UserX, Clock, Briefcase } from 'lucide-react';
+import { Users, Search, ChevronRight, GraduationCap, Upload, Filter, UserCheck, UserX, Clock, Briefcase, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const schools = [
@@ -67,6 +67,25 @@ const POCStudents = () => {
     } catch (error) {
       console.error('Error updating status:', error);
       toast.error('Failed to update status');
+    }
+  };
+
+  const handleGharSync = async (e, email) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!email) {
+      toast.error('Student email not found');
+      return;
+    }
+
+    try {
+      await gharAPI.syncStudent(email);
+      toast.success('Synced with Ghar successfully');
+      fetchStudents();
+      fetchStats();
+    } catch (error) {
+      console.error('Error syncing with Ghar:', error);
+      toast.error(error.response?.data?.message || 'Failed to sync with Ghar');
     }
   };
 
@@ -221,19 +240,29 @@ const POCStudents = () => {
                       </div>
                       <div>
                         <span className="text-gray-400 font-bold uppercase tracking-tighter block mb-0.5">Status</span>
-                        <select
-                          value={student.studentProfile?.currentStatus || 'Active'}
-                          onChange={(e) => handleStatusChange(e, student._id, e.target.value)}
-                          className="text-[10px] font-bold py-0.5 px-1.5 h-auto border-gray-200 rounded bg-gray-50 focus:bg-white"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <option value="Active">Active</option>
-                          <option value="Placed">Placed</option>
-                          <option value="Dropout">Dropout</option>
-                          <option value="Internship Paid">Paid Intern</option>
-                          <option value="Paid Project">Paid Proj</option>
-                          <option value="Internship UnPaid">Unpaid Intern</option>
-                        </select>
+                        <div className="flex items-center gap-1 group/sync">
+                          <select
+                            value={student.studentProfile?.currentStatus || 'Active'}
+                            onChange={(e) => handleStatusChange(e, student._id, e.target.value)}
+                            className="text-[10px] font-bold py-0.5 px-1.5 h-auto border-gray-200 rounded bg-gray-50 focus:bg-white"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <option value="Active">Active</option>
+                            <option value="Placed">Placed</option>
+                            <option value="Dropout">Dropout</option>
+                            <option value="Internship Paid">Paid Intern</option>
+                            <option value="Paid Project">Paid Proj</option>
+                            <option value="Internship UnPaid">Unpaid Intern</option>
+                          </select>
+                          <button
+                            onClick={(e) => handleGharSync(e, student.email)}
+                            className="p-1 hover:bg-primary-50 rounded-md text-gray-400 hover:text-primary-600 transition-colors"
+                            title="Sync status with Ghar"
+                            disabled={loading}
+                          >
+                            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <span className="text-gray-400 font-bold uppercase tracking-tighter block mb-0.5">Profile</span>

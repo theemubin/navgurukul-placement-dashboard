@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { userAPI, applicationAPI, jobReadinessAPI } from '../../services/api';
+import { userAPI, applicationAPI, jobReadinessAPI, gharAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
 import {
   ArrowLeft, User, Mail, Phone, GraduationCap, Linkedin,
   Github, Globe, FileText, Star, CheckCircle, XCircle, Clock,
-  CheckSquare
+  CheckSquare, RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -139,6 +139,18 @@ const POCStudentDetails = () => {
     }
   };
 
+  const handleGharSync = async () => {
+    if (!student?.email) return;
+    try {
+      await gharAPI.syncStudent(student.email);
+      toast.success('Synced with Ghar successfully');
+      fetchStudentData();
+    } catch (error) {
+      console.error('Error syncing with Ghar:', error);
+      toast.error(error.response?.data?.message || 'Failed to sync with Ghar');
+    }
+  };
+
   const getCriteriaByCategory = () => {
     const categories = {};
     if (!jobReadinessConfig.length || !jobReadiness) return categories;
@@ -263,18 +275,27 @@ const POCStudentDetails = () => {
               </div>
               <div className="w-px h-8 bg-gray-200 md:hidden" />
               <div className="text-center md:text-right">
-                <select
-                  value={profile.currentStatus || 'Active'}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  className="text-xs font-bold py-2 px-3 border-2 border-primary-100 rounded-xl bg-white focus:ring-4 focus:ring-primary-50 appearance-none text-primary-700 shadow-sm"
-                >
-                  <option value="Active">🟢 Active</option>
-                  <option value="Placed">🎉 Placed</option>
-                  <option value="Dropout">🛑 Dropout</option>
-                  <option value="Internship Paid">💼 Paid Intern</option>
-                  <option value="Paid Project">🔨 Paid Project</option>
-                  <option value="Internship UnPaid">📝 Unpaid Intern</option>
-                </select>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={profile.currentStatus || 'Active'}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    className="text-xs font-bold py-2 px-3 border-2 border-primary-100 rounded-xl bg-white focus:ring-4 focus:ring-primary-50 appearance-none text-primary-700 shadow-sm"
+                  >
+                    <option value="Active">🟢 Active</option>
+                    <option value="Placed">🎉 Placed</option>
+                    <option value="Dropout">🛑 Dropout</option>
+                    <option value="Internship Paid">💼 Paid Intern</option>
+                    <option value="Paid Project">🔨 Paid Project</option>
+                    <option value="Internship UnPaid">📝 Unpaid Intern</option>
+                  </select>
+                  <button
+                    onClick={handleGharSync}
+                    className="p-2 bg-white border-2 border-primary-100 rounded-xl text-primary-600 hover:bg-primary-50 transition-colors shadow-sm"
+                    title="Sync with Ghar"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Placememt Status</p>
               </div>
             </div>
