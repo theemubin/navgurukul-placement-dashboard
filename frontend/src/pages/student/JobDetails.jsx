@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI, campusAPI } from '../../services/api';
+import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI, statsAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Modal } from '../../components/common/UIComponents';
 import {
   ArrowLeft, Briefcase, MapPin, IndianRupee, Calendar, Clock,
@@ -107,11 +107,16 @@ const JobDetails = () => {
   const [askingQuestion, setAskingQuestion] = useState(false);
 
   useEffect(() => {
-    fetchJobWithMatch();
-    checkIfApplied();
-    fetchProfileStatus();
-    fetchReadiness();
-  }, [id]);
+    if (user?.role === 'student') {
+      fetchJobWithMatch();
+      checkIfApplied();
+      fetchProfileStatus();
+      fetchReadiness();
+    } else {
+      // For POC/Coordinator/Manager
+      fetchJobOnly();
+    }
+  }, [id, user?.role]);
 
   useEffect(() => {
     if (job) {
@@ -169,25 +174,30 @@ const JobDetails = () => {
   const fetchJobWithMatch = async () => {
     try {
       setMatchLoading(true);
-      // Try to get job with match details first
-      try {
-        const matchResponse = await jobAPI.getJobWithMatch(id);
-        setJob(matchResponse.data);
-        setMatchDetails(matchResponse.data.matchDetails);
-        setInterestRequest(matchResponse.data.interestRequest);
-      } catch (matchError) {
-        // Fallback to regular job fetch
-        const response = await jobAPI.getJob(id);
-        setJob(response.data);
-        setMatchDetails(null);
-        setInterestRequest(null);
-      }
+      const matchResponse = await jobAPI.getJobWithMatch(id);
+      setJob(matchResponse.data);
+      setMatchDetails(matchResponse.data.matchDetails);
+      setInterestRequest(matchResponse.data.interestRequest);
+    } catch (error) {
+      console.error('Error loading job match details:', error);
+      // Fallback to regular job if match fetch fails (perhaps student has no profile)
+      fetchJobOnly();
+    } finally {
+      setMatchLoading(false);
+    }
+  };
+
+  const fetchJobOnly = async () => {
+    try {
+      setLoading(true);
+      const response = await jobAPI.getJob(id);
+      setJob(response.data);
+      setMatchDetails(null);
     } catch (error) {
       toast.error('Error loading job details');
-      navigate('/student/jobs');
+      navigate(user?.role === 'student' ? '/student/jobs' : '/campus-poc');
     } finally {
       setLoading(false);
-      setMatchLoading(false);
     }
   };
 
@@ -294,7 +304,7 @@ const JobDetails = () => {
   const fetchEligibleStudents = async () => {
     setEligibleStudentsModal(prev => ({ ...prev, open: true, loading: true }));
     try {
-      const response = await campusAPI.getEligibleStudents(id);
+      const response = await statsAPI.getJobEligibleStudents(id);
       setEligibleStudentsModal(prev => ({ ...prev, students: response.data, loading: false }));
     } catch (error) {
       console.error('Error fetching eligible students:', error);
