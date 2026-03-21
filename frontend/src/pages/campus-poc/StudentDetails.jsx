@@ -143,7 +143,7 @@ const POCStudentDetails = () => {
     if (!student?.email) return;
     try {
       const response = await gharAPI.syncStudent(student.email);
-      const updatedData = response.data.student;
+      const updatedData = response.data.data?.student;
       toast.success('Synced with Ghar successfully');
       
       // Update local state instead of full data re-fetch
