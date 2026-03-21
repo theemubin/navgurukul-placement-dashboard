@@ -184,6 +184,7 @@ const JobDetails = () => {
       fetchJobOnly();
     } finally {
       setMatchLoading(false);
+      setLoading(false);
     }
   };
 
