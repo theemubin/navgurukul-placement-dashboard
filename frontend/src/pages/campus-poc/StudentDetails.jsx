@@ -294,7 +294,12 @@ const POCStudentDetails = () => {
                   >
                     <option value="Active">🟢 Active</option>
                     <option value="Placed">🎉 Placed</option>
+                    <option value="Intern (In Campus)">🏫 Intern (In Campus)</option>
+                    <option value="Intern (Out Campus)">🚀 Intern (Out Campus)</option>
                     <option value="Dropout">🛑 Dropout</option>
+                    <option value="DropOut">🚩 DropOut</option>
+                    <option value="InActive">💤 InActive</option>
+                    <option value="Completed-Opted out for placement">📪 Opted out</option>
                     <option value="Internship Paid">💼 Paid Intern</option>
                     <option value="Paid Project">🔨 Paid Project</option>
                     <option value="Internship UnPaid">📝 Unpaid Intern</option>
