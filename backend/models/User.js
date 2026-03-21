@@ -127,7 +127,7 @@ const userSchema = new mongoose.Schema({
     },
     currentStatus: {
       type: String,
-      enum: ['Active', 'In active', 'Long Leave', 'Dropout', 'Placed'],
+      enum: ['Active', 'In active', 'Long Leave', 'Dropout', 'Placed', 'Intern (In Campus)', 'Intern (Out Campus)'],
       default: 'Active'
     },
     isPaidProject: {
@@ -547,9 +547,12 @@ userSchema.statics.syncGharData = async function (email, externalData) {
     const trimmedStatus = statusValue.toString().trim();
     gharData.currentStatus = { value: trimmedStatus, lastUpdated: now };
     
-    // Explicitly update local status if Ghar says Placed, to ensure it's truly persistent
-    if (trimmedStatus === 'Placed') {
-      user.studentProfile.currentStatus = 'Placed';
+    // Explicitly update local status for Placed and Intern statuses to ensure they are truly persistent
+    if (trimmedStatus === 'Placed' || trimmedStatus.includes('Intern')) {
+      // Ensure we mapping exactly to our enum values
+      if (trimmedStatus === 'Placed') user.studentProfile.currentStatus = 'Placed';
+      else if (trimmedStatus.includes('In Campus')) user.studentProfile.currentStatus = 'Intern (In Campus)';
+      else if (trimmedStatus.includes('Out Campus')) user.studentProfile.currentStatus = 'Intern (Out Campus)';
     }
   }
 
