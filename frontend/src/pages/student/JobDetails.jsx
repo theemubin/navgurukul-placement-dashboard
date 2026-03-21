@@ -305,7 +305,7 @@ const JobDetails = () => {
     setEligibleStudentsModal(prev => ({ ...prev, open: true, loading: true }));
     try {
       const response = await statsAPI.getJobEligibleStudents(id);
-      setEligibleStudentsModal(prev => ({ ...prev, students: response.data, loading: false }));
+      setEligibleStudentsModal(prev => ({ ...prev, students: response.data.students, loading: false }));
     } catch (error) {
       console.error('Error fetching eligible students:', error);
       toast.error('Failed to load eligible students');
