@@ -44,7 +44,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         userAPI.getPendingProfiles(),
         userAPI.getPendingSkills()
       ]);
-      setPendingProfilesCount(profilesRes.data?.length || 0);
+      setPendingProfilesCount(profilesRes.data?.data?.length || profilesRes.data?.total || 0);
       setPendingSkillsCount(skillsRes.data?.length || 0);
     } catch (error) {
       console.error('Error fetching PoC counts:', error);

@@ -14,6 +14,18 @@ const schools = [
   'School of Second Chance'
 ];
 
+const ProgressBar = ({ progress, total }) => {
+  const percentage = total > 0 ? Math.round((progress / total) * 100) : 0;
+  return (
+    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+      <div 
+        className="bg-primary-600 h-full transition-all duration-300 ease-out"
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+  );
+};
+
 const POCStudents = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,6 +111,38 @@ const POCStudents = () => {
     }
   };
 
+  const [syncAllLoading, setSyncAllLoading] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+
+  const handleSyncAll = async () => {
+    if (!students.length) return;
+    setSyncAllLoading(true);
+    setSyncProgress(0);
+    
+    let successCount = 0;
+    let failCount = 0;
+
+    toast.loading('Starting batch sync...', { id: 'batch-sync' });
+
+    for (let i = 0; i < students.length; i++) {
+      const student = students[i];
+      if (student.email) {
+        try {
+          await gharAPI.syncStudent(student.email);
+          successCount++;
+        } catch (err) {
+          failCount++;
+        }
+      }
+      setSyncProgress(i + 1);
+    }
+
+    setSyncAllLoading(false);
+    toast.success(`Batch sync completed! ${successCount} successful, ${failCount} failed.`, { id: 'batch-sync' });
+    fetchStudents();
+    fetchStats();
+  };
+
   const getApprovedSkillsCount = (skills) => {
     return skills?.filter(s => s.status === 'approved').length || 0;
   };
@@ -115,11 +159,25 @@ const POCStudents = () => {
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Students</h1>
           <p className="text-gray-500 text-sm">View and manage students from your campus</p>
         </div>
-        <Button onClick={() => setBulkUploadModal(true)} className="w-full md:w-auto shadow-sm">
-          <Upload className="w-4 h-4 mr-2" />
-          <span className="hidden md:inline">Bulk Upload Students</span>
-          <span className="md:hidden text-sm">Bulk Upload</span>
-        </Button>
+        <div className="flex flex-col md:flex-row gap-3">
+          {syncAllLoading && (
+            <div className="flex flex-col items-end justify-center">
+              <span className="text-[10px] font-bold text-primary-600 mb-1">SYNCING: {syncProgress}/{students.length}</span>
+              <div className="w-32">
+                <ProgressBar progress={syncProgress} total={students.length} />
+              </div>
+            </div>
+          )}
+          <Button 
+            onClick={handleSyncAll} 
+            disabled={syncAllLoading || loading || students.length === 0}
+            variant="outline"
+            className="w-full md:w-auto shadow-sm border-primary-200 text-primary-700 hover:bg-primary-50"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncAllLoading ? 'animate-spin' : ''}`} />
+            Sync All Status
+          </Button>
+        </div>
       </div>
 
       {/* Stats Dashboard */}
