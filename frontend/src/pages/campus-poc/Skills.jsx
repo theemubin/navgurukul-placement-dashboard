@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { skillAPI, settingsAPI, userAPI } from '../../services/api';
 import { LoadingSpinner, EmptyState, Modal, ConfirmDialog } from '../../components/common/UIComponents';
+import { useAuth } from '../../context/AuthContext';
 import { 
   Search, Plus, Edit2, Trash2, Tag, Layers, Globe, School, 
-  CheckSquare, CheckCircle, XCircle, Clock, LayoutGrid, ClipboardCheck 
+  CheckSquare, CheckCircle, XCircle, Clock, LayoutGrid, ClipboardCheck,
+  MessageCircle, TrendingUp, Award
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const POCSkillManagement = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('approvals');
   const [loading, setLoading] = useState(true);
   
@@ -34,9 +37,21 @@ const POCSkillManagement = () => {
   const [pendingStudents, setPendingStudents] = useState([]);
   const [processing, setProcessing] = useState({});
 
+  // States for Communication Tab
+  const [communicationStudents, setCommunicationStudents] = useState([]);
+  const [communicationLoading, setCommunicationLoading] = useState(false);
+  const [selectedCampus, setSelectedCampus] = useState('');
+  const [campusList, setCampusList] = useState([]);
+
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'communication') {
+      fetchCommunicationStudents();
+    }
+  }, [selectedCampus, activeTab]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -45,12 +60,54 @@ const POCSkillManagement = () => {
         fetchSkills(),
         fetchCategoryOptions(),
         fetchSchools(),
-        fetchPendingSkills()
+        fetchPendingSkills(),
+        fetchCampuses()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCampuses = async () => {
+    try {
+      if (user?.role === 'campus_poc') {
+        // For POC, use their managed campuses or their campus
+        const managedCampuses = user?.managedCampuses?.length > 0 ? user.managedCampuses : (user?.campus ? [user.campus] : []);
+        setCampusList(managedCampuses);
+        if (managedCampuses.length > 0 && !selectedCampus) {
+          setSelectedCampus(managedCampuses[0]?._id || managedCampuses[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching campuses:', error);
+    }
+  };
+
+  const fetchCommunicationStudents = async () => {
+    if (!selectedCampus) return;
+    
+    setCommunicationLoading(true);
+    try {
+      const response = await userAPI.getStudents({
+        campus: selectedCampus,
+        limit: 1000,
+        summary: 'false'
+      });
+      
+      const students = response.data.students || [];
+      const studentsWithEnglish = students.filter(s => 
+        s.studentProfile?.englishProficiency?.speaking || 
+        s.studentProfile?.englishProficiency?.writing
+      );
+      
+      setCommunicationStudents(studentsWithEnglish);
+    } catch (error) {
+      console.error('Error fetching communication students:', error);
+      toast.error('Error loading student communication data');
+    } finally {
+      setCommunicationLoading(false);
     }
   };
 
@@ -134,6 +191,43 @@ const POCSkillManagement = () => {
     }
   };
 
+  // Utility functions for Communication Tab
+  const cefrOrder = { 'A1': 1, 'A2': 2, 'B1': 3, 'B2': 4, 'C1': 5, 'C2': 6 };
+  
+  const isJobReady = (level) => {
+    return cefrOrder[level] >= cefrOrder['B2'];
+  };
+
+  const getCefrColor = (level) => {
+    const order = cefrOrder[level] || 0;
+    if (order >= cefrOrder['B2']) return 'text-green-600 bg-green-50';
+    if (order >= cefrOrder['B1']) return 'text-blue-600 bg-blue-50';
+    if (order >= cefrOrder['A2']) return 'text-yellow-600 bg-yellow-50';
+    return 'text-gray-600 bg-gray-50';
+  };
+
+  const getCefrLabel = (level) => {
+    const labels = {
+      'A1': 'Beginner',
+      'A2': 'Elementary',
+      'B1': 'Intermediate',
+      'B2': 'Upper Intermediate',
+      'C1': 'Advanced',
+      'C2': 'Proficient'
+    };
+    return labels[level] || level || '-';
+  };
+
+  const getJobReadyPercentage = () => {
+    if (communicationStudents.length === 0) return 0;
+    const ready = communicationStudents.filter(s => {
+      const speaking = s.studentProfile?.englishProficiency?.speaking;
+      const writing = s.studentProfile?.englishProficiency?.writing;
+      return isJobReady(speaking) && isJobReady(writing);
+    }).length;
+    return Math.round((ready / communicationStudents.length) * 100);
+  };
+
   const filteredSkills = skills.filter(skill => {
     const matchesSearch = skill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       skill.category?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -191,6 +285,20 @@ const POCSkillManagement = () => {
         >
           <LayoutGrid className="w-4 h-4" />
           Skill Categories
+        </button>
+        <button
+          onClick={() => setActiveTab('communication')}
+          className={`px-4 py-2 border-b-2 font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 ${
+            activeTab === 'communication' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500'
+          }`}
+        >
+          <MessageCircle className="w-4 h-4" />
+          Communication
+          {communicationStudents.length > 0 && (
+            <span className="bg-primary-600 text-white px-1.5 py-0.5 rounded-full text-[10px] ml-1">
+              {communicationStudents.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -328,7 +436,140 @@ const POCSkillManagement = () => {
             ))}
           </div>
         </div>
-      )}
+      ) : activeTab === 'communication' ? (
+        /* Communication Tab Content */
+        <div className="space-y-6">
+          {/* Header with Campus Filter */}
+          <div className="card">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Filter by Campus</label>
+                <select
+                  value={selectedCampus}
+                  onChange={(e) => setSelectedCampus(e.target.value)}
+                  className="w-full md:w-64"
+                >
+                  <option value="">Select Campus</option>
+                  {campusList.map(campus => (
+                    <option key={campus._id || campus} value={campus._id || campus}>
+                      {campus.name || campus}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Stats Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200">
+                  <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">Total Students</p>
+                  <p className="text-2xl font-black text-blue-700">{communicationStudents.length}</p>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200">
+                  <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Job Ready</p>
+                  <p className="text-2xl font-black text-green-700">{getJobReadyPercentage()}%</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Bar for Job Readiness */}
+          {communicationStudents.length > 0 && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Award className="w-4 h-4 text-primary-600" />
+                  <span className="text-sm font-bold text-gray-900">Communication Job Readiness (B2+)</span>
+                </div>
+                <span className="text-sm font-bold text-primary-600">{getJobReadyPercentage()}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-primary-500 to-primary-600 h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${getJobReadyPercentage()}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Students Table */}
+          {communicationLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : communicationStudents.length > 0 ? (
+            <div className="card overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b-2 border-gray-200">
+                    <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Student Name</th>
+                    <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">School</th>
+                    <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Speaking</th>
+                    <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Writing</th>
+                    <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {communicationStudents.map((student) => {
+                    const speaking = student.studentProfile?.englishProficiency?.speaking;
+                    const writing = student.studentProfile?.englishProficiency?.writing;
+                    const isReady = isJobReady(speaking) && isJobReady(writing);
+                    
+                    return (
+                      <tr key={student._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-xs">
+                              {student.firstName?.[0]}{student.lastName?.[0]}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">{student.firstName} {student.lastName}</p>
+                              <p className="text-xs text-gray-500">{student.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-xs font-medium text-gray-700">{student.studentProfile?.currentSchool || '-'}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${getCefrColor(speaking)}`}>
+                            <MessageCircle className="w-3 h-3" />
+                            {speaking || '-'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${getCefrColor(writing)}`}>
+                            <TrendingUp className="w-3 h-3" />
+                            {writing || '-'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {isReady ? (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Job Ready
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                              <Clock className="w-3.5 h-3.5" />
+                              In Progress
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState 
+              icon={MessageCircle} 
+              title="No students with communication data" 
+              description="Students need to complete their English proficiency assessment first"
+            />
+          )}
+        </div>
+      ) : null}
 
       {/* Shared Modals */}
       <Modal isOpen={showModal} onClose={() => { setShowModal(false); resetForm(); }} title={selectedSkill ? 'Edit Skill' : 'Add New Skill'}>
