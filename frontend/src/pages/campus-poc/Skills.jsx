@@ -567,7 +567,7 @@ const POCSkillManagement = () => {
               title="No students with communication data" 
               description="Students need to complete their English proficiency assessment first"
             />
-          )}
+          )
         </div>
       ) : null}
 
