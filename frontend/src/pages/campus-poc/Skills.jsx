@@ -1,11 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { skillAPI, settingsAPI, userAPI } from '../../services/api';
 import { LoadingSpinner, EmptyState, Modal, ConfirmDialog } from '../../components/common/UIComponents';
 import { useAuth } from '../../context/AuthContext';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  LineChart,
+  Line,
+  ReferenceLine,
+  LabelList
+} from 'recharts';
 import { 
   Search, Plus, Edit2, Trash2, Tag, Layers, Globe, School, 
   CheckSquare, CheckCircle, XCircle, Clock, LayoutGrid, ClipboardCheck,
-  MessageCircle, TrendingUp, Award
+  MessageCircle, TrendingUp, Award, BookOpen
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -40,8 +54,8 @@ const POCSkillManagement = () => {
   // States for Communication Tab
   const [communicationStudents, setCommunicationStudents] = useState([]);
   const [communicationLoading, setCommunicationLoading] = useState(false);
-  const [selectedCampus, setSelectedCampus] = useState('');
   const [campusList, setCampusList] = useState([]);
+  const [communicationSubTab, setCommunicationSubTab] = useState('cefr');
 
   useEffect(() => {
     fetchData();
@@ -51,7 +65,7 @@ const POCSkillManagement = () => {
     if (activeTab === 'communication') {
       fetchCommunicationStudents();
     }
-  }, [selectedCampus, activeTab]);
+  }, [activeTab]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -73,12 +87,12 @@ const POCSkillManagement = () => {
   const fetchCampuses = async () => {
     try {
       if (user?.role === 'campus_poc') {
-        // For POC, use their managed campuses or their campus
-        const managedCampuses = user?.managedCampuses?.length > 0 ? user.managedCampuses : (user?.campus ? [user.campus] : []);
+        // Keep campus source aligned with the main dashboard managed-campus configuration
+        const managedRes = await userAPI.getManagedCampuses();
+        const managedCampuses = managedRes?.data?.managedCampuses?.length > 0
+          ? managedRes.data.managedCampuses
+          : (user?.managedCampuses?.length > 0 ? user.managedCampuses : (user?.campus ? [user.campus] : []));
         setCampusList(managedCampuses);
-        if (managedCampuses.length > 0 && !selectedCampus) {
-          setSelectedCampus(managedCampuses[0]?._id || managedCampuses[0]);
-        }
       }
     } catch (error) {
       console.error('Error fetching campuses:', error);
@@ -86,23 +100,26 @@ const POCSkillManagement = () => {
   };
 
   const fetchCommunicationStudents = async () => {
-    if (!selectedCampus) return;
-    
     setCommunicationLoading(true);
     try {
       const response = await userAPI.getStudents({
-        campus: selectedCampus,
         limit: 1000,
         summary: 'false'
       });
       
       const students = response.data.students || [];
-      const studentsWithEnglish = students.filter(s => 
+      const studentsWithCommunicationData = students.filter(s => {
+        const readTheoryLevel = s.studentProfile?.readTheoryLevel
+          || s.studentProfile?.externalData?.ghar?.readTheoryLevel?.value
+          || s.resolvedProfile?.readTheoryLevel;
+        return (
         s.studentProfile?.englishProficiency?.speaking || 
         s.studentProfile?.englishProficiency?.writing
-      );
+          || readTheoryLevel
+        );
+      });
       
-      setCommunicationStudents(studentsWithEnglish);
+      setCommunicationStudents(studentsWithCommunicationData);
     } catch (error) {
       console.error('Error fetching communication students:', error);
       toast.error('Error loading student communication data');
@@ -219,13 +236,227 @@ const POCSkillManagement = () => {
   };
 
   const getJobReadyPercentage = () => {
-    if (communicationStudents.length === 0) return 0;
-    const ready = communicationStudents.filter(s => {
+    if (cefrStudents.length === 0) return 0;
+    const ready = cefrStudents.filter(s => {
       const speaking = s.studentProfile?.englishProficiency?.speaking;
       const writing = s.studentProfile?.englishProficiency?.writing;
       return isJobReady(speaking) && isJobReady(writing);
     }).length;
-    return Math.round((ready / communicationStudents.length) * 100);
+    return Math.round((ready / cefrStudents.length) * 100);
+  };
+
+  const getReadTheoryValue = (student) => {
+    const raw = student?.studentProfile?.readTheoryLevel
+      || student?.studentProfile?.externalData?.ghar?.readTheoryLevel?.value
+      || student?.resolvedProfile?.readTheoryLevel
+      || null;
+    if (raw === null || raw === undefined || raw === '') return null;
+    const parsed = Number.parseFloat(raw);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const getReadTheoryBadgeClass = (score) => {
+    if (score === null || score === undefined) return 'bg-gray-100 text-gray-500 border-gray-200';
+    if (score < 3) return 'bg-red-50 text-red-700 border-red-200';
+    if (score < 5) return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (score < 7) return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (score < 9) return 'bg-green-50 text-green-700 border-green-200';
+    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  };
+
+  const getReadTheoryBucket = (score) => {
+    if (score === null || score === undefined) return 'Unknown';
+    if (score < 3) return '0-2.9';
+    if (score < 5) return '3-4.9';
+    if (score < 7) return '5-6.9';
+    if (score < 9) return '7-8.9';
+    return '9+';
+  };
+
+  const cefrStudents = useMemo(() => {
+    return communicationStudents.filter((s) => (
+      s.studentProfile?.englishProficiency?.speaking || s.studentProfile?.englishProficiency?.writing
+    ));
+  }, [communicationStudents]);
+
+  const readTheoryStudents = useMemo(() => {
+    return communicationStudents
+      .map((student) => ({ ...student, readTheoryNumeric: getReadTheoryValue(student) }))
+      .filter((student) => student.readTheoryNumeric !== null);
+  }, [communicationStudents]);
+
+  const getMonthsSpent = (student) => {
+    const joiningDate = student?.studentProfile?.joiningDate || student?.resolvedProfile?.joiningDate;
+    if (!joiningDate) return null;
+    const parsed = new Date(joiningDate);
+    if (Number.isNaN(parsed.getTime())) return null;
+    const diffMs = Date.now() - parsed.getTime();
+    if (diffMs < 0) return 0;
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24 * 30.44));
+  };
+
+  const getMonthBucket = (months) => {
+    if (months === null || months === undefined) return 'Unknown';
+    if (months <= 2) return '0-2';
+    if (months <= 5) return '3-5';
+    if (months <= 8) return '6-8';
+    if (months <= 12) return '9-12';
+    return '12+';
+  };
+
+  const communicationAnalytics = useMemo(() => {
+    const monthBucketOrder = ['0-2', '3-5', '6-8', '9-12', '12+', 'Unknown'];
+    const monthBucketMap = monthBucketOrder.reduce((acc, label) => {
+      acc[label] = { bucket: label, jobReady: 0, inProgress: 0, total: 0 };
+      return acc;
+    }, {});
+
+    const schoolMap = {};
+
+    const cefrLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+    const cefrMatrixMap = {};
+    cefrLevels.forEach((speak) => {
+      cefrMatrixMap[speak] = {};
+      cefrLevels.forEach((write) => {
+        cefrMatrixMap[speak][write] = 0;
+      });
+    });
+
+    cefrStudents.forEach((student) => {
+      const speaking = student?.studentProfile?.englishProficiency?.speaking || null;
+      const writing = student?.studentProfile?.englishProficiency?.writing || null;
+      const ready = isJobReady(speaking) && isJobReady(writing);
+
+      const months = getMonthsSpent(student);
+      const monthBucket = getMonthBucket(months);
+      const monthEntry = monthBucketMap[monthBucket] || monthBucketMap.Unknown;
+      monthEntry.total += 1;
+      if (ready) monthEntry.jobReady += 1;
+      else monthEntry.inProgress += 1;
+
+      const school = student?.studentProfile?.currentSchool || 'Unknown';
+      if (!schoolMap[school]) {
+        schoolMap[school] = { school, jobReady: 0, inProgress: 0, total: 0, readyRate: 0 };
+      }
+      schoolMap[school].total += 1;
+      if (ready) schoolMap[school].jobReady += 1;
+      else schoolMap[school].inProgress += 1;
+
+      if (cefrLevels.includes(speaking) && cefrLevels.includes(writing)) {
+        cefrMatrixMap[speaking][writing] += 1;
+      }
+    });
+
+    const monthComparisonData = monthBucketOrder
+      .map((bucket) => monthBucketMap[bucket])
+      .filter((item) => item.total > 0 || item.bucket !== 'Unknown');
+
+    const readinessRateTrendData = monthComparisonData
+      .filter((item) => item.total > 0)
+      .map((item) => ({
+        bucket: item.bucket,
+        readyRate: Math.round((item.jobReady / item.total) * 100),
+        total: item.total
+      }));
+
+    const schoolReadinessData = Object.values(schoolMap)
+      .map((item) => ({
+        ...item,
+        readyRate: item.total > 0 ? Math.round((item.jobReady / item.total) * 100) : 0
+      }))
+      .sort((a, b) => b.readyRate - a.readyRate);
+
+    const cefrMatrixRows = cefrLevels.map((speakingLevel) => ({
+      speaking: speakingLevel,
+      values: cefrLevels.map((writingLevel) => ({
+        writing: writingLevel,
+        count: cefrMatrixMap[speakingLevel][writingLevel]
+      }))
+    }));
+
+    const maxMatrixCount = Math.max(
+      0,
+      ...cefrMatrixRows.flatMap((row) => row.values.map((cell) => cell.count))
+    );
+
+    return {
+      monthComparisonData,
+      readinessRateTrendData,
+      schoolReadinessData,
+      cefrMatrixRows,
+      cefrLevels,
+      maxMatrixCount
+    };
+  }, [cefrStudents]);
+
+  const readTheoryAnalytics = useMemo(() => {
+    const bucketOrder = ['0-2.9', '3-4.9', '5-6.9', '7-8.9', '9+', 'Unknown'];
+    const bucketMap = bucketOrder.reduce((acc, label) => {
+      acc[label] = { bucket: label, students: 0 };
+      return acc;
+    }, {});
+
+    const monthBucketOrder = ['0-2', '3-5', '6-8', '9-12', '12+', 'Unknown'];
+    const monthMap = monthBucketOrder.reduce((acc, label) => {
+      acc[label] = { bucket: label, totalScore: 0, count: 0, averageScore: 0 };
+      return acc;
+    }, {});
+
+    readTheoryStudents.forEach((student) => {
+      const score = student.readTheoryNumeric;
+      const scoreBucket = getReadTheoryBucket(score);
+      bucketMap[scoreBucket].students += 1;
+
+      const monthBucket = getMonthBucket(getMonthsSpent(student));
+      monthMap[monthBucket].totalScore += score;
+      monthMap[monthBucket].count += 1;
+    });
+
+    const distributionData = bucketOrder
+      .map((bucket) => bucketMap[bucket])
+      .filter((item) => item.students > 0)
+      .map((item) => ({
+        ...item,
+        pct: readTheoryStudents.length > 0 ? Math.round(item.students / readTheoryStudents.length * 100) : 0
+      }));
+
+    const monthTrendData = monthBucketOrder
+      .map((bucket) => monthMap[bucket])
+      .filter((item) => item.count > 0)
+      .map((item) => ({
+        bucket: item.bucket,
+        averageScore: Number((item.totalScore / item.count).toFixed(2)),
+        count: item.count
+      }));
+
+    const averageReadTheory = readTheoryStudents.length > 0
+      ? Number((readTheoryStudents.reduce((sum, s) => sum + s.readTheoryNumeric, 0) / readTheoryStudents.length).toFixed(2))
+      : 0;
+
+    const pctAbove6 = readTheoryStudents.length > 0
+      ? Math.round(readTheoryStudents.filter((s) => s.readTheoryNumeric >= 6).length / readTheoryStudents.length * 100)
+      : 0;
+
+    const pctAbove8 = readTheoryStudents.length > 0
+      ? Math.round(readTheoryStudents.filter((s) => s.readTheoryNumeric >= 8).length / readTheoryStudents.length * 100)
+      : 0;
+
+    return {
+      distributionData,
+      monthTrendData,
+      averageReadTheory,
+      pctAbove6,
+      pctAbove8
+    };
+  }, [readTheoryStudents]);
+
+  const getMatrixCellClass = (count, maxCount) => {
+    if (count === 0 || maxCount === 0) return 'bg-gray-50 text-gray-400 border-gray-100';
+    const ratio = count / maxCount;
+    if (ratio >= 0.75) return 'bg-primary-600 text-white border-primary-700';
+    if (ratio >= 0.5) return 'bg-primary-400 text-white border-primary-500';
+    if (ratio >= 0.25) return 'bg-primary-200 text-primary-800 border-primary-300';
+    return 'bg-primary-100 text-primary-700 border-primary-200';
   };
 
   const filteredSkills = skills.filter(skill => {
@@ -301,6 +532,31 @@ const POCSkillManagement = () => {
           )}
         </button>
       </div>
+
+      {activeTab === 'communication' && (
+        <div className="flex gap-3 -mt-2">
+          <button
+            onClick={() => setCommunicationSubTab('cefr')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition shadow-sm ${
+              communicationSubTab === 'cefr'
+                ? 'bg-primary-600 text-white border-primary-600'
+                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            CFER
+          </button>
+          <button
+            onClick={() => setCommunicationSubTab('readTheory')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition shadow-sm flex items-center gap-1.5 ${
+              communicationSubTab === 'readTheory'
+                ? 'bg-primary-600 text-white border-primary-600'
+                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" /> Read Theory
+          </button>
+        </div>
+      )}
 
       {activeTab === 'approvals' ? (
         /* Skill Approvals Tab Content */
@@ -439,41 +695,31 @@ const POCSkillManagement = () => {
       ) : activeTab === 'communication' ? (
         /* Communication Tab Content */
         <div className="space-y-6">
-          {/* Header with Campus Filter */}
           <div className="card">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Filter by Campus</label>
-                <select
-                  value={selectedCampus}
-                  onChange={(e) => setSelectedCampus(e.target.value)}
-                  className="w-full md:w-64"
-                >
-                  <option value="">Select Campus</option>
-                  {campusList.map(campus => (
-                    <option key={campus._id || campus} value={campus._id || campus}>
-                      {campus.name || campus}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              {/* Stats Cards */}
+            <div className="flex justify-end">
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200">
-                  <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">Total Students</p>
-                  <p className="text-2xl font-black text-blue-700">{communicationStudents.length}</p>
+                  <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">
+                    {communicationSubTab === 'cefr' ? 'CFER Students' : 'ReadTheory Students'}
+                  </p>
+                  <p className="text-2xl font-black text-blue-700">
+                    {communicationSubTab === 'cefr' ? cefrStudents.length : readTheoryStudents.length}
+                  </p>
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200">
-                  <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Job Ready</p>
-                  <p className="text-2xl font-black text-green-700">{getJobReadyPercentage()}%</p>
+                  <p className="text-xs text-green-600 font-bold uppercase tracking-wider">
+                    {communicationSubTab === 'cefr' ? 'Job Ready' : 'Average ReadTheory'}
+                  </p>
+                  <p className="text-2xl font-black text-green-700">
+                    {communicationSubTab === 'cefr' ? `${getJobReadyPercentage()}%` : readTheoryAnalytics.averageReadTheory}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Progress Bar for Job Readiness */}
-          {communicationStudents.length > 0 && (
+          {communicationSubTab === 'cefr' && cefrStudents.length > 0 && (
             <div className="card">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -491,83 +737,357 @@ const POCSkillManagement = () => {
             </div>
           )}
 
+          {/* Communication Analytics Graphs */}
+          {communicationSubTab === 'cefr' && cefrStudents.length > 0 && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="card">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Month Spent vs Job Ready</h3>
+                    <p className="text-xs text-gray-500 mt-1">Compares readiness counts across tenure buckets</p>
+                  </div>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={communicationAnalytics.monthComparisonData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="jobReady" name="Job Ready" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="inProgress" name="In Progress" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Readiness Rate by Month Spent</h3>
+                    <p className="text-xs text-gray-500 mt-1">Trend line of communication job-ready percentage by tenure</p>
+                  </div>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={communicationAnalytics.readinessRateTrendData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
+                        <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(value) => [`${value}%`, 'Ready Rate']} />
+                        <Line type="monotone" dataKey="readyRate" stroke="#2563eb" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="card">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">CFER Speaking vs Writing Matrix</h3>
+                    <p className="text-xs text-gray-500 mt-1">Darker cells indicate concentration of students at that level pair</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[460px] text-xs border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="text-left p-2 font-bold text-gray-600 uppercase tracking-wider">Speaking \ Writing</th>
+                          {communicationAnalytics.cefrLevels.map((level) => (
+                            <th key={level} className="p-2 text-center font-bold text-gray-600 uppercase tracking-wider">{level}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {communicationAnalytics.cefrMatrixRows.map((row) => (
+                          <tr key={row.speaking}>
+                            <td className="p-2 font-bold text-gray-700">{row.speaking}</td>
+                            {row.values.map((cell) => (
+                              <td key={`${row.speaking}-${cell.writing}`} className="p-1.5">
+                                <div
+                                  className={`h-8 rounded-md border text-center leading-8 font-bold ${getMatrixCellClass(cell.count, communicationAnalytics.maxMatrixCount)}`}
+                                >
+                                  {cell.count}
+                                </div>
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">School-wise Communication Readiness</h3>
+                    <p className="text-xs text-gray-500 mt-1">Compares readiness percentage and student volume across schools</p>
+                  </div>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        layout="vertical"
+                        data={communicationAnalytics.schoolReadinessData}
+                        margin={{ top: 5, right: 20, left: 60, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
+                        <YAxis type="category" dataKey="school" width={130} tick={{ fontSize: 11 }} />
+                        <Tooltip formatter={(value, name) => (name === 'readyRate' ? [`${value}%`, 'Ready Rate'] : [value, name])} />
+                        <Legend />
+                        <Bar dataKey="readyRate" name="Ready %" fill="#0ea5e9" radius={[0, 6, 6, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {communicationSubTab === 'readTheory' && readTheoryStudents.length > 0 && (
+            <div className="space-y-6">
+              {/* KPI Cards */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="card text-center">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Avg Level</p>
+                  <p className="text-3xl font-black text-indigo-600">{readTheoryAnalytics.averageReadTheory}</p>
+                  <p className="text-xs text-gray-400 mt-1">out of 12</p>
+                </div>
+                <div className="card text-center">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">≥ Level 6</p>
+                  <p className="text-3xl font-black text-green-600">{readTheoryAnalytics.pctAbove6}%</p>
+                  <p className="text-xs text-gray-400 mt-1">benchmark met</p>
+                </div>
+                <div className="card text-center">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">≥ Level 8</p>
+                  <p className="text-3xl font-black text-emerald-600">{readTheoryAnalytics.pctAbove8}%</p>
+                  <p className="text-xs text-gray-400 mt-1">advanced</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="card">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">ReadTheory Distribution</h3>
+                    <p className="text-xs text-gray-500 mt-1">Student count by ReadTheory score bucket</p>
+                  </div>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={readTheoryAnalytics.distributionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(val, name) => [val, name === 'students' ? 'Students' : name]} />
+                        <Bar dataKey="students" name="Students" fill="#4f46e5" radius={[6, 6, 0, 0]}>
+                          <LabelList dataKey="pct" position="top" formatter={(v) => `${v}%`} style={{ fontSize: 11, fill: '#6366f1', fontWeight: 700 }} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">ReadTheory vs Month Spent</h3>
+                    <p className="text-xs text-gray-500 mt-1">Average ReadTheory score trend by tenure bucket</p>
+                  </div>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={readTheoryAnalytics.monthTrendData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(value, name) => [value, name === 'averageScore' ? 'Avg ReadTheory' : name]} />
+                        <ReferenceLine y={6} stroke="#22c55e" strokeDasharray="6 3" label={{ value: 'Benchmark 6', position: 'insideTopRight', fontSize: 11, fill: '#15803d' }} />
+                        <Line type="monotone" dataKey="averageScore" stroke="#7c3aed" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card overflow-x-auto">
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">All Students — by Level</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-gray-200">
+                      <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Student Name</th>
+                      <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">School</th>
+                      <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">ReadTheory Level</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...readTheoryStudents]
+                      .sort((a, b) => b.readTheoryNumeric - a.readTheoryNumeric)
+                      .map((student) => (
+                        <tr key={student._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+                                {student.firstName?.[0]}{student.lastName?.[0]}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">{student.firstName} {student.lastName}</p>
+                                <p className="text-xs text-gray-500">{student.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-xs font-medium text-gray-700">{student.studentProfile?.currentSchool || '-'}</span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${getReadTheoryBadgeClass(student.readTheoryNumeric)}`}>
+                              <BookOpen className="w-3 h-3" />
+                              {student.readTheoryNumeric}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Needs Support */}
+              {readTheoryStudents.filter((s) => s.readTheoryNumeric < 5).length > 0 && (
+                <div className="card overflow-x-auto border-l-4 border-amber-400">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider">Needs Support — Below Level 5</h3>
+                    <p className="text-xs text-gray-500 mt-1">{readTheoryStudents.filter((s) => s.readTheoryNumeric < 5).length} students need additional English reading support</p>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200">
+                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Student Name</th>
+                        <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">School</th>
+                        <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Level</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...readTheoryStudents]
+                        .filter((s) => s.readTheoryNumeric < 5)
+                        .sort((a, b) => a.readTheoryNumeric - b.readTheoryNumeric)
+                        .map((student) => (
+                          <tr key={`ns-${student._id}`} className="border-b border-gray-100 hover:bg-amber-50 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xs">
+                                  {student.firstName?.[0]}{student.lastName?.[0]}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900">{student.firstName} {student.lastName}</p>
+                                  <p className="text-xs text-gray-500">{student.email}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="text-xs font-medium text-gray-700">{student.studentProfile?.currentSchool || '-'}</span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${getReadTheoryBadgeClass(student.readTheoryNumeric)}`}>
+                                <BookOpen className="w-3 h-3" />
+                                {student.readTheoryNumeric}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Students Table */}
           {communicationLoading ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner size="lg" />
             </div>
-          ) : communicationStudents.length > 0 ? (
-            <div className="card overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Student Name</th>
-                    <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">School</th>
-                    <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Speaking</th>
-                    <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Writing</th>
-                    <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {communicationStudents.map((student) => {
-                    const speaking = student.studentProfile?.englishProficiency?.speaking;
-                    const writing = student.studentProfile?.englishProficiency?.writing;
-                    const isReady = isJobReady(speaking) && isJobReady(writing);
-                    
-                    return (
-                      <tr key={student._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-xs">
-                              {student.firstName?.[0]}{student.lastName?.[0]}
+          ) : communicationSubTab === 'cefr' ? (
+            cefrStudents.length > 0 ? (
+              <div className="card overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-gray-200">
+                      <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Student Name</th>
+                      <th className="text-left py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">School</th>
+                      <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Speaking</th>
+                      <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Writing</th>
+                      <th className="text-center py-3 px-4 font-bold text-gray-600 uppercase tracking-wider text-[10px]">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cefrStudents.map((student) => {
+                      const speaking = student.studentProfile?.englishProficiency?.speaking;
+                      const writing = student.studentProfile?.englishProficiency?.writing;
+                      const isReady = isJobReady(speaking) && isJobReady(writing);
+                      
+                      return (
+                        <tr key={student._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-xs">
+                                {student.firstName?.[0]}{student.lastName?.[0]}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">{student.firstName} {student.lastName}</p>
+                                <p className="text-xs text-gray-500">{student.email}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-semibold text-gray-900">{student.firstName} {student.lastName}</p>
-                              <p className="text-xs text-gray-500">{student.email}</p>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-xs font-medium text-gray-700">{student.studentProfile?.currentSchool || '-'}</span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${getCefrColor(speaking)}`}>
+                              <MessageCircle className="w-3 h-3" />
+                              {speaking || '-'}
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="text-xs font-medium text-gray-700">{student.studentProfile?.currentSchool || '-'}</span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${getCefrColor(speaking)}`}>
-                            <MessageCircle className="w-3 h-3" />
-                            {speaking || '-'}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${getCefrColor(writing)}`}>
-                            <TrendingUp className="w-3 h-3" />
-                            {writing || '-'}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          {isReady ? (
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
-                              <CheckCircle className="w-3.5 h-3.5" />
-                              Job Ready
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${getCefrColor(writing)}`}>
+                              <TrendingUp className="w-3 h-3" />
+                              {writing || '-'}
                             </div>
-                          ) : (
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                              <Clock className="w-3.5 h-3.5" />
-                              In Progress
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {isReady ? (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Job Ready
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                <Clock className="w-3.5 h-3.5" />
+                                In Progress
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState 
+                icon={MessageCircle} 
+                title="No students with CFER data" 
+                description="Students need to complete their English proficiency assessment first"
+              />
+            )
+          ) : communicationSubTab === 'readTheory' ? (
+            readTheoryStudents.length === 0 ? (
+              <EmptyState 
+                icon={BookOpen}
+                title="No students with ReadTheory data"
+                description="ReadTheory levels are not available yet for these managed campuses"
+              />
+            ) : null
           ) : (
             <EmptyState 
               icon={MessageCircle} 
-              title="No students with communication data" 
-              description="Students need to complete their English proficiency assessment first"
+              title="No communication data" 
+              description="No CEFR or ReadTheory records are available for the selected scope"
             />
-          )
+          )}
         </div>
       ) : null}
 
