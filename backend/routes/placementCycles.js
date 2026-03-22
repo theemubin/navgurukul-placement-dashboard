@@ -291,10 +291,14 @@ router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', '
       return res.status(404).json({ message: 'Placement cycle not found' });
     }
 
-    // Build student query - POC can only assign their campus students
+    // Build student query - POC can only assign their managed campus students
     let studentQuery = { _id: { $in: studentIds }, role: 'student' };
     if (req.user.role === 'campus_poc') {
-      studentQuery.campus = req.user.campus;
+      const campusIds = Array.from(new Set([
+        req.user.campus?.toString(),
+        ...(req.user.managedCampuses?.map(c => c.toString()) || [])
+      ])).filter(Boolean);
+      studentQuery.campus = { $in: campusIds };
     }
 
     // Update students
@@ -355,10 +359,14 @@ router.delete('/:cycleId/students', auth, authorize('campus_poc', 'coordinator',
       return res.status(404).json({ message: 'Placement cycle not found' });
     }
 
-    // Build student query - POC can only remove their campus students
+    // Build student query - POC can only remove their managed campus students
     let studentQuery = { _id: { $in: studentIds }, placementCycle: cycle._id };
     if (req.user.role === 'campus_poc') {
-      studentQuery.campus = req.user.campus;
+      const campusIds = Array.from(new Set([
+        req.user.campus?.toString(),
+        ...(req.user.managedCampuses?.map(c => c.toString()) || [])
+      ])).filter(Boolean);
+      studentQuery.campus = { $in: campusIds };
     }
 
     await User.updateMany(
@@ -407,9 +415,13 @@ router.get('/unassigned/students', auth, authorize('campus_poc', 'coordinator', 
       ]
     };
 
-    // POC only sees their campus students
+    // POC only sees their managed campus students
     if (req.user.role === 'campus_poc') {
-      query.campus = req.user.campus;
+      const campusIds = Array.from(new Set([
+        req.user.campus?.toString(),
+        ...(req.user.managedCampuses?.map(c => c.toString()) || [])
+      ])).filter(Boolean);
+      query.campus = { $in: campusIds };
     } else if (req.query.campus) {
       query.campus = req.query.campus;
     }
@@ -457,9 +469,13 @@ router.get('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'm
 
     let studentQuery = { role: 'student', placementCycle: cycle._id };
 
-    // POC only sees their campus students
+    // POC only sees their managed campus students
     if (req.user.role === 'campus_poc') {
-      studentQuery.campus = req.user.campus;
+      const campusIds = Array.from(new Set([
+        req.user.campus?.toString(),
+        ...(req.user.managedCampuses?.map(c => c.toString()) || [])
+      ])).filter(Boolean);
+      studentQuery.campus = { $in: campusIds };
     } else if (req.query.campus) {
       studentQuery.campus = req.query.campus;
     }

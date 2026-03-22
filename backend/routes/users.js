@@ -143,9 +143,15 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
     }
 
     if (batch) {
-      query['studentProfile.batch'] = batch;
+      const year = parseInt(batch, 10);
+      if (!isNaN(year)) {
+        const startDate = new Date(`${year}-01-01T00:00:00.000Z`);
+        const endDate = new Date(`${year}-12-31T23:59:59.999Z`);
+        query['studentProfile.joiningDate'] = { $gte: startDate, $lte: endDate };
+      } else {
+        query['studentProfile.batch'] = batch;
+      }
     }
-
 
     if (search) {
       query.$or = [

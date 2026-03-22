@@ -248,10 +248,10 @@ const POCStudents = () => {
             onChange={(e) => setFilters({ ...filters, batch: e.target.value })}
             className="text-sm"
           >
-            <option value="">All Batches</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
+            <option value="">All Batches (Join Year)</option>
+            {Array.from({ length: new Date().getFullYear() - 2020 + 2 }, (_, i) => 2021 + i).map(year => (
+              <option key={year} value={year}>{year}</option>
+            ))}
           </select>
           <select
             value={filters.status}
