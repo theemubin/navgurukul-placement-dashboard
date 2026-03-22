@@ -1302,6 +1302,18 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
     return acc;
   }, {});
 
+  const fetchUnassigned = async () => {
+    try {
+      const res = await placementCycleAPI.getUnassignedStudents();
+      setUnassignedStudents(res.data);
+    } catch (e) {
+      console.error('Error fetching unassigned:', e);
+    }
+  };
+
+  // Fetch unassigned students eagerly so available count is shown everywhere consistently
+  useEffect(() => { fetchUnassigned(); }, []);
+
   const fetchCycleStudents = async (cycleId) => {
     setLoadingStudents(true);
     try {
@@ -1351,9 +1363,12 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
               try {
                 const res = await placementCycleAPI.releaseExpiredStudents();
                 toast.success(res.data.message);
+                await fetchUnassigned();
+                if (selectedCycleId) fetchCycleStudents(selectedCycleId);
                 onUpdate();
               } catch (e) {
-                toast.error('Failed to release students');
+                const detail = e.response?.data?.detail || 'Failed to release students';
+                toast.error(detail);
               }
             }}
             className="btn btn-secondary btn-sm flex items-center gap-1 text-xs"

@@ -394,7 +394,7 @@ router.post('/release-expired', auth, authorize('manager', 'coordinator', 'campu
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1; // 1-indexed
 
-    // Find all active cycles whose month/year is in the PAST
+    // Find all cycles whose month/year is in the PAST and not yet completed
     const expiredCycles = await PlacementCycle.find({
       $or: [
         { year: { $lt: currentYear } },
@@ -407,42 +407,29 @@ router.post('/release-expired', auth, authorize('manager', 'coordinator', 'campu
     const results = [];
 
     for (const cycle of expiredCycles) {
-      // Find non-placed, non-dropout students still in this cycle
+      // Simple query: students in this cycle who are NOT placed or dropout
       const studentsToRelease = await User.find({
         placementCycle: cycle._id,
         role: 'student',
-        $and: [
-          {
-            $or: [
-              { 'studentProfile.currentStatus': { $nin: ['Placed', 'placed'] } },
-              { 'studentProfile.currentStatus': { $exists: false } }
-            ]
-          },
-          {
-            $or: [
-              { 'studentProfile.currentStatus': { $nin: ['Dropout', 'DropOut', 'dropout'] } },
-              { 'studentProfile.currentStatus': { $exists: false } }
-            ]
-          }
-        ]
+        'studentProfile.currentStatus': {
+          $nin: ['Placed', 'placed', 'Dropout', 'DropOut', 'dropout', 'Intern (Out Campus)']
+        }
       }).select('_id');
 
       const releaseIds = studentsToRelease.map(s => s._id);
 
+      // Mark cycle as completed (separate from arrayFilters update)
+      await PlacementCycle.updateOne({ _id: cycle._id }, { $set: { status: 'completed' } });
+
       if (releaseIds.length > 0) {
-        // Snapshot: update status of released students in cycle snapshot
+        // Update snapshot statuses for released students (separate operation)
         await PlacementCycle.updateOne(
           { _id: cycle._id },
-          {
-            $set: {
-              status: 'completed',
-              'snapshotStudents.$[elem].status': 'released'
-            }
-          },
+          { $set: { 'snapshotStudents.$[elem].status': 'released' } },
           { arrayFilters: [{ 'elem.student': { $in: releaseIds } }] }
         );
 
-        // Release: unset placementCycle on these students
+        // Unset placementCycle on released students
         await User.updateMany(
           { _id: { $in: releaseIds } },
           {
@@ -455,20 +442,19 @@ router.post('/release-expired', auth, authorize('manager', 'coordinator', 'campu
         );
 
         totalReleased += releaseIds.length;
-        results.push({ cycle: cycle.name, released: releaseIds.length });
-      } else {
-        // Mark as completed anyway
-        await PlacementCycle.updateOne({ _id: cycle._id }, { status: 'completed' });
       }
+      results.push({ cycle: cycle.name, released: releaseIds.length, marked: 'completed' });
     }
 
     res.json({
-      message: `Released ${totalReleased} students from ${expiredCycles.length} expired cycles`,
+      message: totalReleased > 0
+        ? `Released ${totalReleased} students from ${results.length} expired cycle(s)`
+        : `No students to release. ${results.length} expired cycle(s) marked completed.`,
       results
     });
   } catch (error) {
     console.error('Release expired error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
 
