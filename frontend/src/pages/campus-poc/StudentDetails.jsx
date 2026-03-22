@@ -207,6 +207,23 @@ const POCStudentDetails = () => {
     </div>
   );
 
+  // Row component for Ghar-verified fields (shows a green badge if verified from Ghar)
+  const GharRow = ({ label, value, verified, highlight }) => (
+    <div className="flex items-start justify-between py-1.5 border-b border-gray-50 last:border-0 gap-2">
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{label}</p>
+      <div className="flex items-center gap-1.5 min-w-0">
+        {value ? (
+          <p className={`text-xs font-semibold truncate ${highlight ? 'text-green-700' : 'text-gray-800'}`}>{value}</p>
+        ) : (
+          <p className="text-xs text-gray-300 italic">—</p>
+        )}
+        {verified && value && (
+          <span className="text-[9px] bg-green-100 text-green-600 px-1 py-0.5 rounded font-bold whitespace-nowrap flex-shrink-0">✓ Ghar</span>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Navigation & Status */}
@@ -492,7 +509,88 @@ const POCStudentDetails = () => {
         </div>
       </div>
 
-      {/* Job Readiness Section - Moved to last */}
+      {/* ===== NAVGURUKUL / GHAR DATA SECTION ===== */}
+      <div className="space-y-4 mt-4">
+        <div className="flex items-center gap-2">
+          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Navgurukul Data</h3>
+          <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">Synced from Ghar</span>
+          <button onClick={handleGharSync} className="ml-auto text-[10px] flex items-center gap-1 text-primary-600 hover:underline font-bold">
+            <RefreshCw className="w-3 h-3" /> Re-sync Ghar
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* NG Journey */}
+          <div className="card">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-3 pb-2 border-b">Navgurukul Journey</h4>
+            <div className="space-y-0.5">
+              <GharRow label="School" value={profile.currentSchool} verified={profile.isSchoolVerified} />
+              <GharRow label="Campus" value={profile.campus} verified={profile.isCampusVerified} />
+              <GharRow label="Module" value={profile.currentModule} verified={profile.isModuleVerified} />
+              <GharRow label="Joined" value={profile.joiningDate ? new Date(profile.joiningDate).toLocaleDateString('en-IN') : null} verified={profile.isJoiningDateVerified} />
+              <GharRow
+                label="Time Spent"
+                value={profile.joiningDate
+                  ? `${Math.max(0, Math.floor((new Date() - new Date(profile.joiningDate)) / (1000 * 60 * 60 * 24 * 30.44)))} months`
+                  : null}
+                verified={profile.isJoiningDateVerified}
+              />
+              <GharRow label="Current Status" value={profile.currentStatus} verified={profile.isStatusVerified} />
+              <GharRow label="Attendance" value={profile.attendancePercentage ? `${profile.attendancePercentage}%` : null} verified={profile.isAttendanceVerified} />
+              <GharRow label="Read Theory Level" value={profile.readTheoryLevel} />
+              <GharRow label="AtCoder Rating" value={profile.atCoderRating} />
+            </div>
+          </div>
+
+          {/* Placement Info */}
+          <div className="card">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-3 pb-2 border-b">Placement Info</h4>
+            <div className="space-y-0.5">
+              <GharRow
+                label="Date of Placement"
+                value={profile.dateOfPlacement ? new Date(profile.dateOfPlacement).toLocaleDateString('en-IN') : null}
+                highlight={!!profile.dateOfPlacement}
+              />
+              <GharRow
+                label="Placement Cycle"
+                value={student.placementCycle?.name || (student.placementCycle ? 'Assigned' : 'Not in any cycle')}
+              />
+              <GharRow
+                label="Assigned On"
+                value={student.placementCycleAssignedAt ? new Date(student.placementCycleAssignedAt).toLocaleDateString('en-IN') : null}
+              />
+              <GharRow label="Total Applications" value={applications.length > 0 ? `${applications.length} application(s)` : 'None yet'} />
+              <GharRow
+                label="Offers Received"
+                value={`${applications.filter(a => a.status === 'selected').length} offer(s)`}
+                highlight={applications.filter(a => a.status === 'selected').length > 0}
+              />
+            </div>
+          </div>
+
+          {/* English & Personal */}
+          <div className="card">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-3 pb-2 border-b">English & Communication</h4>
+            <div className="space-y-0.5 mb-4">
+              <GharRow label="Speaking" value={profile.englishSpeaking} verified={profile.isEnglishVerified} />
+              <GharRow label="Writing" value={profile.englishWriting} verified={profile.isEnglishVerified} />
+            </div>
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2 pb-1 border-b">Personal Details</h4>
+            <div className="space-y-0.5">
+              <GharRow label="Date of Birth" value={profile.dob ? new Date(profile.dob).toLocaleDateString('en-IN') : null} />
+              <GharRow label="Gender" value={profile.gender} verified={profile.isGenderVerified} />
+              <GharRow label="Marital Status" value={profile.maritalStatus} />
+              <GharRow label="Caste" value={profile.caste} />
+              <GharRow label="Religion" value={profile.religion} />
+              <GharRow label="Qualification" value={profile.qualification} />
+              <GharRow label="Personal Email" value={profile.personalEmail} />
+              <GharRow label="Aadhar No." value={profile.aadharNo} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+
       <div className="card !bg-gray-900 !text-white overflow-hidden relative mt-6">
         <div className="absolute top-0 right-0 p-8 opacity-10">
           <CheckSquare className="w-32 h-32" />
