@@ -1419,7 +1419,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                         className="btn btn-secondary btn-sm whitespace-nowrap"
                         disabled={filteredUnassigned.length === 0}
                       >
-                        {selectedStudents.length === filteredUnassigned.length && filteredUnassigned.length > 0 ? 'Deselect All' : 'Select All'}
+                        {selectedStudents.length === filteredUnassigned.length && filteredUnassigned.length > 0 ? 'Deselect All Matches' : 'Select All Matches'}
                       </button>
                     </div>
                     <div className="max-h-60 overflow-y-auto space-y-2 mb-3 p-1">
@@ -1438,11 +1438,11 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                                 setSelectedStudents(selectedStudents.filter(id => id !== student._id));
                               }
                             }}
-                            className="rounded border-gray-300 mr-3 cursor-pointer"
+                            className="rounded border-gray-300 mr-3 cursor-pointer min-w-[16px] min-h-[16px]"
                           />
                           <div className="flex-1 w-full min-w-0" style={{ minWidth: '0' }}>
                             <p className="text-sm font-bold text-black truncate">
-                              {student.firstName ? `${student.firstName} ${student.lastName || ''}`.trim() : student.name || student.email || 'Unknown Student'}
+                              {student.firstName ? `${student.firstName} ${student.lastName || ''}`.trim() : student.name || student.email || '⚠️ Unnamed Student'}
                             </p>
                             <p className="text-xs text-black truncate">{student.email || 'No email'}</p>
                           </div>
