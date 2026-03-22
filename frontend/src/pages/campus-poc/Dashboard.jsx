@@ -1270,11 +1270,37 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [studentSearch, setStudentSearch] = useState('');
+  const [editingTargetId, setEditingTargetId] = useState(null);
+  const [editTargetValue, setEditTargetValue] = useState('');
+  const [expandedSchools, setExpandedSchools] = useState({});
+
+  const saveTarget = async (cycleId) => {
+    try {
+      await placementCycleAPI.updateCycle(cycleId, { targetPlacements: parseInt(editTargetValue) || 0 });
+      setEditingTargetId(null);
+      onUpdate();
+    } catch (e) {
+      console.error('Failed to update goal', e);
+    }
+  };
+
+  const toggleSchool = (school) => {
+    setExpandedSchools(prev => ({ ...prev, [school]: !prev[school] }));
+  };
 
   const filteredUnassigned = unassignedStudents.filter(s => 
     `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()) || 
     s.email.toLowerCase().includes(studentSearch.toLowerCase())
   );
+
+  const schoolGroups = cycleStudents.reduce((acc, student) => {
+    const school = student.studentProfile?.currentSchool || student.campus?.name || 'No School';
+    if (!acc[school]) acc[school] = { students: [], placed: 0, total: 0 };
+    acc[school].students.push(student);
+    acc[school].total++;
+    if (student.placementStatus === 'placed' || student.dateOfPlacement) acc[school].placed++;
+    return acc;
+  }, {});
 
   const fetchCycleStudents = async (cycleId) => {
     setLoadingStudents(true);
@@ -1334,45 +1360,80 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
           <h4 className="text-sm font-medium text-gray-600">All Cycles</h4>
           {cycles.length > 0 ? (
             cycles.map((cycle) => (
-              <button
+              <div
                 key={cycle.cycleId}
-                onClick={() => {
-                  setSelectedCycleId(cycle.cycleId);
-                  fetchCycleStudents(cycle.cycleId);
-                }}
-                className={`w-full text-left p-4 rounded-lg border transition-colors ${selectedCycleId === cycle.cycleId
+                className={`w-full text-left rounded-lg border transition-colors ${selectedCycleId === cycle.cycleId
                   ? 'border-primary-500 bg-primary-50'
                   : 'border-gray-200 hover:border-gray-300'
                   }`}
               >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium">{cycle.name}</p>
-                    <p className="text-sm text-gray-500">{cycle.students} students</p>
+                {/* Clickable header */}
+                <div
+                  className="p-4 cursor-pointer"
+                  onClick={() => {
+                    setSelectedCycleId(cycle.cycleId);
+                    fetchCycleStudents(cycle.cycleId);
+                  }}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium">{cycle.name}</p>
+                      <p className="text-sm text-gray-500">{cycle.students} in cycle · {unassignedStudents.length + cycle.students} total available</p>
+                    </div>
+                    <Badge variant={cycle.status === 'active' ? 'green' : cycle.status === 'completed' ? 'gray' : 'blue'}>
+                      {cycle.status}
+                    </Badge>
                   </div>
-                  <Badge variant={cycle.status === 'active' ? 'green' : cycle.status === 'completed' ? 'gray' : 'blue'}>
-                    {cycle.status}
-                  </Badge>
-                </div>
-                <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                  <span>{cycle.placed} placed</span>
-                  <span>{cycle.inProgress} in progress</span>
-                </div>
-                {cycle.targetPlacements > 0 && (
+                  <div className="mt-2 flex gap-4 text-xs text-gray-500">
+                    <span>{cycle.placed} placed</span>
+                    <span>{cycle.inProgress} in progress</span>
+                  </div>
+                  {/* Progress bar */}
                   <div className="mt-2">
                     <div className="flex justify-between text-xs text-gray-500 mb-1">
                       <span>Progress</span>
-                      <span>{cycle.progress}%</span>
+                      <span>{cycle.placed}/{cycle.targetPlacements > 0 ? cycle.targetPlacements : cycle.students} placed ({cycle.progress}%)</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1.5">
                       <div
-                        className="bg-primary-600 h-1.5 rounded-full"
+                        className="bg-primary-600 h-1.5 rounded-full transition-all"
                         style={{ width: `${Math.min(cycle.progress, 100)}%` }}
                       />
                     </div>
                   </div>
-                )}
-              </button>
+                </div>
+
+                {/* Editable Goal */}
+                <div
+                  className="px-4 pb-3 border-t border-gray-100 pt-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {editingTargetId === cycle.cycleId ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 whitespace-nowrap">Target placements:</span>
+                      <input
+                        type="number"
+                        value={editTargetValue}
+                        onChange={(e) => setEditTargetValue(e.target.value)}
+                        className="input py-0.5 px-2 text-xs w-20"
+                        min="0"
+                        autoFocus
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveTarget(cycle.cycleId); if (e.key === 'Escape') setEditingTargetId(null); }}
+                      />
+                      <button onClick={() => saveTarget(cycle.cycleId)} className="text-xs text-green-600 font-medium hover:underline">Save</button>
+                      <button onClick={() => setEditingTargetId(null)} className="text-xs text-gray-400 hover:underline">Cancel</button>
+                    </div>
+                  ) : (
+                    <button
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-primary-600 transition-colors"
+                      onClick={() => { setEditingTargetId(cycle.cycleId); setEditTargetValue(String(cycle.targetPlacements || '')); }}
+                    >
+                      <Settings className="w-3 h-3" />
+                      {cycle.targetPlacements > 0 ? `Goal: ${cycle.targetPlacements} placements` : 'Set placement goal'}
+                    </button>
+                  )}
+                </div>
+              </div>
             ))
           ) : (
             <div className="text-center py-8 text-gray-500">
@@ -1394,7 +1455,12 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
             <div className="lg:col-span-2 space-y-4">
               {/* Assign Students */}
               <div className="card">
-                <h4 className="font-medium mb-3">Add Students to Cycle</h4>
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-medium">Add Students to Cycle</h4>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                    {unassignedStudents.length} students available
+                  </span>
+                </div>
                 {unassignedStudents.length > 0 ? (
                   <>
                     <div className="flex gap-2 mb-3">
@@ -1506,49 +1572,84 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                 )}
               </div>
 
-              {/* Cycle Students */}
+              {/* Cycle Students — grouped by school */}
               <div className="card">
-                <h4 className="font-medium mb-3">Students in Cycle ({cycleStudents.length})</h4>
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-medium">Students in Cycle ({cycleStudents.length})</h4>
+                  {cycleStudents.length > 0 && (
+                    <span className="text-xs text-gray-500">
+                      {Object.values(schoolGroups).reduce((s, g) => s + g.placed, 0)} placed ·&nbsp;
+                      {Math.round((Object.values(schoolGroups).reduce((s, g) => s + g.placed, 0) / Math.max(cycleStudents.length, 1)) * 100)}% success
+                    </span>
+                  )}
+                </div>
                 {loadingStudents ? (
                   <div className="flex justify-center py-8">
                     <LoadingSpinner />
                   </div>
                 ) : cycleStudents.length > 0 ? (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {cycleStudents.map((student) => (
-                      <div
-                        key={student._id}
-                        className="flex items-center justify-between p-2 bg-gray-50 rounded"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
-                              {student.fullName || student.name || `${student.firstName} ${student.lastName}`.trim()}
-                            </p>
-                            <p className="text-xs text-gray-500 truncate">{student.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          {student.dateOfPlacement && (
-                            <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase">
-                              Placed: {new Date(student.dateOfPlacement).toLocaleDateString()}
-                            </span>
+                  <div className="space-y-2">
+                    {Object.entries(schoolGroups).map(([school, group]) => {
+                      const successRate = Math.round((group.placed / Math.max(group.total, 1)) * 100);
+                      const isOpen = expandedSchools[school] !== false; // default open
+                      return (
+                        <div key={school} className="border border-gray-100 rounded-lg overflow-hidden">
+                          {/* Accordion Header */}
+                          <button
+                            onClick={() => toggleSchool(school)}
+                            className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                              <span className="text-sm font-medium text-gray-800">{school}</span>
+                              <span className="text-xs text-gray-400">({group.total} students)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                                <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${successRate}%` }} />
+                              </div>
+                              <span className={`text-xs font-semibold ${successRate >= 50 ? 'text-green-600' : successRate > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
+                                {successRate}% placed
+                              </span>
+                            </div>
+                          </button>
+                          {/* Accordion Body */}
+                          {isOpen && (
+                            <div className="divide-y divide-gray-50">
+                              {group.students.map((student) => (
+                                <div
+                                  key={student._id}
+                                  className="flex items-center justify-between px-3 py-2 hover:bg-gray-50"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                      {student.firstName || student.lastName ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : student.name || 'Unnamed'}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate">{student.email}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                                    {student.dateOfPlacement ? (
+                                      <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                                        ✓ {new Date(student.dateOfPlacement).toLocaleDateString()}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">In progress</span>
+                                    )}
+                                    <button
+                                      onClick={() => handleRemoveStudent(student._id)}
+                                      className="text-red-400 hover:text-red-600 p-0.5 transition-colors"
+                                      title="Remove from cycle"
+                                    >
+                                      <XCircle className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           )}
-                          <div className="flex items-center gap-2">
-                            <Badge variant={student.placementStatus === 'placed' ? 'green' : 'gray'}>
-                              {student.applicationCount} apps
-                            </Badge>
-                            <button
-                              onClick={() => handleRemoveStudent(student._id)}
-                              className="text-red-500 hover:text-red-700 p-1"
-                              title="Remove from cycle"
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 text-center py-4">

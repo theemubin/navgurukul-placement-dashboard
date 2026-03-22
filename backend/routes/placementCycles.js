@@ -185,7 +185,7 @@ router.post('/',
  *       200:
  *         description: Cycle updated
  */
-router.put('/:cycleId', auth, authorize('manager'), async (req, res) => {
+router.put('/:cycleId', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { status, description, targetPlacements, isActive } = req.body;
 
