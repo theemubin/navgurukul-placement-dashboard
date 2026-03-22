@@ -1423,34 +1423,71 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                       </button>
                     </div>
                     <div className="max-h-60 overflow-y-auto space-y-2 mb-3 p-1">
-                      {filteredUnassigned.length > 0 ? filteredUnassigned.map((student) => (
-                        <label
-                          key={student._id}
-                          className="flex items-center w-full p-2 hover:bg-gray-50 rounded cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedStudents.includes(student._id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedStudents([...selectedStudents, student._id]);
-                              } else {
-                                setSelectedStudents(selectedStudents.filter(id => id !== student._id));
-                              }
-                            }}
-                            className="rounded border-gray-300 mr-3 cursor-pointer min-w-[16px] min-h-[16px]"
-                          />
-                          <div className="flex-1 w-full min-w-0" style={{ minWidth: '0' }}>
-                            <p className="text-sm font-bold text-black truncate">
-                              {student.firstName ? `${student.firstName} ${student.lastName || ''}`.trim() : student.name || student.email || '⚠️ Unnamed Student'}
-                            </p>
-                            <p className="text-xs text-black truncate">{student.email || 'No email'}</p>
-                          </div>
-                          <div className="text-xs text-gray-500 whitespace-nowrap ml-3">
-                            {student.studentProfile?.currentSchool || student.campus?.name || 'No school'}
-                          </div>
-                        </label>
-                      )) : (
+                      {filteredUnassigned.length > 0 ? filteredUnassigned.map((student) => {
+                        const doj = student.studentProfile?.joiningDate || student.dateOfJoining || student.joiningDate;
+                        let monthsSpent = null;
+                        if (doj) {
+                          const d = new Date(doj);
+                          if (!isNaN(d.getTime())) {
+                            monthsSpent = Math.max(0, Math.floor((new Date() - d) / (1000 * 60 * 60 * 24 * 30.44)));
+                          }
+                        }
+
+                        return (
+                          <label
+                            key={student._id}
+                            className="flex items-stretch justify-between w-full p-3 hover:bg-gray-50 rounded cursor-pointer border-b border-gray-100 last:border-0"
+                          >
+                            {/* 1. Name */}
+                            <div className="flex flex-col min-w-0 justify-center pr-2" style={{ flex: '2' }}>
+                              <p className="text-sm font-bold text-gray-900 truncate">
+                                {student.firstName || student.lastName ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : student.name || 'Unnamed Student'}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">{student.email || 'No email'}</p>
+                            </div>
+
+                            {/* 2. DOJ & Months */}
+                            <div className="flex flex-col min-w-0 px-2 justify-center border-l border-gray-200" style={{ flex: '1.5' }}>
+                              <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Joined</span>
+                              <span className="text-xs text-gray-800 truncate">
+                                {doj ? new Date(doj).toLocaleDateString() : 'N/A'}
+                              </span>
+                              {monthsSpent !== null && (
+                                <span className="text-[10px] text-primary-600 font-medium">
+                                  {monthsSpent} months spent
+                               </span>
+                              )}
+                            </div>
+
+                            {/* 3. Module & School */}
+                            <div className="flex flex-col min-w-0 px-2 justify-center border-l border-gray-200" style={{ flex: '2' }}>
+                              <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Module / School</span>
+                              <span className="text-xs text-gray-800 truncate">
+                                {student.studentProfile?.currentModule || student.currentModule || 'No Module'}
+                              </span>
+                              <span className="text-[10px] text-gray-500 truncate mt-0.5 max-w-fit bg-gray-100 px-1.5 py-0.5 rounded">
+                                {student.studentProfile?.currentSchool || student.campus?.name || 'No school'}
+                              </span>
+                            </div>
+
+                            {/* 4. Checkbox on the right */}
+                            <div className="flex items-center justify-center pl-4 pr-1">
+                              <input
+                                type="checkbox"
+                                checked={selectedStudents.includes(student._id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedStudents([...selectedStudents, student._id]);
+                                  } else {
+                                    setSelectedStudents(selectedStudents.filter(id => id !== student._id));
+                                  }
+                                }}
+                                className="rounded border-gray-300 w-5 h-5 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                              />
+                            </div>
+                          </label>
+                        );
+                      }) : (
                         <p className="text-sm text-gray-500 text-center py-4">No students match your search.</p>
                       )}
                     </div>
