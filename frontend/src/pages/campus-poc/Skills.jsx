@@ -365,7 +365,7 @@ const POCSkillManagement = () => {
             <EmptyState icon={CheckSquare} title="No pending approvals" description="All student skills have been reviewed" />
           )}
         </div>
-      ) : (
+      ) : activeTab === 'categories' ? (
         /* Skill Categories Tab Content */
         <div className="space-y-6">
           <div className="card">
