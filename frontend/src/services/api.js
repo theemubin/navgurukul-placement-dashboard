@@ -271,7 +271,8 @@ export const placementCycleAPI = {
   removeStudents: (cycleId, studentIds) => api.delete(`/placement-cycles/${cycleId}/students`, { data: { studentIds } }),
   getUnassignedStudents: (params) => api.get('/placement-cycles/unassigned/students', { params }),
   updateMyCycle: (cycleId) => api.put('/placement-cycles/my-cycle', { cycleId }),
-  updateStudentCycleOnPlacement: (studentId) => api.put(`/placement-cycles/student/${studentId}/placement-success`)
+  updateStudentCycleOnPlacement: (studentId) => api.put(`/placement-cycles/student/${studentId}/placement-success`),
+  releaseExpiredStudents: () => api.post('/placement-cycles/release-expired')
 };
 
 // Campus APIs

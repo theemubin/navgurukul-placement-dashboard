@@ -387,6 +387,93 @@ router.delete('/:cycleId/students', auth, authorize('campus_poc', 'coordinator',
   }
 });
 
+// Auto-release students from expired cycles (month has ended, not placed/dropout)
+router.post('/release-expired', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+  try {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-indexed
+
+    // Find all active cycles whose month/year is in the PAST
+    const expiredCycles = await PlacementCycle.find({
+      $or: [
+        { year: { $lt: currentYear } },
+        { year: currentYear, month: { $lt: currentMonth } }
+      ],
+      status: { $ne: 'completed' }
+    });
+
+    let totalReleased = 0;
+    const results = [];
+
+    for (const cycle of expiredCycles) {
+      // Find non-placed, non-dropout students still in this cycle
+      const studentsToRelease = await User.find({
+        placementCycle: cycle._id,
+        role: 'student',
+        $and: [
+          {
+            $or: [
+              { 'studentProfile.currentStatus': { $nin: ['Placed', 'placed'] } },
+              { 'studentProfile.currentStatus': { $exists: false } }
+            ]
+          },
+          {
+            $or: [
+              { 'studentProfile.currentStatus': { $nin: ['Dropout', 'DropOut', 'dropout'] } },
+              { 'studentProfile.currentStatus': { $exists: false } }
+            ]
+          }
+        ]
+      }).select('_id');
+
+      const releaseIds = studentsToRelease.map(s => s._id);
+
+      if (releaseIds.length > 0) {
+        // Snapshot: update status of released students in cycle snapshot
+        await PlacementCycle.updateOne(
+          { _id: cycle._id },
+          {
+            $set: {
+              status: 'completed',
+              'snapshotStudents.$[elem].status': 'released'
+            }
+          },
+          { arrayFilters: [{ 'elem.student': { $in: releaseIds } }] }
+        );
+
+        // Release: unset placementCycle on these students
+        await User.updateMany(
+          { _id: { $in: releaseIds } },
+          {
+            $unset: {
+              placementCycle: 1,
+              placementCycleAssignedAt: 1,
+              placementCycleAssignedBy: 1
+            }
+          }
+        );
+
+        totalReleased += releaseIds.length;
+        results.push({ cycle: cycle.name, released: releaseIds.length });
+      } else {
+        // Mark as completed anyway
+        await PlacementCycle.updateOne({ _id: cycle._id }, { status: 'completed' });
+      }
+    }
+
+    res.json({
+      message: `Released ${totalReleased} students from ${expiredCycles.length} expired cycles`,
+      results
+    });
+  } catch (error) {
+    console.error('Release expired error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+
 // Get unassigned students (POC sees their campus, others can filter)
 /**
  * @swagger

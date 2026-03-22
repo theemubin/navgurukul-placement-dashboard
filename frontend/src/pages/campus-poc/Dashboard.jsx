@@ -1345,13 +1345,31 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="font-semibold text-gray-900">Placement Cycles</h3>
-        <button
-          onClick={() => setShowModal(true)}
-          className="btn btn-primary btn-sm flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          New Cycle
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const res = await placementCycleAPI.releaseExpiredStudents();
+                toast.success(res.data.message);
+                onUpdate();
+              } catch (e) {
+                toast.error('Failed to release students');
+              }
+            }}
+            className="btn btn-secondary btn-sm flex items-center gap-1 text-xs"
+            title="Release non-placed students from past months back into the unallocated pool"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Release Expired
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="btn btn-primary btn-sm flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            New Cycle
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1409,7 +1427,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                   onClick={(e) => e.stopPropagation()}
                 >
                   {editingTargetId === cycle.cycleId ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-gray-500 whitespace-nowrap">Target placements:</span>
                       <input
                         type="number"
@@ -1417,9 +1435,11 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                         onChange={(e) => setEditTargetValue(e.target.value)}
                         className="input py-0.5 px-2 text-xs w-20"
                         min="0"
+                        max={unassignedStudents.length + cycle.students}
                         autoFocus
                         onKeyDown={(e) => { if (e.key === 'Enter') saveTarget(cycle.cycleId); if (e.key === 'Escape') setEditingTargetId(null); }}
                       />
+                      <span className="text-[10px] text-gray-400">(max: {unassignedStudents.length + cycle.students} available)</span>
                       <button onClick={() => saveTarget(cycle.cycleId)} className="text-xs text-green-600 font-medium hover:underline">Save</button>
                       <button onClick={() => setEditingTargetId(null)} className="text-xs text-gray-400 hover:underline">Cancel</button>
                     </div>
@@ -1666,6 +1686,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
       {showModal && (
         <NewCycleModal
           onClose={() => setShowModal(false)}
+          unassignedCount={unassignedStudents.length}
           onSuccess={() => {
             setShowModal(false);
             onUpdate();
@@ -1677,7 +1698,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
 };
 
 // New Cycle Modal Component
-const NewCycleModal = ({ onClose, onSuccess }) => {
+const NewCycleModal = ({ onClose, onSuccess, unassignedCount = 0 }) => {
   const [formData, setFormData] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
@@ -1761,16 +1782,25 @@ const NewCycleModal = ({ onClose, onSuccess }) => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Target Placements (optional)
+              Target Placements
+              {unassignedCount > 0 && (
+                <span className="ml-2 text-xs font-normal text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
+                  {unassignedCount} students currently unallocated
+                </span>
+              )}
             </label>
             <input
               type="number"
               value={formData.targetPlacements}
               onChange={(e) => setFormData({ ...formData, targetPlacements: e.target.value })}
               className="input w-full"
-              placeholder="e.g., 50"
+              placeholder={`e.g., ${unassignedCount > 0 ? unassignedCount : 50}`}
               min="0"
+              max={unassignedCount > 0 ? unassignedCount : undefined}
             />
+            {unassignedCount > 0 && (
+              <p className="text-xs text-gray-400 mt-1">Maximum: {unassignedCount} (total unallocated students)</p>
+            )}
           </div>
 
           <div>

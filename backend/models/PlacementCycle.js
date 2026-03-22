@@ -34,7 +34,13 @@ const placementCycleSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
-  }
+  },
+  // Snapshot of students assigned during this cycle (preserved even after release at month end)
+  snapshotStudents: [{
+    student: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    addedAt: Date,
+    status: { type: String, enum: ['active', 'placed', 'released', 'dropout'], default: 'active' }
+  }]
 }, {
   timestamps: true
 });
