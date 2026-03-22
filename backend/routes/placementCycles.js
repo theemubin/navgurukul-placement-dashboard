@@ -427,7 +427,7 @@ router.get('/unassigned/students', auth, authorize('campus_poc', 'coordinator', 
     }
 
     const students = await User.find(query)
-      .select('firstName lastName email campus studentProfile.currentSchool')
+      .select('-password')
       .populate('campus', 'name code');
 
     res.json(students);

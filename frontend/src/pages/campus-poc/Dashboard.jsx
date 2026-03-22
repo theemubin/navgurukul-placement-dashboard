@@ -1441,8 +1441,8 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                             className="rounded border-gray-300"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {student.firstName} {student.lastName}
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {student.fullName || student.name || `${student.firstName} ${student.lastName}`.trim()}
                             </p>
                             <p className="text-xs text-gray-500 truncate">{student.email}</p>
                           </div>
@@ -1484,24 +1484,31 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                         className="flex items-center justify-between p-2 bg-gray-50 rounded"
                       >
                         <div className="flex items-center gap-3">
-                          <div>
-                            <p className="text-sm font-medium">
-                              {student.firstName} {student.lastName}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {student.fullName || student.name || `${student.firstName} ${student.lastName}`.trim()}
                             </p>
-                            <p className="text-xs text-gray-500">{student.email}</p>
+                            <p className="text-xs text-gray-500 truncate">{student.email}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={student.placementStatus === 'placed' ? 'green' : 'gray'}>
-                            {student.applicationCount} apps
-                          </Badge>
-                          <button
-                            onClick={() => handleRemoveStudent(student._id)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                            title="Remove from cycle"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
+                        <div className="flex flex-col items-end gap-1">
+                          {student.dateOfPlacement && (
+                            <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase">
+                              Placed: {new Date(student.dateOfPlacement).toLocaleDateString()}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Badge variant={student.placementStatus === 'placed' ? 'green' : 'gray'}>
+                              {student.applicationCount} apps
+                            </Badge>
+                            <button
+                              onClick={() => handleRemoveStudent(student._id)}
+                              className="text-red-500 hover:text-red-700 p-1"
+                              title="Remove from cycle"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}

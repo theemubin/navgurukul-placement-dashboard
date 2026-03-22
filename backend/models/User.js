@@ -172,6 +172,7 @@ const userSchema = new mongoose.Schema({
     },
     joiningDate: Date,
     dateOfJoining: Date, // Official joining date for calculating months at Navgurukul
+    dateOfPlacement: Date, // Track date of placement from Ghar Zoho data
     attendancePercentage: {
       type: Number,
       min: 0,
@@ -488,6 +489,7 @@ userSchema.virtual('resolvedProfile').get(function () {
     religion: ghar.religion?.value || '',
     maritalStatus: ghar.maritalStatus?.value || '',
     dob: ghar.dob?.value || null,
+    dateOfPlacement: ghar.dateOfPlacement?.value || local.dateOfPlacement || null,
     readTheoryLevel: ghar.readTheoryLevel?.value || '',
     atCoderRating: ghar.atCoderRating?.value || '',
     campus: ghar.campus?.value || '',
@@ -641,6 +643,10 @@ userSchema.statics.syncGharData = async function (email, externalData) {
   }
   if (externalData.Name?.last_name) {
     gharData.lastName = { value: externalData.Name.last_name, lastUpdated: now };
+  }
+
+  if (externalData.Placement_Date || externalData.Date_of_Placement) {
+    gharData.dateOfPlacement = { value: new Date(externalData.Placement_Date || externalData.Date_of_Placement), lastUpdated: now };
   }
 
   gharData.lastSyncedAt = now;
