@@ -7,7 +7,7 @@ import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
-  MessageSquare, ClipboardList
+  MessageSquare, ClipboardList, Search
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -1269,6 +1269,12 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
   const [unassignedStudents, setUnassignedStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState([]);
+  const [studentSearch, setStudentSearch] = useState('');
+
+  const filteredUnassigned = unassignedStudents.filter(s => 
+    `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()) || 
+    s.email.toLowerCase().includes(studentSearch.toLowerCase())
+  );
 
   const fetchCycleStudents = async (cycleId) => {
     setLoadingStudents(true);
@@ -1391,8 +1397,33 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                 <h4 className="font-medium mb-3">Add Students to Cycle</h4>
                 {unassignedStudents.length > 0 ? (
                   <>
-                    <div className="max-h-48 overflow-y-auto space-y-2 mb-3">
-                      {unassignedStudents.map((student) => (
+                    <div className="flex gap-2 mb-3">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input
+                          type="text"
+                          placeholder="Search students..."
+                          value={studentSearch}
+                          onChange={(e) => setStudentSearch(e.target.value)}
+                          className="pl-9 input w-full text-sm py-2"
+                        />
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (selectedStudents.length === filteredUnassigned.length && filteredUnassigned.length > 0) {
+                            setSelectedStudents([]);
+                          } else {
+                            setSelectedStudents(filteredUnassigned.map(s => s._id));
+                          }
+                        }}
+                        className="btn btn-secondary btn-sm whitespace-nowrap"
+                        disabled={filteredUnassigned.length === 0}
+                      >
+                        {selectedStudents.length === filteredUnassigned.length && filteredUnassigned.length > 0 ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto space-y-2 mb-3 p-1">
+                      {filteredUnassigned.length > 0 ? filteredUnassigned.map((student) => (
                         <label
                           key={student._id}
                           className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
@@ -1419,7 +1450,9 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                             {student.studentProfile?.currentSchool || 'No school'}
                           </span>
                         </label>
-                      ))}
+                      )) : (
+                        <p className="text-sm text-gray-500 text-center py-4">No students match your search.</p>
+                      )}
                     </div>
                     <button
                       onClick={handleAssignStudents}

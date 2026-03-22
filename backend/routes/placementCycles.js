@@ -116,7 +116,7 @@ router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager
  */
 router.post('/',
   auth,
-  authorize('manager'),
+  authorize('manager', 'coordinator', 'campus_poc'),
   [
     body('month').isInt({ min: 1, max: 12 }).withMessage('Month must be between 1 and 12'),
     body('year').isInt({ min: 2020, max: 2050 }).withMessage('Invalid year')
