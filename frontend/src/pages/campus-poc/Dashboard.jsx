@@ -1426,7 +1426,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                       {filteredUnassigned.length > 0 ? filteredUnassigned.map((student) => (
                         <label
                           key={student._id}
-                          className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                          className="flex items-center w-full p-2 hover:bg-gray-50 rounded cursor-pointer"
                         >
                           <input
                             type="checkbox"
@@ -1438,17 +1438,17 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                                 setSelectedStudents(selectedStudents.filter(id => id !== student._id));
                               }
                             }}
-                            className="rounded border-gray-300"
+                            className="rounded border-gray-300 mr-3 cursor-pointer"
                           />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
-                              {student.fullName || student.name || `${student.firstName} ${student.lastName}`.trim()}
+                          <div className="flex-1 w-full min-w-0" style={{ minWidth: '0' }}>
+                            <p className="text-sm font-bold text-black truncate">
+                              {student.firstName ? `${student.firstName} ${student.lastName || ''}`.trim() : student.name || student.email || 'Unknown Student'}
                             </p>
-                            <p className="text-xs text-gray-500 truncate">{student.email}</p>
+                            <p className="text-xs text-black truncate">{student.email || 'No email'}</p>
                           </div>
-                          <span className="text-xs text-gray-400">
-                            {student.studentProfile?.currentSchool || 'No school'}
-                          </span>
+                          <div className="text-xs text-gray-500 whitespace-nowrap ml-3">
+                            {student.studentProfile?.currentSchool || student.campus?.name || 'No school'}
+                          </div>
                         </label>
                       )) : (
                         <p className="text-sm text-gray-500 text-center py-4">No students match your search.</p>
