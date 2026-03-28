@@ -211,7 +211,7 @@ const POCSkillManagement = () => {
   // Utility functions for Communication Tab
   const cefrOrder = { 'A1': 1, 'A2': 2, 'B1': 3, 'B2': 4, 'C1': 5, 'C2': 6 };
   
-  const isJobReady = (level) => {
+  const isCommunicationReady = (level) => {
     return cefrOrder[level] >= cefrOrder['B2'];
   };
 
@@ -235,12 +235,12 @@ const POCSkillManagement = () => {
     return labels[level] || level || '-';
   };
 
-  const getJobReadyPercentage = () => {
+  const getCommunicationReadyPercentage = () => {
     if (cefrStudents.length === 0) return 0;
     const ready = cefrStudents.filter(s => {
       const speaking = s.studentProfile?.englishProficiency?.speaking;
       const writing = s.studentProfile?.englishProficiency?.writing;
-      return isJobReady(speaking) && isJobReady(writing);
+      return isCommunicationReady(speaking) && isCommunicationReady(writing);
     }).length;
     return Math.round((ready / cefrStudents.length) * 100);
   };
@@ -307,7 +307,7 @@ const POCSkillManagement = () => {
   const communicationAnalytics = useMemo(() => {
     const monthBucketOrder = ['0-2', '3-5', '6-8', '9-12', '12+', 'Unknown'];
     const monthBucketMap = monthBucketOrder.reduce((acc, label) => {
-      acc[label] = { bucket: label, jobReady: 0, inProgress: 0, total: 0 };
+      acc[label] = { bucket: label, communicationReady: 0, inProgress: 0, total: 0 };
       return acc;
     }, {});
 
@@ -325,21 +325,21 @@ const POCSkillManagement = () => {
     cefrStudents.forEach((student) => {
       const speaking = student?.studentProfile?.englishProficiency?.speaking || null;
       const writing = student?.studentProfile?.englishProficiency?.writing || null;
-      const ready = isJobReady(speaking) && isJobReady(writing);
+      const communicationReady = isCommunicationReady(speaking) && isCommunicationReady(writing);
 
       const months = getMonthsSpent(student);
       const monthBucket = getMonthBucket(months);
       const monthEntry = monthBucketMap[monthBucket] || monthBucketMap.Unknown;
       monthEntry.total += 1;
-      if (ready) monthEntry.jobReady += 1;
+      if (communicationReady) monthEntry.communicationReady += 1;
       else monthEntry.inProgress += 1;
 
       const school = student?.studentProfile?.currentSchool || 'Unknown';
       if (!schoolMap[school]) {
-        schoolMap[school] = { school, jobReady: 0, inProgress: 0, total: 0, readyRate: 0 };
+        schoolMap[school] = { school, communicationReady: 0, inProgress: 0, total: 0, readyRate: 0 };
       }
       schoolMap[school].total += 1;
-      if (ready) schoolMap[school].jobReady += 1;
+      if (communicationReady) schoolMap[school].communicationReady += 1;
       else schoolMap[school].inProgress += 1;
 
       if (cefrLevels.includes(speaking) && cefrLevels.includes(writing)) {
@@ -355,14 +355,14 @@ const POCSkillManagement = () => {
       .filter((item) => item.total > 0)
       .map((item) => ({
         bucket: item.bucket,
-        readyRate: Math.round((item.jobReady / item.total) * 100),
+        readyRate: Math.round((item.communicationReady / item.total) * 100),
         total: item.total
       }));
 
     const schoolReadinessData = Object.values(schoolMap)
       .map((item) => ({
         ...item,
-        readyRate: item.total > 0 ? Math.round((item.jobReady / item.total) * 100) : 0
+        readyRate: item.total > 0 ? Math.round((item.communicationReady / item.total) * 100) : 0
       }))
       .sort((a, b) => b.readyRate - a.readyRate);
 
@@ -708,30 +708,30 @@ const POCSkillManagement = () => {
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200">
                   <p className="text-xs text-green-600 font-bold uppercase tracking-wider">
-                    {communicationSubTab === 'cefr' ? 'Job Ready' : 'Average ReadTheory'}
+                    {communicationSubTab === 'cefr' ? 'Comm Ready' : 'Average ReadTheory'}
                   </p>
                   <p className="text-2xl font-black text-green-700">
-                    {communicationSubTab === 'cefr' ? `${getJobReadyPercentage()}%` : readTheoryAnalytics.averageReadTheory}
+                    {communicationSubTab === 'cefr' ? `${getCommunicationReadyPercentage()}%` : readTheoryAnalytics.averageReadTheory}
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Progress Bar for Job Readiness */}
+          {/* Progress Bar for Communication Readiness */}
           {communicationSubTab === 'cefr' && cefrStudents.length > 0 && (
             <div className="card">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Award className="w-4 h-4 text-primary-600" />
-                  <span className="text-sm font-bold text-gray-900">Communication Job Readiness (B2+)</span>
+                  <span className="text-sm font-bold text-gray-900">Communication Ready (B2+)</span>
                 </div>
-                <span className="text-sm font-bold text-primary-600">{getJobReadyPercentage()}%</span>
+                <span className="text-sm font-bold text-primary-600">{getCommunicationReadyPercentage()}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                 <div
                   className="bg-gradient-to-r from-primary-500 to-primary-600 h-full transition-all duration-300 rounded-full"
-                  style={{ width: `${getJobReadyPercentage()}%` }}
+                  style={{ width: `${getCommunicationReadyPercentage()}%` }}
                 />
               </div>
             </div>
@@ -743,7 +743,7 @@ const POCSkillManagement = () => {
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <div className="card">
                   <div className="mb-4">
-                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Month Spent vs Job Ready</h3>
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Month Spent vs Comm Ready</h3>
                     <p className="text-xs text-gray-500 mt-1">Compares readiness counts across tenure buckets</p>
                   </div>
                   <div className="h-72">
@@ -754,7 +754,7 @@ const POCSkillManagement = () => {
                         <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="jobReady" name="Job Ready" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="communicationReady" name="Comm Ready" fill="#16a34a" radius={[6, 6, 0, 0]} />
                         <Bar dataKey="inProgress" name="In Progress" fill="#f59e0b" radius={[6, 6, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -764,7 +764,7 @@ const POCSkillManagement = () => {
                 <div className="card">
                   <div className="mb-4">
                     <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Readiness Rate by Month Spent</h3>
-                    <p className="text-xs text-gray-500 mt-1">Trend line of communication job-ready percentage by tenure</p>
+                    <p className="text-xs text-gray-500 mt-1">Trend line of communication-ready percentage by tenure</p>
                   </div>
                   <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
@@ -1017,7 +1017,7 @@ const POCSkillManagement = () => {
                     {cefrStudents.map((student) => {
                       const speaking = student.studentProfile?.englishProficiency?.speaking;
                       const writing = student.studentProfile?.englishProficiency?.writing;
-                      const isReady = isJobReady(speaking) && isJobReady(writing);
+                      const isReady = isCommunicationReady(speaking) && isCommunicationReady(writing);
                       
                       return (
                         <tr key={student._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
@@ -1051,7 +1051,7 @@ const POCSkillManagement = () => {
                             {isReady ? (
                               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
                                 <CheckCircle className="w-3.5 h-3.5" />
-                                Job Ready
+                                Comm Ready
                               </div>
                             ) : (
                               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">

@@ -1,8 +1,97 @@
 const express = require('express');
 const router = express.Router();
 const Settings = require('../models/Settings');
+const Notification = require('../models/Notification');
 const { auth, authorize } = require('../middleware/auth');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
+
+async function getImpactFromUserQuery(matchQuery) {
+  const User = require('../models/User');
+  const Campus = require('../models/Campus');
+
+  const impactedUsers = await User.find(matchQuery, '_id firstName lastName email campus').lean();
+  const studentCount = impactedUsers.length;
+
+  const campusIds = [...new Set(
+    impactedUsers
+      .map((user) => (user?.campus ? String(user.campus) : null))
+      .filter(Boolean)
+  )];
+
+  let campusNames = [];
+  let campusBreakdown = [];
+  let studentRows = [];
+  if (campusIds.length > 0) {
+    const campuses = await Campus.find({ _id: { $in: campusIds } }, 'name').lean();
+    const campusNameById = Object.fromEntries(campuses.map((campus) => [String(campus._id), campus.name]));
+    campusNames = campusIds.map((id) => campusNameById[id]).filter(Boolean);
+
+    const campusCountMap = {};
+    impactedUsers.forEach((user) => {
+      const campusId = user?.campus ? String(user.campus) : null;
+      if (!campusId) return;
+      const campusName = campusNameById[campusId] || 'Unknown Campus';
+      campusCountMap[campusName] = (campusCountMap[campusName] || 0) + 1;
+    });
+
+    campusBreakdown = Object.entries(campusCountMap)
+      .map(([campusName, students]) => ({ campusName, students }))
+      .sort((a, b) => b.students - a.students || a.campusName.localeCompare(b.campusName));
+
+    studentRows = impactedUsers.map((user) => {
+      const campusId = user?.campus ? String(user.campus) : null;
+      return {
+        id: String(user._id),
+        name: [user.firstName, user.lastName].filter(Boolean).join(' ') || 'N/A',
+        email: user.email || 'N/A',
+        campus: campusId ? (campusNameById[campusId] || 'Unknown Campus') : 'No Campus'
+      };
+    }).sort((a, b) => a.campus.localeCompare(b.campus) || a.name.localeCompare(b.name));
+  } else {
+    // Students without a campus assignment
+    studentRows = impactedUsers.map((user) => ({
+      id: String(user._id),
+      name: [user.firstName, user.lastName].filter(Boolean).join(' ') || 'N/A',
+      email: user.email || 'N/A',
+      campus: 'No Campus'
+    }));
+  }
+
+  return {
+    students: studentCount,
+    campuses: campusIds.length,
+    campusNames,
+    campusBreakdown,
+    studentRows,
+    impactedUserIds: impactedUsers.map((user) => user._id)
+  };
+}
+
+function sanitizeImpact(impact = {}) {
+  return {
+    students: impact.students || 0,
+    campuses: impact.campuses || 0,
+    campusNames: Array.isArray(impact.campusNames) ? impact.campusNames : [],
+    campusBreakdown: Array.isArray(impact.campusBreakdown) ? impact.campusBreakdown : [],
+    studentRows: Array.isArray(impact.studentRows) ? impact.studentRows : []
+  };
+}
+
+async function notifyImpactedStudents(studentIds = [], title, message) {
+  if (!Array.isArray(studentIds) || studentIds.length === 0) return 0;
+
+  const notifications = studentIds.map((studentId) => ({
+    recipient: studentId,
+    type: 'profile_needs_revision',
+    title,
+    message,
+    link: '/profile',
+    relatedEntity: { type: 'user', id: studentId }
+  }));
+
+  await Notification.insertMany(notifications, { ordered: false });
+  return notifications.length;
+}
 
 /**
  * @swagger
@@ -597,8 +686,8 @@ router.put('/pipeline-stages-order', auth, authorize('coordinator', 'manager'), 
   }
 });
 
-// Add council post (manager/coordinator only)
-router.post('/council-posts', auth, authorize('manager', 'coordinator'), async (req, res) => {
+// Add council post (manager/coordinator/campus_poc)
+router.post('/council-posts', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { post } = req.body;
 
@@ -628,8 +717,8 @@ router.post('/council-posts', auth, authorize('manager', 'coordinator'), async (
   }
 });
 
-// Add council post dynamically (Any authenticated user)
-router.post('/council-posts/add', auth, async (req, res) => {
+// Backward-compatible alias for council post creation
+router.post('/council-posts/add', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { post } = req.body;
     if (!post || !post.trim()) {
@@ -658,13 +747,31 @@ router.post('/council-posts/add', auth, async (req, res) => {
   }
 });
 
-// Remove council post (manager/coordinator only)
-router.delete('/council-posts/:post', auth, authorize('manager', 'coordinator'), async (req, res) => {
+// Remove council post (manager/coordinator/campus_poc)
+router.delete('/council-posts/:post', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { post } = req.params;
+    const force = req.query.force === 'true';
+    const decodedPost = decodeURIComponent(post);
+
+    const impact = await getImpactFromUserQuery({
+      role: 'student',
+      isActive: true,
+      'studentProfile.councilService': {
+        $elemMatch: { post: decodedPost }
+      }
+    });
+
+    if (impact.students > 0 && !force) {
+      return res.status(409).json({
+        success: false,
+        message: `This post is selected by ${impact.students} student(s) across ${impact.campuses} campus(es).`,
+        impact: sanitizeImpact(impact)
+      });
+    }
 
     const settings = await Settings.getSettings();
-    const index = settings.councilPosts.indexOf(decodeURIComponent(post));
+    const index = settings.councilPosts.indexOf(decodedPost);
 
     if (index === -1) {
       return res.status(404).json({ success: false, message: 'Post not found' });
@@ -674,13 +781,146 @@ router.delete('/council-posts/:post', auth, authorize('manager', 'coordinator'),
     settings.lastUpdatedBy = req.userId;
     await settings.save();
 
+    let notifiedStudents = 0;
+    if (force && impact.students > 0) {
+      notifiedStudents = await notifyImpactedStudents(
+        impact.impactedUserIds,
+        'Profile Update Required',
+        `A council post you selected ("${decodedPost}") is no longer available. Please update your profile.`
+      );
+    }
+
     res.json({
       success: true,
       message: 'Council post removed successfully',
-      data: { councilPosts: settings.councilPosts }
+      data: { councilPosts: settings.councilPosts },
+      impact: force ? sanitizeImpact(impact) : undefined,
+      notifiedStudents
     });
   } catch (error) {
     console.error('Remove council post error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Remove higher education option (department or specialization)
+router.delete('/higher-education', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+  try {
+    const { department, specialization, force = false } = req.body || {};
+
+    if (!department || !department.trim()) {
+      return res.status(400).json({ success: false, message: 'Department is required' });
+    }
+
+    const settings = await Settings.getSettings();
+    const currentOptions = settings.higherEducationOptions || new Map();
+    const normalizedDept = department.trim();
+
+    if (!currentOptions.has(normalizedDept)) {
+      return res.status(404).json({ success: false, message: 'Department not found' });
+    }
+
+    if (specialization && specialization.trim()) {
+      const normalizedSpec = specialization.trim();
+
+      const impact = await getImpactFromUserQuery({
+        role: 'student',
+        isActive: true,
+        'studentProfile.higherEducation': {
+          $elemMatch: {
+            $or: [
+              { department: normalizedDept },
+              { fieldOfStudy: normalizedDept }
+            ],
+            specialization: normalizedSpec
+          }
+        }
+      });
+
+      if (impact.students > 0 && !force) {
+        return res.status(409).json({
+          success: false,
+          message: `This specialization is selected by ${impact.students} student(s) across ${impact.campuses} campus(es).`,
+          impact: sanitizeImpact(impact)
+        });
+      }
+
+      const existingSpecializations = currentOptions.get(normalizedDept) || [];
+      const nextSpecializations = existingSpecializations.filter((spec) => spec !== normalizedSpec);
+
+      if (nextSpecializations.length === existingSpecializations.length) {
+        return res.status(404).json({ success: false, message: 'Specialization not found' });
+      }
+
+      currentOptions.set(normalizedDept, nextSpecializations);
+
+      settings.higherEducationOptions = currentOptions;
+      settings.lastUpdatedBy = req.userId;
+      await settings.save();
+
+      let notifiedStudents = 0;
+      if (force && impact.students > 0) {
+        notifiedStudents = await notifyImpactedStudents(
+          impact.impactedUserIds,
+          'Profile Update Required',
+          `A higher-education specialization you selected ("${normalizedSpec}") under "${normalizedDept}" is no longer available. Please update your profile.`
+        );
+      }
+
+      return res.json({
+        success: true,
+        message: 'Higher-education options updated successfully',
+        data: Object.fromEntries(currentOptions),
+        impact: force ? sanitizeImpact(impact) : undefined,
+        notifiedStudents
+      });
+    } else {
+      const impact = await getImpactFromUserQuery({
+        role: 'student',
+        isActive: true,
+        'studentProfile.higherEducation': {
+          $elemMatch: {
+            $or: [
+              { department: normalizedDept },
+              { fieldOfStudy: normalizedDept }
+            ]
+          }
+        }
+      });
+
+      if (impact.students > 0 && !force) {
+        return res.status(409).json({
+          success: false,
+          message: `This department is selected by ${impact.students} student(s) across ${impact.campuses} campus(es).`,
+          impact: sanitizeImpact(impact)
+        });
+      }
+
+      currentOptions.delete(normalizedDept);
+
+      settings.higherEducationOptions = currentOptions;
+      settings.lastUpdatedBy = req.userId;
+      await settings.save();
+
+      let notifiedStudents = 0;
+      if (force && impact.students > 0) {
+        notifiedStudents = await notifyImpactedStudents(
+          impact.impactedUserIds,
+          'Profile Update Required',
+          `A higher-education department you selected ("${normalizedDept}") is no longer available. Please update your profile.`
+        );
+      }
+
+      return res.json({
+        success: true,
+        message: 'Higher-education options updated successfully',
+        data: Object.fromEntries(currentOptions),
+        impact: force ? sanitizeImpact(impact) : undefined,
+        notifiedStudents
+      });
+    }
+  } catch (error) {
+    console.error('Remove higher education option error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -785,7 +1025,7 @@ router.get('/ai-status', auth, authorize('manager'), async (req, res) => {
 });
 
 // Add higher education option (Department or Specialization)
-router.post('/higher-education/add', auth, async (req, res) => {
+router.post('/higher-education/add', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { department, specialization } = req.body;
 
@@ -821,6 +1061,104 @@ router.post('/higher-education/add', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Add higher education option error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Profile options analytics (counts of student selections)
+router.get('/analytics/profile-options', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const students = await User.find(
+      { role: 'student', isActive: true },
+      'studentProfile.councilService studentProfile.higherEducation'
+    ).lean();
+
+    const councilPostCounts = {};
+    const higherEducationDepartmentCounts = {};
+    const higherEducationSpecializationCounts = {};
+
+    students.forEach((student) => {
+      const councilService = student?.studentProfile?.councilService || [];
+      councilService.forEach((entry) => {
+        const post = (entry?.post || '').trim();
+        if (!post) return;
+        councilPostCounts[post] = (councilPostCounts[post] || 0) + 1;
+      });
+
+      const higherEducation = student?.studentProfile?.higherEducation || [];
+      higherEducation.forEach((edu) => {
+        const department = (edu?.department || edu?.fieldOfStudy || '').trim();
+        if (!department) return;
+
+        higherEducationDepartmentCounts[department] =
+          (higherEducationDepartmentCounts[department] || 0) + 1;
+
+        const specialization = (edu?.specialization || '').trim();
+        if (!specialization) return;
+
+        if (!higherEducationSpecializationCounts[department]) {
+          higherEducationSpecializationCounts[department] = {};
+        }
+        higherEducationSpecializationCounts[department][specialization] =
+          (higherEducationSpecializationCounts[department][specialization] || 0) + 1;
+      });
+    });
+
+    res.json({
+      success: true,
+      data: {
+        councilPostCounts,
+        higherEducationDepartmentCounts,
+        higherEducationSpecializationCounts
+      }
+    });
+  } catch (error) {
+    console.error('Profile options analytics error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get students who selected a specific profile option
+router.get('/analytics/option-students', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+  try {
+    const { type, value, department } = req.query;
+
+    // Guard against MongoDB operator injection via qs object parsing
+    if (typeof type !== 'string' || typeof value !== 'string') {
+      return res.status(400).json({ success: false, message: 'Invalid query params.' });
+    }
+    if (type === 'specialization' && typeof department !== 'string') {
+      return res.status(400).json({ success: false, message: 'Invalid query params.' });
+    }
+
+    const safeType = type.trim();
+    const safeValue = value.trim();
+    const safeDept = typeof department === 'string' ? department.trim() : '';
+
+    let matchQuery;
+    if (safeType === 'council-post' && safeValue) {
+      matchQuery = { role: 'student', isActive: true, 'studentProfile.councilService': { $elemMatch: { post: safeValue } } };
+    } else if (safeType === 'department' && safeValue) {
+      matchQuery = {
+        role: 'student', isActive: true,
+        'studentProfile.higherEducation': { $elemMatch: { $or: [{ department: safeValue }, { fieldOfStudy: safeValue }] } }
+      };
+    } else if (safeType === 'specialization' && safeDept && safeValue) {
+      matchQuery = {
+        role: 'student', isActive: true,
+        'studentProfile.higherEducation': {
+          $elemMatch: { $or: [{ department: safeDept }, { fieldOfStudy: safeDept }], specialization: safeValue }
+        }
+      };
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid query params. Provide type + value (and department for specialization).' });
+    }
+
+    const impact = await getImpactFromUserQuery(matchQuery);
+    res.json({ success: true, data: impact.studentRows || [] });
+  } catch (error) {
+    console.error('Option students error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });

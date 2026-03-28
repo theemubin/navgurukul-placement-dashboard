@@ -34,6 +34,7 @@ import UnifiedJobReadiness from './pages/campus-poc/UnifiedJobReadiness';
 import POCSelfApplicationsReview from './pages/campus-poc/SelfApplicationsReview';
 import POCInterestRequestsReview from './pages/campus-poc/InterestRequestsReview';
 import POCSkills from './pages/campus-poc/Skills';
+import POCCouncilPosts from './pages/campus-poc/CouncilPosts';
 
 // Coordinator Pages
 import CoordinatorDashboard from './pages/coordinator/Dashboard';
@@ -176,6 +177,8 @@ function App() {
         <Route path="self-applications" element={<POCSelfApplicationsReview />} />
         <Route path="interest-requests" element={<POCInterestRequestsReview />} />
         <Route path="skills" element={<POCSkills />} />
+        <Route path="profile-options" element={<POCCouncilPosts />} />
+        <Route path="council-posts" element={<POCCouncilPosts />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="jobs/:id" element={<JobDetails />} />
       </Route>
@@ -198,12 +201,14 @@ function App() {
         </Route>
         <Route path="interest-requests" element={<CoordinatorInterestRequests />} />
         <Route path="forum" element={<CoordinatorForum />} />
+        <Route path="profile-options" element={<POCCouncilPosts />} />
         {/* Nested Settings routes */}
         <Route path="settings" element={<SettingsLayout role="coordinator" />}>
           <Route index element={<AIKeysSettings />} />
           <Route path="discord" element={<DiscordSettings />} />
         </Route>
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
+        <Route path="students/:id" element={<POCStudentDetails />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
@@ -220,6 +225,7 @@ function App() {
         <Route path="partners" element={<PartnerManagement />} />
         <Route path="leads" element={<LeadsManagement />} />
         <Route path="settings" element={<ManagerSettings />} />
+        <Route path="profile-options" element={<POCCouncilPosts />} />
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />

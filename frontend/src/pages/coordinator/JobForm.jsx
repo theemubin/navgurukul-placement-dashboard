@@ -80,9 +80,6 @@ const JobForm = () => {
   const [showHometownSuggestions, setShowHometownSuggestions] = useState(false);
   const [showHomestateSuggestions, setShowHomestateSuggestions] =
     useState(false);
-  const [showCouncilPostSuggestions, setShowCouncilPostSuggestions] = useState(
-    {},
-  ); // Keyed by index
   const [roleCategories, setRoleCategories] = useState([]);
 
   const [formData, setFormData] = useState({
@@ -130,7 +127,7 @@ const JobForm = () => {
       englishSpeaking: "",
       homestate: "",
       councilPosts: [], // Array of { post: String, minMonths: Number }
-      readinessRequirement: "yes",
+      readinessRequirement: "no",
       houses: [],
       requiredGharStatuses: [],
       minReadTheoryLevel: "",
@@ -241,7 +238,7 @@ const JobForm = () => {
       fetchStudentCount();
     }, 500);
     return () => clearTimeout(timer);
-  }, [formData.eligibility]);
+  }, [formData.eligibility, formData.requiredSkills]);
 
   const fetchCompanies = async () => {
     try {
@@ -379,24 +376,8 @@ const JobForm = () => {
       setSchools(filteredSchools);
       setSchoolsWithModules(filteredSchools);
 
-      // Also set Council Posts from settings if available
-      if (settingsRes.councilPosts) {
-        setCouncilPostsList(settingsRes.councilPosts);
-      } else {
-        // Fallback default list
-        setCouncilPostsList([
-          "General Secretary",
-          "Technical Secretary",
-          "Cultural Secretary",
-          "Sports Secretary",
-          "Health Secretary",
-          "Mess Secretary",
-          "Maintenance Secretary",
-          "Discipline Secretary",
-          "Academic Secretary",
-          "Placement Coordinator",
-        ]);
-      }
+      // Council Posts from backend settings only — section hidden if none configured
+      setCouncilPostsList(settingsRes.councilPosts || []);
     } catch (error) {
       console.error("Error fetching campuses:", error);
     }
@@ -971,6 +952,7 @@ const JobForm = () => {
     // English proficiency (CEFR)
     formData.eligibility.englishSpeaking ||
     formData.eligibility.englishWriting ||
+    formData.eligibility.minReadTheoryLevel ||
     // Job readiness
     (formData.eligibility.readinessRequirement &&
       formData.eligibility.readinessRequirement !== "no") ||
@@ -978,7 +960,9 @@ const JobForm = () => {
     (formData.eligibility.councilPosts?.length > 0 &&
       formData.eligibility.councilPosts.some((cp) => cp.post)) ||
     // Ghar Status
+    formData.eligibility.minGharAttendance ||
     formData.eligibility.requiredGharStatuses?.length > 0 ||
+    formData.eligibility.minAtCoderRating ||
     // Certifications
     formData.eligibility.certifications?.length > 0 ||
     // Required Skills
@@ -2340,7 +2324,8 @@ const JobForm = () => {
             </div>
           </div>
 
-          {/* Council Post Requirements */}
+          {/* Council Post Requirements — only shown if posts are configured in settings */}
+          {councilPostsList.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-medium text-gray-800 flex items-center gap-2">
@@ -2371,17 +2356,18 @@ const JobForm = () => {
                   key={index}
                   className="flex gap-2 items-start p-2 bg-indigo-50 rounded-lg border border-indigo-100"
                 >
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      placeholder="Select Post"
+                  <div className="flex-1">
+                    <select
                       className="w-full text-sm rounded border-gray-300"
                       value={req.post}
                       onChange={(e) => {
                         const updated = [
                           ...(formData.eligibility.councilPosts || []),
                         ];
-                        updated[index].post = e.target.value;
+                        updated[index] = {
+                          ...updated[index],
+                          post: e.target.value,
+                        };
                         setFormData({
                           ...formData,
                           eligibility: {
@@ -2389,64 +2375,15 @@ const JobForm = () => {
                             councilPosts: updated,
                           },
                         });
-                        setShowCouncilPostSuggestions({
-                          ...showCouncilPostSuggestions,
-                          [index]: true,
-                        });
                       }}
-                      onFocus={() =>
-                        setShowCouncilPostSuggestions({
-                          ...showCouncilPostSuggestions,
-                          [index]: true,
-                        })
-                      }
-                    />
-                    {showCouncilPostSuggestions[index] && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={() =>
-                            setShowCouncilPostSuggestions({
-                              ...showCouncilPostSuggestions,
-                              [index]: false,
-                            })
-                          }
-                        ></div>
-                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                          {councilPostsList
-                            .filter((p) =>
-                              p.toLowerCase().includes(req.post.toLowerCase()),
-                            )
-                            .map((p) => (
-                              <button
-                                key={p}
-                                type="button"
-                                onClick={() => {
-                                  const updated = [
-                                    ...(formData.eligibility.councilPosts ||
-                                      []),
-                                  ];
-                                  updated[index].post = p;
-                                  setFormData({
-                                    ...formData,
-                                    eligibility: {
-                                      ...formData.eligibility,
-                                      councilPosts: updated,
-                                    },
-                                  });
-                                  setShowCouncilPostSuggestions({
-                                    ...showCouncilPostSuggestions,
-                                    [index]: false,
-                                  });
-                                }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-0"
-                              >
-                                {p}
-                              </button>
-                            ))}
-                        </div>
-                      </>
-                    )}
+                    >
+                      <option value="">Select Post</option>
+                      {councilPostsList.map((post) => (
+                        <option key={post} value={post}>
+                          {post}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="w-24">
                     <input
@@ -2459,8 +2396,10 @@ const JobForm = () => {
                         const updated = [
                           ...(formData.eligibility.councilPosts || []),
                         ];
-                        updated[index].minMonths =
-                          parseInt(e.target.value) || 0;
+                        updated[index] = {
+                          ...updated[index],
+                          minMonths: parseInt(e.target.value) || 0,
+                        };
                         setFormData({
                           ...formData,
                           eligibility: {
@@ -2500,6 +2439,7 @@ const JobForm = () => {
               )}
             </div>
           </div>
+          )}
 
           {/* Additional Internal Filters */}
           <div className="mb-4">
@@ -2643,6 +2583,9 @@ const JobForm = () => {
                           setShowHomestateSuggestions(true);
                         }}
                         onFocus={() => setShowHomestateSuggestions(true)}
+                        onBlur={() =>
+                          setTimeout(() => setShowHomestateSuggestions(false), 150)
+                        }
                       />
                       {showHomestateSuggestions && (
                         <div className="absolute z-30 w-full mt-1 bg-white border rounded shadow-lg max-h-32 overflow-y-auto">
@@ -2695,6 +2638,9 @@ const JobForm = () => {
                           setShowHometownSuggestions(true);
                         }}
                         onFocus={() => setShowHometownSuggestions(true)}
+                        onBlur={() =>
+                          setTimeout(() => setShowHometownSuggestions(false), 150)
+                        }
                       />
                       {showHometownSuggestions && (
                         <div className="absolute z-30 w-full mt-1 bg-white border rounded shadow-lg max-h-32 overflow-y-auto">
@@ -2735,7 +2681,7 @@ const JobForm = () => {
 
                 {/* 4. English Proficiency */}
                 <div
-                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.englishWriting || formData.eligibility.englishSpeaking ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.englishWriting || formData.eligibility.englishSpeaking || formData.eligibility.minReadTheoryLevel ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
                 >
                   <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
                     English Level (CEFR)
@@ -2781,6 +2727,26 @@ const JobForm = () => {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  <div className="mt-2">
+                    <span className="text-[8px] text-gray-400 uppercase block mb-0.5">
+                      ReadTheory Level
+                    </span>
+                    <input
+                      type="number"
+                      placeholder="Minimum level"
+                      className="w-full text-[10px] py-1"
+                      value={formData.eligibility.minReadTheoryLevel || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          eligibility: {
+                            ...formData.eligibility,
+                            minReadTheoryLevel: e.target.value,
+                          },
+                        })
+                      }
+                    />
                   </div>
                 </div>
 
@@ -2839,34 +2805,14 @@ const JobForm = () => {
                   </div>
                 </div>
 
-                {/* 6. Academic Metrics (ReadTheory/Atcoder) */}
+                {/* 6. Academic Metrics */}
                 <div
-                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minReadTheoryLevel || formData.eligibility.minAtCoderRating ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
+                  className={`p-3 rounded-lg border-2 transition-all ${formData.eligibility.minAtCoderRating ? "border-green-500 bg-white" : "border-gray-200 bg-white"}`}
                 >
                   <span className="font-medium text-gray-900 text-xs block mb-1 uppercase tracking-wider">
-                    Academic Metrics
+                    Coding Metrics
                   </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-[8px] text-gray-400 uppercase block mb-0.5">
-                        ReadTheory Level
-                      </span>
-                      <input
-                        type="number"
-                        placeholder="Level"
-                        className="w-full text-[10px] py-1"
-                        value={formData.eligibility.minReadTheoryLevel || ""}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            eligibility: {
-                              ...formData.eligibility,
-                              minReadTheoryLevel: e.target.value,
-                            },
-                          })
-                        }
-                      />
-                    </div>
+                  <div>
                     <div>
                       <span className="text-[8px] text-gray-400 uppercase block mb-0.5">
                         AtCoder Rating
@@ -2914,7 +2860,7 @@ const JobForm = () => {
                       className={`w-8 h-4 rounded-full relative transition-colors ${formData.eligibility.femaleOnly ? "bg-green-500" : "bg-gray-300"}`}
                     >
                       <div
-                        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${formData.eligibility.femaleOnly ? "left-4.5" : "left-0.5"}`}
+                        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${formData.eligibility.femaleOnly ? "left-[18px]" : "left-0.5"}`}
                       ></div>
                     </div>
                   </div>

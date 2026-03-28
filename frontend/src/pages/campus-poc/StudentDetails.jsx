@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { userAPI, applicationAPI, jobReadinessAPI, gharAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
 import {
@@ -13,6 +14,8 @@ import toast from 'react-hot-toast';
 const POCStudentDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
+  const isCoordinator = currentUser?.role === 'coordinator';
   const [student, setStudent] = useState(null);
   const [applications, setApplications] = useState([]);
   const [jobReadiness, setJobReadiness] = useState(null);
@@ -229,7 +232,7 @@ const POCStudentDetails = () => {
       {/* Navigation & Status */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <button
-          onClick={() => navigate('/campus-poc/students')}
+          onClick={() => navigate(isCoordinator ? '/coordinator' : '/campus-poc/students')}
           className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors text-sm font-bold uppercase tracking-widest"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -539,6 +542,7 @@ const POCStudentDetails = () => {
               <GharRow label="Attendance" value={profile.attendancePercentage ? `${profile.attendancePercentage}%` : null} verified={profile.isAttendanceVerified} />
               <GharRow label="Read Theory Level" value={profile.readTheoryLevel} />
               <GharRow label="AtCoder Rating" value={profile.atCoderRating} />
+              <GharRow label="Zoho Student ID" value={profile.stdId} />
             </div>
           </div>
 

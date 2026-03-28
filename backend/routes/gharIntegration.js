@@ -224,6 +224,116 @@ router.post('/batch-sync', isAuthenticated, isManager, async (req, res) => {
 });
 
 /**
+ * @route   POST /api/ghar/import-all-students
+ * @desc    Mass sync and import students from Ghar Dashboard (optionally filtered by campus)
+ * @access  Manager, Campus POC
+ */
+router.post('/import-all-students', isAuthenticated, authorize('manager', 'campus_poc'), async (req, res) => {
+    try {
+        const isDev = req.query.isDev === 'true';
+        const { campus, school, status, stdIdStart, stdIdEnd } = req.query;
+        console.log(`[GharSync] Starting mass import (isDev: ${isDev}, Campus: ${campus || 'All'}, School: ${school || 'All'}, Status: ${status || 'All'}, Range: ${stdIdStart || 1}-${stdIdEnd || 10000})`);
+
+        // Use the new filtered fetch endpoint (MUCH more efficient)
+        const studentsToProcess = await gharApiService.fetchFilteredStudents({ 
+          campus, 
+          school, 
+          status,
+          stdIdStart: stdIdStart || 1, 
+          stdIdEnd: stdIdEnd || 5000 // Default 5k to be safe
+        }, isDev);
+        
+        if (!studentsToProcess || studentsToProcess.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: campus || school || status 
+                  ? 'No students found matching your filters' 
+                  : 'No students found to import'
+            });
+        }
+
+        const stats = {
+            totalFromGhar: studentsToProcess.length,
+            created: 0,
+            updated: 0,
+            failed: 0
+        };
+
+        const batchSize = 10; // Process in small batches to avoid overload
+        for (let i = 0; i < studentsToProcess.length; i += batchSize) {
+            const batch = studentsToProcess.slice(i, i + batchSize);
+            await Promise.allSettled(batch.map(async (st) => {
+                try {
+                    // Robust email finder - prioritize Navgurukul_Email as per user request
+                    const emailField = [
+                      'Navgurukul_Email', 'Student_ng_email', 'Email', 'Email_ID', 
+                      'student_email', 'Ng_Email_ID', 'Personal_Email',
+                      'Select_Campus.Campus_Email', 'Email_Address'
+                    ].find(k => {
+                      if (k.includes('.')) {
+                        const [p, c] = k.split('.');
+                        return st[p] && st[p][c];
+                      }
+                      return st[k];
+                    });
+
+                    let email = '';
+                    if (emailField && emailField.includes('.')) {
+                      const [p, c] = emailField.split('.');
+                      email = st[p][c];
+                    } else if (emailField) {
+                      email = st[emailField];
+                    }
+
+                    if (!email) {
+                      console.error(`[GharSync] Missing email for student record. Keys: ${Object.keys(st).join(', ')}`);
+                      if (i === 0) { // Log sample on first failure for debugging
+                        console.error(`[GharSync] Sample data from failed record:`, JSON.stringify(st).substring(0, 200));
+                      }
+                      stats.failed++;
+                      return;
+                    }
+
+                    // Check if exists
+                    const exists = await User.findOne({ email: new RegExp(`^${email.trim()}$`, 'i') });
+                    
+                    const result = await User.syncGharData(email.trim(), st, { createIfNotFound: true });
+                    
+                    if (result) {
+                        if (!exists) stats.created++;
+                        else stats.updated++;
+                    } else {
+                        stats.failed++;
+                    }
+                } catch (err) {
+                    console.error(`[GharSync] Import error for student:`, err.message);
+                    stats.failed++;
+                }
+            }));
+        }
+
+        res.json({
+            success: true,
+            message: campus 
+              ? `Sync for ${campus} completed: ${stats.created} new imported, ${stats.updated} updated`
+              : `Mass sync completed: ${stats.created} imported, ${stats.updated} updated`,
+            stats,
+            debug: stats.failed > 0 ? {
+                sampleStudentKeys: studentsToProcess[0] ? Object.keys(studentsToProcess[0]) : [],
+                sampleFirstStudent: studentsToProcess[0] || null
+            } : null
+        });
+    } catch (error) {
+        console.error('Error in mass import:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Mass import failed',
+            error: error.message
+        });
+    }
+});
+
+/**
  * @route   GET /api/ghar/connection-status
  * @desc    Check if Ghar API is accessible
  * @access  Manager only

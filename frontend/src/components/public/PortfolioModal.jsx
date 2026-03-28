@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 const PortfolioModal = ({ portfolio, selectedRole, onClose }) => {
+    const { user } = useAuth();
     const [imageError, setImageError] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -360,31 +362,54 @@ const PortfolioModal = ({ portfolio, selectedRole, onClose }) => {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-gray-900">Resume</h3>
-                                        <a
-                                            href={portfolio.resumeLink}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                            </svg>
-                                            View Full Screen
-                                        </a>
+                                        {user ? (
+                                            <a
+                                                href={portfolio.resumeLink}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                </svg>
+                                                View Full Screen
+                                            </a>
+                                        ) : (
+                                            <span className="text-amber-600 text-xs font-bold uppercase tracking-widest flex items-center gap-1 bg-amber-50 px-2 py-1 rounded">
+                                                Locked
+                                            </span>
+                                        )}
                                     </div>
-                                    <div className="aspect-[8.5/11] bg-gray-100 rounded-xl overflow-hidden shadow-inner border border-gray-200 relative group">
-                                        <iframe
-                                            src={portfolio.resumeLink.includes('drive.google.com')
-                                                ? portfolio.resumeLink.replace('/view', '/preview').replace('?usp=sharing', '')
-                                                : `${portfolio.resumeLink}#toolbar=0&navpanes=0&scrollbar=0`}
-                                            className="w-full h-full"
-                                            title="Resume"
-                                        />
-                                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-                                    </div>
-                                    <p className="text-xs text-gray-500 text-center italic">
-                                        * Note: If the resume doesn't load, please use the "View Full Screen" link above.
-                                    </p>
+
+                                    {user ? (
+                                        <div className="aspect-[8.5/11] bg-gray-100 rounded-xl overflow-hidden shadow-inner border border-gray-200 relative group">
+                                            <iframe
+                                                src={portfolio.resumeLink.includes('drive.google.com')
+                                                    ? portfolio.resumeLink.replace('/view', '/preview').replace('?usp=sharing', '')
+                                                    : `${portfolio.resumeLink}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                className="w-full h-full"
+                                                title="Resume"
+                                            />
+                                            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+                                        </div>
+                                    ) : (
+                                        <div className="aspect-[8/11] bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center p-8 text-center">
+                                            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                                                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                            </div>
+                                            <h4 className="font-black uppercase tracking-tight text-gray-900 mb-2">Resume Locked</h4>
+                                            <p className="text-xs text-gray-500 mb-6 max-w-xs">Please login with your NavGurukul account to view and download this student's resume.</p>
+                                            <a href="/login" className="btn btn-primary text-[10px] font-black uppercase tracking-widest px-8">Login to Access</a>
+                                        </div>
+                                    )}
+
+                                    {user && (
+                                        <p className="text-xs text-gray-500 text-center italic">
+                                            * Note: If the resume doesn't load, please use the "View Full Screen" link above.
+                                        </p>
+                                    )}
                                 </div>
                             )}
 

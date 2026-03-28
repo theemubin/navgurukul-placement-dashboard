@@ -152,7 +152,7 @@ const jobSchema = new mongoose.Schema({
     readinessRequirement: {
       type: String,
       enum: ['yes', 'no', 'in_progress'],
-      default: 'yes'
+      default: 'no'
     },
 
     // House Specific (Navgurukul)

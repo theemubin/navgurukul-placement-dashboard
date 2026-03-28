@@ -151,6 +151,9 @@ const StudentProfile = () => {
   const [showProfileCouncilSuggestions, setShowProfileCouncilSuggestions] = useState(false);
   const [newLanguage, setNewLanguage] = useState({ language: '', speaking: '', writing: '', isNative: false });
   const [resumeLinkStatus, setResumeLinkStatus] = useState({ checked: false, ok: false, status: null });
+  const [atsLoading, setAtsLoading] = useState(false);
+  const [atsResult, setAtsResult] = useState(null);
+  const [atsPrompts, setAtsPrompts] = useState(null);
 
   const schoolList = Object.keys(settings.schoolModules || {});
   const schools = (schoolList.length > 0 ? schoolList : fallbackSchools)
@@ -286,10 +289,67 @@ const StudentProfile = () => {
           setResumeLinkStatus({ checked: true, ok: false, status: null });
         }
       }
+
+      if (data?.studentProfile?.resumeAts?.status === 'ok') {
+        setAtsResult(data.studentProfile.resumeAts);
+      } else {
+        setAtsResult(null);
+      }
     } catch (error) {
       toast.error('Error loading profile');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCheckAtsScore = async () => {
+    const typedLink = (formData.resumeLink || '').trim();
+    const savedLink = (profile?.studentProfile?.resumeLink || '').trim();
+
+    if (!typedLink) {
+      toast.error('Please add a resume link first');
+      return;
+    }
+
+    // Backend intentionally uses saved profile link only; require save first if changed.
+    if (typedLink !== savedLink) {
+      toast.error('Resume link changed. Please Save Profile first, then run ATS check.');
+      return;
+    }
+
+    setAtsLoading(true);
+    try {
+      const res = await utilsAPI.checkResumeAts();
+      const data = res?.data?.data;
+      if (!data) {
+        toast.error('ATS response is empty');
+        return;
+      }
+
+      setAtsResult(data);
+      setAtsPrompts(data.prompts || null);
+      setProfile((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          studentProfile: {
+            ...prev.studentProfile,
+            resumeAts: data
+          }
+        };
+      });
+      toast.success('ATS score generated');
+    } catch (error) {
+      const payload = error?.response?.data;
+      if (error?.response?.status === 422 && payload?.nameMatch) {
+        const reason = payload?.nameMatch?.reason || payload?.message || 'Resume name does not match your profile.';
+        const docHint = payload?.documentType ? ` (Detected: ${payload.documentType.replace('_', ' ')})` : '';
+        toast.error(`ATS blocked${docHint}: ${reason}`);
+      } else {
+        toast.error(payload?.message || 'Failed to generate ATS score');
+      }
+    } finally {
+      setAtsLoading(false);
     }
   };
 
@@ -326,24 +386,6 @@ const StudentProfile = () => {
     }
   };
 
-  const handleAddEducationOption = async (department, specialization = '') => {
-    try {
-      const response = await settingsAPI.addHigherEducationOption({ department, specialization });
-      if (response.data.success) {
-        setSettings(prev => ({
-          ...prev,
-          higherEducationOptions: response.data.data
-        }));
-        toast.success(specialization ? `Added specialization "${specialization}" to ${department}` : `Added department "${department}"`);
-        return true;
-      }
-    } catch (error) {
-      console.error('Error adding education option:', error);
-      toast.error('Failed to add new option');
-    }
-    return false;
-  };
-
   const handleAddInstitutionOption = async (institution, pincode = '') => {
     try {
       const response = await settingsAPI.addInstitutionOption(institution, pincode);
@@ -358,24 +400,6 @@ const StudentProfile = () => {
     } catch (error) {
       console.error('Error adding institution option:', error);
       toast.error('Failed to add new institution');
-    }
-    return false;
-  };
-
-  const handleAddCouncilPostOption = async (post) => {
-    try {
-      const response = await settingsAPI.addCouncilPostOption(post);
-      if (response.data.success) {
-        setSettings(prev => ({
-          ...prev,
-          councilPosts: response.data.data.councilPosts
-        }));
-        toast.success(`Added "${post}" to the list`);
-        return true;
-      }
-    } catch (error) {
-      console.error('Error adding council post option:', error);
-      toast.error('Failed to add new post');
     }
     return false;
   };
@@ -1399,7 +1423,7 @@ const StudentProfile = () => {
                             <div>
                               <SearchableSelect
                                 label="Department"
-                                placeholder="Select or type Department"
+                                placeholder="Select Department"
                                 options={Object.keys(settings.higherEducationOptions || {})}
                                 value={edu.department || edu.fieldOfStudy}
                                 onChange={(value) => {
@@ -1410,43 +1434,22 @@ const StudentProfile = () => {
                                   updated[index].specialization = '';
                                   setFormData({ ...formData, higherEducation: updated });
                                 }}
-                                onAdd={(val) => {
-                                  handleAddEducationOption(val).then(success => {
-                                    if (success) {
-                                      const updated = [...formData.higherEducation];
-                                      updated[index].department = val;
-                                      updated[index].fieldOfStudy = val;
-                                      setFormData({ ...formData, higherEducation: updated });
-                                    }
-                                  });
-                                }}
                                 disabled={!canEdit}
                               />
+                              <p className="mt-1 text-[11px] text-gray-500">
+                                Choose from the approved higher-education list.
+                              </p>
                             </div>
                             <div>
                               <SearchableSelect
                                 label="Specialization"
-                                placeholder="Select or type Specialization"
+                                placeholder="Select Specialization"
                                 options={(edu.department || edu.fieldOfStudy) ? (settings.higherEducationOptions?.[edu.department || edu.fieldOfStudy] || []) : []}
                                 value={edu.specialization}
                                 onChange={(value) => {
                                   const updated = [...formData.higherEducation];
                                   updated[index].specialization = value;
                                   setFormData({ ...formData, higherEducation: updated });
-                                }}
-                                onAdd={(val) => {
-                                  const dept = edu.department || edu.fieldOfStudy;
-                                  if (!dept) {
-                                    toast.error('Please select a department first');
-                                    return;
-                                  }
-                                  handleAddEducationOption(dept, val).then(success => {
-                                    if (success) {
-                                      const updated = [...formData.higherEducation];
-                                      updated[index].specialization = val;
-                                      setFormData({ ...formData, higherEducation: updated });
-                                    }
-                                  });
                                 }}
                                 disabled={!canEdit}
                               />
@@ -2010,13 +2013,10 @@ const StudentProfile = () => {
                             options={settings.councilPosts || []}
                             value={newCouncilService.post}
                             onChange={(val) => setNewCouncilService({ ...newCouncilService, post: val })}
-                            onAdd={async (val) => {
-                              const success = await handleAddCouncilPostOption(val);
-                              if (success) {
-                                setNewCouncilService({ ...newCouncilService, post: val });
-                              }
-                            }}
                           />
+                          <p className="mt-1 text-[11px] text-gray-500">
+                            Choose from the approved council-post list.
+                          </p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Months Served</label>
@@ -2056,9 +2056,8 @@ const StudentProfile = () => {
                               return toast.error('Post name and months served are required');
                             }
 
-                            // If post is typed but not yet in the master list, add it first
                             if (!(settings.councilPosts || []).includes(newCouncilService.post)) {
-                              await handleAddCouncilPostOption(newCouncilService.post);
+                              return toast.error('Please choose a council post from the approved list');
                             }
 
                             const entry = {
@@ -2333,7 +2332,10 @@ const StudentProfile = () => {
           )}
 
           <div className="card">
-            <h2 className="text-lg font-semibold mb-4">Resume</h2>
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              Resume
+              <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase font-black tracking-widest border border-amber-200">Beta - Under Construction</span>
+            </h2>
             {profile?.studentProfile?.resume ? (
               <div className="p-4 bg-green-50 rounded-lg">
                 <p className="text-green-700 text-sm">Resume uploaded</p>
@@ -2350,7 +2352,10 @@ const StudentProfile = () => {
                 <input
                   type="url"
                   value={formData.resumeLink || ''}
-                  onChange={(e) => setFormData({ ...formData, resumeLink: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, resumeLink: e.target.value });
+                    setResumeLinkStatus({ checked: false, ok: false, status: null });
+                  }}
                   placeholder="https://drive.google.com/..."
                   className="flex-1"
                 />
@@ -2368,11 +2373,58 @@ const StudentProfile = () => {
                     toast.error('Error checking link');
                   }
                 }} className="btn btn-outline">Check</button>
+                <button
+                  type="button"
+                  onClick={handleCheckAtsScore}
+                  disabled={atsLoading}
+                  className="btn btn-primary"
+                >
+                  {atsLoading ? 'Checking...' : 'Check ATS Score'}
+                </button>
               </div>
               {resumeLinkStatus.checked && (
                 <p className={`text-sm mt-2 ${resumeLinkStatus.ok ? 'text-green-600' : 'text-red-600'}`}>
                   {resumeLinkStatus.ok ? 'Accessible' : 'Not accessible'} {resumeLinkStatus.status ? `(HTTP ${resumeLinkStatus.status})` : ''}
                 </p>
+              )}
+
+              {atsResult && atsResult.status === 'ok' && (
+                <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-bold text-indigo-800">ATS Score</p>
+                    <p className="text-2xl font-black text-indigo-700">{atsResult.overallScore}/100</p>
+                  </div>
+                  <p className="text-xs text-indigo-700 mb-3">
+                    Last checked: {atsResult.checkedAt ? new Date(atsResult.checkedAt).toLocaleString() : 'just now'}
+                    {atsResult.qualityFlag === 'low_text_extraction' ? ' | Low text extraction quality detected' : ''}
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs mb-3">
+                    <div className="bg-white rounded border border-indigo-100 p-2">Keyword Alignment: <span className="font-bold">{atsResult.breakdown?.keywordAlignment ?? 0}/30</span></div>
+                    <div className="bg-white rounded border border-indigo-100 p-2">Skills Relevance: <span className="font-bold">{atsResult.breakdown?.skillsRelevance ?? 0}/20</span></div>
+                    <div className="bg-white rounded border border-indigo-100 p-2">Project Impact: <span className="font-bold">{atsResult.breakdown?.projectImpact ?? 0}/20</span></div>
+                    <div className="bg-white rounded border border-indigo-100 p-2">Structure: <span className="font-bold">{atsResult.breakdown?.structureReadability ?? 0}/15</span></div>
+                    <div className="bg-white rounded border border-indigo-100 p-2 md:col-span-2">Experience Strength: <span className="font-bold">{atsResult.breakdown?.experienceStrength ?? 0}/15</span></div>
+                  </div>
+
+                  {Array.isArray(atsResult.actionItems) && atsResult.actionItems.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs font-bold text-indigo-800 mb-1">Top Fixes</p>
+                      <ul className="list-disc pl-5 text-xs text-indigo-900 space-y-1">
+                        {atsResult.actionItems.slice(0, 5).map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {atsPrompts?.improvementPrompt && (
+                    <details className="bg-white rounded border border-indigo-100 p-2">
+                      <summary className="text-xs font-bold text-indigo-800 cursor-pointer">Prompt for Better ATS</summary>
+                      <pre className="text-[11px] text-gray-700 mt-2 whitespace-pre-wrap">{atsPrompts.improvementPrompt}</pre>
+                    </details>
+                  )}
+                </div>
               )}
             </div>
           </div>

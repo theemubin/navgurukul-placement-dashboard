@@ -23,11 +23,17 @@ class GharApiService {
         this.client.interceptors.request.use(
             (config) => {
                 if (this.token && typeof this.token === 'string') {
-                    // Handle potential duplicate tokens in .env by taking the last JWT part
-                    const cleanToken = this.token.includes('eyJhbGci')
-                        ? 'eyJhbGci' + this.token.split('eyJhbGci').pop()
-                        : this.token;
-                    config.headers['Authorization'] = cleanToken.trim();
+                    // Extract JWT if it's duplicated in .env (common issue)
+                    const jwtMarker = 'eyJhbGci';
+                    let tokenToUse = this.token.trim();
+                    if (tokenToUse.includes(jwtMarker)) {
+                        tokenToUse = jwtMarker + tokenToUse.split(jwtMarker).pop();
+                    }
+                    
+                    // Most APIs expect Bearer prefix for JWT
+                    config.headers['Authorization'] = tokenToUse.startsWith('Bearer ') 
+                        ? tokenToUse 
+                        : `Bearer ${tokenToUse}`;
                 }
                 return config;
             },
@@ -48,6 +54,55 @@ class GharApiService {
                 return Promise.reject(error);
             }
         );
+    }
+
+    /**
+     * Fetch filtered students from Ghar Zoho using the filter endpoint
+     * @param {Object} filters - Filter parameters (campus, school, status, etc.)
+     * @param {boolean} isDev - Whether to use dev mode
+     * @returns {Promise<Array>} List of students
+     */
+    async fetchFilteredStudents(filters = {}, isDev = process.env.NODE_ENV !== 'production') {
+        try {
+            const params = {
+                ...filters,
+                isDev,
+                stdIdStart: filters.stdIdStart || 1,
+                stdIdEnd: filters.stdIdEnd || 5000
+            };
+            
+            console.log(`[GharSync] Fetching students (isDev: ${isDev}, range: ${params.stdIdStart}-${params.stdIdEnd})`);
+            const response = await this.client.get('/gharZoho/students/filter', { params });
+
+            if (response.data && response.data.students && Array.isArray(response.data.students)) {
+                return response.data.students;
+            }
+            return [];
+        } catch (error) {
+            console.error('[GharSync] Fetch filtered students failed:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Fetch all active students from Ghar Zoho
+     * @param {boolean} isDev - Whether to use dev mode
+     * @returns {Promise<Array>} List of students
+     */
+    async fetchAllStudents(isDev = process.env.NODE_ENV !== 'production') {
+        try {
+            const response = await this.client.get('/gharZoho/All_Students', {
+                params: { isDev }
+            });
+
+            if (response.data && response.data.data && Array.isArray(response.data.data)) {
+                return response.data.data;
+            }
+            return [];
+        } catch (error) {
+            console.error('[GharSync] Fetch all students failed:', error.message);
+            throw new Error(`Failed to fetch all students: ${error.message}`);
+        }
     }
 
     /**

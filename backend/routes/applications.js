@@ -133,7 +133,7 @@ router.post('/', auth, authorize('student'), [
 
     // --- Job Readiness Check ---
     const studentReadiness = await StudentJobReadiness.findOne({ student: req.userId });
-    const readinessRequirement = job.eligibility?.readinessRequirement || 'yes';
+    const readinessRequirement = job.eligibility?.readinessRequirement || 'no';
 
     if (type === 'regular') {
       if (readinessRequirement === 'yes') {
@@ -263,13 +263,19 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
         });
       }
 
-      // Update student's placement cycle and status
+      // Update student's placement cycle and status in User model
       await User.findByIdAndUpdate(application.student, {
         'studentProfile.currentStatus': 'Placed',
         placementCycle: cycle._id,
         placementCycleAssignedAt: new Date(),
         placementCycleAssignedBy: req.userId
       });
+
+      // Update student's status in current cycle snapshot to 'placed'
+      await PlacementCycle.updateOne(
+        { _id: cycle._id, 'snapshotStudents.student': application.student },
+        { $set: { 'snapshotStudents.$.status': 'placed' } }
+      );
     }
 
     await application.save();

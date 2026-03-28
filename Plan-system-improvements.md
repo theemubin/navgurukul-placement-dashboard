@@ -337,3 +337,114 @@ Parse Request
 - Consider mobile responsiveness for student checklist
 - Add email notifications for status changes
 - Ensure backward compatibility with existing jobs/applications
+
+---
+
+## 📋 NEW REQUIREMENT: Gated Profile Approval (Resume + LinkedIn + Portfolio)
+
+### Objective
+Make profile approval stricter and auditable by enforcing:
+- Profile completion must be at least 80%.
+- Resume, LinkedIn, and Portfolio must each be reviewed and approved by Campus PoC.
+- These checks become part of the final profile approval flow.
+
+### Business Rules
+1. Student cannot submit profile unless:
+- Profile completion score >= 80.
+- Resume exists (file or link).
+- LinkedIn URL exists.
+- Portfolio URL exists.
+
+2. PoC cannot mark final profile as approved unless all are true:
+- Profile completion score >= 80.
+- Resume status = approved.
+- LinkedIn status = approved.
+- Portfolio status = approved.
+
+3. If student edits any approved asset later:
+- That asset resets to pending.
+- Profile status moves out of approved state (draft or pending_approval based on action).
+- PoC re-review required only for changed assets.
+
+### Data Model Additions (studentProfile)
+Add approval-tracking object:
+
+```javascript
+studentProfile: {
+  assetApprovals: {
+    resume: {
+      status: 'pending|approved|rejected',
+      reviewedBy: ObjectId,
+      reviewedAt: Date,
+      reviewerNote: String,
+      submittedValue: String
+    },
+    linkedIn: {
+      status: 'pending|approved|rejected',
+      reviewedBy: ObjectId,
+      reviewedAt: Date,
+      reviewerNote: String,
+      submittedValue: String
+    },
+    portfolio: {
+      status: 'pending|approved|rejected',
+      reviewedBy: ObjectId,
+      reviewedAt: Date,
+      reviewerNote: String,
+      submittedValue: String
+    }
+  },
+  profileCompletionScore: Number
+}
+```
+
+### API/Backend Changes
+1. Submission guard (`POST /users/profile/submit`):
+- Validate 80% completion and required assets present.
+- Initialize asset statuses to pending if newly submitted/changed.
+
+2. Asset review endpoint (new):
+- `PUT /users/students/:studentId/profile/assets/:assetType/review`
+- Roles: campus_poc, coordinator, manager.
+- Body: status + reviewerNote.
+
+3. Final approval endpoint (`PUT /users/students/:studentId/profile/approve`):
+- Add hard validation for all gates before allowing status=approved.
+
+4. Auto-reset logic on student edit (`PUT /users/profile`):
+- If resume/linkedin/portfolio changes, mark corresponding asset approval as pending.
+
+### PoC UI Flow (Profile Approvals Page)
+1. Student row/detail modal shows a "Readiness Gate" card:
+- Profile completion score (must be >= 80).
+- Resume status + approve/reject controls.
+- LinkedIn status + approve/reject controls.
+- Portfolio status + approve/reject controls.
+
+2. Final Approve button behavior:
+- Disabled until all gates pass.
+- Tooltip/message indicates missing gates.
+
+3. Revision flow:
+- PoC can reject individual asset with reason.
+- Student sees asset-level feedback and updates only required fields.
+
+### Integration with Job Readiness
+- Resume/LinkedIn/Portfolio criteria remain in job readiness where needed.
+- Asset approval state becomes the source of truth for profile approval gating.
+- Basic Job Readiness can depend on these approvals if configured.
+
+### Rollout Plan
+Phase 1:
+- Backend schema + validation guards + new asset review endpoint.
+
+Phase 2:
+- PoC approval UI for asset-level review and final gate.
+
+Phase 3:
+- Student feedback UX (clear pending/rejected reasons per asset).
+
+### Success Metrics
+- Reduction in profiles approved without verified links.
+- Faster PoC review turnaround due to section-wise approvals.
+- Lower rework by students due to targeted revision feedback.

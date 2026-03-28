@@ -19,7 +19,7 @@ const SearchableSelect = ({
         opt.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const showAddOption = searchTerm && !options.some(opt => opt.toLowerCase() === searchTerm.toLowerCase());
+    const showAddOption = !!onAdd && searchTerm && !options.some(opt => opt.toLowerCase() === searchTerm.toLowerCase());
 
     useEffect(() => {
         function handleClickOutside(event) {

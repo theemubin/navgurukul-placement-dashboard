@@ -1047,13 +1047,14 @@ router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (
     }
 
     // Geographic filters
+    const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (hometown) {
-      // Case insensitive match for hometown district
-      query['studentProfile.hometown.district'] = { $regex: new RegExp(`^${hometown}$`, 'i') };
+      // Case insensitive exact match for hometown district
+      query['studentProfile.hometown.district'] = { $regex: new RegExp(`^${escapeRegex(hometown)}$`, 'i') };
     }
 
     if (homestate) {
-      query['studentProfile.hometown.state'] = { $regex: new RegExp(`^${homestate}$`, 'i') };
+      query['studentProfile.hometown.state'] = { $regex: new RegExp(`^${escapeRegex(homestate)}$`, 'i') };
     }
 
     // Gender filters

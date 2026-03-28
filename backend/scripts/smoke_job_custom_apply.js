@@ -33,7 +33,7 @@ async function main() {
     // Get readiness
     const readinessRes = await client.get('/job-readiness/my-status', auth).catch(() => null);
     const studentPct = readinessRes?.data?.readiness?.readinessPercentage || 0;
-    const requirement = job.eligibility?.readinessRequirement || 'yes';
+    const requirement = job.eligibility?.readinessRequirement || 'no';
 
     let meetsReadiness = false;
     if (requirement === 'yes') {

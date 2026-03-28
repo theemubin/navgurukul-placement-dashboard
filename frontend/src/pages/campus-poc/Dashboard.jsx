@@ -2,15 +2,79 @@ import { useState, useEffect } from 'react';
 import { formatDistanceToNow, isPast, format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { statsAPI, placementCycleAPI, userAPI, campusAPI, gharAPI } from '../../services/api';
-import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
+import { StatsCard, LoadingSpinner, Badge, Modal, ConfirmDialog } from '../../components/common/UIComponents';
 import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
-  MessageSquare, ClipboardList, Search
+  MessageSquare, ClipboardList, Search, Github, Globe, Star
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import HistoricalCycleCharts from '../../components/common/HistoricalCycleCharts';
+// Helper component for fallback sync modal if one-go sync fails
+const SyncErrorModal = ({ isOpen, onClose, onRetry, campusName }) => {
+  if (!isOpen) return null;
+  const [start, setStart] = useState(1);
+  const [end, setEnd] = useState(1000);
 
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 text-left">
+      <div className="bg-white rounded-3xl max-w-md w-full p-8 animate-in zoom-in-95 duration-200 shadow-2xl border-2 border-red-50">
+        <div className="flex items-center gap-3 text-red-600 mb-6">
+          <div className="p-2 bg-red-100 rounded-xl">
+             <AlertCircle className="w-8 h-8" />
+          </div>
+          <h3 className="text-2xl font-black tracking-tight">Sync Failed</h3>
+        </div>
+        
+        <p className="text-gray-600 text-sm mb-6 font-medium leading-relaxed">
+           The single-call sync for <span className="font-bold text-gray-900">{campusName}</span> failed. This usually happens due to API timeouts or large data sets.
+        </p>
+
+        <div className="bg-primary-50/50 p-6 rounded-2xl border-2 border-primary-100/50 mb-6">
+          <h4 className="text-[10px] font-black uppercase text-primary-600 tracking-widest mb-4">Fallback: Advanced Range Sync</h4>
+          <p className="text-[11px] text-gray-500 mb-4 font-medium italic">Try syncing a specific ID range (e.g., 200 record chunks). This is more stable.</p>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Start ID</label>
+              <input 
+                type="number" 
+                value={start} 
+                onChange={(e) => setStart(parseInt(e.target.value) || 1)}
+                className="bg-white border-2 border-gray-100 rounded-xl p-2.5 text-sm font-bold focus:border-primary-500 outline-none transition-all"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">End ID</label>
+              <input 
+                type="number" 
+                value={end} 
+                onChange={(e) => setEnd(parseInt(e.target.value) || 1000)}
+                className="bg-white border-2 border-gray-100 rounded-xl p-2.5 text-sm font-bold focus:border-primary-500 outline-none transition-all"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <button
+            onClick={onClose}
+            className="flex-1 bg-gray-100 text-gray-500 font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-gray-200 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onRetry({ stdIdStart: start, stdIdEnd: end })}
+            className="flex-1 bg-primary-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all"
+          >
+            Retry Sync
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 const POCDashboard = () => {
   const [stats, setStats] = useState(null);
   const [pendingSkills, setPendingSkills] = useState([]);
@@ -34,9 +98,14 @@ const POCDashboard = () => {
   const [managedCampuses, setManagedCampuses] = useState([]);
   const [selectedCampuses, setSelectedCampuses] = useState([]);
   const [savingCampuses, setSavingCampuses] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   // Eligible students modal state
   const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ open: false, job: null, students: [], loading: false });
   const [studentFilter, setStudentFilter] = useState('all'); // 'all', 'applied', 'not-applied'
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
+  const [campusToSync, setCampusToSync] = useState('');
+  const [showSyncError, setShowSyncError] = useState(false);
+  const [lastFailedCampus, setLastFailedCampus] = useState('');
 
   useEffect(() => {
     fetchDashboardData();
@@ -82,30 +151,86 @@ const POCDashboard = () => {
 
   const handleGharSync = async (email) => {
     if (!email) return;
-    try {
-      toast.loading('Syncing with Ghar...', { id: 'ghar-sync' });
-      const response = await gharAPI.syncStudent(email);
-      const updatedData = response.data.data?.student;
-      toast.success('Synced with Ghar successfully', { id: 'ghar-sync' });
-      
-      // Update local state instead of full dashboard re-fetch
-      setStudentSummary(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          students: prev.students.map(s => s.email?.toLowerCase() === email?.toLowerCase() ? {
-            ...s,
-            placementStatus: updatedData.resolvedProfile?.currentStatus || s.placementStatus
-          } : s)
-        };
-      });
+    
+    toast.promise(
+      gharAPI.syncStudent(email),
+      {
+        loading: `Syncing ${email} with Ghar...`,
+        success: (response) => {
+          const updatedData = response.data.data?.student;
+          setStudentSummary(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              students: prev.students.map(s => s.email?.toLowerCase() === email?.toLowerCase() ? {
+                ...s,
+                placementStatus: updatedData.resolvedProfile?.currentStatus || s.placementStatus
+              } : s)
+            };
+          });
+          fetchDashboardData();
+          return 'Student data updated successfully';
+        },
+        error: (err) => err.response?.data?.message || 'Failed to sync with Ghar'
+      }
+    );
+  };
 
-      // Also refresh the overall stats in the background
-      fetchDashboardData();
-    } catch (error) {
-      console.error('Error syncing with Ghar:', error);
-      toast.error(error.response?.data?.message || 'Failed to sync with Ghar', { id: 'ghar-sync' });
-    }
+  const handleImportAll = async (campusName, range = {}) => {
+    setIsSyncing(true);
+    const { stdIdStart, stdIdEnd } = range;
+    
+    // Create a custom promise so we can handle error-side effects outside toast
+    const syncPromise = gharAPI.importAll({ 
+      campus: campusName,
+      stdIdStart,
+      stdIdEnd
+    });
+
+    toast.promise(
+      syncPromise,
+      {
+        loading: (
+          <div className="flex flex-col">
+            <span className="font-bold">Syncing {campusName}...</span>
+            <span className="text-[10px] opacity-70">
+              {stdIdStart ? `Range: ${stdIdStart}-${stdIdEnd}` : 'Performing standard sync'}
+            </span>
+          </div>
+        ),
+        success: (res) => {
+          fetchDashboardData();
+          setShowSyncError(false); // Close modal if it was open
+          const { stats, message } = res.data;
+          if (stats) {
+            return (
+              <div className="flex flex-col gap-1 min-w-[200px]">
+                <span className="font-bold text-sm">Sync Complete</span>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-1 border-t border-gray-100 pt-1">
+                  <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Imported</span>
+                  <span className="text-[10px] text-green-600 font-bold ml-auto">{stats.created}</span>
+                  <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Updated</span>
+                  <span className="text-[10px] text-blue-600 font-bold ml-auto">{stats.updated}</span>
+                  <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Failed</span>
+                  <span className="text-[10px] text-red-600 font-bold ml-auto">{stats.failed}</span>
+                </div>
+                <p className="text-[10px] text-gray-400 italic mt-1">{message}</p>
+              </div>
+            );
+          }
+          return message || 'Import completed';
+        },
+        error: (err) => {
+          setLastFailedCampus(campusName);
+          setShowSyncError(true);
+          return err.response?.data?.message || 'Standard sync failed';
+        }
+      },
+      {
+        style: { minWidth: '300px' },
+        success: { duration: 6000 }
+      }
+    ).finally(() => setIsSyncing(false));
   };
 
   const toggleCampusSelection = (campusId) => {
@@ -296,7 +421,7 @@ const POCDashboard = () => {
   if (loading && !stats) return <LoadingSpinner size="lg" />;
 
   return (
-    <div className="space-y-4 animate-fadeIn pb-12">
+    <div className="space-y-4 pb-12">
       {/* Dynamic Header & Toolbar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex-1">
@@ -314,7 +439,41 @@ const POCDashboard = () => {
             {managedCampuses.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {managedCampuses.map(campus => (
-                  <span key={campus._id} className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-[10px] font-bold">{campus.name}</span>
+                  <div key={campus._id} className="flex items-center bg-white border border-gray-200 rounded text-[10px] font-bold overflow-hidden shadow-sm">
+                    <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 border-r border-gray-200">{campus.name}</span>
+                    <button 
+                      onClick={() => {
+                        const tId = toast((t) => (
+                          <div className="flex flex-col gap-2 min-w-[200px]">
+                            <span className="font-bold text-sm">Sync {campus.name}?</span>
+                            <p className="text-xs text-gray-500 font-medium">Updating student records for this campus in one go.</p>
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() => {
+                                  toast.dismiss(tId);
+                                  handleImportAll(campus.name);
+                                }}
+                                className="px-4 py-1.5 bg-primary-600 text-white text-[10px] font-black rounded-lg uppercase tracking-wider shadow-sm hover:bg-primary-700 transition-all"
+                              >
+                                Proceed
+                              </button>
+                              <button
+                                onClick={() => toast.dismiss(tId)}
+                                className="px-4 py-1.5 bg-gray-100 text-gray-700 text-[10px] font-black rounded-lg uppercase tracking-wider border hover:bg-gray-200 transition-all"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ), { duration: 10000, position: 'top-center' });
+                      }}
+                      disabled={isSyncing}
+                      className="px-1.5 py-0.5 text-primary-600 hover:bg-primary-50 transition-colors disabled:opacity-50"
+                      title={`Import new students from Zoho for ${campus.name}`}
+                    >
+                      {isSyncing ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -334,11 +493,11 @@ const POCDashboard = () => {
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="bg-transparent border-none text-xs font-bold text-gray-700 p-0 focus:ring-0 min-w-[120px]"
             >
-              <option value="all">All Students</option>
-              <option value="placed">Placed</option>
-              <option value="ready">Ready to Place</option>
-              <option value="under-process">Under Process</option>
-              <option value="dropout">Dropout</option>
+              <option key="status-all" value="all">All Students</option>
+              <option key="status-placed" value="placed">Placed</option>
+              <option key="status-ready" value="ready">Ready to Place</option>
+              <option key="status-process" value="under-process">Under Process</option>
+              <option key="status-dropout" value="dropout">Dropout</option>
             </select>
           </div>
 
@@ -349,9 +508,9 @@ const POCDashboard = () => {
               onChange={(e) => setSelectedCycle(e.target.value)}
               className="bg-transparent border-none text-xs font-bold text-gray-700 p-0 focus:ring-0 min-w-[120px]"
             >
-              <option value="">All placement cycles</option>
-              {cycles.map(cycle => (
-                <option key={cycle._id} value={cycle._id}>
+              <option key="cycle-all" value="">All placement cycles</option>
+              {cycles.map((cycle, idx) => (
+                <option key={cycle._id || `cycle-${idx}`} value={cycle._id}>
                   {cycle.name || `${format(new Date(), 'MMMM')} ${format(new Date(), 'yyyy')}`}
                 </option>
               ))}
@@ -363,6 +522,7 @@ const POCDashboard = () => {
       {/* Compact Status Strip */}
       <div className="flex flex-wrap items-center gap-2 px-1">
         <StatusBadge color="blue" count={studentSummary?.total || 0} label="Total" />
+        <StatusBadge color="gray" count={stats?.neverLoggedInCount || 0} label="Never Logged In" />
         <StatusBadge color="amber" count={pendingSkills.length} label="Pending Skills" />
         <StatusBadge color="orange" count={pendingProfilesCount} label="Pending Profiles" />
         <StatusBadge color="green" count={stats?.readinessPool?.['Job Ready'] || 0} label="Job Ready" />
@@ -515,6 +675,7 @@ const POCDashboard = () => {
             { id: 'school', label: 'School-wise', icon: GraduationCap },
             { id: 'summary', label: 'Student Summary', icon: Users },
             { id: 'cycles', label: 'Placement Cycles', icon: Calendar },
+            { id: 'analytics', label: 'Analytics', icon: TrendingUp },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1015,7 +1176,9 @@ const POCDashboard = () => {
                     </div>
                     <div>
                       <p className="font-semibold">{school.school}</p>
-                      <p className="text-sm text-gray-500">{school.totalStudents} students</p>
+                      <p className="text-sm text-gray-500">
+                        {school.totalStudents} students | 30% ready: {school.jobReady30Count || 0} | 100% ready: {school.jobReady100Count || 0}
+                      </p>
                     </div>
                   </div>
 
@@ -1034,18 +1197,40 @@ const POCDashboard = () => {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="text-center p-2 bg-blue-50 rounded border border-blue-100">
+                      <p className="text-lg font-bold text-blue-700">{school.jobReady30Count || 0}</p>
+                      <p className="text-xs text-gray-600">30% Job Ready</p>
+                    </div>
+                    <div className="text-center p-2 bg-emerald-50 rounded border border-emerald-100">
+                      <p className="text-lg font-bold text-emerald-700">{school.jobReady100Count || 0}</p>
+                      <p className="text-xs text-gray-600">100% Job Ready</p>
+                    </div>
+                  </div>
+
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {school.students.slice(0, 5).map((student) => (
-                      <div key={student.studentId} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
-                        <Link
-                          to={`/campus-poc/students/${student.studentId}`}
-                          className="text-primary-600 hover:underline truncate max-w-[150px]"
-                        >
-                          {student.name}
-                        </Link>
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500">{student.applicationCount} apps</span>
-                          {getStatusBadge(student.status)}
+                      <div key={student.studentId} className="p-2 bg-gray-50 rounded text-sm">
+                        <div className="flex items-center justify-between">
+                          <Link
+                            to={`/campus-poc/students/${student.studentId}`}
+                            className="text-primary-600 hover:underline truncate max-w-[150px]"
+                          >
+                            {student.name}
+                          </Link>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500">{student.applicationCount} apps</span>
+                            <span className="text-xs font-semibold text-blue-700">{student.readinessPercentage || 0}%</span>
+                            {getStatusBadge(student.status)}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-[11px] text-gray-500 flex flex-wrap gap-3">
+                          <span>
+                            30% date: {student.jobReady30At ? format(new Date(student.jobReady30At), 'dd MMM yyyy') : '-'}
+                          </span>
+                          <span>
+                            100% date: {student.jobReady100At ? format(new Date(student.jobReady100At), 'dd MMM yyyy') : '-'}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -1247,6 +1432,9 @@ const POCDashboard = () => {
           setShowModal={setShowCycleModal}
         />
       )}
+      {activeTab === 'analytics' && (
+        <HistoricalCycleCharts title="My Campus History" />
+      )}
 
       {/* New Cycle Modal */}
       {showCycleModal && activeTab !== 'cycles' && (
@@ -1258,6 +1446,16 @@ const POCDashboard = () => {
           }}
         />
       )}
+      {/* Sync Error Fallback Modal */}
+      <SyncErrorModal 
+        isOpen={showSyncError} 
+        onClose={() => setShowSyncError(false)}
+        campusName={lastFailedCampus}
+        onRetry={(range) => {
+          setShowSyncError(false);
+          handleImportAll(lastFailedCampus, range);
+        }}
+      />
     </div>
   );
 };
@@ -1541,8 +1739,11 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                           >
                             {/* 1. Name */}
                             <div className="flex flex-col min-w-0 justify-center pr-2" style={{ flex: '2' }}>
-                              <p className="text-sm font-bold text-gray-900 truncate">
+                              <p className="text-sm font-bold text-gray-900 truncate flex items-center">
                                 {student.firstName || student.lastName ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : student.name || 'Unnamed Student'}
+                                {!student.lastLogin && (
+                                  <span className="ml-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black uppercase rounded tracking-tighter border border-amber-200">Not Joined</span>
+                                )}
                               </p>
                               <p className="text-xs text-gray-500 truncate">{student.email || 'No email'}</p>
                             </div>
@@ -1657,8 +1858,11 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                                   className="flex items-center justify-between px-3 py-2 hover:bg-gray-50"
                                 >
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                    <p className="text-sm font-medium text-gray-900 truncate flex items-center">
                                       {student.firstName || student.lastName ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : student.name || 'Unnamed'}
+                                      {!student.lastLogin && (
+                                        <span className="ml-2 px-1 text-amber-600 bg-amber-50 text-[9px] font-black uppercase rounded-sm border border-amber-100">Not Joined</span>
+                                      )}
                                     </p>
                                     <p className="text-xs text-gray-500 truncate">{student.email}</p>
                                   </div>
@@ -1708,6 +1912,19 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
           }}
         />
       )}
+      {/* Campus Import Confirmation */}
+      <ConfirmDialog
+        isOpen={showImportConfirm}
+        onClose={() => setShowImportConfirm(false)}
+        onConfirm={() => {
+          setShowImportConfirm(false);
+          handleImportAll(campusToSync);
+        }}
+        title="Import Students"
+        message={`This will check Ghar Zoho for any new students in ${campusToSync} and create placeholder profiles. Proceed?`}
+        confirmLabel="Sync Now"
+        type="primary"
+      />
     </div>
   );
 };

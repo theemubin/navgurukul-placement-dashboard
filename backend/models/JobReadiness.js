@@ -234,7 +234,10 @@ const studentJobReadinessSchema = new mongoose.Schema({
     ref: 'User'
   },
   approvedAt: Date,
-  approvalNotes: String
+  approvalNotes: String,
+  // Milestone timestamps for readiness journey
+  jobReady30At: Date,
+  jobReady100At: Date
 }, {
   timestamps: true
 });
@@ -246,6 +249,8 @@ studentJobReadinessSchema.index({ isJobReady: 1 });
 
 // Method to calculate readiness percentage
 studentJobReadinessSchema.methods.calculateReadiness = async function () {
+  const previousPercentage = Number(this.readinessPercentage || 0);
+
   // Find all relevant configs (School-specific and Common)
   const configs = await JobReadinessConfig.find({
     school: { $in: [this.school, 'Common'] },
@@ -327,6 +332,15 @@ studentJobReadinessSchema.methods.calculateReadiness = async function () {
   // User said "100% is Job Ready", so let's stick to percentage for isJobReady if it reaches 100%
   // But also respect mandatory criteria.
   this.isJobReady = (this.readinessPercentage === 100) && allMandatoryCompleted;
+
+  // Track first time crossing of readiness milestones.
+  // Keep the earliest timestamp once set.
+  if (this.readinessPercentage >= 30 && !this.jobReady30At) {
+    this.jobReady30At = previousPercentage >= 30 ? (this.updatedAt || new Date()) : new Date();
+  }
+  if (this.readinessPercentage === 100 && !this.jobReady100At) {
+    this.jobReady100At = previousPercentage === 100 ? (this.updatedAt || new Date()) : new Date();
+  }
 
   return this.readinessPercentage;
 };

@@ -145,12 +145,18 @@ export const settingsAPI = {
   getAIStatus: () => api.get('/settings/ai-status'),
   updateSettings: (data) => api.put('/settings', data),
   addHigherEducationOption: (data) => api.post('/settings/higher-education/add', data),
+  removeHigherEducationOption: (data, force = false) =>
+    api.delete('/settings/higher-education', { data: { ...data, force } }),
   addInstitutionOption: (institution, pincode = '') => api.post('/settings/institutions/add', { institution, pincode }),
-  addCouncilPostOption: (post) => api.post('/settings/council-posts/add', { post }),
+  addCouncilPostOption: (post) => api.post('/settings/council-posts', { post }),
+  removeCouncilPostOption: (post, force = false) =>
+    api.delete(`/settings/council-posts/${encodeURIComponent(post)}`, { params: { force } }),
   addLocationOption: (location) => api.post('/settings/locations/add', { location }),
   addCompanyOption: (companyData) => api.post('/settings/companies/add', companyData),
   updateProficiencyRubrics: (rubrics) => api.put('/settings/proficiency-rubrics', { rubrics }),
   getEducationAnalytics: () => api.get('/settings/analytics/education'),
+  getProfileOptionsAnalytics: () => api.get('/settings/analytics/profile-options'),
+  getOptionStudents: (params) => api.get('/settings/analytics/option-students', { params }),
   renameEducationItem: (data) => api.post('/settings/education/rename', data)
 };
 
@@ -257,6 +263,7 @@ export const statsAPI = {
   getStudentSummary: (params) => api.get('/stats/campus-poc/student-summary', { params }),
   getCycleStats: () => api.get('/stats/campus-poc/cycle-stats'),
   getCoordinatorStats: () => api.get('/stats/coordinator-stats'),
+  getHistoricalCycles: (campusId) => api.get('/stats/historical-cycles', { params: { campus: campusId } }),
   exportStats: (params) => api.get('/stats/export', { params, responseType: 'blob' })
 };
 
@@ -287,6 +294,7 @@ export const campusAPI = {
 // Utilities
 export const utilsAPI = {
   checkUrl: (url) => api.post('/utils/check-url', { url }),
+  checkResumeAts: () => api.post('/utils/resume-ats/check', {}),
   analyzeScam: (data) => api.post('/utils/analyze-scam', data),
   testAIKey: () => api.post('/utils/test-ai-key')
 };
@@ -437,7 +445,15 @@ export const featuredPlacementAPI = {
 export const gharAPI = {
   connectionStatus: () => api.get('/ghar/connection-status'),
   studentPreview: (email, isDev) => api.get(`/ghar/student-preview/${email}?isDev=${isDev}`),
-  syncStudent: (email) => api.post('/users/sync-student', { email }),
+  syncStudent: (email) => api.post('/ghar/sync-student', { email }),
+  importAll: (params = {}) => {
+    const { campus = '', isDev = import.meta.env.DEV, stdIdStart, stdIdEnd } = params;
+    let url = `/ghar/import-all-students?isDev=${isDev}`;
+    if (campus) url += `&campus=${encodeURIComponent(campus)}`;
+    if (stdIdStart) url += `&stdIdStart=${stdIdStart}`;
+    if (stdIdEnd) url += `&stdIdEnd=${stdIdEnd}`;
+    return api.post(url);
+  },
   batchSync: (campusId) => api.post('/ghar/batch-sync', { campusId }),
   getAttendanceConfig: (isDev) => api.get(`/ghar/attendance-config?isDev=${isDev}`)
 };

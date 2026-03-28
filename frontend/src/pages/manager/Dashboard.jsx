@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
+import HistoricalCycleCharts from '../../components/common/HistoricalCycleCharts';
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
@@ -299,6 +300,8 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      <HistoricalCycleCharts />
 
       {/* Detailed Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

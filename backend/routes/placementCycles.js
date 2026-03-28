@@ -301,6 +301,36 @@ router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', '
       studentQuery.campus = { $in: campusIds };
     }
 
+    const studentsToAssign = await User.find(studentQuery);
+    if (!studentsToAssign.length) {
+      return res.status(404).json({ message: 'No eligible students found' });
+    }
+
+    // 1. Release from old cycles if any
+    for (const student of studentsToAssign) {
+      if (student.placementCycle && student.placementCycle.toString() !== cycleId) {
+        await PlacementCycle.updateOne(
+          { _id: student.placementCycle, 'snapshotStudents.student': student._id },
+          { $set: { 'snapshotStudents.$.status': 'released' } }
+        );
+      }
+    }
+
+    // 2. Add to new cycle snapshot
+    const snapshotEntries = studentsToAssign.map(s => ({
+      student: s._id,
+      addedAt: new Date(),
+      status: 'active'
+    }));
+
+    // Use $addToSet to avoid duplicates in snapshot (by student ID)
+    for (const entry of snapshotEntries) {
+      await PlacementCycle.updateOne(
+        { _id: cycleId, 'snapshotStudents.student': { $ne: entry.student } },
+        { $push: { snapshotStudents: entry } }
+      );
+    }
+
     // Update students
     const result = await User.updateMany(
       studentQuery,

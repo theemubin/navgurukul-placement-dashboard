@@ -472,7 +472,7 @@ const JobDetails = () => {
                 <div className="flex gap-3">
                   {(() => {
                     const studentPct = readiness?.readinessPercentage || 0;
-                    const requirement = job.eligibility?.readinessRequirement || 'yes';
+                    const requirement = job.eligibility?.readinessRequirement || 'no';
 
                     // Readiness gate
                     let meetsReadiness = false;
