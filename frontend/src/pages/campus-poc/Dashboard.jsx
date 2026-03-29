@@ -75,6 +75,70 @@ const SyncErrorModal = ({ isOpen, onClose, onRetry, campusName }) => {
     </div>
   );
 };
+const SyncReportModal = ({ isOpen, onClose, stats }) => {
+  if (!isOpen || !stats) return null;
+  const students = stats.processedStudents || [];
+  
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 text-left">
+      <div className="bg-white rounded-3xl max-w-2xl w-full p-0 overflow-hidden shadow-2xl border border-gray-100 flex flex-col max-h-[85vh]">
+        <div className="p-8 bg-primary-600 text-white flex justify-between items-center">
+          <div>
+            <h3 className="text-2xl font-black tracking-tight">Sync Report</h3>
+            <p className="text-primary-100 text-sm mt-1">{students.length} students processed from Ghar Zoho</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <XCircle className="w-8 h-8" />
+          </button>
+        </div>
+
+        <div className="p-8 overflow-y-auto flex-grow custom-scrollbar">
+          <div className="grid grid-cols-3 gap-6 mb-8">
+            <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
+               <p className="text-[10px] uppercase font-black text-green-600 tracking-widest mb-1">New Imported</p>
+               <p className="text-3xl font-black text-green-700">{stats.created}</p>
+            </div>
+            <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+               <p className="text-[10px] uppercase font-black text-blue-600 tracking-widest mb-1">Data Updated</p>
+               <p className="text-3xl font-black text-blue-700">{stats.updated}</p>
+            </div>
+            <div className="bg-red-50 rounded-2xl p-4 border border-red-100">
+               <p className="text-[10px] uppercase font-black text-red-600 tracking-widest mb-1">Failed</p>
+               <p className="text-3xl font-black text-red-700">{stats.failed}</p>
+            </div>
+          </div>
+
+          <h4 className="text-xs font-black uppercase text-gray-400 tracking-widest mb-4">Detailed Student List</h4>
+          <div className="space-y-2">
+            {students.length > 0 ? students.map((s, idx) => (
+              <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-100/50">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-bold text-gray-900">{s.name || 'Unknown'}</span>
+                  <span className="text-[11px] text-gray-500 font-medium">{s.email}</span>
+                </div>
+                <Badge variant={s.status === 'Created' ? 'green' : 'blue'} className="uppercase text-[9px] font-black px-3">
+                  {s.status}
+                </Badge>
+              </div>
+            )) : (
+              <p className="text-center py-8 text-gray-400 font-medium">No detail available for processed records.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-8 bg-primary-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const POCDashboard = () => {
   const [stats, setStats] = useState(null);
   const [pendingSkills, setPendingSkills] = useState([]);
@@ -106,6 +170,8 @@ const POCDashboard = () => {
   const [campusToSync, setCampusToSync] = useState('');
   const [showSyncError, setShowSyncError] = useState(false);
   const [lastFailedCampus, setLastFailedCampus] = useState('');
+  const [syncReport, setSyncReport] = useState(null);
+  const [showSyncReport, setShowSyncReport] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -202,7 +268,12 @@ const POCDashboard = () => {
           fetchDashboardData();
           setShowSyncError(false); // Close modal if it was open
           const { stats, message } = res.data;
+          
           if (stats) {
+            // Set detailed sync report for modal
+            setSyncReport(stats);
+            setShowSyncReport(true);
+
             return (
               <div className="flex flex-col gap-1 min-w-[200px]">
                 <span className="font-bold text-sm">Sync Complete</span>
@@ -211,10 +282,8 @@ const POCDashboard = () => {
                   <span className="text-[10px] text-green-600 font-bold ml-auto">{stats.created}</span>
                   <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Updated</span>
                   <span className="text-[10px] text-blue-600 font-bold ml-auto">{stats.updated}</span>
-                  <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Failed</span>
-                  <span className="text-[10px] text-red-600 font-bold ml-auto">{stats.failed}</span>
                 </div>
-                <p className="text-[10px] text-gray-400 italic mt-1">{message}</p>
+                <p className="text-[10px] text-gray-400 italic mt-1">Detailed report opened.</p>
               </div>
             );
           }
@@ -1446,6 +1515,13 @@ const POCDashboard = () => {
           }}
         />
       )}
+      {/* Sync Report Modal (Success Details) */}
+      <SyncReportModal 
+         isOpen={showSyncReport} 
+         onClose={() => setShowSyncReport(false)} 
+         stats={syncReport} 
+      />
+      
       {/* Sync Error Fallback Modal */}
       <SyncErrorModal 
         isOpen={showSyncError} 

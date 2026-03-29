@@ -256,13 +256,16 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
             totalFromGhar: studentsToProcess.length,
             created: 0,
             updated: 0,
-            failed: 0
+            failed: 0,
+            processedStudents: [] // Track individuals for detailed feedback
         };
 
         const batchSize = 10; // Process in small batches to avoid overload
         for (let i = 0; i < studentsToProcess.length; i += batchSize) {
             const batch = studentsToProcess.slice(i, i + batchSize);
             await Promise.allSettled(batch.map(async (st) => {
+                let currentEmail = 'Unknown';
+                let currentName = 'Unknown Student';
                 try {
                     // Robust email finder - prioritize Navgurukul_Email as per user request
                     const emailField = [
@@ -277,36 +280,44 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
                       return st[k];
                     });
 
-                    let email = '';
                     if (emailField && emailField.includes('.')) {
                       const [p, c] = emailField.split('.');
-                      email = st[p][c];
+                      currentEmail = st[p][c];
                     } else if (emailField) {
-                      email = st[emailField];
+                      currentEmail = st[emailField];
+                    }
+                    
+                    if (st.Name && typeof st.Name === 'object') {
+                      currentName = `${st.Name.first_name || ''} ${st.Name.last_name || ''}`.trim() || 'No Name';
+                    } else if (typeof st.Name === 'string') {
+                      currentName = st.Name;
                     }
 
-                    if (!email) {
-                      console.error(`[GharSync] Missing email for student record. Keys: ${Object.keys(st).join(', ')}`);
-                      if (i === 0) { // Log sample on first failure for debugging
-                        console.error(`[GharSync] Sample data from failed record:`, JSON.stringify(st).substring(0, 200));
-                      }
+                    if (!currentEmail) {
                       stats.failed++;
                       return;
                     }
 
                     // Check if exists
-                    const exists = await User.findOne({ email: new RegExp(`^${email.trim()}$`, 'i') });
+                    const exists = await User.findOne({ email: new RegExp(`^${currentEmail.trim()}$`, 'i') });
                     
-                    const result = await User.syncGharData(email.trim(), st, { createIfNotFound: true });
+                    const result = await User.syncGharData(currentEmail.trim(), st, { createIfNotFound: true });
                     
                     if (result) {
-                        if (!exists) stats.created++;
+                        const isNew = !exists;
+                        if (isNew) stats.created++;
                         else stats.updated++;
+                        
+                        stats.processedStudents.push({
+                           name: currentName,
+                           email: currentEmail,
+                           status: isNew ? 'Created' : 'Updated'
+                        });
                     } else {
                         stats.failed++;
                     }
                 } catch (err) {
-                    console.error(`[GharSync] Import error for student:`, err.message);
+                    console.error(`[GharSync] Import error for student ${currentEmail}:`, err.message);
                     stats.failed++;
                 }
             }));

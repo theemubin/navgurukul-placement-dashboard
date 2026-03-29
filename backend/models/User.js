@@ -671,7 +671,20 @@ userSchema.set('toObject', { virtuals: true });
     
     // 7. Campus & School
     const campusValue = externalData.Select_Campus?.Campus_Name || externalData.Campus_Name || externalData.Campus;
-    if (campusValue) gharData.campus = { value: campusValue, lastUpdated: now };
+    if (campusValue) {
+      gharData.campus = { value: campusValue, lastUpdated: now };
+      
+      // Attempt to resolve top-level campus reference if not already set or mismatching
+      try {
+        const Campus = mongoose.model('Campus');
+        const matchedCampus = await Campus.findOne({ name: new RegExp(`^${campusValue}$`, 'i') });
+        if (matchedCampus) {
+          user.campus = matchedCampus._id;
+        }
+      } catch (e) {
+        console.warn('[GharSync] Could not resolve campus reference for:', campusValue);
+      }
+    }
 
     const schoolValue = externalData.Select_School1 || externalData.Current_School || externalData.School_Name;
     if (schoolValue) gharData.currentSchool = { value: schoolValue, lastUpdated: now };
