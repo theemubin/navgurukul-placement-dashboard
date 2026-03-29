@@ -14,6 +14,37 @@ const getPOCManagedCampusIds = (user) => {
   return [...new Set(ids)];
 };
 
+// Simplified endpoint for never-logged-in list
+router.get('/never-logged-in-list', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
+  try {
+    const campusIds = getPOCManagedCampusIds(req.user);
+    
+    // Showing "everyone" who haven't logged in (regardless of status)
+    // but still filtered by the POC/Coordinators managed campuses
+    const students = await User.find({
+      role: 'student',
+      campus: { $in: campusIds },
+      lastLogin: null
+    })
+    .select('firstName lastName email studentProfile.currentSchool campus isActive')
+    .populate('campus', 'name')
+    .sort({ firstName: 1, lastName: 1 });
+
+    const formattedList = students.map(s => ({
+      name: `${s.firstName} ${s.lastName}`,
+      email: s.email,
+      school: s.studentProfile?.currentSchool || 'N/A',
+      campus: s.campus?.name || 'N/A',
+      isActive: s.isActive
+    }));
+
+    res.json({ success: true, data: formattedList });
+  } catch (error) {
+    console.error('Get never logged in list error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 /**
  * @swagger
  * tags:
@@ -1015,34 +1046,7 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
   }
 });
 
-// Request 3: Get list of students who haven't logged in for modal/export
-router.get('/campus-poc/never-logged-in-list', auth, authorize('campus_poc'), async (req, res) => {
-  try {
-    const campusIds = getPOCManagedCampusIds(req.user);
-    
-    // Only 'Active' students who haven't logged in
-    const students = await User.find({
-      role: 'student',
-      campus: { $in: campusIds },
-      lastLogin: null,
-      'studentProfile.currentStatus': 'Active'
-    })
-    .select('firstName lastName email studentProfile.currentSchool campus')
-    .populate('campus', 'name');
 
-    const formattedList = students.map(s => ({
-      name: `${s.firstName} ${s.lastName}`,
-      email: s.email,
-      school: s.studentProfile?.currentSchool || 'N/A',
-      campus: s.campus?.name || 'N/A'
-    }));
-
-    res.json({ success: true, data: formattedList });
-  } catch (error) {
-    console.error('Get never logged in list error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
 
 // Company-wise application tracking for POC
 /**
@@ -1444,9 +1448,10 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
       role: 'student',
       campus: { $in: campusIds },
       // Request 1: Include students with isActive: false IF they have never logged in (imported)
+      // or if they are in the campus at all
       $or: [
         { isActive: true },
-        { isActive: false, lastLogin: null }
+        { lastLogin: null }
       ]
     };
 

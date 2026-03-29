@@ -316,7 +316,7 @@ const POCStudents = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {students.map((student) => (
               <div key={student._id} className="relative group">
-                <div className="card block hover:shadow-md transition-shadow h-full !p-3 md:!p-6">
+                <div className={`card block hover:shadow-md transition-shadow h-full !p-3 md:!p-6 ${!student.lastLogin ? 'opacity-70 saturate-[0.8] grayscale-[0.2]' : ''}`}>
                   <Link
                     to={`/campus-poc/students/${student._id}`}
                     className="block"
@@ -329,8 +329,13 @@ const POCStudents = () => {
                           </span>
                         </div>
                         <div className="min-w-0">
-                          <h3 className="font-bold text-gray-900 group-hover:text-primary-600 transition-colors truncate text-sm md:text-base">
+                          <h3 className="font-bold text-gray-900 group-hover:text-primary-600 transition-colors truncate text-sm md:text-base flex items-center gap-2">
                             {student.firstName} {student.lastName}
+                            {!student.lastLogin && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-100 text-amber-700 uppercase tracking-tighter border border-amber-200">
+                                <Clock className="w-2 h-2 mr-0.5" /> Never logged in
+                              </span>
+                            )}
                           </h3>
                           <p className="text-xs text-gray-500 truncate">{student.email}</p>
                         </div>

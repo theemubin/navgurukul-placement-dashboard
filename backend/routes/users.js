@@ -105,7 +105,14 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
       sortField, sortOrder, gharAttendanceMin, gharStatus
     } = req.query;
 
-    let query = { role: 'student', isActive: true };
+    let query = { 
+      role: 'student',
+      // Request: Include inactive imported students who have never logged in
+      $or: [
+        { isActive: true },
+        { lastLogin: null }
+      ]
+    };
 
     // Ghar Dashboard Filters
     if (gharAttendanceMin) {
