@@ -139,6 +139,141 @@ const SyncReportModal = ({ isOpen, onClose, stats }) => {
   );
 };
 
+const StatusBadge = ({ color, count, label, onClick }) => (
+  <div 
+    onClick={onClick}
+    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white shadow-sm transition-all ${onClick ? 'cursor-pointer hover:border-primary-500 hover:shadow-md' : ''}`}
+  >
+    <div className={`w-2 h-2 rounded-full bg-${color}-500`} />
+    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{label}</span>
+    <span className={`text-[10px] font-black text-${color}-600 ml-1`}>{count}</span>
+  </div>
+);
+
+const NeverLoggedInModal = ({ isOpen, onClose }) => {
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchList();
+    }
+  }, [isOpen]);
+
+  const fetchList = async () => {
+    setLoading(true);
+    try {
+      const res = await statsAPI.getNeverLoggedInList();
+      setStudents(res.data.data);
+    } catch (e) {
+      console.error('Failed to fetch never logged in list', e);
+      toast.error('Failed to load student list');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportToCSV = () => {
+    const headers = ['Name', 'Email', 'School', 'Campus'];
+    const rows = students.map(s => [s.name, s.email, s.school, s.campus]);
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `never-logged-in-students-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+  };
+
+  if (!isOpen) return null;
+
+  const filtered = students.filter(s => 
+    s.name.toLowerCase().includes(search.toLowerCase()) || 
+    s.email.toLowerCase().includes(search.toLowerCase()) ||
+    s.school.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 text-left">
+      <div className="bg-white rounded-3xl max-w-2xl w-full p-0 overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="p-8 bg-gray-900 text-white flex justify-between items-center">
+          <div>
+            <h3 className="text-2xl font-black tracking-tight flex items-center gap-3">
+              <Clock className="w-8 h-8 text-amber-400" />
+              Never Logged In
+            </h3>
+            <p className="text-gray-400 text-sm mt-1">Active students imported but not yet onboarded</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <XCircle className="w-8 h-8" />
+          </button>
+        </div>
+
+        <div className="p-6 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search by name, email or school..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:border-primary-500 outline-none transition-all font-medium"
+            />
+          </div>
+          <button 
+            onClick={exportToCSV}
+            className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
+          >
+            <FileText className="w-4 h-4" /> Export CSV
+          </button>
+        </div>
+
+        <div className="p-0 overflow-y-auto flex-grow custom-scrollbar">
+          {loading ? (
+            <div className="py-20 flex justify-center"><LoadingSpinner /></div>
+          ) : filtered.length > 0 ? (
+            <div className="divide-y divide-gray-50">
+              {filtered.map((student, idx) => (
+                <div key={idx} className="p-5 hover:bg-gray-50 transition-colors flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-bold">
+                      {student.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">{student.name}</h4>
+                      <p className="text-xs text-gray-500 font-medium">{student.email}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">School</p>
+                    <Badge variant="blue" className="text-[9px] font-black px-2">{student.school}</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-20 text-center text-gray-400">
+              <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">No students found matching your criteria.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-8 bg-gray-900 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-black transition-all"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const POCDashboard = () => {
   const [stats, setStats] = useState(null);
   const [pendingSkills, setPendingSkills] = useState([]);
@@ -172,6 +307,7 @@ const POCDashboard = () => {
   const [lastFailedCampus, setLastFailedCampus] = useState('');
   const [syncReport, setSyncReport] = useState(null);
   const [showSyncReport, setShowSyncReport] = useState(false);
+  const [showNeverLoggedInModal, setShowNeverLoggedInModal] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -480,13 +616,6 @@ const POCDashboard = () => {
     return <Badge variant={config.color}>{config.label}</Badge>;
   };
 
-  const StatusBadge = ({ color, count, label }) => (
-    <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${color === 'blue' ? 'bg-blue-100 text-blue-700' : color === 'amber' ? 'bg-amber-100 text-amber-700' : color === 'orange' ? 'bg-orange-100 text-orange-700' : color === 'green' ? 'bg-green-100 text-green-700' : color === 'indigo' ? 'bg-indigo-100 text-indigo-700' : color === 'purple' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>
-      <span className="font-bold">{count}</span>
-      <span>{label}</span>
-    </div>
-  );
-
   if (loading && !stats) return <LoadingSpinner size="lg" />;
 
   return (
@@ -591,7 +720,12 @@ const POCDashboard = () => {
       {/* Compact Status Strip */}
       <div className="flex flex-wrap items-center gap-2 px-1">
         <StatusBadge color="blue" count={studentSummary?.total || 0} label="Total" />
-        <StatusBadge color="gray" count={stats?.neverLoggedInCount || 0} label="Never Logged In" />
+        <StatusBadge 
+          color="gray" 
+          count={stats?.neverLoggedInCount || 0} 
+          label="Never Logged In" 
+          onClick={() => setShowNeverLoggedInModal(true)}
+        />
         <StatusBadge color="amber" count={pendingSkills.length} label="Pending Skills" />
         <StatusBadge color="orange" count={pendingProfilesCount} label="Pending Profiles" />
         <StatusBadge color="green" count={stats?.readinessPool?.['Job Ready'] || 0} label="Job Ready" />
@@ -1342,7 +1476,7 @@ const POCDashboard = () => {
                 return (
                   <div 
                     key={student.studentId} 
-                    className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'}`}
+                    className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'} ${!student.lastLogin ? 'opacity-70 saturate-[0.8]' : ''}`}
                   >
                     {/* Accordion Header */}
                     <div 
@@ -1356,12 +1490,17 @@ const POCDashboard = () => {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 flex-1">
                           <div>
                             <Link 
-                              to={`/campus-poc/students/${student.studentId}`}
-                              className="font-bold text-gray-900 hover:text-primary-600 truncate block"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {student.name}
-                            </Link>
+                               to={`/campus-poc/students/${student.studentId}`}
+                               className="font-bold text-gray-900 hover:text-primary-600 truncate block flex items-center gap-2"
+                               onClick={(e) => e.stopPropagation()}
+                             >
+                               {student.name}
+                               {!student.lastLogin && (
+                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-100 text-amber-700 uppercase tracking-tighter border border-amber-200">
+                                   <Clock className="w-2 h-2 mr-0.5" /> Never logged in
+                                 </span>
+                               )}
+                             </Link>
                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{student.email}</p>
                           </div>
                           <div>
@@ -1520,6 +1659,11 @@ const POCDashboard = () => {
          isOpen={showSyncReport} 
          onClose={() => setShowSyncReport(false)} 
          stats={syncReport} 
+      />
+      
+      <NeverLoggedInModal 
+        isOpen={showNeverLoggedInModal} 
+        onClose={() => setShowNeverLoggedInModal(false)}
       />
       
       {/* Sync Error Fallback Modal */}

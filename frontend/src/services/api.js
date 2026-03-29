@@ -264,6 +264,7 @@ export const statsAPI = {
   getCycleStats: () => api.get('/stats/campus-poc/cycle-stats'),
   getCoordinatorStats: () => api.get('/stats/coordinator-stats'),
   getHistoricalCycles: (campusId) => api.get('/stats/historical-cycles', { params: { campus: campusId } }),
+  getNeverLoggedInList: (params) => api.get('/stats/campus-poc/never-logged-in-list', { params }),
   exportStats: (params) => api.get('/stats/export', { params, responseType: 'blob' })
 };
 

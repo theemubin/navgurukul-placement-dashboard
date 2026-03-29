@@ -736,10 +736,12 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
     ).length;
 
     // Never logged in (imported) count for this POC's campuses
+    // Request 2: Only show those who are 'Active' in their status
     const neverLoggedInCount = await User.countDocuments({
       role: 'student',
       campus: { $in: campusIds },
-      lastLogin: null
+      lastLogin: null,
+      'studentProfile.currentStatus': 'Active'
     });
 
     // Application stats
@@ -1010,6 +1012,35 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
   } catch (error) {
     console.error('Get eligible jobs error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Request 3: Get list of students who haven't logged in for modal/export
+router.get('/campus-poc/never-logged-in-list', auth, authorize('campus_poc'), async (req, res) => {
+  try {
+    const campusIds = getPOCManagedCampusIds(req.user);
+    
+    // Only 'Active' students who haven't logged in
+    const students = await User.find({
+      role: 'student',
+      campus: { $in: campusIds },
+      lastLogin: null,
+      'studentProfile.currentStatus': 'Active'
+    })
+    .select('firstName lastName email studentProfile.currentSchool campus')
+    .populate('campus', 'name');
+
+    const formattedList = students.map(s => ({
+      name: `${s.firstName} ${s.lastName}`,
+      email: s.email,
+      school: s.studentProfile?.currentSchool || 'N/A',
+      campus: s.campus?.name || 'N/A'
+    }));
+
+    res.json({ success: true, data: formattedList });
+  } catch (error) {
+    console.error('Get never logged in list error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
@@ -1412,7 +1443,11 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
     let studentQuery = {
       role: 'student',
       campus: { $in: campusIds },
-      isActive: true
+      // Request 1: Include students with isActive: false IF they have never logged in (imported)
+      $or: [
+        { isActive: true },
+        { isActive: false, lastLogin: null }
+      ]
     };
 
     if (cycleId) {
@@ -1474,7 +1509,8 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
           deadline: a.job?.applicationDeadline,
           appliedAt: a.createdAt,
           lastUpdated: a.updatedAt
-        }))
+        })),
+        lastLogin: student.lastLogin // Request 1: helpful for indicator
       };
     });
 
