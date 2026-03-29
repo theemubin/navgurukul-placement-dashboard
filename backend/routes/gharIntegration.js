@@ -234,8 +234,7 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
         const { campus, school, status, stdIdStart, stdIdEnd } = req.query;
         console.log(`[GharSync] Starting mass import (isDev: ${isDev}, Campus: ${campus || 'All'}, School: ${school || 'All'}, Status: ${status || 'All'}, Range: ${stdIdStart || 1}-${stdIdEnd || 10000})`);
 
-        // Use the new filtered fetch endpoint (MUCH more efficient)
-        const studentsToProcess = await gharApiService.fetchFilteredStudents({ 
+        let studentsFromGhar = await gharApiService.fetchFilteredStudents({ 
           campus, 
           school, 
           status,
@@ -243,12 +242,18 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
           stdIdEnd: stdIdEnd || 5000 // Default 5k to be safe
         }, isDev);
         
+        // Request: Pick "Active" only from Ghar response (locally filter to be 100% sure)
+        const studentsToProcess = (studentsFromGhar || []).filter(st => {
+            const statusValue = st.Status || st.Current_Status || '';
+            return statusValue.toLowerCase() === 'active';
+        });
+
         if (!studentsToProcess || studentsToProcess.length === 0) {
             return res.status(200).json({
                 success: false,
                 message: campus || school || status 
-                  ? 'No students found matching your filters' 
-                  : 'No students found to import'
+                  ? 'No students found matching your filters (Active only)' 
+                  : 'No active students found to import'
             });
         }
 

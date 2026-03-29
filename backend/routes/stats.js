@@ -26,17 +26,23 @@ router.get('/never-logged-in-list', auth, authorize('campus_poc', 'coordinator',
       campus: { $in: campusIds },
       lastLogin: null
     })
-    .select('firstName lastName email studentProfile.currentSchool campus isActive')
+    .select('firstName lastName email studentProfile.currentSchool studentProfile.externalData.ghar campus isActive')
     .populate('campus', 'name')
     .sort({ firstName: 1, lastName: 1 });
 
-    const formattedList = students.map(s => ({
-      name: `${s.firstName} ${s.lastName}`,
-      email: s.email,
-      school: s.studentProfile?.currentSchool || 'N/A',
-      campus: s.campus?.name || 'N/A',
-      isActive: s.isActive
-    }));
+    const formattedList = students.map(s => {
+      // Manually resolve school for consistency
+      const gharSchool = s.studentProfile?.externalData?.ghar?.currentSchool?.value;
+      const localSchool = s.studentProfile?.currentSchool;
+      
+      return {
+        name: `${s.firstName} ${s.lastName}`,
+        email: s.email,
+        school: gharSchool || localSchool || 'N/A',
+        campus: s.campus?.name || 'N/A',
+        isActive: s.isActive
+      };
+    });
 
     res.json({ success: true, data: formattedList });
   } catch (error) {
