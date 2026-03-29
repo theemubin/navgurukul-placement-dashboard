@@ -59,11 +59,13 @@ class GharApiService {
     /**
      * Fetch filtered students from Ghar Zoho using the filter endpoint
      * @param {Object} filters - Filter parameters (campus, school, status, etc.)
-     * @param {boolean} isDev - Whether to use dev mode
+     * @param {boolean} _isDev - (Deprecated) Now forced to true to match Zoho API behavior
      * @returns {Promise<Array>} List of students
      */
-    async fetchFilteredStudents(filters = {}, isDev = process.env.NODE_ENV !== 'production') {
+    async fetchFilteredStudents(filters = {}, _isDev = true) {
         try {
+            // Force isDev to true as requested by user
+            const isDev = true; 
             const params = {
                 ...filters,
                 isDev,
@@ -91,11 +93,12 @@ class GharApiService {
 
     /**
      * Fetch all active students from Ghar Zoho
-     * @param {boolean} isDev - Whether to use dev mode
+     * @param {boolean} _isDev - (Deprecated) Now forced to true
      * @returns {Promise<Array>} List of students
      */
-    async fetchAllStudents(isDev = process.env.NODE_ENV !== 'production') {
+    async fetchAllStudents(_isDev = true) {
         try {
+            const isDev = true;
             const response = await this.client.get('/gharZoho/All_Students', {
                 params: { isDev }
             });
@@ -112,11 +115,12 @@ class GharApiService {
 
     /**
      * Fetch all attendance configurations
-     * @param {boolean} isDev - Whether to use dev mode
+     * @param {boolean} _isDev - (Deprecated) Now forced to true
      * @returns {Promise<Object>} Attendance configurations
      */
-    async getAllAttendanceConfigurations(isDev = process.env.NODE_ENV !== 'production') {
+    async getAllAttendanceConfigurations(_isDev = true) {
         try {
+            const isDev = true;
             const response = await this.client.get('/gharZoho/All_Attendance_Configurations', {
                 params: { isDev }
             });
@@ -151,9 +155,10 @@ class GharApiService {
         try {
             // Normalize email: trim and lowercase
             const normalizedEmail = email.trim().toLowerCase();
-            const isDev = process.env.NODE_ENV !== 'production';
+            // Force isDev to true as requested
+            const isDev = true; 
 
-            console.log(`[GharAPI] Attempting sync for: "${normalizedEmail}" (Original: "${email}", isDev: ${isDev})`);
+            console.log(`[GharAPI] Attempting sync for: "${normalizedEmail}" (isDev: true)`);
 
             const tryFetch = async (envMode) => {
                 const res = await this.client.get('/gharZoho/students/By/NgEmail', {
@@ -165,14 +170,8 @@ class GharApiService {
                 return res;
             };
 
-            // Try primary environment
-            let response = await tryFetch(isDev);
-
-            // If no data found in primary, try the fallback
-            if (!response.data || !response.data.data || !Array.isArray(response.data.data) || response.data.data.length === 0) {
-                console.log(`[GharAPI] No data in primary env (${isDev}), trying fallback (${!isDev}) for ${normalizedEmail}`);
-                response = await tryFetch(!isDev);
-            }
+            // Process response (only try with isDev: true as user requested)
+            let response = await tryFetch(true);
 
             // Process response
             if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
@@ -184,7 +183,7 @@ class GharApiService {
                 return externalData;
             }
 
-            console.warn(`[GharAPI] Student not found in any environment for email: ${normalizedEmail}`);
+            console.warn(`[GharAPI] Student not found in Ghar (isDev: true) for email: ${normalizedEmail}`);
             return null;
         } catch (error) {
             console.error(`[GharAPI] Sync failed for ${email}:`, error.message);

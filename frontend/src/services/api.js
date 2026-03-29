@@ -447,7 +447,7 @@ export const gharAPI = {
   studentPreview: (email, isDev) => api.get(`/ghar/student-preview/${email}?isDev=${isDev}`),
   syncStudent: (email) => api.post('/ghar/sync-student', { email }),
   importAll: (params = {}) => {
-    const { campus = '', isDev = import.meta.env.DEV, stdIdStart, stdIdEnd } = params;
+    const { campus = '', isDev = true, stdIdStart, stdIdEnd } = params;
     let url = `/ghar/import-all-students?isDev=${isDev}`;
     if (campus) url += `&campus=${encodeURIComponent(campus)}`;
     if (stdIdStart) url += `&stdIdStart=${stdIdStart}`;
