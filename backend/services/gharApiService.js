@@ -71,7 +71,12 @@ class GharApiService {
                 stdIdEnd: filters.stdIdEnd || 5000
             };
             
-            console.log(`[GharSync] Fetching students (isDev: ${isDev}, range: ${params.stdIdStart}-${params.stdIdEnd})`);
+            console.log(`[GharSync] Fetching students:`, {
+                url: this.baseURL + '/gharZoho/students/filter',
+                params,
+                tokenAvailable: !!this.token,
+                tokenPrefixCorrect: this.token?.startsWith('eyJhbGci')
+            });
             const response = await this.client.get('/gharZoho/students/filter', { params });
 
             if (response.data && response.data.students && Array.isArray(response.data.students)) {

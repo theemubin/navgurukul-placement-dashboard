@@ -173,8 +173,14 @@ const Login = () => {
       {!selectedBackground && <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />}
       <div className="absolute inset-0 bg-black/45" />
 
-      <div className="relative z-10 min-h-screen flex flex-col items-center px-4 pb-3 sm:pb-4" style={{ justifyContent: animateToBottom ? 'flex-end' : 'center', transition: 'justify-content 8s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-        <div className="w-full max-w-md">
+      <div className="relative z-10 min-h-screen flex flex-col items-center px-4 pb-8">
+        {/* Animated Spacers to move the box slowly to bottom */}
+        <div 
+          className="transition-all duration-[10000ms] ease-in-out" 
+          style={{ flexGrow: animateToBottom ? 1 : 0.5 }} 
+        />
+        
+        <div className="w-full max-w-md animate-in fade-in zoom-in duration-1000">
           {/* Glassmorphism container */}
           <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl p-6 shadow-2xl">
             {/* Logo */}
@@ -212,6 +218,9 @@ const Login = () => {
             </button>
           </div>
         </div>
+        
+        {/* Static Bottom Spacer to balance centering initially */}
+        <div className="flex-grow flex-shrink-0" style={{ flexBasis: '10vh' }} />
       </div>
 
       <button

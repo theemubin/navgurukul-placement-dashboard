@@ -244,7 +244,7 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
         }, isDev);
         
         if (!studentsToProcess || studentsToProcess.length === 0) {
-            return res.status(404).json({
+            return res.status(200).json({
                 success: false,
                 message: campus || school || status 
                   ? 'No students found matching your filters' 
