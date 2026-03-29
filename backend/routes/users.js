@@ -153,7 +153,18 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
       if (!isNaN(year)) {
         const startDate = new Date(`${year}-01-01T00:00:00.000Z`);
         const endDate = new Date(`${year}-12-31T23:59:59.999Z`);
-        query['studentProfile.joiningDate'] = { $gte: startDate, $lte: endDate };
+        const dateRange = { $gte: startDate, $lte: endDate };
+        // Match either the local joiningDate OR the Ghar-synced joiningDate
+        // so that never-logged-in imported students are included in batch filters
+        query.$and = [
+          ...(query.$and || []),
+          {
+            $or: [
+              { 'studentProfile.joiningDate': dateRange },
+              { 'studentProfile.externalData.ghar.joiningDate.value': dateRange }
+            ]
+          }
+        ];
       } else {
         query['studentProfile.batch'] = batch;
       }
