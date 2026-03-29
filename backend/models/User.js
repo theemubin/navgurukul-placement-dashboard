@@ -736,6 +736,60 @@ userSchema.set('toObject', { virtuals: true });
 
     gharData.lastSyncedAt = now;
 
+    // -----------------------------------------------------------------------
+    // PROMOTE Ghar data into top-level profile fields so all DB filters work.
+    // These are overwritten on every sync so they stay fresh.
+    // When a student logs in and manually updates their profile, those manual
+    // entries are kept and Ghar data is stored alongside in externalData.ghar.
+    // -----------------------------------------------------------------------
+
+    // Joining date → used by batch year filter
+    if (gharData.joiningDate?.value) {
+      user.studentProfile.joiningDate = gharData.joiningDate.value;
+    }
+
+    // School → used by school filter
+    if (gharData.currentSchool?.value) {
+      user.studentProfile.currentSchool = gharData.currentSchool.value;
+    }
+
+    // Attendance
+    if (gharData.attendancePercentage?.value != null) {
+      user.studentProfile.attendancePercentage = gharData.attendancePercentage.value;
+    }
+
+    // Current module
+    if (gharData.currentModule?.value) {
+      user.studentProfile.currentModule = gharData.currentModule.value;
+    }
+
+    // Gender → top-level user field
+    if (gharData.gender?.value) {
+      user.gender = gharData.gender.value.toLowerCase();
+    }
+
+    // Phone → top-level user field
+    if (gharData.phone?.value && !user.phone) {
+      user.phone = gharData.phone.value;
+    }
+
+    // Hometown → studentProfile.hometown (district / state)
+    if (gharData.hometown?.value) {
+      const { state, district } = gharData.hometown.value;
+      user.studentProfile.hometown = {
+        ...user.studentProfile.hometown,
+        state: state || user.studentProfile.hometown?.state,
+        district: district || user.studentProfile.hometown?.district
+      };
+    }
+
+    // Date of placement
+    if (gharData.dateOfPlacement?.value) {
+      user.studentProfile.dateOfPlacement = gharData.dateOfPlacement.value;
+    }
+
+    // -----------------------------------------------------------------------
+
     // Safely update extraAttributes Map
     if (externalData) {
       if (!user.studentProfile.externalData.ghar.extraAttributes || typeof user.studentProfile.externalData.ghar.extraAttributes.set !== 'function') {
