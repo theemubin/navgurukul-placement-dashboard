@@ -578,7 +578,7 @@ userSchema.set('toObject', { virtuals: true });
       user = new this({
         email: normalizedEmail,
         role: 'student',
-        isActive: false, // Start as inactive until they log in
+        isActive: true, // Mark as active to ensure they appear in "Active" counts as requested
         firstName: resolvedFirstName,
         lastName: resolvedLastName,
         authProvider: 'google',
@@ -622,6 +622,10 @@ userSchema.set('toObject', { virtuals: true });
 
       if (matchedStatus) {
         user.studentProfile.currentStatus = matchedStatus;
+        // Request: Ensure user is marked as Active if Zoho status is Active
+        if (matchedStatus.toLowerCase() === 'active') {
+          user.isActive = true;
+        }
       }
     }
 
