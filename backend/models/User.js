@@ -118,6 +118,25 @@ const userSchema = new mongoose.Schema({
       type: Date
     }  // Track last notification for rate limiting
   },
+  // Role Change Request
+  roleRequest: {
+    role: { 
+      type: String, 
+      enum: ['student', 'campus_poc', 'coordinator', 'manager'] 
+    },
+    status: { 
+      type: String, 
+      enum: ['pending', 'approved', 'rejected'], 
+      default: 'pending' 
+    },
+    requestedAt: Date,
+    reason: String,
+    reviewedAt: Date,
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  },
   // Student-specific fields
   studentProfile: {
     // Profile approval status

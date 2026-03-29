@@ -106,8 +106,11 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
     } = req.query;
 
     let query = { 
-      role: 'student',
-      // Request: Include inactive imported students who have never logged in
+      role: 'student'
+    };
+
+    // Request: Include inactive imported students who have never logged in
+    const baseFilter = {
       $or: [
         { isActive: true },
         { lastLogin: null }
@@ -126,7 +129,11 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
     const statusFilter = status;
 
     if (statusFilter && statusFilter !== 'all') {
-      query['studentProfile.currentStatus'] = statusFilter;
+      if (statusFilter === 'never_logged_in') {
+        query.lastLogin = null;
+      } else {
+        query['studentProfile.currentStatus'] = statusFilter;
+      }
     } else if (!statusFilter && req.user.role === 'student') {
       // Students see active peers by default
       query['studentProfile.currentStatus'] = 'Active';
@@ -161,11 +168,17 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
     }
 
     if (search) {
-      query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ];
+      const searchFilter = {
+        $or: [
+          { firstName: { $regex: search, $options: 'i' } },
+          { lastName: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ]
+      };
+      // Use $and to prevent overwriting the existing query properties
+      query.$and = [baseFilter, searchFilter];
+    } else {
+      query.$and = [baseFilter];
     }
 
     // Sorting: support sortField and sortOrder; default to oldest joining active student first

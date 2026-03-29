@@ -2,14 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { notificationAPI, questionAPI } from '../../services/api';
-import { Menu, Bell, LogOut, ChevronDown, User, MessageCircle, Heart } from 'lucide-react';
+import { Menu, Bell, LogOut, ChevronDown, User, MessageCircle, Heart, ShieldCheck } from 'lucide-react';
 import { getNotificationUrl } from '../../utils/notificationUtils';
+import RoleRequestModal from './RoleRequestModal';
 
 const Navbar = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [forumUnreadCount, setForumUnreadCount] = useState(0);
@@ -258,6 +260,16 @@ const Navbar = ({ onMenuClick }) => {
                     </Link>
                   )}
                   <button
+                    onClick={() => {
+                      setShowDropdown(false);
+                      setShowRoleModal(true);
+                    }}
+                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 rounded-xl transition-colors"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Request Role Change</span>
+                  </button>
+                  <button
                     onClick={handleLogout}
                     className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                   >
@@ -270,6 +282,12 @@ const Navbar = ({ onMenuClick }) => {
           </div>
         </div>
       </div>
+      
+      <RoleRequestModal 
+        isOpen={showRoleModal} 
+        onClose={() => setShowRoleModal(false)} 
+        currentUser={user} 
+      />
     </header>
   );
 };

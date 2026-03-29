@@ -199,10 +199,52 @@ router.post('/debug/verify-token', async (req, res) => {
   }
 });
 
-// Manager approval endpoint
+// Role Request endpoint (for users to request role change from profile)
+router.post('/request-role', auth, async (req, res) => {
+  try {
+    const { role, reason } = req.body;
+    if (!['student', 'coordinator', 'campus_poc', 'manager'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role requested' });
+    }
+
+    if (req.user.role === role) {
+      return res.status(400).json({ message: 'You already have this role' });
+    }
+
+    const user = await User.findById(req.userId);
+    user.roleRequest = {
+      role: role,
+      status: 'pending',
+      reason: reason || '',
+      requestedAt: new Date()
+    };
+    await user.save();
+
+    // Notify manager
+    const Notification = require('../models/Notification');
+    const manager = await User.findOne({ email: process.env.MANAGER_EMAIL?.toLowerCase(), role: 'manager' });
+    if (manager) {
+      await Notification.create({
+        recipient: manager._id,
+        type: 'role_request',
+        title: 'Role Change Requested',
+        message: `${user.firstName} ${user.lastName} has requested a role change to ${role.replace('_', ' ')}.`,
+        link: '/manager/approvals',
+        relatedEntity: { type: 'user', id: user._id }
+      });
+    }
+
+    res.json({ message: 'Role change request submitted successfully' });
+  } catch (error) {
+    console.error('Role request error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Manager approval endpoint (Handles both user activation and role requests)
 router.post('/approve-user', auth, async (req, res) => {
   try {
-    const { userId, approvedRole } = req.body;
+    const { userId, approvedRole, action = 'approve' } = req.body;
 
     // Check if current user is manager
     if (req.user.role !== 'manager') {
@@ -214,30 +256,54 @@ router.post('/approve-user', auth, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Normalize approvedRole to accept both underscore and hyphen variants (frontend may send campus_poc)
-    const normalizedRole = approvedRole ? String(approvedRole).replace('_', '-').trim() : undefined;
+    const Notification = require('../models/Notification');
+
+    if (action === 'reject') {
+        if (user.roleRequest) {
+          user.roleRequest.status = 'rejected';
+          user.roleRequest.reviewedAt = new Date();
+          user.roleRequest.reviewedBy = req.userId;
+        }
+        await user.save();
+        
+        await Notification.create({
+          recipient: user._id,
+          type: 'role_request_rejected',
+          title: 'Role Request Rejected',
+          message: `Your request for the ${approvedRole || 'new'} role has been rejected.`,
+        });
+
+        return res.json({ message: 'Request rejected' });
+    }
+
+    // Normalize approvedRole
+    const normalizedRole = approvedRole ? String(approvedRole).replace('_', '-').replace('campus-poc', 'campus_poc').trim() : undefined;
 
     // Update user status
-    user.isActive = true;
-    if (normalizedRole && ['student', 'coordinator', 'campus-poc', 'manager'].includes(normalizedRole)) {
+    user.isActive = true; // Always active when manager acts on them
+    if (normalizedRole && ['student', 'coordinator', 'campus_poc', 'manager'].includes(normalizedRole)) {
       user.role = normalizedRole;
-    } else if (approvedRole && ['student', 'coordinator', 'campus_poc', 'manager'].includes(approvedRole)) {
-      // Fallback: accept underscore variant for campus_poc
-      user.role = approvedRole === 'campus_poc' ? 'campus-poc' : approvedRole;
     }
+
+    // If there was a pending request, mark it as approved
+    if (user.roleRequest && user.roleRequest.status === 'pending') {
+       user.roleRequest.status = 'approved';
+       user.roleRequest.reviewedAt = new Date();
+       user.roleRequest.reviewedBy = req.userId;
+    }
+    
     await user.save();
 
     // Create notification for approved user
-    const Notification = require('../models/Notification');
     await Notification.create({
       recipient: user._id,
       type: 'account_approved',
-      title: 'Account Approved',
-      message: `Your account has been approved with ${user.role} role. You can now access the platform.`,
+      title: 'Account Role Updated',
+      message: `Your account role has been updated to ${user.role.replace('_', ' ')}.`,
     });
 
     res.json({
-      message: 'User approved successfully',
+      message: 'User approved/updated successfully',
       user: {
         id: user._id,
         email: user.email,
@@ -252,7 +318,7 @@ router.post('/approve-user', auth, async (req, res) => {
   }
 });
 
-// Get pending approvals (for manager)
+// Get pending role requests (for manager)
 router.get('/pending-approvals', auth, async (req, res) => {
   try {
     if (req.user.role !== 'manager') {
@@ -260,9 +326,8 @@ router.get('/pending-approvals', auth, async (req, res) => {
     }
 
     const pendingUsers = await User.find({
-      isActive: false,
-      authProvider: 'google'
-    }).select('firstName lastName email role createdAt');
+      'roleRequest.status': 'pending'
+    }).select('firstName lastName email role roleRequest createdAt');
 
     res.json(pendingUsers);
 
@@ -354,12 +419,10 @@ router.post('/register', registerValidation, async (req, res) => {
       return res.status(400).json({ message: 'User already exists with this email' });
     }
 
-    // Determine activation: students auto-active; elevated roles require manager approval
-    let isActive = true;
-    const normalizedRole = role === 'campus_poc' ? 'campus_poc' : role;
-    if (['coordinator', 'campus_poc', 'manager'].includes(normalizedRole) && normalizedRole !== 'student') {
-      isActive = false;
-    }
+    // Determine activation: everyone is student by default and auto-active
+    // This removes the mandatory approval for everyone
+    const normalizedRole = 'student';
+    const isActive = true;
 
     // Create new user
     const user = new User({
@@ -367,12 +430,22 @@ router.post('/register', registerValidation, async (req, res) => {
       password,
       firstName,
       lastName,
-      role: normalizedRole || 'student',
+      role: normalizedRole,
       phone,
       campus,
       isActive,
-      studentProfile: (normalizedRole || 'student') === 'student' ? {} : undefined
+      studentProfile: {}
     });
+
+    // If they provided a desired role in registration body, set it as a request
+    if (role && role !== 'student' && ['coordinator', 'campus_poc', 'manager'].includes(role)) {
+       user.roleRequest = {
+          role: role,
+          status: 'pending',
+          requestedAt: new Date(),
+          reason: 'Initial registration request'
+       };
+    }
 
     await user.save();
 

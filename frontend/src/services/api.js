@@ -67,7 +67,8 @@ export const authAPI = {
   changePassword: (data) => api.put('/auth/change-password', data),
   // Exchange short-lived code (cookie will be set by server)
   exchange: (code) => api.post('/auth/google/exchange', { code }, { withCredentials: true }),
-  logout: () => api.post('/auth/logout', {}, { withCredentials: true })
+  logout: () => api.post('/auth/logout', {}, { withCredentials: true }),
+  requestRole: (data) => api.post('/auth/request-role', data)
 };
 
 // User APIs

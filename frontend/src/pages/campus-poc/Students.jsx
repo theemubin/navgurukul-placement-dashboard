@@ -296,6 +296,7 @@ const POCStudents = () => {
             className="text-sm"
           >
             <option value="">All Statuses</option>
+            <option value="never_logged_in">Never Logged In</option>
             <option value="Active">Active</option>
             <option value="Placed">Placed</option>
             <option value="Dropout">Dropout</option>
