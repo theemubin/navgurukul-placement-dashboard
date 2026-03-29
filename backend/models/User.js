@@ -674,12 +674,16 @@ userSchema.set('toObject', { virtuals: true });
     if (campusValue) {
       gharData.campus = { value: campusValue, lastUpdated: now };
       
-      // Attempt to resolve top-level campus reference if not already set or mismatching
+      // Attempt to resolve top-level campus reference
       try {
-        const Campus = mongoose.model('Campus');
-        const matchedCampus = await Campus.findOne({ name: new RegExp(`^${campusValue}$`, 'i') });
-        if (matchedCampus) {
-          user.campus = matchedCampus._id;
+        if (options.targetCampusId) {
+          user.campus = options.targetCampusId;
+        } else {
+          const Campus = mongoose.model('Campus');
+          const matchedCampus = await Campus.findOne({ name: new RegExp(`^${campusValue}$`, 'i') });
+          if (matchedCampus) {
+            user.campus = matchedCampus._id;
+          }
         }
       } catch (e) {
         console.warn('[GharSync] Could not resolve campus reference for:', campusValue);

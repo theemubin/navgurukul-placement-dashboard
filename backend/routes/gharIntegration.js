@@ -257,17 +257,43 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
             created: 0,
             updated: 0,
             failed: 0,
-            processedStudents: [] // Track individuals for detailed feedback
+            processedStudents: [] 
         };
 
-        const batchSize = 10; // Process in small batches to avoid overload
+        // Pre-fetch campus ID once to avoid 292 redundant queries
+        let resolvedCampusId = null;
+        if (campus) {
+          try {
+            const Campus = mongoose.model('Campus');
+            const campusDoc = await Campus.findOne({ name: new RegExp(`^${campus}$`, 'i') });
+            if (campusDoc) resolvedCampusId = campusDoc._id;
+          } catch (e) {
+            console.warn('[GharSync] Could not pre-cache campus ID');
+          }
+        }
+
+        // Get all emails in one batch to check existence in one go
+        const studentEmailsInGhar = studentsToProcess.map(st => {
+           // Reuse the email finding logic but carefully
+           return [
+              'Navgurukul_Email', 'Student_ng_email', 'Email', 'Email_ID', 
+              'student_email', 'Ng_Email_ID', 'Personal_Email'
+            ].map(k => st[k]).find(v => v);
+        }).filter(v => v);
+
+        const existingUsers = await User.find({ 
+           email: { $in: studentEmailsInGhar.map(e => new RegExp(`^${e.trim()}$`, 'i')) } 
+        }, 'email');
+        const existingEmailsSet = new Set(existingUsers.map(u => u.email.toLowerCase()));
+
+        const batchSize = 15; // Slightly larger batches
         for (let i = 0; i < studentsToProcess.length; i += batchSize) {
             const batch = studentsToProcess.slice(i, i + batchSize);
             await Promise.allSettled(batch.map(async (st) => {
                 let currentEmail = 'Unknown';
                 let currentName = 'Unknown Student';
                 try {
-                    // Robust email finder - prioritize Navgurukul_Email as per user request
+                    // Reuse the finding logic
                     const emailField = [
                       'Navgurukul_Email', 'Student_ng_email', 'Email', 'Email_ID', 
                       'student_email', 'Ng_Email_ID', 'Personal_Email',
@@ -298,10 +324,14 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
                       return;
                     }
 
-                    // Check if exists
-                    const exists = await User.findOne({ email: new RegExp(`^${currentEmail.trim()}$`, 'i') });
+                    const normalizedEmail = currentEmail.trim().toLowerCase();
+                    const exists = existingEmailsSet.has(normalizedEmail);
                     
-                    const result = await User.syncGharData(currentEmail.trim(), st, { createIfNotFound: true });
+                    // Sync data 
+                    const result = await User.syncGharData(normalizedEmail, st, { 
+                      createIfNotFound: true,
+                      targetCampusId: resolvedCampusId // Pass if already found
+                    });
                     
                     if (result) {
                         const isNew = !exists;
