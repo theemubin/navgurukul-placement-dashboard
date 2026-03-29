@@ -109,14 +109,6 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
       role: 'student'
     };
 
-    // Request: Include inactive imported students who have never logged in
-    const baseFilter = {
-      $or: [
-        { isActive: true },
-        { lastLogin: null }
-      ]
-    };
-
     // Ghar Dashboard Filters
     if (gharAttendanceMin) {
       query['studentProfile.externalData.ghar.attendancePercentage.value'] = { $gte: parseFloat(gharAttendanceMin) };
@@ -168,17 +160,11 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
     }
 
     if (search) {
-      const searchFilter = {
-        $or: [
-          { firstName: { $regex: search, $options: 'i' } },
-          { lastName: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } }
-        ]
-      };
-      // Use $and to prevent overwriting the existing query properties
-      query.$and = [baseFilter, searchFilter];
-    } else {
-      query.$and = [baseFilter];
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
     }
 
     // Sorting: support sortField and sortOrder; default to oldest joining active student first
