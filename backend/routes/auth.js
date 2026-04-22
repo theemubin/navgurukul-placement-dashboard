@@ -212,6 +212,22 @@ router.post('/request-role', auth, async (req, res) => {
     }
 
     const user = await User.findById(req.userId);
+    
+    // Auto-approve student role request
+    if (role === 'student') {
+      user.role = 'student';
+      user.roleRequest = {
+        role: 'student',
+        status: 'approved',
+        reason: reason || 'Auto-approved student role request',
+        requestedAt: new Date(),
+        reviewedAt: new Date(),
+        reviewedBy: req.userId
+      };
+      await user.save();
+      return res.json({ message: 'Role changed to student successfully' });
+    }
+
     user.roleRequest = {
       role: role,
       status: 'pending',
@@ -326,7 +342,8 @@ router.get('/pending-approvals', auth, async (req, res) => {
     }
 
     const pendingUsers = await User.find({
-      'roleRequest.status': 'pending'
+      'roleRequest.status': 'pending',
+      'roleRequest.role': { $ne: 'student' }
     }).select('firstName lastName email role roleRequest createdAt');
 
     res.json(pendingUsers);

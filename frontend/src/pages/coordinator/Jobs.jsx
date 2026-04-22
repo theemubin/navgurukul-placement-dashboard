@@ -59,21 +59,7 @@ const CoordinatorJobs = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const canManageJob = (job) => {
-    if (!user) return false;
-    if (user.role === 'manager') return true;
-    // guard against missing user._id or missing job fields
-    const uid = user && (user._id || user.id || null);
-    if (!uid) return false;
-    try {
-      if (job?.coordinator && job.coordinator.toString() === uid.toString()) return true;
-      if (job?.createdBy && job.createdBy.toString() === uid.toString()) return true;
-    } catch (e) {
-      // defensive: any unexpected shape, deny permission
-      return false;
-    }
-    return false;
-  };
+
 
   const fetchApplicantsForJob = async (jobId) => {
     try {
@@ -86,10 +72,6 @@ const CoordinatorJobs = () => {
   };
 
   const openManageApplicants = async (job) => {
-    if (!canManageJob(job)) {
-      toast.error("Only the job's assigned coordinator or a manager may manage applicants for this job");
-      return;
-    }
     setModalJob(job);
     setModalNewStatus(null);
     await fetchApplicantsForJob(job._id);
@@ -440,10 +422,6 @@ const CoordinatorJobs = () => {
     if (reviewStatuses.includes(newStatus)) {
       // Open modal and set up for review flow instead of directly updating the job
       const job = jobs.find(j => j._id === jobId);
-      if (!canManageJob(job)) {
-        toast.error("Only the job's assigned coordinator or a manager may manage applicants for this job");
-        return;
-      }
       setModalJob(job);
       setModalNewStatus(newStatus);
       await fetchApplicantsForJob(jobId);

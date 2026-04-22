@@ -112,14 +112,14 @@ const UserApprovals = () => {
               <div className="flex-shrink-0 ml-4">
                 <div className="flex flex-col space-y-2">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                    Requested Role: {user.role.replace('_', ' ').toUpperCase()}
+                    Requested Role: {(user.roleRequest?.role || user.role).replace('_', ' ').toUpperCase()}
                   </span>
                   
                   <div className="flex space-x-2">
                     {/* Role selection and approval buttons */}
                     <select
                       id={`role-${user._id}`}
-                      defaultValue={user.role}
+                      defaultValue={user.roleRequest?.role || user.role}
                       className="text-sm border border-gray-300 rounded px-2 py-1"
                     >
                       <option value="student">Student</option>

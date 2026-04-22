@@ -1476,7 +1476,60 @@ node scripts/promote_normalized_index_unique.js`;
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-4 border-t border-indigo-100/50">
+                    <div className="mt-4 pt-4 border-t border-indigo-100/50 space-y-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase">Ping Roles (Job Announcements)</label>
+                          <div className="group relative">
+                            <AlertCircle className="w-3 h-3 text-gray-400 cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-tight">
+                              Discord Role IDs to @ping when a new job thread is created. Find Role IDs via Discord → Server Settings → Roles → Right-click → Copy Role ID (requires Developer Mode).
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            id="discord-ping-role-input"
+                            type="text"
+                            placeholder="Role ID (e.g. 1234567890)"
+                            className="flex-1 bg-white border border-indigo-100 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const val = e.target.value.trim();
+                                if (val && !/\D/.test(val) && !(settings.discordConfig?.pingRoles || []).includes(val)) {
+                                  setSettings({ ...settings, discordConfig: { ...settings.discordConfig, pingRoles: [...(settings.discordConfig?.pingRoles || []), val] } });
+                                  e.target.value = '';
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-colors"
+                            onClick={() => {
+                              const input = document.getElementById('discord-ping-role-input');
+                              const val = input.value.trim();
+                              if (val && !/\D/.test(val) && !(settings.discordConfig?.pingRoles || []).includes(val)) {
+                                setSettings({ ...settings, discordConfig: { ...settings.discordConfig, pingRoles: [...(settings.discordConfig?.pingRoles || []), val] } });
+                                input.value = '';
+                              }
+                            }}
+                          >Add</button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(settings.discordConfig?.pingRoles || []).map((roleId) => (
+                            <span key={roleId} className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-[10px] font-bold">
+                              <span>@&amp;{roleId}</span>
+                              <button
+                                onClick={() => setSettings({ ...settings, discordConfig: { ...settings.discordConfig, pingRoles: settings.discordConfig.pingRoles.filter(r => r !== roleId) } })}
+                                className="hover:text-red-600 transition-colors"
+                              >×</button>
+                            </span>
+                          ))}
+                          {(settings.discordConfig?.pingRoles || []).length === 0 && (
+                            <p className="text-[10px] text-gray-400 italic">No roles configured. Add a Role ID above.</p>
+                          )}
+                        </div>
+                      </div>
                       <p className="text-[10px] text-indigo-400 leading-relaxed font-medium italic">
                         Note: Self-application and student-specific notifications ALWAYS require a campus-specific channel and will not be sent to global channels.
                       </p>

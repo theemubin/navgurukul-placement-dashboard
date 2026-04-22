@@ -2,277 +2,14 @@ import { useState, useEffect } from 'react';
 import { formatDistanceToNow, isPast, format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { statsAPI, placementCycleAPI, userAPI, campusAPI, gharAPI } from '../../services/api';
-import { StatsCard, LoadingSpinner, Badge, Modal, ConfirmDialog } from '../../components/common/UIComponents';
+import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
 import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
-  MessageSquare, ClipboardList, Search, Github, Globe, Star
+  MessageSquare, ClipboardList, Search
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import HistoricalCycleCharts from '../../components/common/HistoricalCycleCharts';
-// Helper component for fallback sync modal if one-go sync fails
-const SyncErrorModal = ({ isOpen, onClose, onRetry, campusName }) => {
-  if (!isOpen) return null;
-  const [start, setStart] = useState(1);
-  const [end, setEnd] = useState(1000);
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 text-left">
-      <div className="bg-white rounded-3xl max-w-md w-full p-8 animate-in zoom-in-95 duration-200 shadow-2xl border-2 border-red-50">
-        <div className="flex items-center gap-3 text-red-600 mb-6">
-          <div className="p-2 bg-red-100 rounded-xl">
-             <AlertCircle className="w-8 h-8" />
-          </div>
-          <h3 className="text-2xl font-black tracking-tight">Sync Failed</h3>
-        </div>
-        
-        <p className="text-gray-600 text-sm mb-6 font-medium leading-relaxed">
-           The single-call sync for <span className="font-bold text-gray-900">{campusName}</span> failed. This usually happens due to API timeouts or large data sets.
-        </p>
-
-        <div className="bg-primary-50/50 p-6 rounded-2xl border-2 border-primary-100/50 mb-6">
-          <h4 className="text-[10px] font-black uppercase text-primary-600 tracking-widest mb-4">Fallback: Advanced Range Sync</h4>
-          <p className="text-[11px] text-gray-500 mb-4 font-medium italic">Try syncing a specific ID range (e.g., 200 record chunks). This is more stable.</p>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Start ID</label>
-              <input 
-                type="number" 
-                value={start} 
-                onChange={(e) => setStart(parseInt(e.target.value) || 1)}
-                className="bg-white border-2 border-gray-100 rounded-xl p-2.5 text-sm font-bold focus:border-primary-500 outline-none transition-all"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">End ID</label>
-              <input 
-                type="number" 
-                value={end} 
-                onChange={(e) => setEnd(parseInt(e.target.value) || 1000)}
-                className="bg-white border-2 border-gray-100 rounded-xl p-2.5 text-sm font-bold focus:border-primary-500 outline-none transition-all"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex gap-4">
-          <button
-            onClick={onClose}
-            className="flex-1 bg-gray-100 text-gray-500 font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-gray-200 transition-all"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onRetry({ stdIdStart: start, stdIdEnd: end })}
-            className="flex-1 bg-primary-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all"
-          >
-            Retry Sync
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-const SyncReportModal = ({ isOpen, onClose, stats }) => {
-  if (!isOpen || !stats) return null;
-  const students = stats.processedStudents || [];
-  
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 text-left">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-0 overflow-hidden shadow-2xl border border-gray-100 flex flex-col max-h-[85vh]">
-        <div className="p-8 bg-primary-600 text-white flex justify-between items-center">
-          <div>
-            <h3 className="text-2xl font-black tracking-tight">Sync Report</h3>
-            <p className="text-primary-100 text-sm mt-1">{students.length} students processed from Ghar Zoho</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-            <XCircle className="w-8 h-8" />
-          </button>
-        </div>
-
-        <div className="p-8 overflow-y-auto flex-grow custom-scrollbar">
-          <div className="grid grid-cols-3 gap-6 mb-8">
-            <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
-               <p className="text-[10px] uppercase font-black text-green-600 tracking-widest mb-1">New Imported</p>
-               <p className="text-3xl font-black text-green-700">{stats.created}</p>
-            </div>
-            <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
-               <p className="text-[10px] uppercase font-black text-blue-600 tracking-widest mb-1">Data Updated</p>
-               <p className="text-3xl font-black text-blue-700">{stats.updated}</p>
-            </div>
-            <div className="bg-red-50 rounded-2xl p-4 border border-red-100">
-               <p className="text-[10px] uppercase font-black text-red-600 tracking-widest mb-1">Failed</p>
-               <p className="text-3xl font-black text-red-700">{stats.failed}</p>
-            </div>
-          </div>
-
-          <h4 className="text-xs font-black uppercase text-gray-400 tracking-widest mb-4">Detailed Student List</h4>
-          <div className="space-y-2">
-            {students.length > 0 ? students.map((s, idx) => (
-              <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-100/50">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-bold text-gray-900">{s.name || 'Unknown'}</span>
-                  <span className="text-[11px] text-gray-500 font-medium">{s.email}</span>
-                </div>
-                <Badge variant={s.status === 'Created' ? 'green' : 'blue'} className="uppercase text-[9px] font-black px-3">
-                  {s.status}
-                </Badge>
-              </div>
-            )) : (
-              <p className="text-center py-8 text-gray-400 font-medium">No detail available for processed records.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-8 bg-primary-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all"
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const StatusBadge = ({ color, count, label, onClick }) => (
-  <div 
-    onClick={onClick}
-    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white shadow-sm transition-all ${onClick ? 'cursor-pointer hover:border-primary-500 hover:shadow-md' : ''}`}
-  >
-    <div className={`w-2 h-2 rounded-full bg-${color}-500`} />
-    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{label}</span>
-    <span className={`text-[10px] font-black text-${color}-600 ml-1`}>{count}</span>
-  </div>
-);
-
-const NeverLoggedInModal = ({ isOpen, onClose }) => {
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchList();
-    }
-  }, [isOpen]);
-
-  const fetchList = async () => {
-    setLoading(true);
-    try {
-      const res = await statsAPI.getNeverLoggedInList();
-      setStudents(res.data.data);
-    } catch (e) {
-      console.error('Failed to fetch never logged in list', e);
-      toast.error('Failed to load student list');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const exportToCSV = () => {
-    const headers = ['Name', 'Email', 'School', 'Campus'];
-    const rows = students.map(s => [s.name, s.email, s.school, s.campus]);
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `never-logged-in-students-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    a.click();
-  };
-
-  if (!isOpen) return null;
-
-  const filtered = students.filter(s => 
-    s.name.toLowerCase().includes(search.toLowerCase()) || 
-    s.email.toLowerCase().includes(search.toLowerCase()) ||
-    s.school.toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 text-left">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-0 overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
-        <div className="p-8 bg-gray-900 text-white flex justify-between items-center">
-          <div>
-            <h3 className="text-2xl font-black tracking-tight flex items-center gap-3">
-              <Clock className="w-8 h-8 text-amber-400" />
-              Never Logged In
-            </h3>
-            <p className="text-gray-400 text-sm mt-1">Active students imported but not yet onboarded</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-            <XCircle className="w-8 h-8" />
-          </button>
-        </div>
-
-        <div className="p-6 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row gap-4 items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              type="text" 
-              placeholder="Search by name, email or school..." 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:border-primary-500 outline-none transition-all font-medium"
-            />
-          </div>
-          <button 
-            onClick={exportToCSV}
-            className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
-          >
-            <FileText className="w-4 h-4" /> Export CSV
-          </button>
-        </div>
-
-        <div className="p-0 overflow-y-auto flex-grow custom-scrollbar">
-          {loading ? (
-            <div className="py-20 flex justify-center"><LoadingSpinner /></div>
-          ) : filtered.length > 0 ? (
-            <div className="divide-y divide-gray-50">
-              {filtered.map((student, idx) => (
-                <div key={idx} className="p-5 hover:bg-gray-50 transition-colors flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-bold">
-                      {student.name.charAt(0)}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-gray-900">{student.name}</h4>
-                      <p className="text-xs text-gray-500 font-medium">{student.email}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">School</p>
-                    <Badge variant="blue" className="text-[9px] font-black px-2">{student.school}</Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-20 text-center text-gray-400">
-              <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p className="font-medium">No students found matching your criteria.</p>
-            </div>
-          )}
-        </div>
-
-        <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-8 bg-gray-900 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs hover:bg-black transition-all"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const POCDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -297,17 +34,9 @@ const POCDashboard = () => {
   const [managedCampuses, setManagedCampuses] = useState([]);
   const [selectedCampuses, setSelectedCampuses] = useState([]);
   const [savingCampuses, setSavingCampuses] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   // Eligible students modal state
   const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ open: false, job: null, students: [], loading: false });
   const [studentFilter, setStudentFilter] = useState('all'); // 'all', 'applied', 'not-applied'
-  const [showImportConfirm, setShowImportConfirm] = useState(false);
-  const [campusToSync, setCampusToSync] = useState('');
-  const [showSyncError, setShowSyncError] = useState(false);
-  const [lastFailedCampus, setLastFailedCampus] = useState('');
-  const [syncReport, setSyncReport] = useState(null);
-  const [showSyncReport, setShowSyncReport] = useState(false);
-  const [showNeverLoggedInModal, setShowNeverLoggedInModal] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -353,89 +82,30 @@ const POCDashboard = () => {
 
   const handleGharSync = async (email) => {
     if (!email) return;
-    
-    toast.promise(
-      gharAPI.syncStudent(email),
-      {
-        loading: `Syncing ${email} with Ghar...`,
-        success: (response) => {
-          const updatedData = response.data.data?.student;
-          setStudentSummary(prev => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              students: prev.students.map(s => s.email?.toLowerCase() === email?.toLowerCase() ? {
-                ...s,
-                placementStatus: updatedData.resolvedProfile?.currentStatus || s.placementStatus
-              } : s)
-            };
-          });
-          fetchDashboardData();
-          return 'Student data updated successfully';
-        },
-        error: (err) => err.response?.data?.message || 'Failed to sync with Ghar'
-      }
-    );
-  };
+    try {
+      toast.loading('Syncing with Ghar...', { id: 'ghar-sync' });
+      const response = await gharAPI.syncStudent(email);
+      const updatedData = response.data.data?.student;
+      toast.success('Synced with Ghar successfully', { id: 'ghar-sync' });
+      
+      // Update local state instead of full dashboard re-fetch
+      setStudentSummary(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          students: prev.students.map(s => s.email?.toLowerCase() === email?.toLowerCase() ? {
+            ...s,
+            placementStatus: updatedData.resolvedProfile?.currentStatus || s.placementStatus
+          } : s)
+        };
+      });
 
-  const handleImportAll = async (campusName, range = {}) => {
-    setIsSyncing(true);
-    const { stdIdStart, stdIdEnd } = range;
-    
-    // Create a custom promise so we can handle error-side effects outside toast
-    const syncPromise = gharAPI.importAll({ 
-      campus: campusName,
-      stdIdStart,
-      stdIdEnd
-    });
-
-    toast.promise(
-      syncPromise,
-      {
-        loading: (
-          <div className="flex flex-col">
-            <span className="font-bold">Syncing {campusName}...</span>
-            <span className="text-[10px] opacity-70">
-              {stdIdStart ? `Range: ${stdIdStart}-${stdIdEnd}` : 'Performing standard sync'}
-            </span>
-          </div>
-        ),
-        success: (res) => {
-          fetchDashboardData();
-          setShowSyncError(false); // Close modal if it was open
-          const { stats, message } = res.data;
-          
-          if (stats) {
-            // Set detailed sync report for modal
-            setSyncReport(stats);
-            setShowSyncReport(true);
-
-            return (
-              <div className="flex flex-col gap-1 min-w-[200px]">
-                <span className="font-bold text-sm">Sync Complete</span>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-1 border-t border-gray-100 pt-1">
-                  <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Imported</span>
-                  <span className="text-[10px] text-green-600 font-bold ml-auto">{stats.created}</span>
-                  <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Updated</span>
-                  <span className="text-[10px] text-blue-600 font-bold ml-auto">{stats.updated}</span>
-                </div>
-                <p className="text-[10px] text-gray-400 italic mt-1">Detailed report opened.</p>
-              </div>
-            );
-          }
-          return message || 'Import completed';
-        },
-        error: (err) => {
-          setLastFailedCampus(campusName);
-          setShowSyncError(true);
-          return err.response?.data?.message || 'Standard sync failed';
-        }
-      },
-      {
-        style: { minWidth: '300px' },
-        success: { duration: 6000 }
-      }
-    ).finally(() => setIsSyncing(false));
+      // Also refresh the overall stats in the background
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error syncing with Ghar:', error);
+      toast.error(error.response?.data?.message || 'Failed to sync with Ghar', { id: 'ghar-sync' });
+    }
   };
 
   const toggleCampusSelection = (campusId) => {
@@ -616,10 +286,17 @@ const POCDashboard = () => {
     return <Badge variant={config.color}>{config.label}</Badge>;
   };
 
+  const StatusBadge = ({ color, count, label }) => (
+    <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${color === 'blue' ? 'bg-blue-100 text-blue-700' : color === 'amber' ? 'bg-amber-100 text-amber-700' : color === 'orange' ? 'bg-orange-100 text-orange-700' : color === 'green' ? 'bg-green-100 text-green-700' : color === 'indigo' ? 'bg-indigo-100 text-indigo-700' : color === 'purple' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>
+      <span className="font-bold">{count}</span>
+      <span>{label}</span>
+    </div>
+  );
+
   if (loading && !stats) return <LoadingSpinner size="lg" />;
 
   return (
-    <div className="space-y-4 pb-12">
+    <div className="space-y-4 animate-fadeIn pb-12">
       {/* Dynamic Header & Toolbar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex-1">
@@ -637,41 +314,7 @@ const POCDashboard = () => {
             {managedCampuses.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {managedCampuses.map(campus => (
-                  <div key={campus._id} className="flex items-center bg-white border border-gray-200 rounded text-[10px] font-bold overflow-hidden shadow-sm">
-                    <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 border-r border-gray-200">{campus.name}</span>
-                    <button 
-                      onClick={() => {
-                        const tId = toast((t) => (
-                          <div className="flex flex-col gap-2 min-w-[200px]">
-                            <span className="font-bold text-sm">Sync {campus.name}?</span>
-                            <p className="text-xs text-gray-500 font-medium">Updating student records for this campus in one go.</p>
-                            <div className="flex gap-2 mt-2">
-                              <button
-                                onClick={() => {
-                                  toast.dismiss(tId);
-                                  handleImportAll(campus.name);
-                                }}
-                                className="px-4 py-1.5 bg-primary-600 text-white text-[10px] font-black rounded-lg uppercase tracking-wider shadow-sm hover:bg-primary-700 transition-all"
-                              >
-                                Proceed
-                              </button>
-                              <button
-                                onClick={() => toast.dismiss(tId)}
-                                className="px-4 py-1.5 bg-gray-100 text-gray-700 text-[10px] font-black rounded-lg uppercase tracking-wider border hover:bg-gray-200 transition-all"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ), { duration: 10000, position: 'top-center' });
-                      }}
-                      disabled={isSyncing}
-                      className="px-1.5 py-0.5 text-primary-600 hover:bg-primary-50 transition-colors disabled:opacity-50"
-                      title={`Import new students from Zoho for ${campus.name}`}
-                    >
-                      {isSyncing ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
-                    </button>
-                  </div>
+                  <span key={campus._id} className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-[10px] font-bold">{campus.name}</span>
                 ))}
               </div>
             ) : (
@@ -691,11 +334,11 @@ const POCDashboard = () => {
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="bg-transparent border-none text-xs font-bold text-gray-700 p-0 focus:ring-0 min-w-[120px]"
             >
-              <option key="status-all" value="all">All Students</option>
-              <option key="status-placed" value="placed">Placed</option>
-              <option key="status-ready" value="ready">Ready to Place</option>
-              <option key="status-process" value="under-process">Under Process</option>
-              <option key="status-dropout" value="dropout">Dropout</option>
+              <option value="all">All Students</option>
+              <option value="placed">Placed</option>
+              <option value="ready">Ready to Place</option>
+              <option value="under-process">Under Process</option>
+              <option value="dropout">Dropout</option>
             </select>
           </div>
 
@@ -706,9 +349,9 @@ const POCDashboard = () => {
               onChange={(e) => setSelectedCycle(e.target.value)}
               className="bg-transparent border-none text-xs font-bold text-gray-700 p-0 focus:ring-0 min-w-[120px]"
             >
-              <option key="cycle-all" value="">All placement cycles</option>
-              {cycles.map((cycle, idx) => (
-                <option key={cycle._id || `cycle-${idx}`} value={cycle._id}>
+              <option value="">All placement cycles</option>
+              {cycles.map(cycle => (
+                <option key={cycle._id} value={cycle._id}>
                   {cycle.name || `${format(new Date(), 'MMMM')} ${format(new Date(), 'yyyy')}`}
                 </option>
               ))}
@@ -720,12 +363,6 @@ const POCDashboard = () => {
       {/* Compact Status Strip */}
       <div className="flex flex-wrap items-center gap-2 px-1">
         <StatusBadge color="blue" count={studentSummary?.total || 0} label="Total" />
-        <StatusBadge 
-          color="gray" 
-          count={stats?.neverLoggedInCount || 0} 
-          label="Never Logged In" 
-          onClick={() => setShowNeverLoggedInModal(true)}
-        />
         <StatusBadge color="amber" count={pendingSkills.length} label="Pending Skills" />
         <StatusBadge color="orange" count={pendingProfilesCount} label="Pending Profiles" />
         <StatusBadge color="green" count={stats?.readinessPool?.['Job Ready'] || 0} label="Job Ready" />
@@ -878,7 +515,6 @@ const POCDashboard = () => {
             { id: 'school', label: 'School-wise', icon: GraduationCap },
             { id: 'summary', label: 'Student Summary', icon: Users },
             { id: 'cycles', label: 'Placement Cycles', icon: Calendar },
-            { id: 'analytics', label: 'Analytics', icon: TrendingUp },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1476,7 +1112,7 @@ const POCDashboard = () => {
                 return (
                   <div 
                     key={student.studentId} 
-                    className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'} ${!student.lastLogin ? 'opacity-70 saturate-[0.8]' : ''}`}
+                    className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'}`}
                   >
                     {/* Accordion Header */}
                     <div 
@@ -1490,17 +1126,12 @@ const POCDashboard = () => {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 flex-1">
                           <div>
                             <Link 
-                               to={`/campus-poc/students/${student.studentId}`}
-                               className="font-bold text-gray-900 hover:text-primary-600 truncate block flex items-center gap-2"
-                               onClick={(e) => e.stopPropagation()}
-                             >
-                               {student.name}
-                               {!student.lastLogin && (
-                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-100 text-amber-700 uppercase tracking-tighter border border-amber-200">
-                                   <Clock className="w-2 h-2 mr-0.5" /> Never logged in
-                                 </span>
-                               )}
-                             </Link>
+                              to={`/campus-poc/students/${student.studentId}`}
+                              className="font-bold text-gray-900 hover:text-primary-600 truncate block"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {student.name}
+                            </Link>
                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{student.email}</p>
                           </div>
                           <div>
@@ -1640,9 +1271,6 @@ const POCDashboard = () => {
           setShowModal={setShowCycleModal}
         />
       )}
-      {activeTab === 'analytics' && (
-        <HistoricalCycleCharts title="My Campus History" />
-      )}
 
       {/* New Cycle Modal */}
       {showCycleModal && activeTab !== 'cycles' && (
@@ -1654,28 +1282,6 @@ const POCDashboard = () => {
           }}
         />
       )}
-      {/* Sync Report Modal (Success Details) */}
-      <SyncReportModal 
-         isOpen={showSyncReport} 
-         onClose={() => setShowSyncReport(false)} 
-         stats={syncReport} 
-      />
-      
-      <NeverLoggedInModal 
-        isOpen={showNeverLoggedInModal} 
-        onClose={() => setShowNeverLoggedInModal(false)}
-      />
-      
-      {/* Sync Error Fallback Modal */}
-      <SyncErrorModal 
-        isOpen={showSyncError} 
-        onClose={() => setShowSyncError(false)}
-        campusName={lastFailedCampus}
-        onRetry={(range) => {
-          setShowSyncError(false);
-          handleImportAll(lastFailedCampus, range);
-        }}
-      />
     </div>
   );
 };
@@ -1959,11 +1565,8 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                           >
                             {/* 1. Name */}
                             <div className="flex flex-col min-w-0 justify-center pr-2" style={{ flex: '2' }}>
-                              <p className="text-sm font-bold text-gray-900 truncate flex items-center">
+                              <p className="text-sm font-bold text-gray-900 truncate">
                                 {student.firstName || student.lastName ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : student.name || 'Unnamed Student'}
-                                {!student.lastLogin && (
-                                  <span className="ml-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black uppercase rounded tracking-tighter border border-amber-200">Not Joined</span>
-                                )}
                               </p>
                               <p className="text-xs text-gray-500 truncate">{student.email || 'No email'}</p>
                             </div>
@@ -2078,11 +1681,8 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                                   className="flex items-center justify-between px-3 py-2 hover:bg-gray-50"
                                 >
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-900 truncate flex items-center">
+                                    <p className="text-sm font-medium text-gray-900 truncate">
                                       {student.firstName || student.lastName ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : student.name || 'Unnamed'}
-                                      {!student.lastLogin && (
-                                        <span className="ml-2 px-1 text-amber-600 bg-amber-50 text-[9px] font-black uppercase rounded-sm border border-amber-100">Not Joined</span>
-                                      )}
                                     </p>
                                     <p className="text-xs text-gray-500 truncate">{student.email}</p>
                                   </div>
@@ -2132,19 +1732,6 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
           }}
         />
       )}
-      {/* Campus Import Confirmation */}
-      <ConfirmDialog
-        isOpen={showImportConfirm}
-        onClose={() => setShowImportConfirm(false)}
-        onConfirm={() => {
-          setShowImportConfirm(false);
-          handleImportAll(campusToSync);
-        }}
-        title="Import Students"
-        message={`This will check Ghar Zoho for any new students in ${campusToSync} and create placeholder profiles. Proceed?`}
-        confirmLabel="Sync Now"
-        type="primary"
-      />
     </div>
   );
 };

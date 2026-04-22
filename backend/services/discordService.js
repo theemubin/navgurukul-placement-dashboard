@@ -119,9 +119,11 @@ class DiscordService {
             }
 
             // Create embed
+            const applyUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/student/jobs/${job._id}`;
             const embed = new EmbedBuilder()
                 .setColor('#3b82f6')
                 .setTitle(`🆕 New Job: ${job.title}`)
+                .setURL(applyUrl)
                 .setDescription(job.description.substring(0, 300) + (job.description.length > 300 ? '...' : ''))
                 .addFields(
                     { name: '🏢 Company', value: job.company.name, inline: true },
@@ -129,7 +131,7 @@ class DiscordService {
                     { name: '💼 Type', value: job.jobType.replace('_', ' ').toUpperCase(), inline: true },
                     { name: '💰 Salary', value: job.salary?.min && job.salary?.max ? `₹${job.salary.min} - ₹${job.salary.max}` : 'Not disclosed', inline: true },
                     { name: '📅 Deadline', value: new Date(job.applicationDeadline).toLocaleDateString('en-IN'), inline: true },
-                    { name: '👥 Eligible Students', value: `~${eligibleStudents.length || 0}`, inline: true }
+                    { name: '🔗 Apply Here', value: `[Click to Apply](${applyUrl})`, inline: true }
                 )
                 .setTimestamp()
                 .setFooter({ text: `Posted by ${coordinator.firstName} ${coordinator.lastName}` });
@@ -146,7 +148,11 @@ class DiscordService {
                     reason: 'Job posting discussion thread'
                 });
 
-                await thread.send(`📋 **Job ID:** ${job._id}\n💬 Use this thread for updates and discussions about this job posting.`);
+                // Build role pings from settings
+                const pingRoles = settings.discordConfig?.pingRoles || [];
+                const roleMentions = pingRoles.map(id => `<@&${id}>`).join(' ');
+                const threadMsg = `${roleMentions ? roleMentions + '\n' : ''}📋 **Job ID:** ${job._id}\n💬 Use this thread for updates and discussions about this job posting.\n🔗 **Apply:** ${applyUrl}`;
+                await thread.send(threadMsg);
             }
 
             return {

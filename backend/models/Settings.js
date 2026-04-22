@@ -141,7 +141,8 @@ const settingsSchema = new mongoose.Schema({
     },
     useThreads: { type: Boolean, default: true },   // Create threads for each job/student
     mentionUsers: { type: Boolean, default: true }, // @mention users in notifications
-    testMode: { type: Boolean, default: false }     // Test mode (don't send actual notifications)
+    testMode: { type: Boolean, default: false },    // Test mode (don't send actual notifications)
+    pingRoles: { type: [String], default: [] }      // Discord Role IDs to ping in job thread (e.g. ['123456789'])
   },
   // Hiring Partners logos for public showcase
   hiringPartners: [{
