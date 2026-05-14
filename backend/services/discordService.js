@@ -100,12 +100,15 @@ class DiscordService {
                 if (campus.discordChannelId) {
                     channelId = campus.discordChannelId;
                     console.log(`Using campus-specific channel ${channelId} for job posting`);
+                } else if (settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general) {
+                    channelId = settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general;
+                    console.log(`Job is for single campus but no campus Discord channel configured. Falling back to global channel.`);
                 } else {
-                    console.log(`Job is for single campus but no campus Discord channel configured. Skipping notification.`);
+                    console.log(`Job is for single campus but no campus Discord channel configured and no fallback. Skipping notification.`);
                     return null;
                 }
             } else {
-                channelId = settings.discordConfig?.channels?.jobPostings;
+                channelId = settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general;
             }
 
             if (!channelId) {
