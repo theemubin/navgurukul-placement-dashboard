@@ -17,6 +17,8 @@ This file lists actionable, high-priority work discovered during the recent chan
   - Student attempts to change to `active` cycle -> returns 400.
 
 ## Medium Priority
+- Fix Discord ID Verification Flow: The frontend (`Profile.jsx` / `Discord.jsx`) uses generic `updateProfile` instead of the dedicated `POST /api/discord/verify-user` endpoint. Currently, users' Discord IDs can never be marked as verified because the backend resets `verified = false` on normal profile updates.
+- Implement Strict Discord Verification: Update the `POST /api/discord/verify-user` endpoint to use an actual verification handshake (e.g., DM with OTP or magic link) rather than just validating the ID string format.
 - Document test commands and examples in `DEV-SETUP.md` (add test commands & example Drive/Dropbox links).
 - Add CI workflow to run tests on PRs and pushes.
 - Add provider-specific helpers for Drive/Dropbox to handle large files and confirm content-type edge cases.

@@ -197,8 +197,11 @@ class DiscordService {
                 if (student.campus?.discordChannelId) {
                     channelId = student.campus.discordChannelId;
                     console.log(`Using campus-specific channel ${channelId} for application update`);
+                } else if (settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general) {
+                    channelId = settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general;
+                    console.log(`Application update for student with no campus Discord channel. Falling back to global channel.`);
                 } else {
-                    console.log(`Application update for student with no campus Discord channel. Skipping notification to avoid global posting.`);
+                    console.log(`Application update for student with no campus Discord channel and no fallback. Skipping notification.`);
                     return null;
                 }
 
@@ -279,8 +282,11 @@ class DiscordService {
             let channelId = null;
             if (student.campus?.discordChannelId) {
                 channelId = student.campus.discordChannelId;
+            } else if (settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general) {
+                channelId = settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general;
+                console.log(`Profile update for student with no campus Discord channel. Falling back to global channel.`);
             } else {
-                console.log(`Profile update for student with no campus Discord channel. Skipping notification.`);
+                console.log(`Profile update for student with no campus Discord channel and no fallback. Skipping notification.`);
                 return null;
             }
 
@@ -557,8 +563,11 @@ class DiscordService {
             // Prioritize campus-specific channel (Mandatory for self-applications)
             if (student.campus?.discordChannelId) {
                 channelId = student.campus.discordChannelId;
+            } else if (settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general) {
+                channelId = settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general;
+                console.log(`Self-application for student with no campus Discord channel. Falling back to global channel.`);
             } else {
-                console.log(`Self-application for student with no campus Discord channel. Skipping notification.`);
+                console.log(`Self-application for student with no campus Discord channel and no fallback. Skipping notification.`);
                 return null;
             }
 
@@ -622,7 +631,11 @@ class DiscordService {
             if (!channel) {
                 let channelId = student.campus?.discordChannelId;
                 if (!channelId) {
-                    console.log('No campus channel for self-app update, skipping');
+                    channelId = settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general;
+                }
+                
+                if (!channelId) {
+                    console.log('No campus channel or fallback for self-app update, skipping');
                     return null;
                 }
                 channel = await this.client.channels.fetch(channelId);
