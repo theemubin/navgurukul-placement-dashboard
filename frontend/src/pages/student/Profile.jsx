@@ -414,7 +414,7 @@ const StudentProfile = () => {
       if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
         const po = data[0].PostOffice[0];
         const pincode = po.Pincode;
-        const district = po.District;
+        const district = po
         const updated = [...formData.higherEducation];
         updated[index].pincode = pincode;
         updated[index].district = district;
@@ -703,14 +703,48 @@ const StudentProfile = () => {
   const canEdit = true; // Students can always edit, but need re-approval
   const needsReapproval = formData.profileStatus === 'approved';
 
+  const SectionSaveButton = ({ className = "" }) => (
+    canEdit ? (
+      <button form="profile-form" type="submit" disabled={saving} className={`btn btn-primary flex items-center gap-2 shadow-lg hover:shadow-xl transition-all ${className}`}>
+        <Save className="w-4 h-4" />
+        {saving ? 'Saving...' : 'Save Changes'}
+      </button>
+    ) : null
+  );
+
   return (
     <div className="space-y-6 animate-fadeIn">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-          <p className="text-gray-600">Manage your personal, academic, and skill information</p>
+      {/* Sticky Header with Save Button and Tabs */}
+      <div className="sticky top-0 z-30 bg-gray-50/95 backdrop-blur-sm py-4 -mt-4 mb-2 border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
+            <p className="text-sm text-gray-600">Manage your personal, academic, and skill information</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <SectionSaveButton />
+            {getStatusBadge()}
+          </div>
         </div>
-        {getStatusBadge()}
+
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {tabs.map(tab => {
+            const TabIcon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-[1px] transition flex items-center gap-2 whitespace-nowrap ${activeTab === tab.id
+                  ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100/50 rounded-t-lg'
+                  }`}
+              >
+                <TabIcon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {formData.profileStatus === 'needs_revision' && formData.revisionNotes && (
@@ -776,34 +810,19 @@ const StudentProfile = () => {
         </div>
       )}
 
-      <div className="flex gap-2 border-b overflow-x-auto">
-        {tabs.map(tab => {
-          const TabIcon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-[2px] transition flex items-center gap-2 whitespace-nowrap ${activeTab === tab.id
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              <TabIcon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <form onSubmit={handleSave}>
+          <form id="profile-form" onSubmit={handleSave}>
             {activeTab === 'personal' && (
               <div className="card space-y-6">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  Personal Information
-                </h2>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <User className="w-5 h-5" />
+                    Personal Information
+                  </h2>
+                </div>
                 <div className="flex flex-col md:flex-row items-center gap-6 mb-8 p-4 bg-gray-50 rounded-xl border border-gray-100">
                   <div className="relative group">
                     <div className="w-32 h-32 rounded-full overflow-hidden ring-4 ring-white shadow-xl bg-white flex items-center justify-center">
@@ -873,7 +892,9 @@ const StudentProfile = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      Email
+                    </label>
                     <input type="email" value={profile?.email || ''} disabled className="bg-gray-100" />
                   </div>
                   <div>
@@ -1138,23 +1159,18 @@ const StudentProfile = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">About Me</label>
                   <textarea rows={4} value={formData.about} onChange={(e) => setFormData({ ...formData, about: e.target.value })} placeholder="Tell us about yourself..." disabled={!canEdit} />
                 </div>
-
-                {canEdit && (
-                  <button type="submit" disabled={saving} className="btn btn-primary flex items-center gap-2">
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                )}
               </div>
             )}
 
             {activeTab === 'education' && (
               <div className="space-y-6">
                 <div className="card">
-                  <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <GraduationCap className="w-5 h-5" />
-                    Current Navgurukul Education
-                  </h2>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-4">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <GraduationCap className="w-5 h-5" />
+                      Current Navgurukul Education
+                    </h2>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
@@ -1728,20 +1744,14 @@ const StudentProfile = () => {
                   )}
                 </div>
 
-                {canEdit && (
-                  <button type="submit" disabled={saving} className="btn btn-primary flex items-center gap-2">
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                )}
-              </div>
+                </div>
             )}
 
             {activeTab === 'skills' && (
               <div className="space-y-6">
                 {/* Technical Skills - School Specific */}
                 <div className="card">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-4 gap-4">
                     <h2 className="text-lg font-semibold flex items-center gap-2">
                       <Brain className="w-5 h-5" />
                       {formData.currentSchool ? `${formData.currentSchool.replace('School of ', '')} Skills` : 'Technical Skills'} (Self-Assessment)
@@ -1931,12 +1941,7 @@ const StudentProfile = () => {
                   )}
                 </div>
 
-                {canEdit && (
-                  <button type="submit" disabled={saving} className="btn btn-primary flex items-center gap-2">
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                )}
+
               </div>
             )}
             {activeTab === 'council' && (
@@ -1946,14 +1951,16 @@ const StudentProfile = () => {
                     <Award className="w-5 h-5" />
                     Council Service
                   </h2>
-                  <button
-                    type="button"
-                    onClick={() => setAddingCouncilService(true)}
-                    className="text-primary-600 text-sm font-medium hover:underline flex items-center gap-1"
-                    disabled={!canEdit}
-                  >
-                    <Plus className="w-4 h-4" /> Add Service
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAddingCouncilService(true)}
+                      className="text-primary-600 text-sm font-medium hover:underline flex items-center gap-1"
+                      disabled={!canEdit}
+                    >
+                      <Plus className="w-4 h-4" /> Add Service
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -2087,8 +2094,12 @@ const StudentProfile = () => {
 
             {activeTab === 'languages' && (
               <div className="card">
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Languages className="w-5 h-5" />Language Proficiency (CEFR Levels)</h2>
-                <p className="text-sm text-gray-500 mb-6">The Common European Framework of Reference (CEFR) is an international standard for describing language ability.</p>
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold flex items-center gap-2"><Languages className="w-5 h-5" />Language Proficiency (CEFR Levels)</h2>
+                    <p className="text-sm text-gray-500 mt-2">The Common European Framework of Reference (CEFR) is an international standard for describing language ability.</p>
+                  </div>
+                </div>
 
                 {/* English Proficiency - Primary */}
                 <div className="mb-8">
@@ -2270,12 +2281,7 @@ const StudentProfile = () => {
                   </div>
                 </div>
 
-                {canEdit && (
-                  <button type="submit" disabled={saving} className="btn btn-primary mt-6 flex items-center gap-2">
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                )}
+
               </div>
             )}
 
@@ -2293,13 +2299,7 @@ const StudentProfile = () => {
                   ))}
                 </div>
 
-                {canEdit && (
-                  <button type="submit" disabled={saving} className="btn btn-primary mt-6 flex items-center gap-2">
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                )}
-              </div>
+                </div>
             )}
           </form>
         </div >
@@ -2333,21 +2333,22 @@ const StudentProfile = () => {
 
           <div className="card">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Upload className="w-5 h-5 text-gray-500" />
               Resume
-              <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase font-black tracking-widest border border-amber-200">Beta - Under Construction</span>
             </h2>
             {profile?.studentProfile?.resume ? (
               <div className="p-4 bg-green-50 rounded-lg">
                 <p className="text-green-700 text-sm">Resume uploaded</p>
                 <a href={`/${profile.studentProfile.resume}`} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-sm hover:underline">View Resume</a>
               </div>
-            ) : (
-              <p className="text-gray-500 text-sm mb-3">No resume uploaded</p>
-            )}
+            ) : null}
 
             {/* Resume Link Input & Accessibility Check */}
             <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Resume Link (optional)</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">Resume Link (optional)</label>
+                <span className="text-[10px] text-indigo-600 font-medium">To update: Replace link & Save Profile</span>
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="url"
@@ -2360,27 +2361,35 @@ const StudentProfile = () => {
                   className="flex-1"
                 />
                 <button type="button" onClick={async () => {
-                  const url = formData.resumeLink && formData.resumeLink.trim();
-                  if (!url) return toast.error('Enter a link first');
-                  try {
-                    setResumeLinkStatus({ checked: false, ok: false, status: null });
-                    const res = await utilsAPI.checkUrl(url);
-                    const ok = res.data?.ok === true;
-                    setResumeLinkStatus({ checked: true, ok, status: res.data?.status });
-                    toast.success(ok ? 'Link is accessible' : 'Link is not accessible');
-                  } catch (err) {
-                    setResumeLinkStatus({ checked: true, ok: false, status: null });
-                    toast.error('Error checking link');
-                  }
-                }} className="btn btn-outline">Check</button>
-                <button
-                  type="button"
-                  onClick={handleCheckAtsScore}
-                  disabled={atsLoading}
-                  className="btn btn-primary"
-                >
-                  {atsLoading ? 'Checking...' : 'Check ATS Score'}
-                </button>
+                    const url = formData.resumeLink && formData.resumeLink.trim();
+                    if (!url) return toast.error('Enter a link first');
+                    try {
+                      setResumeLinkStatus({ checked: false, ok: false, status: null });
+                      const res = await utilsAPI.checkUrl(url);
+                      const ok = res.data?.ok === true;
+                      setResumeLinkStatus({ checked: true, ok, status: res.data?.status });
+                      toast.success(ok ? 'Link is accessible' : 'Link is not accessible');
+                    } catch (err) {
+                      setResumeLinkStatus({ checked: true, ok: false, status: null });
+                      toast.error('Error checking link');
+                    }
+                  }} className="btn btn-outline">Check</button>
+                <div className="flex items-center gap-2">
+                  <div className="relative group">
+                    <button
+                      type="button"
+                      onClick={handleCheckAtsScore}
+                      disabled={atsLoading}
+                      className="btn btn-primary"
+                    >
+                      {atsLoading ? 'Checking...' : 'Check ATS Score'}
+                    </button>
+                    <div className="absolute bottom-full left-0 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
+                      ATS Score calculation is currently in Beta and under active development.
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase font-black tracking-widest border border-amber-200">Beta</span>
+                </div>
               </div>
               {resumeLinkStatus.checked && (
                 <p className={`text-sm mt-2 ${resumeLinkStatus.ok ? 'text-green-600' : 'text-red-600'}`}>
@@ -2388,10 +2397,25 @@ const StudentProfile = () => {
                 </p>
               )}
 
+              {profile?.studentProfile?.resumeLink && resumeLinkStatus.ok && (
+                <p className="mt-3 text-sm">
+                  <a
+                    href={profile.studentProfile.resumeLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary-600 font-medium hover:underline"
+                  >
+                    [Resume]
+                  </a>
+                </p>
+              )}
+
               {atsResult && atsResult.status === 'ok' && (
                 <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-bold text-indigo-800">ATS Score</p>
+                    <p className="text-sm font-bold text-indigo-800">
+                      ATS Score <span className="text-[10px] uppercase font-semibold tracking-widest text-indigo-700 ml-2">beta</span>
+                    </p>
                     <p className="text-2xl font-black text-indigo-700">{atsResult.overallScore}/100</p>
                   </div>
                   <p className="text-xs text-indigo-700 mb-3">
