@@ -112,59 +112,74 @@ router.post('/google/exchange', async (req, res) => {
 });
 
 router.get('/google/callback', (req, res, next) => {
-  // Guard: avoid calling passport when OAuth is not configured
   if (!isGoogleConfigured()) {
     console.error('Google callback hit but OAuth not configured. Returning 503.');
     return res.status(503).json({ message: 'Google OAuth is not configured on the server.' });
   }
-  // Delegate to passport
-  passport.authenticate('google', { session: false })(req, res, next);
-}, async (req, res) => {
-  try {
-    // If passport rejected the user (e.g., non-navgurukul email), redirect to frontend with error
-    if (!req.user) {
-      const frontendBase = getFrontendBase();
-      return res.redirect(`${frontendBase}/login?error=domain_not_allowed`);
-    }
 
-    const user = req.user;
-    const frontendBase = getFrontendBase();
-
-    // If the account is not active, treat it as pending approval and redirect accordingly
-    if (!user.isActive) {
-      return res.redirect(`${frontendBase}/auth/pending-approval?email=${encodeURIComponent(user.email)}`);
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        email: user.email,
-        role: user.role
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Create a short-lived, single-use code and redirect the user with the code
-    const code = createTokenEntry({ token, user: { id: user._id, email: user.email, role: user.role } }, 2 * 60 * 1000);
-
-    // Trigger Ghar Sync in background if student
-    if (user.role === 'student') {
-      gharApiService.syncStudentData(user.email).catch(err => console.error('Background Ghar sync error (callback):', err.message));
-    }
-
-    const redirectUrl = `${frontendBase}/auth/callback?code=${code}`;
-    res.redirect(redirectUrl);
-
-  } catch (error) {
-    console.error('Google callback error:', error);
-    const frontendBase = getFrontendBase();
-    // Redirect to the canonical frontend login path
-    res.redirect(`${frontendBase}/login?error=authentication_failed`);
+  const frontendBase = getFrontendBase();
+  const googleStrategy = passport._strategy && passport._strategy('google');
+  if (!googleStrategy) {
+    console.error('Google callback cannot proceed because Passport Google strategy is not registered.');
+    return res.redirect(`${frontendBase}/login?error=oauth_not_configured`);
   }
-}
-);
+
+  const debugEnv = {
+    NODE_ENV: process.env.NODE_ENV,
+    hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
+    hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+    hasGoogleRedirectUri: !!process.env.GOOGLE_REDIRECT_URI,
+    hasJwtSecret: !!process.env.JWT_SECRET,
+    hasFrontendUrl: !!process.env.FRONTEND_URL,
+    frontendBase,
+    requestHost: req.get('host'),
+    referer: req.get('referer')
+  };
+  console.info('Google callback environment and request metadata:', debugEnv);
+
+  console.info('Google callback request query:', req.query);
+
+  passport.authenticate('google', { session: false }, async (err, user, info) => {
+    if (err) {
+      console.error('Google callback passport error:', err);
+      return res.redirect(`${frontendBase}/login?error=oauth_failed&details=${encodeURIComponent(err.message)}`);
+    }
+
+    if (!user) {
+      console.warn('Google callback passport returned no user:', info);
+      const errorCode = info?.message?.includes('@navgurukul.org') ? 'domain_not_allowed' : 'oauth_failed';
+      return res.redirect(`${frontendBase}/login?error=${errorCode}`);
+    }
+
+    try {
+      if (!user.isActive) {
+        return res.redirect(`${frontendBase}/auth/pending-approval?email=${encodeURIComponent(user.email)}`);
+      }
+
+      const token = jwt.sign(
+        {
+          userId: user._id,
+          email: user.email,
+          role: user.role
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      const code = createTokenEntry({ token, user: { id: user._id, email: user.email, role: user.role } }, 2 * 60 * 1000);
+
+      if (user.role === 'student') {
+        gharApiService.syncStudentData(user.email).catch(err => console.error('Background Ghar sync error (callback):', err.message));
+      }
+
+      const redirectUrl = `${frontendBase}/auth/callback?code=${code}`;
+      return res.redirect(redirectUrl);
+    } catch (error) {
+      console.error('Google callback processing error:', error);
+      return res.redirect(`${frontendBase}/login?error=authentication_failed&details=${encodeURIComponent(error.message)}`);
+    }
+  })(req, res, next);
+});
 
 // Logout (clear cookie)
 router.post('/logout', (req, res) => {

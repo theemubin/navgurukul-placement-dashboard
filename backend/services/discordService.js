@@ -21,16 +21,27 @@ class DiscordService {
         try {
             const settings = await Settings.getSettings();
 
-            if (!settings.discordConfig?.enabled) {
-                console.log('Discord integration is disabled in settings');
+            const settingToken = settings.discordConfig?.botToken?.trim();
+            const envToken = process.env.DISCORD_BOT_TOKEN?.trim();
+            const botToken = settingToken || envToken;
+            const isEnabled = settings.discordConfig?.enabled || !!envToken || !!settingToken;
+
+            if (!isEnabled) {
+                console.log('Discord integration is disabled in settings and no bot token was found in settings or DISCORD_BOT_TOKEN');
                 this.isInitializing = false;
                 return;
             }
 
-            if (!settings.discordConfig?.botToken) {
-                console.log('Discord bot token not configured');
+            if (!botToken) {
+                console.log('Discord bot token not configured in settings or DISCORD_BOT_TOKEN environment variable');
                 this.isInitializing = false;
                 return;
+            }
+
+            if (settingToken) {
+                console.log('Using Discord bot token from settings.discordConfig.botToken');
+            } else if (envToken) {
+                console.log('Using Discord bot token from DISCORD_BOT_TOKEN environment variable');
             }
 
             this.client = new Client({
@@ -41,7 +52,7 @@ class DiscordService {
             });
 
             this.client.once('ready', () => {
-                console.log(`✅ Discord bot logged in as ${this.client.user.tag}`);
+                console.log(`\u2705 Discord bot logged in as ${this.client.user.tag}`);
                 this.isReady = true;
                 this.isInitializing = false;
             });
@@ -50,7 +61,7 @@ class DiscordService {
                 console.error('Discord client error:', error);
             });
 
-            await this.client.login(settings.discordConfig.botToken);
+            await this.client.login(botToken);
         } catch (error) {
             console.error('Failed to initialize Discord bot:', error.message);
             this.isReady = false;
@@ -94,21 +105,34 @@ class DiscordService {
 
             // Priority: Campus-specific channel (if job is for a single campus)
             let channelId = null;
+            const generalChannel = settings.discordConfig?.channels?.general;
+            const jobPostingsChannel = settings.discordConfig?.channels?.jobPostings;
 
             if (job.eligibility?.campuses?.length === 1) {
                 const campus = job.eligibility.campuses[0];
-                if (campus.discordChannelId) {
-                    channelId = campus.discordChannelId;
+                // campus may be a populated object or just an id; prefer campus.discordChannelId when available
+                const campusChannelId = campus?.discordChannelId || null;
+                if (campusChannelId) {
+                    channelId = campusChannelId;
                     console.log(`Using campus-specific channel ${channelId} for job posting`);
-                } else if (settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general) {
-                    channelId = settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general;
-                    console.log(`Job is for single campus but no campus Discord channel configured. Falling back to global channel.`);
+                } else if (generalChannel) {
+                    // If campus has no channel, prefer sending to the general announcements channel
+                    channelId = generalChannel;
+                    console.log(`Job is for single campus but no campus Discord channel configured. Falling back to general announcements channel ${channelId}.`);
+                } else if (jobPostingsChannel) {
+                    channelId = jobPostingsChannel;
+                    console.log(`Job is for single campus but no campus Discord channel configured. Falling back to jobPostings channel ${channelId}.`);
                 } else {
                     console.log(`Job is for single campus but no campus Discord channel configured and no fallback. Skipping notification.`);
                     return null;
                 }
             } else {
-                channelId = settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general;
+                // No single campus selected: prefer general announcements channel, then jobPostings channel as secondary fallback
+                if (generalChannel) {
+                    channelId = generalChannel;
+                } else {
+                    channelId = jobPostingsChannel || null;
+                }
             }
 
             if (!channelId) {

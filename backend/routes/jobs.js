@@ -543,6 +543,9 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
       await Notification.insertMany(notifications);
       const discordResult = await discordService.sendJobPosting(job, req.user, eligibleStudents);
       console.log('Discord sendJobPosting result for job', job._id, discordResult);
+      if (discordResult?.error) {
+        console.error('Discord job posting error for new job:', job._id, discordResult.error);
+      }
       if (discordResult) {
         if (discordResult.messageId) job.discordMessageId = discordResult.messageId;
         if (discordResult.threadId) job.discordThreadId = discordResult.threadId;
@@ -608,6 +611,9 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
       await Notification.insertMany(notifications);
       const discordResult = await discordService.sendJobPosting(job, req.user, eligibleStudents);
       console.log('Discord sendJobPosting result for job', job._id, discordResult);
+      if (discordResult?.error) {
+        console.error('Discord job posting error for job update:', job._id, discordResult.error);
+      }
       if (discordResult) {
         if (discordResult.messageId) job.discordMessageId = discordResult.messageId;
         if (discordResult.threadId) job.discordThreadId = discordResult.threadId;
@@ -934,6 +940,15 @@ router.post('/:id/broadcast', auth, authorize('coordinator', 'manager'), async (
       if (discordResult.messageId) job.discordMessageId = discordResult.messageId;
       if (discordResult.threadId) job.discordThreadId = discordResult.threadId;
       await job.save();
+    }
+
+    if (discordResult?.error) {
+      console.error('Discord broadcast failed:', discordResult.error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to broadcast job to Discord',
+        discordResult
+      });
     }
 
     res.json({ success: true, message: 'Job broadcasted to Discord successfully', discordResult });
