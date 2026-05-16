@@ -34,13 +34,7 @@ const GharDataViewer = () => {
     };
 
     return (
-        <div className="ghar-data-viewer">
-            <div className="page-header">
-                <div>
-                    <h1>Ghar Data Explorer</h1>
-                    <p className="subtitle">Search and view raw student data directly from NavGurukul Ghar API</p>
-                </div>
-            </div>
+        <div className="p-4">
 
             <div className="search-card">
                 <form onSubmit={handleSearch} className="search-form">

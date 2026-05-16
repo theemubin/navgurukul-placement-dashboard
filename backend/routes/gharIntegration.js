@@ -13,6 +13,7 @@ const { auth, authorize } = require('../middleware/auth');
 
 // Helper middlewares using the existing authorize function
 const isManager = authorize('manager');
+const isAuthorized = authorize('manager', 'coordinator', 'campus_poc');
 const isAuthenticated = auth;
 
 /**
@@ -390,7 +391,7 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
  *       200:
  *         description: Connection status
  */
-router.get('/connection-status', isAuthenticated, isManager, async (req, res) => {
+router.get('/connection-status', isAuthenticated, isAuthorized, async (req, res) => {
     try {
         const isConnected = await gharApiService.checkConnection();
 

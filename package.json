@@ -4,8 +4,10 @@
   "description": "Placement Management Dashboard - Full Stack Application",
   "scripts": {
     "start": "concurrently \"npm run server\" \"npm run client\"",
+    "start:mock": "concurrently \"npm run server:mock\" \"npm run client\"",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "cd backend && npm run dev",
+    "server:mock": "cd backend && npm run dev:mock",
     "client": "cd frontend && npm run dev",
     "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "seed": "cd backend && npm run seed"

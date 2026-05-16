@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { statsAPI, userAPI } from '../../services/api';
+import { statsAPI, userAPI, campusAPI } from '../../services/api';
 import api from '../../services/api';
 import { StatsCard, LoadingSpinner } from '../../components/common/UIComponents';
 import UserApprovals from '../../components/manager/UserApprovals';
@@ -8,17 +8,21 @@ import ManagerStaff from '../../components/manager/ManagerStaff';
 import ReadinessDetailedModal from '../../components/manager/ReadinessDetailedModal';
 import {
   Users, Briefcase, Building2, Award, TrendingUp,
-  CheckCircle, Clock, BarChart3, PieChart, Download, UserCog
+  CheckCircle, Clock, BarChart3, PieChart, Download, UserCog,
+  CheckSquare, MessageCircle
 } from 'lucide-react';
 import { DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 import HistoricalCycleCharts from '../../components/common/HistoricalCycleCharts';
+import CommunicationDashboard from '../../components/manager/CommunicationDashboard';
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [coordinatorStats, setCoordinatorStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('all');
+  const [selectedCampus, setSelectedCampus] = useState('');
+  const [campuses, setCampuses] = useState([]);
   const [activeTab, setActiveTab] = useState('approvals');
   const [pendingCount, setPendingCount] = useState(0);
   const [campusRows, setCampusRows] = useState([]);
@@ -47,6 +51,18 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    const fetchCampuses = async () => {
+      try {
+        const res = await campusAPI.getCampuses();
+        setCampuses(res.data || []);
+      } catch (err) {
+        console.error('Error fetching campuses:', err);
+      }
+    };
+    fetchCampuses();
+  }, []);
+
+  useEffect(() => {
     const loadDashboardData = async () => {
       try {
         await fetchStats();
@@ -58,14 +74,14 @@ const Dashboard = () => {
       }
     };
     loadDashboardData();
-  }, [dateRange]);
+  }, [dateRange, selectedCampus]);
 
   const fetchCampusRows = async () => {
     setLoadingCampusRows(true);
     try {
       const [pocRes, campusStatsRes] = await Promise.all([
         userAPI.getUsers({ role: 'campus_poc', limit: 1000 }),
-        statsAPI.getCampusStats()
+        statsAPI.getCampusStats({ range: dateRange, campusId: selectedCampus })
       ]);
 
       const pocs = pocRes.data.users || [];
@@ -126,7 +142,7 @@ const Dashboard = () => {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const response = await statsAPI.getDashboardStats();
+      const response = await statsAPI.getDashboardStats({ range: dateRange, campus: selectedCampus });
       setStats(response.data);
     } catch (error) {
       toast.error('Error fetching statistics');
@@ -137,7 +153,7 @@ const Dashboard = () => {
 
   const fetchCoordinatorStats = async () => {
     try {
-      const response = await statsAPI.getCoordinatorStats();
+      const response = await statsAPI.getCoordinatorStats({ range: dateRange, campus: selectedCampus });
       setCoordinatorStats(response.data);
     } catch (error) {
       console.error('Error fetching coordinator stats:', error);
@@ -178,12 +194,12 @@ const Dashboard = () => {
   }
 
   // Calculate derived metrics
-  const placementRate = stats?.totalStudents > 0
-    ? ((stats?.placedStudents || 0) / stats.totalStudents * 100).toFixed(1)
+  const placementRate = stats?.summary?.totalStudents > 0
+    ? ((stats?.summary?.placedStudents || 0) / stats.summary.totalStudents * 100).toFixed(1)
     : 0;
 
-  const applicationSuccessRate = stats?.totalApplications > 0
-    ? ((stats?.selectedApplications || 0) / stats.totalApplications * 100).toFixed(1)
+  const applicationSuccessRate = stats?.summary?.totalApplications > 0
+    ? ((stats?.summary?.selectedApplications || 0) / stats.summary.totalApplications * 100).toFixed(1)
     : 0;
 
   return (
@@ -195,9 +211,19 @@ const Dashboard = () => {
         </div>
         <div className="flex items-center gap-3">
           <select
+            value={selectedCampus}
+            onChange={(e) => setSelectedCampus(e.target.value)}
+            className="text-sm border-gray-300 rounded-md shadow-sm focus:border-primary-500 focus:ring-primary-500"
+          >
+            <option value="">All Campuses</option>
+            {campuses.map(c => (
+              <option key={c._id} value={c._id}>{c.name}</option>
+            ))}
+          </select>
+          <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="text-sm"
+            className="text-sm border-gray-300 rounded-md shadow-sm focus:border-primary-500 focus:ring-primary-500"
           >
             <option value="all">All Time</option>
             <option value="year">This Year</option>
@@ -227,7 +253,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
           title="Total Students"
-          value={stats?.totalStudents || 0}
+          value={stats?.summary?.totalStudents || 0}
           icon={Users}
           color="primary"
           trend={{ value: 12, isPositive: true }}
@@ -235,25 +261,25 @@ const Dashboard = () => {
         />
         <StatsCard
           title="Active Jobs"
-          value={stats?.activeJobs || 0}
+          value={stats?.summary?.activeJobs || 0}
           icon={Briefcase}
           color="secondary"
         />
         <StatsCard
           title="Paid Projects"
-          value={stats?.paidProjects || stats?.statusCounts?.['Paid Project'] || 0}
+          value={stats?.summary?.paidProjects || stats?.summary?.statusCounts?.['Paid Project'] || 0}
           icon={DollarSign}
           color="teal"
         />
         <StatsCard
           title="Total Applications"
-          value={stats?.totalApplications || 0}
+          value={stats?.summary?.totalApplications || 0}
           icon={Clock}
           color="accent"
         />
         <StatsCard
           title="Placements"
-          value={stats?.placedStudents || 0}
+          value={stats?.summary?.totalPlacements || 0}
           icon={Award}
           color="success"
           trend={{ value: 8, isPositive: true }}
@@ -270,7 +296,7 @@ const Dashboard = () => {
           <div className="flex items-end gap-4">
             <div className="text-5xl font-bold text-primary-600">{placementRate}%</div>
             <div className="text-sm text-gray-500 mb-2">
-              {stats?.placedStudents || 0} out of {stats?.totalStudents || 0} students placed
+              {stats?.summary?.placedStudents || 0} out of {stats?.summary?.totalStudents || 0} students placed
             </div>
           </div>
           <div className="mt-4 h-4 bg-gray-100 rounded-full overflow-hidden">
@@ -289,7 +315,7 @@ const Dashboard = () => {
           <div className="flex items-end gap-4">
             <div className="text-5xl font-bold text-green-600">{applicationSuccessRate}%</div>
             <div className="text-sm text-gray-500 mb-2">
-              {stats?.selectedApplications || 0} selections from {stats?.totalApplications || 0} applications
+              {stats?.summary?.selectedApplications || 0} selections from {stats?.summary?.totalApplications || 0} applications
             </div>
           </div>
           <div className="mt-4 h-4 bg-gray-100 rounded-full overflow-hidden">
@@ -301,7 +327,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <HistoricalCycleCharts />
+      <HistoricalCycleCharts campusId={selectedCampus} />
 
       {/* Detailed Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -383,14 +409,38 @@ const Dashboard = () => {
       <div className="card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button className={`px-3 py-2 rounded-md font-medium ${activeTab === 'approvals' ? 'bg-primary-50 text-primary-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setActiveTab('approvals')}>
-              Pending Approvals
+            <button 
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                activeTab === 'approvals' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`} 
+              onClick={() => setActiveTab('approvals')}
+            >
+              <CheckSquare className="w-4 h-4" />
+              Role Requests
               {pendingCount > 0 && (
-                <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">{pendingCount}</span>
+                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black ${activeTab === 'approvals' ? 'bg-white text-indigo-600' : 'bg-indigo-600 text-white'}`}>
+                  {pendingCount}
+                </span>
               )}
             </button>
-            <button className={`px-3 py-2 rounded-md font-medium ${activeTab === 'staff' ? 'bg-primary-50 text-primary-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setActiveTab('staff')}>Staff</button>
-            <button className={`px-3 py-2 rounded-md font-medium ${activeTab === 'students' ? 'bg-primary-50 text-primary-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setActiveTab('students')}>Students</button>
+            <button 
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                activeTab === 'students' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`} 
+              onClick={() => setActiveTab('students')}
+            >
+              <Users className="w-4 h-4" />
+              Students
+            </button>
+            <button 
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                activeTab === 'staff' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`} 
+              onClick={() => setActiveTab('staff')}
+            >
+              <UserCog className="w-4 h-4" />
+              Coordinators
+            </button>
           </div>
         </div>
 
@@ -535,19 +585,19 @@ const Dashboard = () => {
       {/* Additional Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card text-center">
-          <p className="text-3xl font-bold text-gray-900">{stats?.totalCampuses || 0}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats?.summary?.totalCampuses || 0}</p>
           <p className="text-sm text-gray-500">Campuses</p>
         </div>
         <div className="card text-center">
-          <p className="text-3xl font-bold text-gray-900">{stats?.totalPocs || 0}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats?.summary?.totalPocs || 0}</p>
           <p className="text-sm text-gray-500">Campus POCs</p>
         </div>
         <div className="card text-center">
-          <p className="text-3xl font-bold text-gray-900">{stats?.totalCoordinators || 0}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats?.summary?.totalCoordinators || 0}</p>
           <p className="text-sm text-gray-500">Coordinators</p>
         </div>
         <div className="card text-center">
-          <p className="text-3xl font-bold text-gray-900">{stats?.totalJobs || 0}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats?.summary?.totalJobs || 0}</p>
           <p className="text-sm text-gray-500">Total Jobs</p>
         </div>
       </div>

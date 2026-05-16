@@ -6,7 +6,7 @@ import { authAPI } from '../../services/api';
 const AuthCallback = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login } = useAuth();
+  const { login, updateUser } = useAuth();
 
   const handledRef = useRef(false);
 
@@ -52,10 +52,12 @@ const AuthCallback = () => {
           // Prefer using the authoritative user object from exchange response.
           if (user) {
             localStorage.setItem('user', JSON.stringify(user));
+            updateUser(user);
             // Try to fetch full user from server (using cookie or token) to ensure consistency
             try {
               const meResp = await authAPI.getMe();
               if (meResp?.data) {
+                updateUser(meResp.data);
                 window.dispatchEvent(new CustomEvent('auth:login', { detail: meResp.data }));
               } else {
                 window.dispatchEvent(new CustomEvent('auth:login', { detail: user }));
@@ -65,9 +67,9 @@ const AuthCallback = () => {
               window.dispatchEvent(new CustomEvent('auth:login', { detail: user }));
             }
 
-            // Redirect based on role
-            // NOTE: route layout uses the top-level role path as the dashboard (e.g. '/student'),
-            // so navigate to parent role route rather than '/role/dashboard' which doesn't exist.
+            // Give React a chance to flush auth state before changing routes.
+            await new Promise(resolve => setTimeout(resolve, 0));
+
             const finalRole = (user.role || response?.data?.user?.role);
             switch (finalRole) {
               case 'student':
@@ -103,7 +105,7 @@ const AuthCallback = () => {
     };
 
     handleCallback();
-  }, [searchParams, navigate]);
+  }, [searchParams, navigate, updateUser]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">

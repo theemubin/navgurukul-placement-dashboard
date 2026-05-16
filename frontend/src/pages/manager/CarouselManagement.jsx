@@ -130,7 +130,7 @@ const CarouselManagement = () => {
     }
 
     return (
-        <div className="max-w-6xl mx-auto p-6">
+        <div className="p-4">
             <div className="flex justify-between items-center mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 uppercase tracking-tight">Hero Carousel Management</h1>
@@ -296,7 +296,7 @@ const CarouselManagement = () => {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div className="max-w-2xl">
+                                                <div>
                                                     <p className="text-gray-600 font-medium italic leading-relaxed">
                                                         "{item.customQuote || 'No testimonial added yet...'}"
                                                     </p>

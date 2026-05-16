@@ -35,5 +35,12 @@ This document identifies pages and features within the Placement Dashboard appli
 - **Details:** 
     - There is currently no "Maintenance Mode" toggle that prevents user access during updates, although some code references "Maintenance" in the context of data cleanup.
 
+## 6. Slack Integration
+- **Status:** Planned
+- **Details:** 
+    - Implementation of `slackService.js` to send real-time notifications for new job postings, application status updates, and profile approvals.
+    - Will utilize Slack Incoming Webhooks for a cost-free implementation.
+    - Configuration will be added to the Manager Settings dashboard.
+
 ---
 *Created on: 2026-06-25*

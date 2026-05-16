@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Job = require('../models/Job');
 const Application = require('../models/Application');
 const Campus = require('../models/Campus');
+const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
 
@@ -238,11 +239,31 @@ const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'inter
  */
 router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
-    const { campus } = req.query;
+    const { campus, range } = req.query;
+
+    // Set up date filter based on range
+    const now = new Date();
+    let dateFilter = {};
+    if (range === 'year') {
+      dateFilter = { createdAt: { $gte: new Date(now.getFullYear(), 0, 1) } };
+    } else if (range === 'month') {
+      dateFilter = { createdAt: { $gte: new Date(now.getFullYear(), now.getMonth(), 1) } };
+    } else if (range === 'week') {
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+      startOfWeek.setHours(0, 0, 0, 0);
+      dateFilter = { createdAt: { $gte: startOfWeek } };
+    }
 
     // Base queries
     let studentQuery = { role: 'student', isActive: true };
     let applicationQuery = {};
+    let jobQuery = {};
+
+    if (Object.keys(dateFilter).length > 0) {
+      applicationQuery.createdAt = dateFilter.createdAt;
+      jobQuery.createdAt = dateFilter.createdAt;
+    }
 
     if (campus) {
       studentQuery.campus = campus;
@@ -252,14 +273,22 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
 
     // Get counts
     const totalStudents = await User.countDocuments(studentQuery);
-    const totalJobs = await Job.countDocuments({ status: { $in: activeStatuses } });
+    const totalJobs = await Job.countDocuments({ ...jobQuery, status: { $in: activeStatuses } });
     const totalApplications = await Application.countDocuments(applicationQuery);
+    
+    // For placements, we look at updatedAt or status change date if available, 
+    // but createdAt with status 'selected' is common too. 
+    // Let's use applicationQuery which already has the date filter.
     const totalPlacements = await Application.countDocuments({ ...applicationQuery, status: 'selected' });
 
     // Get active companies
     const activeJobs = await Job.find({ status: { $in: activeStatuses } }).distinct('company.name');
     const activeCompanies = activeJobs.length;
 
+    const totalCampuses = await Campus.countDocuments({ isActive: true });
+    const totalPocs = await User.countDocuments({ role: 'campus_poc', isActive: true });
+    const totalCoordinators = await User.countDocuments({ role: 'coordinator', isActive: true });
+    const paidProjects = await Job.countDocuments({ jobType: 'paid_project', status: { $in: activeStatuses } });
 
     // Applications by status
     const applicationsByStatus = await Application.aggregate([
@@ -269,7 +298,7 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
 
     // Placements by campus
     const placementsByCampus = await Application.aggregate([
-      { $match: { status: 'selected' } },
+      { $match: { ...applicationQuery, status: 'selected' } },
       {
         $lookup: {
           from: 'users',
@@ -299,7 +328,7 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
 
     // Placements by job type
     const placementsByJobType = await Application.aggregate([
-      { $match: { status: 'selected' } },
+      { $match: { ...applicationQuery, status: 'selected' } },
       {
         $lookup: {
           from: 'jobs',
@@ -318,7 +347,7 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
     ]);
 
     // Recent placements
-    const recentPlacements = await Application.find({ status: 'selected' })
+    const recentPlacements = await Application.find({ ...applicationQuery, status: 'selected' })
       .populate('student', 'firstName lastName')
       .populate('job', 'title company.name')
       .sort({ updatedAt: -1 })
@@ -326,7 +355,7 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
 
     // Top companies by placements
     const topCompanies = await Application.aggregate([
-      { $match: { status: 'selected' } },
+      { $match: { ...applicationQuery, status: 'selected' } },
       {
         $lookup: {
           from: 'jobs',
@@ -373,9 +402,14 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
       summary: {
         totalStudents,
         totalJobs,
+        activeJobs: totalJobs,
+        paidProjects,
         totalApplications,
         totalPlacements,
         activeCompanies,
+        totalCampuses,
+        totalPocs,
+        totalCoordinators,
         placementRate: totalStudents > 0
           ? Math.round((totalPlacements / totalStudents) * 100)
           : 0
@@ -416,7 +450,28 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
  */
 router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
-    const campuses = await Campus.find({ isActive: true });
+    const { range, campusId } = req.query;
+
+    // Set up date filter based on range
+    const now = new Date();
+    let dateFilter = {};
+    if (range === 'year') {
+      dateFilter = { createdAt: { $gte: new Date(now.getFullYear(), 0, 1) } };
+    } else if (range === 'month') {
+      dateFilter = { createdAt: { $gte: new Date(now.getFullYear(), now.getMonth(), 1) } };
+    } else if (range === 'week') {
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      dateFilter = { createdAt: { $gte: startOfWeek } };
+    }
+
+    const campusFilter = { isActive: true };
+    if (campusId) {
+      campusFilter._id = campusId;
+    }
+
+    const campuses = await Campus.find(campusFilter);
 
     const campusStats = await Promise.all(campuses.map(async (campus) => {
       const students = await User.countDocuments({
@@ -430,10 +485,16 @@ router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res
         campus: campus._id
       }).select('_id');
 
-      const placements = await Application.countDocuments({
+      const placementFilter = {
         student: { $in: studentIds.map(s => s._id) },
         status: 'selected'
-      });
+      };
+
+      if (Object.keys(dateFilter).length > 0) {
+        placementFilter.createdAt = dateFilter.createdAt;
+      }
+
+      const placements = await Application.countDocuments(placementFilter);
 
       // Count job-ready students for this campus
       let jobReadyCount = 0;
@@ -614,6 +675,22 @@ router.get('/student', auth, authorize('student'), async (req, res) => {
  */
 router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) => {
   try {
+    const { range, campus } = req.query;
+
+    // Set up date filter based on range
+    const now = new Date();
+    let dateFilter = {};
+    if (range === 'year') {
+      dateFilter = { createdAt: { $gte: new Date(now.getFullYear(), 0, 1) } };
+    } else if (range === 'month') {
+      dateFilter = { createdAt: { $gte: new Date(now.getFullYear(), now.getMonth(), 1) } };
+    } else if (range === 'week') {
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      dateFilter = { createdAt: { $gte: startOfWeek } };
+    }
+
     // Get all coordinators
     const coordinators = await User.find({
       role: 'coordinator',
@@ -643,23 +720,33 @@ router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) =>
       });
 
       // Get applications for jobs handled by this coordinator
-      const coordinatorJobs = await Job.find({
+      let coordinatorJobQuery = {
         $or: [
           { assignedCoordinator: coordinator._id },
           { createdBy: coordinator._id }
         ]
-      }).select('_id');
+      };
 
+      const coordinatorJobs = await Job.find(coordinatorJobQuery).select('_id');
       const jobIds = coordinatorJobs.map(j => j._id);
 
-      const applications = await Application.countDocuments({
-        job: { $in: jobIds }
-      });
+      const applicationFilter = { job: { $in: jobIds } };
+      const placementFilter = { job: { $in: jobIds }, status: 'selected' };
 
-      const placements = await Application.countDocuments({
-        job: { $in: jobIds },
-        status: 'selected'
-      });
+      if (campus) {
+        const campusStudents = await User.find({ campus, role: 'student' }).select('_id');
+        const campusStudentIds = campusStudents.map(s => s._id);
+        applicationFilter.student = { $in: campusStudentIds };
+        placementFilter.student = { $in: campusStudentIds };
+      }
+
+      if (Object.keys(dateFilter).length > 0) {
+        applicationFilter.createdAt = dateFilter.createdAt;
+        placementFilter.createdAt = dateFilter.createdAt;
+      }
+
+      const applications = await Application.countDocuments(applicationFilter);
+      const placements = await Application.countDocuments(placementFilter);
 
       return {
         coordinator: {
@@ -1486,4 +1573,232 @@ router.get('/manager/students-readiness', auth, authorize('manager'), async (req
   }
 });
 
+// Get historical cycle stats (for charts)
+/**
+ * @swagger
+ * /api/stats/historical-cycles:
+ *   get:
+ *     summary: Get historical placement cycle statistics for charts
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Historical statistics
+ */
+router.get('/historical-cycles', auth, authorize('manager', 'coordinator'), async (req, res) => {
+  try {
+    const { campus: campusId } = req.query;
+    
+    // Fetch all cycles sorted by date (newest first for the list, frontend reverses for charts)
+    const cycles = await PlacementCycle.find({})
+      .sort({ year: -1, month: -1 })
+      .limit(12);
+
+    const historicalData = cycles.map(cycle => {
+      // If campus filter is applied, filter the snapshot
+      let students = cycle.snapshotStudents || [];
+      
+      // Note: In the current schema, snapshotStudents doesn't have campus info directly.
+      // We would need to populate or have it in the snapshot.
+      // For now, return global stats if campusId is provided but we can't filter precisely,
+      // or implement the filter if we assume all students in snapshot belong to cycles.
+      
+      const total = students.length;
+      const placed = students.filter(s => s.status === 'placed').length;
+      const released = students.filter(s => s.status === 'released').length;
+      const successRate = total > 0 ? Math.round((placed / total) * 100) : 0;
+
+      return {
+        _id: cycle._id,
+        name: cycle.name,
+        total,
+        placed,
+        released,
+        successRate,
+        targetPlacements: cycle.targetPlacements || 0
+      };
+    });
+
+    res.json({ success: true, data: historicalData });
+  } catch (error) {
+    console.error('Get historical cycles error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+
+/**
+ * @swagger
+ * /api/stats/talent-pipeline:
+ *   get:
+ *     summary: Get talent pipeline analytics (Manager/Coordinator/POC)
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: school
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Pipeline analytics data
+ */
+router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+  try {
+    const { campus, school } = req.query;
+
+    // 1. Build filters
+    let studentFilter = { role: 'student', isActive: true };
+    if (campus) studentFilter.campus = campus;
+    
+    // For POC, enforce campus restriction if not manager/coordinator
+    if (req.user.role === 'campus_poc') {
+      const managedIds = getPOCManagedCampusIds(req.user);
+      if (campus && !managedIds.includes(campus)) {
+        return res.status(403).json({ message: 'Not authorized for this campus' });
+      }
+      if (!campus) {
+        studentFilter.campus = { $in: managedIds };
+      }
+    }
+
+    // 2. Fetch Students and their Readiness
+    const students = await User.find(studentFilter)
+      .select('firstName lastName studentProfile.openForRoles studentProfile.currentSchool campus studentProfile.currentStatus')
+      .populate('campus', 'name');
+
+    const readinessRecords = await StudentJobReadiness.find({
+      student: { $in: students.map(s => s._id) }
+    }).select('student isJobReady');
+
+    const readinessMap = new Map();
+    readinessRecords.forEach(r => readinessMap.set(r.student.toString(), r.isJobReady));
+
+    // 3. Fetch Active Jobs
+    // Jobs are active if they are not draft/closed/filled and deadline hasn't passed
+    const activeJobs = await Job.find({ 
+      status: { $nin: ['draft', 'closed', 'filled'] },
+      applicationDeadline: { $gte: new Date() }
+    }).select('roleCategory title status company.name');
+
+    // 4. Fetch Active Placement Cycle for Goals
+    // Prioritize cycle matching current month/year, or the most recent active one
+    const now_date = new Date();
+    const currentMonth = now_date.getMonth() + 1;
+    const currentYear = now_date.getFullYear();
+
+    let activeCycle = await PlacementCycle.findOne({ 
+      status: 'active',
+      month: currentMonth,
+      year: currentYear
+    });
+
+    if (!activeCycle) {
+      activeCycle = await PlacementCycle.findOne({ status: 'active' }).sort({ year: -1, month: -1 });
+    }
+
+    let totalPlaced = 0;
+    
+    if (activeCycle) {
+      const startDate = new Date(activeCycle.year, activeCycle.month - 1, 1);
+      const endDate = new Date(activeCycle.year, activeCycle.month, 0, 23, 59, 59);
+
+      totalPlaced = await User.countDocuments({ 
+        role: 'student', 
+        'studentProfile.currentStatus': { $in: ['Placed', 'Intern (In Campus)', 'Intern (Out Campus)'] },
+        'studentProfile.dateOfPlacement': { $gte: startDate, $lte: endDate }
+      });
+    }
+
+    // 5. Aggregate Data by Role
+    const pipeline = {};
+
+    const initRole = (role) => {
+      if (!pipeline[role]) {
+        pipeline[role] = {
+          role,
+          totalInterested: 0,
+          jobReady: 0,
+          activeJobs: 0,
+          readyStudents: [], // Top 5 students for quick view
+          openJobList: [] // Top 3 jobs for quick view
+        };
+      }
+    };
+
+    // Process Student Interests
+    students.forEach(student => {
+      const roles = student.studentProfile?.openForRoles || [];
+      const isReady = readinessMap.get(student._id.toString()) || false;
+      const studentSchool = student.studentProfile?.currentSchool;
+      const studentStatus = student.studentProfile?.currentStatus || 'Active';
+
+      // Filter by school if provided
+      if (school && studentSchool !== school) return;
+      
+      // Only include Active/Intern statuses as per user's earlier requirement for readiness dashboards
+      const allowedStatuses = ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'];
+      if (!allowedStatuses.includes(studentStatus)) return;
+
+      roles.forEach(role => {
+        if (!role) return;
+        initRole(role);
+        pipeline[role].totalInterested++;
+        if (isReady) {
+          pipeline[role].jobReady++;
+          if (pipeline[role].readyStudents.length < 5) {
+            pipeline[role].readyStudents.push({
+              _id: student._id,
+              name: `${student.firstName} ${student.lastName}`,
+              campus: student.campus?.name
+            });
+          }
+        }
+      });
+    });
+
+    // Process Jobs
+    activeJobs.forEach(job => {
+      const role = job.roleCategory || 'Other';
+      initRole(role);
+      pipeline[role].activeJobs++;
+      if (pipeline[role].openJobList.length < 3) {
+        pipeline[role].openJobList.push({
+          _id: job._id,
+          title: job.title,
+          company: job.company.name
+        });
+      }
+    });
+
+    // Convert to array and sort by interest
+    const rolesData = Object.values(pipeline).sort((a, b) => b.totalInterested - a.totalInterested);
+
+    res.json({
+      roles: rolesData,
+      cycle: activeCycle ? {
+        name: activeCycle.name,
+        target: activeCycle.targetPlacements,
+        current: totalPlaced,
+        id: activeCycle._id
+      } : null
+    });
+  } catch (error) {
+    console.error('Talent pipeline stats error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;
+

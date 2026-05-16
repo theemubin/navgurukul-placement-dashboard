@@ -1,4 +1,5 @@
 require('dotenv').config();
+// Restart trigger for nodemon - port change
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');

@@ -17,8 +17,10 @@ const HistoricalCycleCharts = ({ campusId = null, title = "Historical Placement 
       try {
         setLoading(true);
         const response = await statsAPI.getHistoricalCycles(campusId);
+        // Backend returns { success: true, data: [...] }
+        const rawData = response.data.data || [];
         // Reverse to show chronological order in charts (oldest to newest)
-        const sortedData = [...(response.data || [])].reverse();
+        const sortedData = [...rawData].reverse();
         setData(sortedData);
       } catch (error) {
         console.error('Error fetching historical stats:', error);

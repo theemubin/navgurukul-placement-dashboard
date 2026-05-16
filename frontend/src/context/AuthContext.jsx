@@ -17,24 +17,34 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initAuth = async () => {
-      // Check if we're on a public route first, before attempting authentication
       const pathname = window.location.pathname || '';
       const publicRoutes = ['/auth', '/login', '/register', '/portfolios'];
       const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
-      // If on a public route, skip authentication check and just set loading to false
       if (isPublicRoute) {
         console.debug('Auth init: on public route, skipping auth check');
         setLoading(false);
         return;
       }
 
+      const storedUser = localStorage.getItem('user');
+      const storedToken = localStorage.getItem('token');
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser && !user) {
+            setUser(parsedUser);
+            console.debug('Auth init: restored user from localStorage before validation', parsedUser.email);
+          }
+        } catch (parseError) {
+          console.warn('Auth init: failed to parse stored user', parseError.message);
+          localStorage.removeItem('user');
+        }
+      }
+
       try {
         console.debug('Auth init: document.cookie =>', document.cookie);
-        const localToken = localStorage.getItem('token');
-        console.debug('Auth init: local token present =>', !!localToken);
-
-        // Prefer cookie-based session (server sets HttpOnly cookie)
+        console.debug('Auth init: local token present =>', !!storedToken);
         console.debug('Auth init: calling GET /auth/me');
         const response = await authAPI.getMe();
         console.debug('Auth init: /auth/me response =>', response?.status, response?.data);
@@ -46,12 +56,9 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.warn('Auth init: cookie-based getMe failed:', error?.response?.status, error?.response?.data || error.message);
-        // If cookie-based auth fails, fall back to token in localStorage
-        const token = localStorage.getItem('token');
-        console.debug('Auth init fallback: token present =>', !!token);
-        if (token) {
+        if (storedToken) {
           try {
-            console.debug('Auth init fallback: trying getMe with token');
+            console.debug('Auth init fallback: token present => true');
             const response2 = await authAPI.getMe();
             console.debug('Auth init fallback: /auth/me response =>', response2?.status, response2?.data);
             setUser(response2.data);
@@ -60,13 +67,16 @@ export const AuthProvider = ({ children }) => {
             console.error('Auth init fallback error:', err?.response?.status, err?.response?.data || err.message);
             localStorage.removeItem('token');
             localStorage.removeItem('user');
+            setUser(null);
           }
+        } else if (storedUser) {
+          // Keep the locally stored user while the session is restored.
+          console.debug('Auth init: no token present, keeping stored user until a protected request verifies auth');
         }
       }
+
       setLoading(false);
 
-      // If neither cookie-based getMe nor local token/user yielded a session,
-      // redirect to login (we already checked for public routes above)
       try {
         const finalToken = localStorage.getItem('token');
         const finalUser = localStorage.getItem('user');
@@ -110,18 +120,14 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn('Logout request failed, clearing client state anyway');
     }
-    // Clear client state
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
 
-    // Notify other tabs/windows and ensure UI navigates to login
     window.dispatchEvent(new CustomEvent('auth:logout'));
-    // Replace location to avoid adding history entry
     window.location.replace('/login');
   };
 
-  // Listen for cross-tab login events (AuthCallback dispatches a custom event)
   useEffect(() => {
     const onAuthLogin = (e) => {
       if (e?.detail) setUser(e.detail);

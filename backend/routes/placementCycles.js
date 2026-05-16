@@ -284,9 +284,10 @@ router.delete('/:cycleId', auth, authorize('manager'), async (req, res) => {
  */
 router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
+    const { cycleId } = req.params;
     const { studentIds } = req.body;
 
-    const cycle = await PlacementCycle.findById(req.params.cycleId);
+    const cycle = await PlacementCycle.findById(cycleId);
     if (!cycle) {
       return res.status(404).json({ message: 'Placement cycle not found' });
     }

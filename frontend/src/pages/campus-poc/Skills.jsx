@@ -108,7 +108,12 @@ const POCSkillManagement = () => {
       });
       
       const students = response.data.students || [];
+      const allowedStatuses = ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'];
       const studentsWithCommunicationData = students.filter(s => {
+        const status = s.studentProfile?.currentStatus || s.resolvedProfile?.currentStatus || 'Active';
+        const isAllowedStatus = allowedStatuses.includes(status);
+        if (!isAllowedStatus) return false;
+
         const readTheoryLevel = s.studentProfile?.readTheoryLevel
           || s.studentProfile?.externalData?.ghar?.readTheoryLevel?.value
           || s.resolvedProfile?.readTheoryLevel;

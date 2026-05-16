@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Normalize API base and ensure it always includes '/api'
-const rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5006';
 const API_URL = rawApi.replace(/\/+$/, '') + '/api';
 
 const api = axios.create({
@@ -263,9 +263,10 @@ export const statsAPI = {
   getSchoolTracking: (cycleId) => api.get('/stats/campus-poc/school-tracking', { params: { cycleId } }),
   getStudentSummary: (params) => api.get('/stats/campus-poc/student-summary', { params }),
   getCycleStats: () => api.get('/stats/campus-poc/cycle-stats'),
-  getCoordinatorStats: () => api.get('/stats/coordinator-stats'),
+  getCoordinatorStats: (params) => api.get('/stats/coordinator-stats', { params }),
   getHistoricalCycles: (campusId) => api.get('/stats/historical-cycles', { params: { campus: campusId } }),
   getNeverLoggedInList: (params) => api.get('/stats/never-logged-in-list', { params }),
+  getTalentPipeline: (params) => api.get('/stats/talent-pipeline', { params }),
   exportStats: (params) => api.get('/stats/export', { params, responseType: 'blob' })
 };
 

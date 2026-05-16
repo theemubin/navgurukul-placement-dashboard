@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "dev:mock": "nodemon mock-server.js",
+    "dev:memory": "nodemon start-mongo-dev.js",
     "seed": "node seed.js",
     "migrate:skill-ids": "node scripts/migrate_skill_ids.js",
     "migrate:skill-ids:dry": "node scripts/migrate_skill_ids.js --dry-run",

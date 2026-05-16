@@ -45,6 +45,7 @@ import CoordinatorSkills from './pages/coordinator/Skills';
 import CoordinatorInterestRequests from './pages/coordinator/InterestRequests';
 import CoordinatorInterestRequestsForManager from './pages/coordinator/InterestRequests';
 import CoordinatorForum from './pages/coordinator/Forum';
+import PipelineAnalytics from './pages/coordinator/PipelineAnalytics';
 // Coordinator Settings sub-pages
 import AIKeysSettings from './pages/coordinator/settings/AIKeys';
 import DiscordSettings from './pages/coordinator/settings/Discord';
@@ -57,12 +58,11 @@ import ManagerDashboard from './pages/manager/Dashboard';
 import ManagerReports from './pages/manager/Reports';
 import ManagerSettings from './pages/manager/Settings';
 import UsersManager from './pages/manager/Users';
-import CarouselManagement from './pages/manager/CarouselManagement';
+import MediaManagement from './pages/manager/MediaManagement';
 import PartnerManagement from './pages/manager/PartnerManagement';
 import LeadsManagement from './pages/manager/LeadsManagement';
-import GharIntegration from './pages/manager/GharIntegration';
-import GharDataViewer from './pages/manager/GharDataViewer';
-import LoginBackgrounds from './pages/manager/LoginBackgrounds';
+import GharManagement from './pages/manager/GharManagement';
+import ManagerCommunication from './pages/manager/Communication';
 
 // Common Pages
 import Notifications from './pages/common/Notifications';
@@ -85,6 +85,10 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   if (loading) return <LoadingScreen />;
 
   if (!user) {
+    const persistedAuth = localStorage.getItem('token') || localStorage.getItem('user');
+    if (persistedAuth) {
+      return <LoadingScreen />;
+    }
     return <Navigate to="/login" replace />;
   }
 
@@ -208,6 +212,7 @@ function App() {
           <Route path="discord" element={<DiscordSettings />} />
         </Route>
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
+        <Route path="pipeline" element={<PipelineAnalytics />} />
         <Route path="students/:id" element={<POCStudentDetails />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
@@ -220,18 +225,21 @@ function App() {
       }>
         <Route index element={<ManagerDashboard />} />
         <Route path="reports" element={<ManagerReports />} />
-        <Route path="carousel" element={<CarouselManagement />} />
-        <Route path="login-backgrounds" element={<LoginBackgrounds />} />
+        <Route path="media" element={<MediaManagement />} />
+        <Route path="carousel" element={<Navigate to="/manager/media" replace />} />
+        <Route path="login-backgrounds" element={<Navigate to="/manager/media" replace />} />
         <Route path="partners" element={<PartnerManagement />} />
         <Route path="leads" element={<LeadsManagement />} />
         <Route path="settings" element={<ManagerSettings />} />
         <Route path="profile-options" element={<POCCouncilPosts />} />
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
+        <Route path="pipeline" element={<PipelineAnalytics />} />
+        <Route path="communication" element={<ManagerCommunication />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />
         <Route path="users" element={<UsersManager />} />
-        <Route path="ghar" element={<GharIntegration />} />
-        <Route path="ghar-viewer" element={<GharDataViewer />} />
+        <Route path="ghar" element={<GharManagement />} />
+        <Route path="ghar-viewer" element={<Navigate to="/manager/ghar" replace />} />
       </Route>
 
       {/* Redirects */}

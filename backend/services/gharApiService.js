@@ -8,6 +8,12 @@ class GharApiService {
     constructor() {
         this.baseURL = 'https://ghar.navgurukul.org';
         this.token = process.env.NAVGURUKUL_API_TOKEN;
+        
+        if (this.token) {
+            console.log(`[GharAPI] Service initialized with token: ${this.token.substring(0, 10)}...`);
+        } else {
+            console.warn('[GharAPI] Service initialized WITHOUT token (NAVGURUKUL_API_TOKEN is missing)');
+        }
 
         // Create axios instance with default config
         this.client = axios.create({
@@ -46,10 +52,12 @@ class GharApiService {
         this.client.interceptors.response.use(
             (response) => response,
             (error) => {
+                const tokenHint = this.token ? `${this.token.slice(0, 10)}...${this.token.slice(-5)}` : 'MISSING';
                 console.error('Ghar API Error:', {
                     endpoint: error.config?.url,
                     status: error.response?.status,
-                    message: error.response?.data?.message || error.message
+                    message: error.response?.data?.message || error.message,
+                    tokenHint
                 });
                 return Promise.reject(error);
             }

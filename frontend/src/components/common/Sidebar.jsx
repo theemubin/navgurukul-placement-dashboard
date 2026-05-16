@@ -87,6 +87,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/coordinator/skills', icon: Settings, label: 'Skill Categories' },
           { path: '/coordinator/profile-options', icon: Settings, label: 'Profile Options' },
           { path: '/coordinator/job-readiness', icon: Target, label: 'Job Readiness' },
+          { path: '/coordinator/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' },
           { path: '/coordinator/settings', icon: Key, label: 'Settings' }
@@ -94,19 +95,19 @@ const Sidebar = ({ isOpen, onClose }) => {
       case 'manager':
         return [
           { path: '/manager', icon: Home, label: 'Dashboard', exact: true },
-          { path: '/manager/carousel', icon: ImageIcon, label: 'Hero Carousel' },
-          { path: '/manager/login-backgrounds', icon: ImageIcon, label: 'Login Backgrounds' },
+          { path: '/manager/media', icon: ImageIcon, label: 'Media Assets' },
           { path: '/manager/partners', icon: Globe, label: 'Hiring Partners' },
           { path: '/manager/leads', icon: MessageCircle, label: 'Recruitment Leads' },
           { path: '/manager/reports', icon: BarChart3, label: 'Reports & Export' },
           { path: '/manager/settings', icon: Settings, label: 'Platform Settings' },
           { path: '/manager/profile-options', icon: Settings, label: 'Profile Options' },
           { path: '/manager/job-readiness', icon: Target, label: 'Job Readiness' },
+          { path: '/manager/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' },
+          {path: '/manager/communication', icon: MessageCircle, label: 'Communication'},
           { path: '/manager/users', icon: Users, label: 'User Management' },
-          { path: '/manager/ghar', icon: Home, label: 'Ghar Integration' },
-          { path: '/manager/ghar-viewer', icon: Search, label: 'Ghar Explorer' }
+          { path: '/manager/ghar', icon: Database, label: 'Ghar System' }
         ];
       default:
         return [];

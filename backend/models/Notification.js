@@ -29,6 +29,10 @@ const notificationSchema = new mongoose.Schema({
       'job_question',
       'question_answered',
       'role_changed',
+      'role_request',
+      'user_approval_required',
+      'account_approved',
+      'role_request_rejected',
       'status_update',
       'general'
     ],

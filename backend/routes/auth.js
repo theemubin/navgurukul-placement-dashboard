@@ -92,19 +92,13 @@ router.post('/google/exchange', async (req, res) => {
       console.debug('Exchange route - unable to read Set-Cookie header:', err.message);
     }
 
-    // Only return token in response body when explicitly enabled for debugging.
-    if (process.env.DEBUG_RETURN_TOKEN === 'true') {
-      console.warn('DEBUG: Returning JWT in exchange response because DEBUG_RETURN_TOKEN is enabled.');
-      return res.json({ user, token });
-    }
-
-    // Default (safer): do not return token in response body. Browser will hold HttpOnly cookie.
+    // Return token in response body so the browser can use it as a fallback when HttpOnly cookies are unavailable.
     // Trigger Ghar Sync in background if student
     if (user.role === 'student') {
       gharApiService.syncStudentData(user.email).catch(err => console.error('Background Ghar sync error (exchange):', err.message));
     }
 
-    return res.json({ user });
+    return res.json({ user, token });
   } catch (error) {
     console.error('Token exchange error:', error);
     return res.status(500).json({ message: 'Server error during token exchange' });
@@ -358,7 +352,7 @@ router.get('/pending-approvals', auth, async (req, res) => {
 
     const pendingUsers = await User.find({
       'roleRequest.status': 'pending',
-      'roleRequest.role': { $ne: 'student' }
+      'roleRequest.role': { $in: ['coordinator', 'campus_poc', 'manager'] }
     }).select('firstName lastName email role roleRequest createdAt');
 
     res.json(pendingUsers);

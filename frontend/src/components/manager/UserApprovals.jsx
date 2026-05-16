@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { UserCheck, UserX, Mail, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
+import { UserCheck, UserX, Mail, Calendar, UserCog, CheckCircle } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -70,13 +70,13 @@ const UserApprovals = () => {
     <div className="bg-white rounded-lg shadow">
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center">
-          <AlertCircle className="h-6 w-6 text-orange-500 mr-3" />
+          <UserCog className="h-6 w-6 text-indigo-500 mr-3" />
           <h2 className="text-xl font-semibold text-gray-900">
-            Pending User Approvals ({pendingUsers.length})
+            Role Change Requests ({pendingUsers.length})
           </h2>
         </div>
         <p className="text-gray-600 mt-1">
-          Review and approve new user registrations
+          Review and approve requests for elevated roles (Coordinator, PoC, etc.)
         </p>
       </div>
 
