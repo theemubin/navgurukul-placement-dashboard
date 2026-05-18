@@ -7,7 +7,7 @@ import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
-  MessageSquare, ClipboardList, Search
+  MessageSquare, ClipboardList, Search, Bell
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -35,8 +35,9 @@ const POCDashboard = () => {
   const [selectedCampuses, setSelectedCampuses] = useState([]);
   const [savingCampuses, setSavingCampuses] = useState(false);
   // Eligible students modal state
-  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ open: false, job: null, students: [], loading: false });
+  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ isOpen: false, job: null, students: [], loading: false });
   const [studentFilter, setStudentFilter] = useState('all'); // 'all', 'applied', 'not-applied'
+  const [notifying, setNotifying] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -115,7 +116,6 @@ const POCDashboard = () => {
         : [...prev, campusId]
     );
   };
-
   const fetchDashboardData = async () => {
     try {
       const [statsResponse, pendingResponse, cyclesResponse, jobsResponse] = await Promise.all([
@@ -207,21 +207,15 @@ const POCDashboard = () => {
   };
 
   const fetchEligibleStudents = async (job) => {
-    setEligibleStudentsModal({ open: true, job, students: [], loading: true });
+    setEligibleStudentsModal({ isOpen: true, job, students: [], loading: true });
     try {
-      const response = await statsAPI.getJobEligibleStudents(job._id);
-      setEligibleStudentsModal(prev => ({
-        ...prev,
-        students: response.data.students,
-        total: response.data.total,
-        applied: response.data.applied,
-        notApplied: response.data.notApplied,
-        loading: false
-      }));
+      const jobId = job._id || job.jobId;
+      const response = await statsAPI.getJobEligibleStudents(jobId);
+      setEligibleStudentsModal({ isOpen: true, job, students: response.data.students, loading: false });
     } catch (error) {
       console.error('Error fetching eligible students:', error);
       toast.error('Failed to load eligible students');
-      setEligibleStudentsModal(prev => ({ ...prev, loading: false }));
+      setEligibleStudentsModal({ isOpen: false, job: null, students: [], loading: false });
     }
   };
 
@@ -270,6 +264,20 @@ const POCDashboard = () => {
     return eligibleStudentsModal.students;
   };
 
+  const handleNotifyEligible = async () => {
+    if (!eligibleStudentsModal.job?._id) return;
+    setNotifying(true);
+    try {
+      const response = await statsAPI.notifyEligibleStudents(eligibleStudentsModal.job._id);
+      toast.success(response.data.message || 'Notifications sent successfully!');
+    } catch (error) {
+      console.error('Error sending notifications:', error);
+      toast.error(error.response?.data?.message || 'Failed to send notifications');
+    } finally {
+      setNotifying(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const statusConfig = {
       applied: { color: 'blue', label: 'Applied' },
@@ -297,6 +305,15 @@ const POCDashboard = () => {
 
   return (
     <div className="space-y-4 animate-fadeIn pb-12">
+      <EligibleStudentsModal
+        {...eligibleStudentsModal}
+        onClose={() => setEligibleStudentsModal({ ...eligibleStudentsModal, isOpen: false })}
+        studentFilter={studentFilter}
+        setStudentFilter={setStudentFilter}
+        getFilteredStudents={getFilteredEligibleStudents}
+        onNotify={handleNotifyEligible}
+        notifying={notifying}
+      />
       {/* Dynamic Header & Toolbar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex-1">
@@ -350,8 +367,8 @@ const POCDashboard = () => {
               className="bg-transparent border-none text-xs font-bold text-gray-700 p-0 focus:ring-0 min-w-[120px]"
             >
               <option value="">All placement cycles</option>
-              {cycles.map(cycle => (
-                <option key={cycle._id} value={cycle._id}>
+              {cycles.map((cycle, index) => (
+                <option key={cycle._id || index} value={cycle._id}>
                   {cycle.name || `${format(new Date(), 'MMMM')} ${format(new Date(), 'yyyy')}`}
                 </option>
               ))}
@@ -750,7 +767,7 @@ const POCDashboard = () => {
                     </div>
 
                     {/* Stats Row */}
-                    <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3">
+                    <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3 px-1">
                       <button
                         className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
                         onClick={() => fetchEligibleStudents(job)}
@@ -903,7 +920,7 @@ const POCDashboard = () => {
                                             <Eye className="w-3.5 h-3.5" />
                                             View Details
                                           </Link>
-                                          {job.eligibleCount !== undefined && (
+                                           {job.eligibleCount !== undefined && (
                                             <button
                                               onClick={() => fetchEligibleStudents({ ...job, _id: job.jobId })}
                                               className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
@@ -1878,7 +1895,21 @@ const NewCycleModal = ({ onClose, onSuccess, unassignedCount = 0 }) => {
 };
 
 // Eligible Students Modal Component
-const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total, applied, notApplied, studentFilter, setStudentFilter, getFilteredStudents }) => {
+const EligibleStudentsModal = ({ 
+  isOpen, 
+  onClose, 
+  job, 
+  students, 
+  loading, 
+  total, 
+  applied, 
+  notApplied, 
+  studentFilter, 
+  setStudentFilter, 
+  getFilteredStudents,
+  onNotify,
+  notifying
+}) => {
   if (!isOpen) return null;
 
   const filteredStudents = getFilteredStudents();
@@ -1900,9 +1931,23 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
                 </p>
               )}
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              <XCircle className="w-6 h-6" />
-            </button>
+            <div className="flex items-start gap-4">
+              <button
+                onClick={onNotify}
+                disabled={notifying || loading || notApplied === 0}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
+                  notifying 
+                    ? 'bg-gray-100 text-gray-400' 
+                    : 'bg-primary-600 text-white hover:bg-primary-700 active:scale-95'
+                }`}
+              >
+                <Bell className={`w-4 h-4 ${notifying ? 'animate-bounce' : ''}`} />
+                {notifying ? 'Sending...' : 'Notify All Eligible'}
+              </button>
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
           </div>
 
           {/* Stats Summary */}
@@ -1958,7 +2003,7 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
         </div>
 
         {/* Content */}
-        <div className="px-6 py-4 overflow-y-auto max-h-[50vh]">
+        <div className="px-6 py-0 overflow-y-auto max-h-[60vh]">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner size="lg" />
@@ -1969,64 +2014,82 @@ const EligibleStudentsModal = ({ isOpen, onClose, job, students, loading, total,
               <p>No students found</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredStudents.map((student) => (
-                <div
-                  key={student._id}
-                  className={`p-4 rounded-lg border ${student.hasApplied
-                    ? 'bg-green-50 border-green-200'
-                    : 'bg-white border-gray-200'
-                    }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-gray-600 font-medium text-sm">
-                          {student.firstName?.charAt(0)}{student.lastName?.charAt(0)}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {student.firstName} {student.lastName}
-                        </p>
-                        <p className="text-sm text-gray-500">{student.email}</p>
-                        {student.enrollmentNumber && (
-                          <p className="text-xs text-gray-400">ID: {student.enrollmentNumber}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${student.skillMatch >= 80 ? 'bg-green-100 text-green-700' :
-                        student.skillMatch >= 60 ? 'bg-yellow-100 text-yellow-700' :
+            <div className="min-w-full inline-block align-middle">
+              <table className="min-w-full">
+                <thead className="sticky top-0 bg-white z-10 border-b">
+                  <tr>
+                    <th className="px-3 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Student</th>
+                    <th className="px-3 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Skills</th>
+                    <th className="px-3 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Eligibility</th>
+                    <th className="px-3 py-4 text-right text-xs font-black text-gray-400 uppercase tracking-widest">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredStudents.map((student) => (
+                    <tr key={student._id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center font-bold text-xs">
+                            {student.firstName?.charAt(0)}{student.lastName?.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-gray-900">{student.firstName} {student.lastName}</div>
+                            <div className="text-xs text-gray-500">{student.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {(student.studentProfile?.skills || []).slice(0, 2).map((s, idx) => (
+                            <span key={idx} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded uppercase font-medium">
+                              {s.skill?.name || s.name}
+                            </span>
+                          ))}
+                          {(student.studentProfile?.skills || []).length > 2 && (
+                            <span className="text-[10px] text-gray-400 font-medium">+{student.studentProfile.skills.length - 2}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 text-center">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${
+                          student.skillMatch >= 80 ? 'bg-green-100 text-green-700' :
+                          student.skillMatch >= 50 ? 'bg-yellow-100 text-yellow-700' :
                           'bg-red-100 text-red-700'
                         }`}>
-                        {student.skillMatch}% Match
-                      </div>
-                      {student.hasApplied ? (
-                        <div className="mt-1 inline-flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="w-3 h-3" />
-                          {student.applicationStatus}
+                          {student.skillMatch}% Match
+                        </span>
+                        {student.hasApplied && (
+                          <div className="mt-1 flex items-center justify-center gap-1 text-[9px] text-green-600 font-bold uppercase">
+                            <CheckCircle className="w-2.5 h-2.5" /> Applied
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Link 
+                            to={`/campus-poc/students/${student._id}`} 
+                            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
+                            title="View Profile"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
                         </div>
-                      ) : (
-                        <p className="mt-1 text-xs text-orange-600">Not Applied</p>
-                      )}
-                    </div>
-                  </div>
-                  {student.school && (
-                    <p className="mt-2 text-xs text-gray-500 ml-14">
-                      <GraduationCap className="w-3 h-3 inline mr-1" />
-                      {student.school}
-                    </p>
-                  )}
-                </div>
-              ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end">
-          <button onClick={onClose} className="btn btn-secondary">
+        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
+          <p className="mr-auto text-xs text-gray-500 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            Showing {filteredStudents.length} students
+          </p>
+          <button onClick={onClose} className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all active:scale-95 shadow-sm">
             Close
           </button>
         </div>

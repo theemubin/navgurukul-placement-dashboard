@@ -991,6 +991,114 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
   }
 });
 
+// Notify eligible students about a job
+router.post('/campus-poc/job/:jobId/notify-eligible', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const campusIds = getPOCManagedCampusIds(req.user);
+
+    // 1. Get the job
+    const job = await Job.findById(jobId).populate('requiredSkills.skill', 'name category');
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+
+    // 2. Get students for this campus (reuse eligibility logic)
+    const students = await User.find({
+      role: 'student',
+      campus: { $in: campusIds },
+      isActive: true,
+      'studentProfile.profileStatus': 'approved'
+    }).populate('studentProfile.skills.skill', 'name');
+
+    // Filter only eligible students (simplified for logic reuse)
+    const eligibleStudents = students.filter(student => {
+      const studentSkillIds = (student.studentProfile?.skills || [])
+        .filter(s => s.verified)
+        .map(s => s.skill?._id?.toString())
+        .filter(Boolean);
+
+      const requiredSkillIds = (job.requiredSkills || [])
+        .filter(s => s.isRequired)
+        .map(s => s.skill?._id?.toString())
+        .filter(Boolean);
+
+      const matchedSkills = studentSkillIds.filter(id => requiredSkillIds.includes(id)).length;
+      const totalRequired = requiredSkillIds.length;
+      return totalRequired > 0 ? (matchedSkills / totalRequired) >= 0.5 : true; // 50% match threshold
+    });
+
+    if (eligibleStudents.length === 0) {
+      return res.status(400).json({ message: 'No eligible students found to notify' });
+    }
+
+    // 3. Get first managed campus to find Discord channel (or use user's primary campus)
+    const primaryCampusId = campusIds[0];
+    const campus = await Campus.findById(primaryCampusId);
+    
+    if (!campus || !campus.discordChannelId) {
+      return res.status(400).json({ message: 'No Discord channel configured for your campus' });
+    }
+
+    // 3.5 Check for existing thread for this campus
+    const existingThread = (job.discordThreads || []).find(t => t.campus.toString() === primaryCampusId.toString());
+
+    // 4. Trigger Discord Notification
+    const discordService = require('../services/discordService');
+    const discordResult = await discordService.sendEligibleStudentsNotification(
+      job,
+      eligibleStudents,
+      campus,
+      req.user,
+      existingThread?.threadId
+    );
+
+    // 4.5 Save thread info if new
+    if (discordResult?.threadId && (!existingThread || existingThread.threadId !== discordResult.threadId)) {
+      if (!job.discordThreads) job.discordThreads = [];
+      
+      const threadIndex = job.discordThreads.findIndex(t => t.campus.toString() === primaryCampusId.toString());
+      if (threadIndex > -1) {
+        job.discordThreads[threadIndex].threadId = discordResult.threadId;
+      } else {
+        job.discordThreads.push({
+          campus: primaryCampusId,
+          threadId: discordResult.threadId,
+          channelId: campus.discordChannelId
+        });
+      }
+      await job.save();
+    }
+
+    // 5. Create Internal Notifications
+    const Notification = require('../models/Notification');
+    const notificationPromises = eligibleStudents.map(async (student) => {
+      // Check if student already applied
+      const alreadyApplied = await Application.exists({ job: jobId, student: student._id });
+      if (alreadyApplied) return null;
+
+      return Notification.create({
+        recipient: student._id,
+        type: 'new_job_posting',
+        title: `Opportunity: ${job.title}`,
+        message: `PoC ${req.user.firstName} has identified you as eligible for the ${job.title} role at ${job.company.name}. Apply now!`,
+        link: `/student/jobs/${job._id}`,
+        relatedEntity: { type: 'job', id: job._id }
+      });
+    });
+
+    await Promise.all(notificationPromises);
+
+    res.json({ 
+      success: true, 
+      message: `Notifications sent to ${eligibleStudents.length} students via Discord and system.`,
+      discordResult
+    });
+
+  } catch (error) {
+    console.error('Notify eligible students error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get all eligible active jobs for Campus POC (jobs their students can apply to)
 /**
  * @swagger

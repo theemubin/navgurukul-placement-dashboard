@@ -533,7 +533,7 @@ const Dashboard = () => {
             </thead>
             <tbody className="divide-y">
               {coordinatorStats.map((coord, index) => (
-                <tr key={coord.coordinator.id} className="hover:bg-gray-50">
+                <tr key={coord.coordinator?.id || index} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-sm font-bold text-primary-600">

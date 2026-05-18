@@ -6,7 +6,7 @@ import { LoadingSpinner, StatusBadge, Modal } from '../../components/common/UICo
 import {
   ArrowLeft, Briefcase, MapPin, IndianRupee, Calendar, Clock,
   Users, Building, Globe, CheckCircle, AlertCircle, Heart, XCircle,
-  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History, Check, Trash, Home, Eye
+  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History, Check, Trash, Home, Eye, Bell
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -87,7 +87,8 @@ const JobDetails = () => {
   const { user } = useAuth();
   
   // Eligible students modal state (for POC view)
-  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ open: false, students: [], loading: false });
+  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ open: false, students: [], loading: false, total: 0, applied: 0, notApplied: 0 });
+  const [notifying, setNotifying] = useState(false);
 
   // Debug helper to log decision variables (removed in production)
   const debugDecision = (msg, vars = {}) => {
@@ -306,11 +307,31 @@ const JobDetails = () => {
     setEligibleStudentsModal(prev => ({ ...prev, open: true, loading: true }));
     try {
       const response = await statsAPI.getJobEligibleStudents(id);
-      setEligibleStudentsModal(prev => ({ ...prev, students: response.data.students, loading: false }));
+      setEligibleStudentsModal({ 
+        open: true, 
+        students: response.data.students, 
+        total: response.data.total,
+        applied: response.data.applied,
+        notApplied: response.data.notApplied,
+        loading: false 
+      });
     } catch (error) {
       console.error('Error fetching eligible students:', error);
       toast.error('Failed to load eligible students');
       setEligibleStudentsModal(prev => ({ ...prev, open: false, loading: false }));
+    }
+  };
+
+  const handleNotifyEligible = async () => {
+    setNotifying(true);
+    try {
+      const response = await statsAPI.notifyEligibleStudents(id);
+      toast.success(response.data.message || 'Notifications sent successfully!');
+    } catch (error) {
+      console.error('Error sending notifications:', error);
+      toast.error(error.response?.data?.message || 'Failed to send notifications');
+    } finally {
+      setNotifying(false);
     }
   };
 
@@ -1213,8 +1234,36 @@ const JobDetails = () => {
         onClose={() => setEligibleStudentsModal(prev => ({ ...prev, open: false }))}
         title={`Eligible Students for ${job.title}`}
         size="xl"
+        headerActions={
+          <button
+            onClick={handleNotifyEligible}
+            disabled={notifying || eligibleStudentsModal.loading || eligibleStudentsModal.notApplied === 0}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
+              notifying 
+                ? 'bg-gray-100 text-gray-400' 
+                : 'bg-primary-600 text-white hover:bg-primary-700 active:scale-95'
+            }`}
+          >
+            <Bell className={`w-4 h-4 ${notifying ? 'animate-bounce' : ''}`} />
+            {notifying ? 'Sending...' : 'Notify All Eligible'}
+          </button>
+        }
       >
         <div className="space-y-4">
+          <div className="flex gap-6 mb-4 px-1">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-indigo-600">{eligibleStudentsModal.total}</p>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Total Eligible</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">{eligibleStudentsModal.applied}</p>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Applied</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-orange-600">{eligibleStudentsModal.notApplied}</p>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Not Applied</p>
+            </div>
+          </div>
           {eligibleStudentsModal.loading ? (
             <div className="flex justify-center p-8">
               <LoadingSpinner />

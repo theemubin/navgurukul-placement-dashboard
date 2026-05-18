@@ -705,6 +705,100 @@ class DiscordService {
         }
     }
 
+    /**
+     * Send notification to eligible students about a job
+     * @param {Object} job - Job document
+     * @param {Array} students - List of eligible student documents
+     * @param {Object} campus - Campus document
+     * @param {Object} coordinator - User who triggered the notification
+     * @param {String} existingThreadId - Optional ID of an existing thread to reuse
+     */
+    async sendEligibleStudentsNotification(job, students, campus, coordinator, existingThreadId = null) {
+        try {
+            const ready = await this.ensureReady();
+            if (!ready) return null;
+
+            const channelId = campus.discordChannelId;
+            if (!channelId && !existingThreadId) {
+                console.log(`No Discord channel configured for campus ${campus.name}`);
+                return null;
+            }
+
+            let targetChannel = null;
+            if (existingThreadId) {
+                try {
+                    targetChannel = await this.client.channels.fetch(existingThreadId);
+                } catch (e) {
+                    console.warn(`Could not fetch existing thread ${existingThreadId}, falling back to campus channel`);
+                }
+            }
+
+            if (!targetChannel && channelId) {
+                targetChannel = await this.client.channels.fetch(channelId);
+            }
+
+            if (!targetChannel) throw new Error('Target Discord channel or thread not found');
+
+            const applyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/student/jobs/${job._id}`;
+            
+            const embed = new EmbedBuilder()
+                .setColor('#6366f1')
+                .setTitle(`🚀 New Job Alert: ${job.title}`)
+                .setURL(applyUrl)
+                .setDescription(`A new job opportunity is available for you at **${job.company?.name || 'a top company'}**!\n\n**[Click here to Apply Now](${applyUrl})**`)
+                .addFields(
+                    { name: '🏢 Company', value: job.company?.name || 'N/A', inline: true },
+                    { name: '📍 Location', value: job.location || 'N/A', inline: true },
+                    { name: '📅 Deadline', value: job.applicationDeadline ? new Date(job.applicationDeadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Not specified', inline: true },
+                    { name: '🔗 Apply Directly', value: `[Dashboard Link](${applyUrl})` }
+                )
+                .setTimestamp()
+                .setFooter({ text: `Targeted notification for eligible students • POC: ${coordinator.firstName}` });
+
+            // Collect mentions for students with Discord IDs
+            const mentions = students
+                .filter(s => s.discord?.userId || (s.studentProfile?.externalData?.ghar?.extraAttributes?.Discord_ID))
+                .map(s => `<@${s.discord?.userId || s.studentProfile?.externalData?.ghar?.extraAttributes?.Discord_ID}>`);
+
+            let content = `📢 **Attention Eligible Students!**\n`;
+            if (mentions.length > 0) {
+                const mentionLimit = 20;
+                if (mentions.length > mentionLimit) {
+                    content += mentions.slice(0, mentionLimit).join(' ') + ` and ${mentions.length - mentionLimit} others...`;
+                } else {
+                    content += mentions.join(' ');
+                }
+            }
+
+            const message = await targetChannel.send({ content, embeds: [embed] });
+
+            // Create thread if it doesn't exist yet and we're in a regular channel
+            let threadId = existingThreadId;
+            if (!existingThreadId && targetChannel.type === ChannelType.GuildText) {
+                try {
+                    const thread = await message.startThread({
+                        name: `Job: ${job.company.name} - ${job.title}`.substring(0, 100),
+                        autoArchiveDuration: 1440,
+                        reason: 'Eligible students notification thread'
+                    });
+                    threadId = thread.id;
+                    await thread.send(`📋 **Job Discussion Thread**\nThis thread is for students of **${campus.name}** campus to discuss this opportunity. Use this space for any questions!`);
+                } catch (e) {
+                    console.error('Failed to create thread for eligible students:', e);
+                }
+            }
+
+            return {
+                messageId: message.id,
+                channelId: targetChannel.id,
+                threadId: threadId
+            };
+        } catch (error) {
+            console.error('Error sending eligible students notification:', error);
+            return { error: error.message };
+        }
+    }
+
     async shutdown() {
         if (this.client) {
             await this.client.destroy();

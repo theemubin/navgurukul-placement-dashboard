@@ -252,7 +252,7 @@ export const Pagination = ({ current, total, onPageChange }) => {
 };
 
 // Modal Component
-export const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
+export const Modal = ({ isOpen, onClose, title, children, size = 'md', headerActions }) => {
   if (!isOpen) return null;
 
   const sizeClasses = {
@@ -264,19 +264,22 @@ export const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
-      <div className={`bg-white rounded-lg w-full ${sizeClasses[size]} animate-fadeIn max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition text-gray-400 group"
-          >
-            <svg className="w-6 h-6 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+      <div className={`bg-white rounded-2xl w-full ${sizeClasses[size]} animate-fadeIn max-h-[90vh] overflow-y-auto shadow-2xl`}>
+        <div className="flex items-center justify-between p-6 border-b">
+          <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">{title}</h3>
+          <div className="flex items-center gap-3">
+            {headerActions && <div className="flex items-center">{headerActions}</div>}
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-full transition text-gray-400 group"
+            >
+              <svg className="w-6 h-6 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-6">{children}</div>
       </div>
     </div>
   );

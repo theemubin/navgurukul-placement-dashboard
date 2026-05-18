@@ -259,6 +259,7 @@ export const statsAPI = {
   getCampusPocStats: (status) => api.get('/stats/campus-poc', { params: { status } }),
   getEligibleJobs: (cycleId) => api.get('/stats/campus-poc/eligible-jobs', { params: { cycleId } }),
   getJobEligibleStudents: (jobId) => api.get(`/stats/campus-poc/job/${jobId}/eligible-students`),
+  notifyEligibleStudents: (jobId) => api.post(`/stats/campus-poc/job/${jobId}/notify-eligible`),
   getCompanyTracking: (cycleId) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }),
   getSchoolTracking: (cycleId) => api.get('/stats/campus-poc/school-tracking', { params: { cycleId } }),
   getStudentSummary: (params) => api.get('/stats/campus-poc/student-summary', { params }),

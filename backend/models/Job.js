@@ -239,8 +239,13 @@ const jobSchema = new mongoose.Schema({
     isPublic: { type: Boolean, default: true }
   }],
   // Discord Integration
-  discordThreadId: { type: String, default: null },
-  discordMessageId: { type: String, default: null }
+  discordThreadId: { type: String, default: null }, // Global thread (if any)
+  discordMessageId: { type: String, default: null }, // Global message (if any)
+  discordThreads: [{
+    campus: { type: mongoose.Schema.Types.ObjectId, ref: 'Campus' },
+    threadId: String,
+    channelId: String
+  }]
 }, {
   timestamps: true
 });
