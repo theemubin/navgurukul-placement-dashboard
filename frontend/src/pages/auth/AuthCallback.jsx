@@ -70,24 +70,31 @@ const AuthCallback = () => {
             // Give React a chance to flush auth state before changing routes.
             await new Promise(resolve => setTimeout(resolve, 0));
 
-            const finalRole = (user.role || response?.data?.user?.role);
-            switch (finalRole) {
-              case 'student':
-                navigate('/student');
-                break;
-              case 'coordinator':
-                navigate('/coordinator');
-                break;
-              case 'campus_poc':
-              case 'campus-poc':
-                // accept both variants (underscore or hyphen) and normalize to the hyphenated path
-                navigate('/campus-poc');
-                break;
-              case 'manager':
-                navigate('/manager');
-                break;
-              default:
-                navigate('/');
+            // Check if there was a saved redirect URL before login
+            const redirectUrl = sessionStorage.getItem('authRedirect');
+            if (redirectUrl) {
+              sessionStorage.removeItem('authRedirect'); // clear it
+              navigate(redirectUrl);
+            } else {
+              const finalRole = (user.role || response?.data?.user?.role);
+              switch (finalRole) {
+                case 'student':
+                  navigate('/student');
+                  break;
+                case 'coordinator':
+                  navigate('/coordinator');
+                  break;
+                case 'campus_poc':
+                case 'campus-poc':
+                  // accept both variants (underscore or hyphen) and normalize to the hyphenated path
+                  navigate('/campus-poc');
+                  break;
+                case 'manager':
+                  navigate('/manager');
+                  break;
+                default:
+                  navigate('/');
+              }
             }
           } else {
             console.warn('AuthCallback: exchange returned no user:', response?.data);

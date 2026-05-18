@@ -202,6 +202,15 @@ const Login = () => {
             <button
               type="button"
               onClick={() => {
+                // Save intended redirect URL before leaving the site for OAuth
+                const params = new URLSearchParams(window.location.search);
+                // Also check if ProtectedRoute passed a state.from (though window.history.state could be used, search params or state is fine)
+                const state = window.history.state;
+                const fromUrl = state?.usr?.from?.pathname || '/';
+                if (fromUrl && fromUrl !== '/' && fromUrl !== '/login') {
+                  sessionStorage.setItem('authRedirect', fromUrl);
+                }
+
                 const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:5001').replace(/\/$/, '');
                 const authUrl = apiBase.endsWith('/api') ? `${apiBase}/auth/google` : `${apiBase}/api/auth/google`;
                 window.location.href = authUrl;

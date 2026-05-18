@@ -35,7 +35,7 @@ const POCDashboard = () => {
   const [selectedCampuses, setSelectedCampuses] = useState([]);
   const [savingCampuses, setSavingCampuses] = useState(false);
   // Eligible students modal state
-  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ isOpen: false, job: null, students: [], loading: false });
+  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ isOpen: false, job: null, students: [], loading: false, total: 0, applied: 0, notApplied: 0 });
   const [studentFilter, setStudentFilter] = useState('all'); // 'all', 'applied', 'not-applied'
   const [notifying, setNotifying] = useState(false);
 
@@ -207,11 +207,19 @@ const POCDashboard = () => {
   };
 
   const fetchEligibleStudents = async (job) => {
-    setEligibleStudentsModal({ isOpen: true, job, students: [], loading: true });
+    setEligibleStudentsModal(prev => ({ ...prev, isOpen: true, job, students: [], loading: true }));
     try {
       const jobId = job._id || job.jobId;
       const response = await statsAPI.getJobEligibleStudents(jobId);
-      setEligibleStudentsModal({ isOpen: true, job, students: response.data.students, loading: false });
+      setEligibleStudentsModal({ 
+        isOpen: true, 
+        job, 
+        students: response.data.students, 
+        total: response.data.total,
+        applied: response.data.applied,
+        notApplied: response.data.notApplied,
+        loading: false 
+      });
     } catch (error) {
       console.error('Error fetching eligible students:', error);
       toast.error('Failed to load eligible students');

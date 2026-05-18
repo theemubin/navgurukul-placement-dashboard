@@ -1252,15 +1252,15 @@ const JobDetails = () => {
         <div className="space-y-4">
           <div className="flex gap-6 mb-4 px-1">
             <div className="text-center">
-              <p className="text-2xl font-bold text-indigo-600">{eligibleStudentsModal.total}</p>
+              <p className="text-2xl font-bold text-indigo-600">{eligibleStudentsModal.total ?? 0}</p>
               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Total Eligible</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">{eligibleStudentsModal.applied}</p>
+              <p className="text-2xl font-bold text-green-600">{eligibleStudentsModal.applied ?? 0}</p>
               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Applied</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-orange-600">{eligibleStudentsModal.notApplied}</p>
+              <p className="text-2xl font-bold text-orange-600">{eligibleStudentsModal.notApplied ?? 0}</p>
               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Not Applied</p>
             </div>
           </div>
@@ -1302,8 +1302,12 @@ const JobDetails = () => {
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <div className="inline-flex items-center px-1.5 py-0.5 bg-green-50 text-green-700 rounded-lg text-[10px] font-black">
-                           100% MATCH
+                        <div className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[10px] font-black ${
+                          student.skillMatch === 100 ? 'bg-green-50 text-green-700' :
+                          student.skillMatch >= 50 ? 'bg-yellow-50 text-yellow-700' :
+                          'bg-orange-50 text-orange-700'
+                        }`}>
+                          {student.skillMatch ?? 100}% MATCH
                         </div>
                       </td>
                       <td className="px-4 py-4 text-right">

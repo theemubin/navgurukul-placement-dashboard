@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
 // Layouts
@@ -81,6 +81,7 @@ const LoadingScreen = () => (
 // Protected Route wrapper (normalize role variants to avoid hyphen/underscore mismatches)
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return <LoadingScreen />;
 
@@ -89,7 +90,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     if (persistedAuth) {
       return <LoadingScreen />;
     }
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (allowedRoles) {

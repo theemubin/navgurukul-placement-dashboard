@@ -921,7 +921,8 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
       role: 'student',
       campus: { $in: campusIds },
       isActive: true,
-      'studentProfile.profileStatus': 'approved'
+      'studentProfile.profileStatus': 'approved',
+      'studentProfile.currentStatus': { $in: ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'] }
     })
       .populate('studentProfile.skills.skill', 'name')
       .select('firstName lastName email studentProfile.currentSchool studentProfile.enrollmentNumber studentProfile.skills studentProfile.academicRecords');
@@ -1006,7 +1007,8 @@ router.post('/campus-poc/job/:jobId/notify-eligible', auth, authorize('campus_po
       role: 'student',
       campus: { $in: campusIds },
       isActive: true,
-      'studentProfile.profileStatus': 'approved'
+      'studentProfile.profileStatus': 'approved',
+      'studentProfile.currentStatus': { $in: ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'] }
     }).populate('studentProfile.skills.skill', 'name');
 
     // Filter only eligible students (simplified for logic reuse)
@@ -1148,7 +1150,8 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
       role: 'student',
       campus: { $in: campusIds },
       isActive: true,
-      'studentProfile.profileStatus': 'approved'
+      'studentProfile.profileStatus': 'approved',
+      'studentProfile.currentStatus': { $in: ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'] }
     });
 
     // Get application counts for each job — only approved students
@@ -1156,7 +1159,8 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
       role: 'student',
       campus: { $in: campusIds },
       isActive: true,
-      'studentProfile.profileStatus': 'approved'
+      'studentProfile.profileStatus': 'approved',
+      'studentProfile.currentStatus': { $in: ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'] }
     }).select('_id');
 
     const jobsWithStats = await Promise.all(jobs.map(async (job) => {
