@@ -363,8 +363,21 @@ const JobDetails = () => {
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
-              {job.company?.logo ? (
-                <img src={job.company.logo} alt={job.company.name} className="w-10 h-10 object-contain" />
+              {job.company?.logo && !job.company.logo.includes('domain=&') ? (
+                <>
+                  <img 
+                    src={job.company.logo} 
+                    alt={job.company.name} 
+                    className="w-10 h-10 object-contain" 
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                    }}
+                  />
+                  <div className="hidden">
+                    <Briefcase className="w-8 h-8 text-gray-400" />
+                  </div>
+                </>
               ) : (
                 <Briefcase className="w-8 h-8 text-gray-400" />
               )}

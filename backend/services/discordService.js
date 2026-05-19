@@ -147,6 +147,22 @@ class DiscordService {
 
             // Create embed
             const applyUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/student/jobs/${job._id}`;
+            
+            let salaryText = 'Not disclosed';
+            if (job.salary?.min || job.salary?.max) {
+                if (job.salary.min && job.salary.max) {
+                    if (job.salary.min === job.salary.max) {
+                        salaryText = `₹${job.salary.min.toLocaleString('en-IN')}`;
+                    } else {
+                        salaryText = `₹${job.salary.min.toLocaleString('en-IN')} - ₹${job.salary.max.toLocaleString('en-IN')}`;
+                    }
+                } else if (job.salary.min) {
+                    salaryText = `₹${job.salary.min.toLocaleString('en-IN')}`;
+                } else if (job.salary.max) {
+                    salaryText = `₹${job.salary.max.toLocaleString('en-IN')}`;
+                }
+            }
+
             const embed = new EmbedBuilder()
                 .setColor('#3b82f6')
                 .setTitle(`🆕 New Job: ${job.title}`)
@@ -156,7 +172,7 @@ class DiscordService {
                     { name: '🏢 Company', value: job.company.name, inline: true },
                     { name: '📍 Location', value: job.location || 'Not specified', inline: true },
                     { name: '💼 Type', value: job.jobType.replace('_', ' ').toUpperCase(), inline: true },
-                    { name: '💰 Salary', value: job.salary?.min && job.salary?.max ? `₹${job.salary.min} - ₹${job.salary.max}` : 'Not disclosed', inline: true },
+                    { name: '💰 Salary', value: salaryText, inline: true },
                     { name: '📅 Deadline', value: new Date(job.applicationDeadline).toLocaleDateString('en-IN'), inline: true },
                     { name: '🔗 Apply Here', value: `[Click to Apply](${applyUrl})`, inline: true }
                 )

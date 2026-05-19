@@ -871,8 +871,21 @@ const POCDashboard = () => {
                           >
                             <div className="flex items-center gap-4">
                               <div className="w-12 h-12 bg-white rounded-lg border flex items-center justify-center p-1 overflow-hidden">
-                                {company.logo ? (
-                                  <img src={company.logo} alt={company.company} className="w-full h-full object-contain" />
+                                {company.logo && !company.logo.includes('domain=&') ? (
+                                  <>
+                                    <img 
+                                      src={company.logo} 
+                                      alt={company.company} 
+                                      className="w-full h-full object-contain" 
+                                      onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                      }}
+                                    />
+                                    <div className="hidden">
+                                      <Building2 className="w-6 h-6 text-gray-300" />
+                                    </div>
+                                  </>
                                 ) : (
                                   <Building2 className="w-6 h-6 text-gray-300" />
                                 )}

@@ -123,6 +123,10 @@ function JobReadinessReview() {
   };
 
   const filteredStudents = students.filter(record => {
+    if (filter === 'pending') {
+      const stats = getProgressStats(record);
+      if (stats.pending === 0) return false;
+    }
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
     const name = getStudentName(record).toLowerCase();

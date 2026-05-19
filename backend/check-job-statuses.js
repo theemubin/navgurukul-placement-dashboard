@@ -29,12 +29,15 @@ async function checkJobStatuses() {
       statusGroups[job.status].push(job);
     });
     
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     Object.entries(statusGroups).forEach(([status, jobsInStatus]) => {
       const visibilityNote = getVisibilityNote(status);
       console.log(`🏷️  ${status.toUpperCase()} (${jobsInStatus.length} jobs) ${visibilityNote}:`);
       
       jobsInStatus.forEach((job, index) => {
-        const deadlineStr = new Date(job.applicationDeadline) > new Date() 
+        const deadlineStr = new Date(job.applicationDeadline) >= startOfToday 
           ? `Open until ${job.applicationDeadline.toDateString()}`
           : `Closed (${job.applicationDeadline.toDateString()})`;
         console.log(`   ${index + 1}. ${job.title} at ${job.company.name} - ${deadlineStr}`);

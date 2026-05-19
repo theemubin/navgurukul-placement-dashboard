@@ -83,8 +83,8 @@ const Settings = () => {
   const [aiStatus, setAiStatus] = useState(null);  // runtime status (working/quota/etc)
 
   const handleAddCompany = async () => {
-    if (!newCompany.name.trim()) {
-      toast.error('Company name is required');
+    if (!newCompany.name?.trim() || !newCompany.website?.trim() || !newCompany.description?.trim()) {
+      toast.error('All fields (Company Name, Website, and Description) are mandatory');
       return;
     }
 
@@ -1643,7 +1643,7 @@ node scripts/promote_normalized_index_unique.js`;
 
                 <div className="space-y-6">
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Company Name</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Company Name *</label>
                     <input
                       type="text"
                       className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-sm font-medium"
@@ -1654,7 +1654,7 @@ node scripts/promote_normalized_index_unique.js`;
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Official Website</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Official Website *</label>
                     <div className="relative">
                       <Globe className="absolute left-5 top-4 w-4 h-4 text-gray-400" />
                       <input
@@ -1668,7 +1668,7 @@ node scripts/promote_normalized_index_unique.js`;
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Description</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Description *</label>
                     <textarea
                       className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-sm font-medium min-h-[120px] resize-none"
                       placeholder="Tell us a bit about what this company does..."
@@ -1689,7 +1689,7 @@ node scripts/promote_normalized_index_unique.js`;
                       variant="primary"
                       onClick={handleAddCompany}
                       className="flex-1 rounded-2xl py-4 font-bold shadow-lg shadow-blue-200"
-                      disabled={!newCompany.name.trim()}
+                      disabled={!newCompany.name.trim() || !newCompany.website.trim() || !newCompany.description.trim()}
                     >
                       Register Company
                     </Button>

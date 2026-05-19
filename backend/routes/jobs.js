@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require('express'); // nodemon trigger reload comment
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Job = require('../models/Job');
@@ -227,8 +227,13 @@ router.get('/', auth, async (req, res) => {
       const studentVisibleStatuses = [...visibleStages, 'active'];
 
       query.status = { $in: studentVisibleStatuses };
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
       if (req.query.past !== 'true') {
-        query.applicationDeadline = { $gte: new Date() };
+        query.applicationDeadline = { $gte: startOfToday };
+      } else {
+        query.applicationDeadline = { $lt: startOfToday };
       }
 
       const campusFilter = req.user.campus ? {
@@ -367,10 +372,13 @@ router.get('/matching', auth, authorize('student'), async (req, res) => {
     // Include legacy 'active' status for backward compatibility
     const studentVisibleStatuses = [...visibleStages, 'active'];
 
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     // Get all jobs visible to students that meet basic criteria
     const jobs = await Job.find({
       status: { $in: studentVisibleStatuses },
-      applicationDeadline: { $gte: new Date() },
+      applicationDeadline: { $gte: startOfToday },
       $or: [
         { 'eligibility.campuses': { $size: 0 } },
         { 'eligibility.campuses': student.campus?._id }

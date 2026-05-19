@@ -380,8 +380,21 @@ const StudentJobs = () => {
                     {/* Company Brand Column */}
                     <div className="flex flex-row md:flex-col items-center gap-4 shrink-0">
                       <div className="w-16 h-16 rounded-2xl border border-gray-50 bg-gray-50/50 flex items-center justify-center shrink-0 overflow-hidden shadow-sm group-hover:scale-110 transition-transform duration-300">
-                        {job.company?.logo ? (
-                          <img src={job.company.logo} alt={job.company.name} className="w-12 h-12 object-contain" />
+                        {job.company?.logo && !job.company.logo.includes("domain=&") ? (
+                          <>
+                            <img
+                              src={job.company.logo}
+                              alt={job.company.name}
+                              className="w-12 h-12 object-contain"
+                              onError={(e) => {
+                                e.target.style.display = "none";
+                                if (e.target.nextSibling) e.target.nextSibling.style.display = "flex";
+                              }}
+                            />
+                            <div className="hidden w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                              <Briefcase className="w-6 h-6 text-gray-400" />
+                            </div>
+                          </>
                         ) : (
                            <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
                              <Briefcase className="w-6 h-6 text-gray-400" />

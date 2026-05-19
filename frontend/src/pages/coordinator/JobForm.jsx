@@ -283,6 +283,18 @@ const JobForm = () => {
   };
 
   const submitNewCompany = async () => {
+    if (
+      !newCompanyFormData.name?.trim() ||
+      !newCompanyFormData.website?.trim() ||
+      !newCompanyFormData.description?.trim() ||
+      !newCompanyFormData.pocName?.trim() ||
+      !newCompanyFormData.pocContact?.trim() ||
+      !newCompanyFormData.pocEmail?.trim()
+    ) {
+      toast.error("All fields (Company Name, Website, Description, PoC Name, PoC Contact, and PoC Email) are mandatory");
+      return;
+    }
+
     try {
       const res = await settingsAPI.addCompanyOption(newCompanyFormData);
       if (res.data.success) {
@@ -1449,12 +1461,21 @@ const JobForm = () => {
                   Logo
                 </label>
                 <div className="w-full h-[38px] flex items-center justify-center bg-gray-50 border rounded-lg overflow-hidden">
-                  {formData.company.logo ? (
-                    <img
-                      src={formData.company.logo}
-                      alt="Logo"
-                      className="w-6 h-6 object-contain"
-                    />
+                  {formData.company.logo && !formData.company.logo.includes('domain=&') ? (
+                    <>
+                      <img
+                        src={formData.company.logo}
+                        alt="Logo"
+                        className="w-6 h-6 object-contain"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                        }}
+                      />
+                      <div className="hidden">
+                        <Building className="w-4 h-4 text-gray-400" />
+                      </div>
+                    </>
                   ) : (
                     <Building className="w-4 h-4 text-gray-400" />
                   )}
@@ -3143,7 +3164,7 @@ const JobForm = () => {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
-                    Website URL
+                    Website URL *
                   </label>
                   <div className="relative">
                     <Link className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -3163,7 +3184,7 @@ const JobForm = () => {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
-                    Company Description
+                    Company Description *
                   </label>
                   <textarea
                     rows="3"
@@ -3184,13 +3205,13 @@ const JobForm = () => {
                 <div className="flex items-center gap-2 mb-4 bg-amber-50 p-2 rounded-lg border border-amber-100">
                   <Users className="w-4 h-4 text-amber-600" />
                   <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
-                    Recruitment Point of Contact (PoC)
+                    Recruitment Point of Contact (PoC) *
                   </p>
                 </div>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
-                      Full Name
+                      Full Name *
                     </label>
                     <input
                       type="text"
@@ -3208,7 +3229,7 @@ const JobForm = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
-                        Contact No.
+                        Contact No. *
                       </label>
                       <input
                         type="text"
@@ -3225,7 +3246,7 @@ const JobForm = () => {
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
-                        Email Address
+                        Email Address *
                       </label>
                       <input
                         type="email"
@@ -3255,7 +3276,14 @@ const JobForm = () => {
               <button
                 type="button"
                 onClick={submitNewCompany}
-                disabled={!newCompanyFormData.name}
+                disabled={
+                  !newCompanyFormData.name?.trim() ||
+                  !newCompanyFormData.website?.trim() ||
+                  !newCompanyFormData.description?.trim() ||
+                  !newCompanyFormData.pocName?.trim() ||
+                  !newCompanyFormData.pocContact?.trim() ||
+                  !newCompanyFormData.pocEmail?.trim()
+                }
                 className="flex-[2] px-4 py-3 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-primary-200 order-1 sm:order-2"
               >
                 Register Company & Select

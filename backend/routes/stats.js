@@ -1799,9 +1799,12 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
 
     // 3. Fetch Active Jobs
     // Jobs are active if they are not draft/closed/filled and deadline hasn't passed
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     const activeJobs = await Job.find({ 
       status: { $nin: ['draft', 'closed', 'filled'] },
-      applicationDeadline: { $gte: new Date() }
+      applicationDeadline: { $gte: startOfToday }
     }).select('roleCategory title status company.name');
 
     // 4. Fetch Active Placement Cycle for Goals

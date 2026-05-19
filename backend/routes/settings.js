@@ -1369,6 +1369,12 @@ router.post('/companies/add', auth, async (req, res) => {
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Company name is required' });
     }
+    if (!website || !website.trim()) {
+      return res.status(400).json({ success: false, message: 'Official website is required' });
+    }
+    if (!description || !description.trim()) {
+      return res.status(400).json({ success: false, message: 'Company description is required' });
+    }
 
     const settings = await Settings.getSettings();
     const current = settings.masterCompanies || new Map();
@@ -1385,7 +1391,18 @@ router.post('/companies/add', auth, async (req, res) => {
       }
     }
 
-    let existing = current.get(normalizedName) || { name: normalizedName, website: '', description: '', pocs: [] };
+    let existing = current.get(normalizedName);
+    if (existing) {
+      if (typeof existing.toObject === 'function') {
+        existing = existing.toObject();
+      } else if (existing._doc) {
+        existing = { ...existing._doc };
+      } else {
+        existing = JSON.parse(JSON.stringify(existing));
+      }
+    } else {
+      existing = { name: normalizedName, website: '', description: '', pocs: [] };
+    }
 
     // Update basic info if provided
     if (website) existing.website = website;

@@ -134,8 +134,23 @@ const CompanyPanel = ({ companyName, questions, jobs }) => {
             {/* Header */}
             <div className="p-5 bg-gradient-to-br from-primary-50 to-indigo-50 border-b border-gray-100">
                 <div className="flex flex-col items-center text-center gap-3">
-                    {company.logo ? (
-                        <img src={company.logo} alt={company.name} className="w-14 h-14 rounded-2xl object-contain bg-white border border-gray-100 shadow-sm p-1" />
+                    {company.logo && !company.logo.includes('domain=&') ? (
+                        <>
+                            <img 
+                                src={company.logo} 
+                                alt={company.name} 
+                                className="w-14 h-14 rounded-2xl object-contain bg-white border border-gray-100 shadow-sm p-1" 
+                                onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                }}
+                            />
+                            <div className="hidden">
+                                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-gray-100">
+                                    <Building2 className="w-7 h-7 text-primary-400" />
+                                </div>
+                            </div>
+                        </>
                     ) : (
                         <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-gray-100">
                             <Building2 className="w-7 h-7 text-primary-400" />

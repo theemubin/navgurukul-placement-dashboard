@@ -210,13 +210,26 @@ const StudentDashboard = () => {
                       className="flex items-center justify-between p-4 rounded-2xl bg-gray-50/50 hover:bg-white hover:shadow-lg hover:shadow-gray-200/50 border border-transparent hover:border-gray-100 transition-all group"
                     >
                       <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-12 h-12 rounded-xl bg-white border border-gray-100 flex items-center justify-center shrink-0">
-                           {app.job?.company?.logo ? (
-                              <img src={app.job.company.logo} alt={app.job.company.name} className="w-8 h-8 object-contain" />
+                         <div className="w-12 h-12 rounded-xl bg-white border border-gray-100 flex items-center justify-center shrink-0">
+                           {app.job?.company?.logo && !app.job.company.logo.includes('domain=&') ? (
+                             <>
+                               <img 
+                                 src={app.job.company.logo} 
+                                 alt={app.job.company.name} 
+                                 className="w-8 h-8 object-contain" 
+                                 onError={(e) => {
+                                   e.target.style.display = 'none';
+                                   if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                 }}
+                               />
+                               <div className="hidden">
+                                 <Briefcase size={18} className="text-gray-300" />
+                               </div>
+                             </>
                            ) : (
-                              <Briefcase size={18} className="text-gray-300" />
+                             <Briefcase size={18} className="text-gray-300" />
                            )}
-                        </div>
+                         </div>
                         <div className="min-w-0">
                           <p className="font-black text-gray-900 truncate leading-tight">{app.job?.title}</p>
                           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">{app.job?.company?.name}</p>

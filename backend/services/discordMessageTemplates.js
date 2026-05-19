@@ -5,9 +5,20 @@ class DiscordMessageTemplates {
      * Template for New Job Posting
      */
     static newJobPosting(job, coordinator) {
-        const salaryText = job.salary?.min && job.salary?.max
-            ? `₹${job.salary.min.toLocaleString('en-IN')} - ₹${job.salary.max.toLocaleString('en-IN')}`
-            : 'Not Disclosed';
+        let salaryText = 'Not Disclosed';
+        if (job.salary?.min || job.salary?.max) {
+            if (job.salary.min && job.salary.max) {
+                if (job.salary.min === job.salary.max) {
+                    salaryText = `₹${job.salary.min.toLocaleString('en-IN')}`;
+                } else {
+                    salaryText = `₹${job.salary.min.toLocaleString('en-IN')} - ₹${job.salary.max.toLocaleString('en-IN')}`;
+                }
+            } else if (job.salary.min) {
+                salaryText = `₹${job.salary.min.toLocaleString('en-IN')}`;
+            } else if (job.salary.max) {
+                salaryText = `₹${job.salary.max.toLocaleString('en-IN')}`;
+            }
+        }
 
         return new EmbedBuilder()
             .setColor('#3b82f6') // Blue

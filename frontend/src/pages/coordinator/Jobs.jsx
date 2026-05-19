@@ -693,8 +693,21 @@ const CoordinatorJobs = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-4">
                           <div className="job-card-icon">
-                            {job.company?.logo ? (
-                              <img src={job.company.logo} alt={job.company.name} className="w-8 h-8 object-contain" />
+                            {job.company?.logo && !job.company.logo.includes('domain=&') ? (
+                              <>
+                                <img 
+                                  src={job.company.logo} 
+                                  alt={job.company.name} 
+                                  className="w-8 h-8 object-contain" 
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                  }}
+                                />
+                                <div className="hidden">
+                                  <Briefcase className={`w-6 h-6 ${job.jobType === 'internship' ? 'text-purple-500' : 'text-primary-500'}`} />
+                                </div>
+                              </>
                             ) : (
                               <Briefcase className={`w-6 h-6 ${job.jobType === 'internship' ? 'text-purple-500' : 'text-primary-500'}`} />
                             )}

@@ -790,7 +790,7 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), upload.single
  */
 router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
-    const { school, isJobReady, page = 1, limit = 20 } = req.query;
+    const { school, isJobReady, status, page = 1, limit = 20 } = req.query;
 
     let query = {};
 
@@ -807,6 +807,10 @@ router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'man
 
     if (school) query.school = school;
     if (isJobReady !== undefined) query.isJobReady = isJobReady === 'true';
+
+    if (status === 'pending') {
+      query.criteriaStatus = { $elemMatch: { status: 'completed' } };
+    }
 
     const readinessRecords = await StudentJobReadiness.find(query)
       .populate('student', 'firstName lastName email studentProfile.currentSchool studentProfile.currentModule')
