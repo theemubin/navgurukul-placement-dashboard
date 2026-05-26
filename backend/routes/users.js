@@ -660,10 +660,28 @@ router.put('/students/:studentId/profile/approve', auth, authorize('campus_poc',
 // Get students pending profile approval (for Campus POCs)
 router.get('/pending-profiles', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
+    const { status, school } = req.query;
+
     let query = {
-      role: 'student',
-      'studentProfile.profileStatus': 'pending_approval'
+      role: 'student'
     };
+
+    // If a specific status is requested, use it; otherwise default to pending_approval
+    if (status) {
+      if (status !== 'all') {
+        query['studentProfile.profileStatus'] = status;
+      }
+    } else {
+      query['studentProfile.profileStatus'] = 'pending_approval';
+    }
+
+    if (school && school !== 'all') {
+      // Handle school filtering. The student could have school stored in currentSchool
+      query.$or = [
+        { 'studentProfile.currentSchool': school },
+        { 'currentEducation.school': school }
+      ];
+    }
 
     // Campus POC can see students from their managed campuses
     if (req.user.role === 'campus_poc') {

@@ -16,15 +16,34 @@ const ProfileApprovals = () => {
   const [editingSoftSkillKey, setEditingSoftSkillKey] = useState(null);
   const [editingSkillName, setEditingSkillName] = useState('');
 
+  // Filters state
+  const [filterSchool, setFilterSchool] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('pending_approval');
+  const [availableSchools, setAvailableSchools] = useState([]);
+
   useEffect(() => {
     fetchPendingProfiles();
-  }, []);
+  }, [filterSchool, filterStatus]);
 
   const fetchPendingProfiles = async () => {
     try {
       setLoading(true);
-      const response = await userAPI.getPendingProfiles();
-      setPendingProfiles(response.data.data || []);
+      const response = await userAPI.getPendingProfiles({
+        school: filterSchool,
+        status: filterStatus
+      });
+      const data = response.data.data || [];
+      setPendingProfiles(data);
+      
+      // Dynamic collection of schools from current data if not set yet, or we can fetch a static/dynamic list
+      // Let's populate the unique list of schools from all fetched profiles initially, or just keep it cumulative
+      if (data.length > 0) {
+        const schools = data.map(s => s.studentProfile?.currentSchool || s.currentEducation?.school).filter(Boolean);
+        setAvailableSchools(prev => {
+          const combined = Array.from(new Set([...prev, ...schools]));
+          return combined;
+        });
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch pending profiles');
     } finally {
@@ -33,6 +52,12 @@ const ProfileApprovals = () => {
   };
 
   const handleApprove = async (studentId) => {
+    // Check if campus is selected/assigned
+    if (!selectedStudent || !selectedStudent.campus) {
+      setError(`Campus is not selected. Please select a campus first.`);
+      return;
+    }
+
     try {
       setActionLoading(true);
       await userAPI.approveProfile(studentId, 'approved');
@@ -208,7 +233,7 @@ const ProfileApprovals = () => {
   };
 
   const getRatingLabel = (rating) => {
-    const labels = ['Not Set', 'Basic', 'Intermediate', 'Advanced', 'Expert'];
+    const labels = ['Not Set', 'Beginner', 'Intermediate', 'Advanced', 'Expert'];
     return labels[rating] || 'Not Set';
   };
 
@@ -302,6 +327,38 @@ const ProfileApprovals = () => {
           {success}
         </Alert>
       )}
+
+      {/* Filters UI */}
+      <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center">
+        <div className="flex flex-col min-w-[200px]">
+          <label className="text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">School</label>
+          <select
+            value={filterSchool}
+            onChange={(e) => setFilterSchool(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="all">All Schools</option>
+            {availableSchools.map(school => (
+              <option key={school} value={school}>{school}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col min-w-[200px]">
+          <label className="text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Status</label>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="pending_approval">Pending Approval</option>
+            <option value="approved">Approved</option>
+            <option value="needs_revision">Needs Revision</option>
+            <option value="draft">Draft</option>
+            <option value="all">All Statuses</option>
+          </select>
+        </div>
+      </div>
 
       {pendingProfiles.length === 0 ? (
         <Card>

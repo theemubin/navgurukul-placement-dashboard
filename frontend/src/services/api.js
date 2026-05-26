@@ -81,7 +81,7 @@ export const userAPI = {
   approveSkill: (studentId, skillId, status) =>
     api.put(`/users/students/${studentId}/skills/${skillId}`, { status }),
   getPendingSkills: () => api.get('/users/pending-skills'),
-  getPendingProfiles: () => api.get('/users/pending-profiles'),
+  getPendingProfiles: (params) => api.get('/users/pending-profiles', { params }),
   approveProfile: (studentId, status, revisionNotes) =>
     api.put(`/users/students/${studentId}/profile/approve`, { status, revisionNotes }),
   requestProfileChanges: (studentId, revisionNotes) =>

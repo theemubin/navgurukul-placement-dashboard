@@ -2347,7 +2347,31 @@ const StudentProfile = () => {
             <div className="mt-4">
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-gray-700">Resume Link (optional)</label>
-                <span className="text-[10px] text-indigo-600 font-medium">To update: Replace link & Save Profile</span>
+                <div className="flex gap-2">
+                  {formData.resumeLink && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          // Clear link locally
+                          setFormData({ ...formData, resumeLink: '' });
+                          setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
+                          
+                          // Call backend to update profile immediately
+                          const response = await userAPI.updateProfile({ resumeLink: '' });
+                          setProfile(response.data);
+                          toast.success('Resume link removed successfully');
+                        } catch (err) {
+                          toast.error('Failed to remove resume link');
+                        }
+                      }}
+                      className="text-[10px] text-red-600 hover:text-red-800 font-semibold"
+                    >
+                      Remove Link
+                    </button>
+                  )}
+                  <span className="text-[10px] text-indigo-600 font-medium">To update: Replace link & Save Profile</span>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -2355,7 +2379,7 @@ const StudentProfile = () => {
                   value={formData.resumeLink || ''}
                   onChange={(e) => {
                     setFormData({ ...formData, resumeLink: e.target.value });
-                    setResumeLinkStatus({ checked: false, ok: false, status: null });
+                    setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
                   }}
                   placeholder="https://drive.google.com/..."
                   className="flex-1"
@@ -2364,13 +2388,13 @@ const StudentProfile = () => {
                     const url = formData.resumeLink && formData.resumeLink.trim();
                     if (!url) return toast.error('Enter a link first');
                     try {
-                      setResumeLinkStatus({ checked: false, ok: false, status: null });
+                      setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
                       const res = await utilsAPI.checkUrl(url);
                       const ok = res.data?.ok === true;
-                      setResumeLinkStatus({ checked: true, ok, status: res.data?.status });
+                      setResumeLinkStatus({ checked: true, ok, status: res.data?.status, reason: res.data?.reason });
                       toast.success(ok ? 'Link is accessible' : 'Link is not accessible');
                     } catch (err) {
-                      setResumeLinkStatus({ checked: true, ok: false, status: null });
+                      setResumeLinkStatus({ checked: true, ok: false, status: null, reason: null });
                       toast.error('Error checking link');
                     }
                   }} className="btn btn-outline">Check</button>
@@ -2392,9 +2416,47 @@ const StudentProfile = () => {
                 </div>
               </div>
               {resumeLinkStatus.checked && (
-                <p className={`text-sm mt-2 ${resumeLinkStatus.ok ? 'text-green-600' : 'text-red-600'}`}>
-                  {resumeLinkStatus.ok ? 'Accessible' : 'Not accessible'} {resumeLinkStatus.status ? `(HTTP ${resumeLinkStatus.status})` : ''}
-                </p>
+                <div className={`mt-2 p-3 rounded-lg text-sm ${resumeLinkStatus.ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                  <p className="font-semibold">
+                    {resumeLinkStatus.ok ? '✅ Accessible' : '❌ Not accessible'} {resumeLinkStatus.status ? `(HTTP ${resumeLinkStatus.status})` : ''}
+                  </p>
+                  
+                  {!resumeLinkStatus.ok && (() => {
+                    const url = (formData.resumeLink || '').toLowerCase();
+                    if (url.includes('drive.google.com')) {
+                      return (
+                        <div className="mt-2 text-xs space-y-1 text-red-700 bg-red-100 p-2.5 rounded border border-red-300">
+                          <p className="font-bold">Google Drive Sharing Tips:</p>
+                          <ol className="list-decimal pl-4 space-y-0.5">
+                            <li>Open your resume file in Google Drive.</li>
+                            <li>Click the <strong>Share</strong> button in the top right.</li>
+                            <li>Under "General access", change <strong>Restricted</strong> to <strong>Anyone with the link</strong>.</li>
+                            <li>Ensure the role is set to <strong>Viewer</strong>.</li>
+                            <li>Click <strong>Copy link</strong> and paste it here to try again!</li>
+                          </ol>
+                        </div>
+                      );
+                    } else if (url.includes('notion.so')) {
+                      return (
+                        <div className="mt-2 text-xs space-y-1 text-red-700 bg-red-100 p-2.5 rounded border border-red-300">
+                          <p className="font-bold">Notion Publishing Tips:</p>
+                          <ol className="list-decimal pl-4 space-y-0.5">
+                            <li>Open the page in Notion.</li>
+                            <li>Click <strong>Publish</strong> in the top right menu.</li>
+                            <li>Click the <strong>Publish to web</strong> button.</li>
+                            <li>Copy the public link and paste it here.</li>
+                          </ol>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <p className="mt-1 text-xs opacity-90">
+                          Please make sure this link is fully public (anyone can view it without logging in) and is typed correctly.
+                        </p>
+                      );
+                    }
+                  })()}
+                </div>
               )}
 
               {profile?.studentProfile?.resumeLink && resumeLinkStatus.ok && (
