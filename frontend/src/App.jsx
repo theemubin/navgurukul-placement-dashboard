@@ -90,6 +90,12 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     if (persistedAuth) {
       return <LoadingScreen />;
     }
+    const jobDetailMatch = location.pathname.match(/\/student\/jobs\/([a-f0-9]+)/i);
+    if (jobDetailMatch) {
+      const jobId = jobDetailMatch[1];
+      sessionStorage.setItem('authRedirect', location.pathname);
+      return <Navigate to={`/jobs/${jobId}`} replace />;
+    }
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -111,6 +117,11 @@ const PublicRoute = ({ children }) => {
   if (loading) return <LoadingScreen />;
 
   if (user) {
+    const redirectUrl = sessionStorage.getItem('authRedirect');
+    if (redirectUrl) {
+      sessionStorage.removeItem('authRedirect');
+      return <Navigate to={redirectUrl} replace />;
+    }
     const path = `/${user.role.replace('_', '-')}`;
     return <Navigate to={path} replace />;
   }
@@ -145,7 +156,9 @@ function App() {
 
       {/* Public Routes */}
       <Route path="/portfolios" element={<Portfolios />} />
+      <Route path="/jobs/:id" element={<JobDetails />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/auth/login" element={<Navigate to="/login" replace />} />
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/pending-approval" element={<PendingApproval />} />

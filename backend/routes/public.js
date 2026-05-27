@@ -402,4 +402,41 @@ router.post('/leads', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/public/jobs/{id}:
+ *   get:
+ *     summary: Get public job details
+ *     tags: [Public]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Job details
+ */
+router.get('/jobs/:id', async (req, res) => {
+    try {
+        const Job = require('../models/Job');
+        const job = await Job.findById(req.params.id)
+            .populate('requiredSkills.skill')
+            .populate('eligibility.campuses', 'name code')
+            .populate('createdBy', 'firstName lastName');
+
+        if (!job) {
+            return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Return public-safe job details
+        res.json(job.toObject());
+    } catch (error) {
+        console.error('Error fetching public job:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 module.exports = router;
+

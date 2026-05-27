@@ -136,8 +136,6 @@ const StudentProfile = () => {
     revisionNotes: '',
     resumeLink: '',
     houseName: '',
-    resumeLink: '',
-    houseName: '',
     councilService: [],
     discord: { userId: '', username: '' },
     readTheoryLevel: '',

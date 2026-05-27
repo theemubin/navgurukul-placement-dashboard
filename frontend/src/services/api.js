@@ -477,7 +477,8 @@ export const loginBackgroundAPI = {
 
 // Public APIs (No auth required)
 export const publicAPI = {
-  submitLead: (data) => axios.post(`${API_URL}/public/leads`, data)
+  submitLead: (data) => axios.post(`${API_URL}/public/leads`, data),
+  getJob: (id) => axios.get(`${API_URL}/public/jobs/${id}`)
 };
 
 export default api;

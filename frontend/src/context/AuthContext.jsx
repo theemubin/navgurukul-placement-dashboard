@@ -18,7 +18,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const pathname = window.location.pathname || '';
-      const publicRoutes = ['/auth', '/login', '/register', '/portfolios'];
+      const publicRoutes = ['/auth', '/login', '/register', '/portfolios', '/jobs'];
       const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
       if (isPublicRoute) {
@@ -81,8 +81,15 @@ export const AuthProvider = ({ children }) => {
         const finalToken = localStorage.getItem('token');
         const finalUser = localStorage.getItem('user');
         if (!finalToken && !finalUser) {
-          console.info('Auth init: not authenticated, redirecting to /login');
-          window.location.replace('/login');
+          console.info('Auth init: not authenticated');
+          const jobDetailMatch = pathname.match(/\/student\/jobs\/([a-f0-9]+)/i);
+          if (jobDetailMatch) {
+            const jobId = jobDetailMatch[1];
+            sessionStorage.setItem('authRedirect', pathname);
+            window.location.replace(`/jobs/${jobId}`);
+          } else {
+            window.location.replace('/login');
+          }
         }
       } catch (e) {
         // ignore any window/localStorage access errors

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI, statsAPI } from '../../services/api';
+import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI, statsAPI, publicAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Modal } from '../../components/common/UIComponents';
 import {
   ArrowLeft, Briefcase, MapPin, IndianRupee, Calendar, Clock,
@@ -192,12 +192,16 @@ const JobDetails = () => {
   const fetchJobOnly = async () => {
     try {
       setLoading(true);
-      const response = await jobAPI.getJob(id);
+      const response = !user ? await publicAPI.getJob(id) : await jobAPI.getJob(id);
       setJob(response.data);
       setMatchDetails(null);
     } catch (error) {
       toast.error('Error loading job details');
-      navigate(user?.role === 'student' ? '/student/jobs' : '/campus-poc');
+      if (user) {
+        navigate(user.role === 'student' ? '/student/jobs' : '/campus-poc');
+      } else {
+        navigate('/login');
+      }
     } finally {
       setLoading(false);
     }
@@ -343,19 +347,32 @@ const JobDetails = () => {
     );
   }
 
+  const handleBack = () => {
+    if (user) {
+      navigate(user.role === 'student' ? '/student/jobs' : '/campus-poc');
+    } else {
+      navigate('/login');
+    }
+  };
+
+  const loginRedirect = () => {
+    sessionStorage.setItem('authRedirect', `/student/jobs/${id}`);
+    navigate('/login');
+  };
+
   if (!job) return null;
 
   const isDeadlinePassed = new Date(job.applicationDeadline) < new Date();
 
-  return (
+  const renderContent = () => (
     <div className="space-y-6 animate-fadeIn">
       {/* Back Button */}
       <button
-        onClick={() => navigate(user?.role === 'student' ? '/student/jobs' : '/campus-poc')}
+        onClick={handleBack}
         className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold uppercase tracking-widest text-[10px]"
       >
         <ArrowLeft className="w-4 h-4" />
-        {user?.role === 'student' ? 'Back to Jobs' : 'Back to Dashboard'}
+        {user ? (user.role === 'student' ? 'Back to Jobs' : 'Back to Dashboard') : 'Back to Login'}
       </button>
 
       {/* Header */}
@@ -449,7 +466,14 @@ const JobDetails = () => {
             )}
           </div>
 
-          {user?.role === 'campus_poc' ? (
+          {!user ? (
+            <button
+              onClick={loginRedirect}
+              className="btn btn-primary shadow-lg shadow-primary-200 px-6 py-2.5 flex items-center gap-2 font-bold uppercase tracking-wider text-xs"
+            >
+              Log In to Apply
+            </button>
+          ) : user.role === 'campus_poc' ? (
             <div className="flex items-center gap-3">
               <button
                 onClick={fetchEligibleStudents}
@@ -713,26 +737,38 @@ const JobDetails = () => {
             </p>
 
             {/* Ask a Question */}
-            <div className="mb-6">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newQuestion}
-                  onChange={(e) => setNewQuestion(e.target.value)}
-                  placeholder={`Ask a question about ${job.company?.name}...`}
-                  className="flex-1"
-                />
+            {user ? (
+              <div className="mb-6">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newQuestion}
+                    onChange={(e) => setNewQuestion(e.target.value)}
+                    placeholder={`Ask a question about ${job.company?.name}...`}
+                    className="flex-1"
+                  />
+                  <button
+                    onClick={handleAskQuestion}
+                    disabled={askingQuestion || newQuestion.length < 10}
+                    className="btn btn-primary flex items-center gap-1"
+                  >
+                    <Send className="w-4 h-4" />
+                    {askingQuestion ? 'Sending...' : 'Ask'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Min 10 characters. Your identity will be kept anonymous to other students.</p>
+              </div>
+            ) : (
+              <div className="mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-center justify-between">
+                <p className="text-sm text-gray-500">Have a question about {job.company?.name}?</p>
                 <button
-                  onClick={handleAskQuestion}
-                  disabled={askingQuestion || newQuestion.length < 10}
-                  className="btn btn-primary flex items-center gap-1"
+                  onClick={loginRedirect}
+                  className="btn btn-secondary text-xs"
                 >
-                  <Send className="w-4 h-4" />
-                  {askingQuestion ? 'Sending...' : 'Ask'}
+                  Log In to Ask
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Min 10 characters. Your identity will be kept anonymous to other students.</p>
-            </div>
+            )}
 
             {/* Questions List */}
             {questions.length > 0 ? (
@@ -751,7 +787,7 @@ const JobDetails = () => {
                       </div>
 
                       {/* Coordinator Actions */}
-                      {['coordinator', 'manager', 'campus_poc'].includes(JSON.parse(localStorage.getItem('user'))?.role) && (
+                      {user && ['coordinator', 'manager', 'campus_poc'].includes(user.role) && (
                         <button
                           onClick={async () => {
                             if (window.confirm('Delete this question?')) {
@@ -783,7 +819,7 @@ const JobDetails = () => {
                       </div>
                     ) : (
                       <div className="mt-2">
-                        {['coordinator', 'manager', 'campus_poc'].includes(JSON.parse(localStorage.getItem('user'))?.role) ? (
+                        {user && ['coordinator', 'manager', 'campus_poc'].includes(user.role) ? (
                           <div className="flex gap-2 mt-2">
                             <input
                               type="text"
@@ -1347,6 +1383,38 @@ const JobDetails = () => {
       </Modal>
     </div>
   );
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <header className="bg-white border-b border-gray-100 py-4 px-6 mb-8 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left duration-700">
+            <img 
+              src="/ng-logo-horizontal.avif" 
+              alt="NavGurukul Logo" 
+              className="h-8 w-auto object-contain"
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
+            <span className="text-gray-300 font-medium font-sans">|</span>
+            <span className="font-bold text-gray-800 text-sm tracking-wide font-sans">Placement Portal</span>
+          </div>
+          <button
+            onClick={loginRedirect}
+            className="btn btn-primary text-xs shadow-lg shadow-primary-100 hover:translate-y-[-1px] transition-all px-4 py-2 font-bold uppercase tracking-wider"
+          >
+            Sign In
+          </button>
+        </header>
+        <div className="max-w-4xl mx-auto w-full px-4 pb-12 flex-1">
+          {renderContent()}
+        </div>
+      </div>
+    );
+  }
+
+  return renderContent();
 };
 
 export default JobDetails;
