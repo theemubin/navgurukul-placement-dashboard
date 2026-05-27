@@ -1,5 +1,19 @@
-import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
+import React from 'react';
+import { Routes, Route, Navigate, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+
+const SlashRedirect = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const cleanPath = location.pathname.replace(/\\/\\/+/g, '/');
+  // If path changed, redirect to cleaned path preserving query params
+  React.useEffect(() => {
+    if (location.pathname !== cleanPath) {
+      navigate(cleanPath + location.search, { replace: true });
+    }
+  }, [cleanPath, location.search, navigate, location.pathname]);
+  return null;
+};
 
 // Layouts
 import DashboardLayout from './layouts/DashboardLayout';
@@ -90,10 +104,12 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     if (persistedAuth) {
       return <LoadingScreen />;
     }
-    const jobDetailMatch = location.pathname.match(/\/student\/jobs\/([a-f0-9]+)/i);
+    // Normalize any duplicate slashes in the path
+    const cleanPath = location.pathname.replace(/\/\/+/g, '/');
+    const jobDetailMatch = cleanPath.match(/\/student\/jobs\/([a-f0-9]+)/i);
     if (jobDetailMatch) {
       const jobId = jobDetailMatch[1];
-      sessionStorage.setItem('authRedirect', location.pathname);
+      sessionStorage.setItem('authRedirect', cleanPath);
       return <Navigate to={`/jobs/${jobId}`} replace />;
     }
     return <Navigate to="/login" state={{ from: location }} replace />;
@@ -256,9 +272,9 @@ function App() {
         <Route path="ghar-viewer" element={<Navigate to="/manager/ghar" replace />} />
       </Route>
 
-      {/* Redirects */}
-      <Route path="/" element={<Navigate to="/portfolios" replace />} />
-      <Route path="*" element={<NotFound />} />
+  // Normalize double slashes in URLs
+  <Route path="/*" element={<SlashRedirect />} />
+
     </Routes>
   );
 }
