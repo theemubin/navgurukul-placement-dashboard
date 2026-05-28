@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Download, Plus, Trash2 } from 'lucide-react';
+import { Download, Plus, Trash2, Lock } from 'lucide-react';
 import { settingsAPI } from '../../services/api';
 import { Modal } from '../../components/common/UIComponents';
+import { useAuth } from '../../context/AuthContext';
 
 const CouncilPosts = () => {
+  const { user } = useAuth();
+  const isManager = user?.role === 'manager';
   const [posts, setPosts] = useState([]);
   const [newPost, setNewPost] = useState('');
   const [higherEducationOptions, setHigherEducationOptions] = useState({});
@@ -350,33 +353,46 @@ const CouncilPosts = () => {
         </p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">Add New Council Post</h2>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newPost}
-            onChange={(e) => setNewPost(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleAddPost();
-              }
-            }}
-            placeholder="e.g. General Secretary"
-            className="flex-1"
-          />
-          <button
-            type="button"
-            onClick={handleAddPost}
-            disabled={saving || !newPost.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4" />
-            {saving ? 'Adding...' : 'Add Post'}
-          </button>
+      {/* Manager-only notice for non-managers */}
+      {!isManager && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+          <Lock className="w-5 h-5 text-amber-600 shrink-0" />
+          <p className="text-sm text-amber-800">
+            <span className="font-semibold">View only.</span> Only managers can add or remove council posts and higher-education options.
+          </p>
         </div>
-      </div>
+      )}
+
+      {/* Add New Council Post — manager only */}
+      {isManager && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">Add New Council Post</h2>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newPost}
+              onChange={(e) => setNewPost(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddPost();
+                }
+              }}
+              placeholder="e.g. General Secretary"
+              className="flex-1"
+            />
+            <button
+              type="button"
+              onClick={handleAddPost}
+              disabled={saving || !newPost.trim()}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              {saving ? 'Adding...' : 'Add Post'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Approved Council Posts</h2>
@@ -399,87 +415,94 @@ const CouncilPosts = () => {
                 >
                   {analytics.councilPostCounts?.[post] || 0}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => handleRemovePost(post)}
-                  className="text-indigo-500 hover:text-red-600"
-                  title="Remove council post"
-                  disabled={saving}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {isManager && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePost(post)}
+                    className="text-indigo-500 hover:text-red-600"
+                    title="Remove council post"
+                    disabled={saving}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </span>
             ))}
           </div>
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">Add Higher-Education Department</h2>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newDepartment}
-            onChange={(e) => setNewDepartment(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleAddDepartment();
-              }
-            }}
-            placeholder="e.g. B.Tech, B.Sc, B.Com"
-            className="flex-1"
-          />
-          <button
-            type="button"
-            onClick={handleAddDepartment}
-            disabled={saving || !newDepartment.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4" />
-            {saving ? 'Adding...' : 'Add Department'}
-          </button>
-        </div>
-      </div>
+      {/* Add Higher-Education options — manager only */}
+      {isManager && (
+        <>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
+            <h2 className="text-sm font-semibold text-gray-900 mb-3">Add Higher-Education Department</h2>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={newDepartment}
+                onChange={(e) => setNewDepartment(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddDepartment();
+                  }
+                }}
+                placeholder="e.g. B.Tech, B.Sc, B.Com"
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={handleAddDepartment}
+                disabled={saving || !newDepartment.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                {saving ? 'Adding...' : 'Add Department'}
+              </button>
+            </div>
+          </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">Add Specialization</h2>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
-          <select
-            value={selectedDepartment}
-            onChange={(e) => setSelectedDepartment(e.target.value)}
-          >
-            <option value="">Select Department</option>
-            {departmentList.map((department) => (
-              <option key={department} value={department}>
-                {department}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            value={newSpecialization}
-            onChange={(e) => setNewSpecialization(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleAddSpecialization();
-              }
-            }}
-            placeholder="e.g. Computer Science, Finance"
-            className="flex-1"
-          />
-          <button
-            type="button"
-            onClick={handleAddSpecialization}
-            disabled={saving || !selectedDepartment || !newSpecialization.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4" />
-            {saving ? 'Adding...' : 'Add Specialization'}
-          </button>
-        </div>
-      </div>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
+            <h2 className="text-sm font-semibold text-gray-900 mb-3">Add Specialization</h2>
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+              >
+                <option value="">Select Department</option>
+                {departmentList.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={newSpecialization}
+                onChange={(e) => setNewSpecialization(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddSpecialization();
+                  }
+                }}
+                placeholder="e.g. Computer Science, Finance"
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={handleAddSpecialization}
+                disabled={saving || !selectedDepartment || !newSpecialization.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                {saving ? 'Adding...' : 'Add Specialization'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Approved Higher-Education Options</h2>
@@ -502,15 +525,17 @@ const CouncilPosts = () => {
                       {analytics.higherEducationDepartmentCounts?.[department] || 0}
                     </span>
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveDepartment(department)}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-red-200 text-red-700 hover:bg-red-50"
-                    disabled={saving}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Remove Department
-                  </button>
+                  {isManager && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDepartment(department)}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-red-200 text-red-700 hover:bg-red-50"
+                      disabled={saving}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Remove Department
+                    </button>
+                  )}
                 </div>
                 {(higherEducationOptions[department] || []).length === 0 ? (
                   <p className="text-sm text-gray-500">No specializations added yet.</p>
@@ -540,15 +565,17 @@ const CouncilPosts = () => {
                         >
                           {analytics.higherEducationSpecializationCounts?.[department]?.[specialization] || 0}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSpecialization(department, specialization)}
-                          className="text-emerald-600 hover:text-red-600"
-                          title="Remove specialization"
-                          disabled={saving}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {isManager && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSpecialization(department, specialization)}
+                            className="text-emerald-600 hover:text-red-600"
+                            title="Remove specialization"
+                            disabled={saving}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </span>
                     ))}
                   </div>

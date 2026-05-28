@@ -2334,44 +2334,45 @@ const StudentProfile = () => {
               <Upload className="w-5 h-5 text-gray-500" />
               Resume
             </h2>
-            {profile?.studentProfile?.resume ? (
-              <div className="p-4 bg-green-50 rounded-lg">
-                <p className="text-green-700 text-sm">Resume uploaded</p>
-                <a href={`/${profile.studentProfile.resume}`} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-sm hover:underline">View Resume</a>
-              </div>
-            ) : null}
 
-            {/* Resume Link Input & Accessibility Check */}
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">Resume Link (optional)</label>
-                <div className="flex gap-2">
-                  {formData.resumeLink && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          // Clear link locally
-                          setFormData({ ...formData, resumeLink: '' });
-                          setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
-                          
-                          // Call backend to update profile immediately
-                          const response = await userAPI.updateProfile({ resumeLink: '' });
-                          setProfile(response.data);
-                          toast.success('Resume link removed successfully');
-                        } catch (err) {
-                          toast.error('Failed to remove resume link');
-                        }
-                      }}
-                      className="text-[10px] text-red-600 hover:text-red-800 font-semibold"
-                    >
-                      Remove Link
-                    </button>
-                  )}
-                  <span className="text-[10px] text-indigo-600 font-medium">To update: Replace link & Save Profile</span>
+            {/* Uploaded file badge */}
+            {profile?.studentProfile?.resume && (
+              <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg mb-4">
+                <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-green-800">File uploaded</p>
+                  <a href={`/${profile.studentProfile.resume}`} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-green-700 hover:underline truncate block">View Resume</a>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+            )}
+
+            {/* ── Link row ── */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">Resume Link</label>
+                {formData.resumeLink && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        setFormData({ ...formData, resumeLink: '' });
+                        setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
+                        const response = await userAPI.updateProfile({ resumeLink: '' });
+                        setProfile(response.data);
+                        toast.success('Resume link removed');
+                      } catch (err) {
+                        toast.error('Failed to remove resume link');
+                      }
+                    }}
+                    className="text-xs text-red-500 hover:text-red-700 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-2">
                 <input
                   type="url"
                   value={formData.resumeLink || ''}
@@ -2380,23 +2381,83 @@ const StudentProfile = () => {
                     setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
                   }}
                   placeholder="https://drive.google.com/..."
-                  className="flex-1"
+                  className="flex-1 min-w-0"
                 />
-                <button type="button" onClick={async () => {
-                    const url = formData.resumeLink && formData.resumeLink.trim();
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const url = (formData.resumeLink || '').trim();
                     if (!url) return toast.error('Enter a link first');
                     try {
                       setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
                       const res = await utilsAPI.checkUrl(url);
                       const ok = res.data?.ok === true;
                       setResumeLinkStatus({ checked: true, ok, status: res.data?.status, reason: res.data?.reason });
-                      toast.success(ok ? 'Link is accessible' : 'Link is not accessible');
-                    } catch (err) {
+                    } catch {
                       setResumeLinkStatus({ checked: true, ok: false, status: null, reason: null });
                       toast.error('Error checking link');
                     }
-                  }} className="btn btn-outline">Check</button>
+                  }}
+                  className="btn btn-outline shrink-0"
+                >
+                  Check Link
+                </button>
+              </div>
+
+              <p className="text-[11px] text-gray-500">
+                Paste a publicly accessible Google Drive, Notion, or PDF link. To update, replace the link and click <strong>Save Changes</strong>.
+              </p>
+            </div>
+
+            {/* ── Accessibility result ── */}
+            {resumeLinkStatus.checked && (
+              <div className={`mt-3 p-3 rounded-lg text-sm border ${resumeLinkStatus.ok
+                ? 'bg-green-50 border-green-200 text-green-800'
+                : 'bg-red-50 border-red-200 text-red-800'}`}>
+                <p className="font-semibold flex items-center gap-1.5">
+                  {resumeLinkStatus.ok ? '✅ Accessible' : '❌ Not accessible'}
+                  {resumeLinkStatus.status ? <span className="font-normal text-xs opacity-75">(HTTP {resumeLinkStatus.status})</span> : null}
+                  {resumeLinkStatus.ok && profile?.studentProfile?.resumeLink && (
+                    <a href={profile.studentProfile.resumeLink} target="_blank" rel="noopener noreferrer"
+                      className="ml-auto text-xs text-green-700 underline font-medium">Open →</a>
+                  )}
+                </p>
+                {!resumeLinkStatus.ok && (() => {
+                  const url = (formData.resumeLink || '').toLowerCase();
+                  if (url.includes('drive.google.com')) return (
+                    <div className="mt-2 text-xs text-red-700 bg-red-100 p-2.5 rounded border border-red-300">
+                      <p className="font-bold mb-1">Google Drive sharing tips:</p>
+                      <ol className="list-decimal pl-4 space-y-0.5">
+                        <li>Open the file → click <strong>Share</strong></li>
+                        <li>Change access to <strong>Anyone with the link</strong> (Viewer)</li>
+                        <li>Copy the link and paste it here again</li>
+                      </ol>
+                    </div>
+                  );
+                  if (url.includes('notion.so')) return (
+                    <div className="mt-2 text-xs text-red-700 bg-red-100 p-2.5 rounded border border-red-300">
+                      <p className="font-bold mb-1">Notion publishing tips:</p>
+                      <ol className="list-decimal pl-4 space-y-0.5">
+                        <li>Open page → click <strong>Publish</strong></li>
+                        <li>Enable <strong>Publish to web</strong></li>
+                        <li>Copy the public link and paste here</li>
+                      </ol>
+                    </div>
+                  );
+                  return <p className="mt-1 text-xs opacity-90">Make sure this link is publicly accessible (no login required).</p>;
+                })()}
+              </div>
+            )}
+
+            {/* ── ATS Score section ── */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">ATS Score Check</p>
+                  <p className="text-xs text-gray-500">Analyse your resume against job-readiness criteria</p>
+                </div>
                 <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase font-black tracking-widest border border-amber-200">Beta</span>
                   <div className="relative group">
                     <button
                       type="button"
@@ -2404,100 +2465,48 @@ const StudentProfile = () => {
                       disabled={atsLoading}
                       className="btn btn-primary"
                     >
-                      {atsLoading ? 'Checking...' : 'Check ATS Score'}
+                      {atsLoading ? 'Checking…' : 'Check ATS Score'}
                     </button>
-                    <div className="absolute bottom-full left-0 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
-                      ATS Score calculation is currently in Beta and under active development.
+                    <div className="absolute bottom-full right-0 mb-2 w-52 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
+                      Save your profile first before running the ATS check. Results are in beta and actively improving.
                     </div>
                   </div>
-                  <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase font-black tracking-widest border border-amber-200">Beta</span>
                 </div>
               </div>
-              {resumeLinkStatus.checked && (
-                <div className={`mt-2 p-3 rounded-lg text-sm ${resumeLinkStatus.ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
-                  <p className="font-semibold">
-                    {resumeLinkStatus.ok ? '✅ Accessible' : '❌ Not accessible'} {resumeLinkStatus.status ? `(HTTP ${resumeLinkStatus.status})` : ''}
-                  </p>
-                  
-                  {!resumeLinkStatus.ok && (() => {
-                    const url = (formData.resumeLink || '').toLowerCase();
-                    if (url.includes('drive.google.com')) {
-                      return (
-                        <div className="mt-2 text-xs space-y-1 text-red-700 bg-red-100 p-2.5 rounded border border-red-300">
-                          <p className="font-bold">Google Drive Sharing Tips:</p>
-                          <ol className="list-decimal pl-4 space-y-0.5">
-                            <li>Open your resume file in Google Drive.</li>
-                            <li>Click the <strong>Share</strong> button in the top right.</li>
-                            <li>Under "General access", change <strong>Restricted</strong> to <strong>Anyone with the link</strong>.</li>
-                            <li>Ensure the role is set to <strong>Viewer</strong>.</li>
-                            <li>Click <strong>Copy link</strong> and paste it here to try again!</li>
-                          </ol>
-                        </div>
-                      );
-                    } else if (url.includes('notion.so')) {
-                      return (
-                        <div className="mt-2 text-xs space-y-1 text-red-700 bg-red-100 p-2.5 rounded border border-red-300">
-                          <p className="font-bold">Notion Publishing Tips:</p>
-                          <ol className="list-decimal pl-4 space-y-0.5">
-                            <li>Open the page in Notion.</li>
-                            <li>Click <strong>Publish</strong> in the top right menu.</li>
-                            <li>Click the <strong>Publish to web</strong> button.</li>
-                            <li>Copy the public link and paste it here.</li>
-                          </ol>
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <p className="mt-1 text-xs opacity-90">
-                          Please make sure this link is fully public (anyone can view it without logging in) and is typed correctly.
-                        </p>
-                      );
-                    }
-                  })()}
-                </div>
-              )}
-
-              {profile?.studentProfile?.resumeLink && resumeLinkStatus.ok && (
-                <p className="mt-3 text-sm">
-                  <a
-                    href={profile.studentProfile.resumeLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary-600 font-medium hover:underline"
-                  >
-                    [Resume]
-                  </a>
-                </p>
-              )}
 
               {atsResult && atsResult.status === 'ok' && (
-                <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-bold text-indigo-800">
-                      ATS Score <span className="text-[10px] uppercase font-semibold tracking-widest text-indigo-700 ml-2">beta</span>
-                    </p>
-                    <p className="text-2xl font-black text-indigo-700">{atsResult.overallScore}/100</p>
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm font-bold text-indigo-800">Overall Score</p>
+                      <p className="text-xs text-indigo-600">
+                        Last checked: {atsResult.checkedAt ? new Date(atsResult.checkedAt).toLocaleString() : 'just now'}
+                        {atsResult.qualityFlag === 'low_text_extraction' ? ' · Low extraction quality' : ''}
+                      </p>
+                    </div>
+                    <p className="text-3xl font-black text-indigo-700">{atsResult.overallScore}<span className="text-base font-semibold text-indigo-400">/100</span></p>
                   </div>
-                  <p className="text-xs text-indigo-700 mb-3">
-                    Last checked: {atsResult.checkedAt ? new Date(atsResult.checkedAt).toLocaleString() : 'just now'}
-                    {atsResult.qualityFlag === 'low_text_extraction' ? ' | Low text extraction quality detected' : ''}
-                  </p>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs mb-3">
-                    <div className="bg-white rounded border border-indigo-100 p-2">Keyword Alignment: <span className="font-bold">{atsResult.breakdown?.keywordAlignment ?? 0}/30</span></div>
-                    <div className="bg-white rounded border border-indigo-100 p-2">Skills Relevance: <span className="font-bold">{atsResult.breakdown?.skillsRelevance ?? 0}/20</span></div>
-                    <div className="bg-white rounded border border-indigo-100 p-2">Project Impact: <span className="font-bold">{atsResult.breakdown?.projectImpact ?? 0}/20</span></div>
-                    <div className="bg-white rounded border border-indigo-100 p-2">Structure: <span className="font-bold">{atsResult.breakdown?.structureReadability ?? 0}/15</span></div>
-                    <div className="bg-white rounded border border-indigo-100 p-2 md:col-span-2">Experience Strength: <span className="font-bold">{atsResult.breakdown?.experienceStrength ?? 0}/15</span></div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs mb-3">
+                    {[
+                      { label: 'Keywords', score: atsResult.breakdown?.keywordAlignment ?? 0, max: 30 },
+                      { label: 'Skills', score: atsResult.breakdown?.skillsRelevance ?? 0, max: 20 },
+                      { label: 'Projects', score: atsResult.breakdown?.projectImpact ?? 0, max: 20 },
+                      { label: 'Structure', score: atsResult.breakdown?.structureReadability ?? 0, max: 15 },
+                      { label: 'Experience', score: atsResult.breakdown?.experienceStrength ?? 0, max: 15 },
+                    ].map(({ label, score, max }) => (
+                      <div key={label} className="bg-white rounded border border-indigo-100 p-2 flex items-center justify-between gap-1">
+                        <span className="text-gray-600">{label}</span>
+                        <span className="font-bold text-indigo-800">{score}<span className="font-normal text-gray-400">/{max}</span></span>
+                      </div>
+                    ))}
                   </div>
 
                   {Array.isArray(atsResult.actionItems) && atsResult.actionItems.length > 0 && (
                     <div className="mb-3">
                       <p className="text-xs font-bold text-indigo-800 mb-1">Top Fixes</p>
                       <ul className="list-disc pl-5 text-xs text-indigo-900 space-y-1">
-                        {atsResult.actionItems.slice(0, 5).map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
+                        {atsResult.actionItems.slice(0, 5).map((item, idx) => <li key={idx}>{item}</li>)}
                       </ul>
                     </div>
                   )}

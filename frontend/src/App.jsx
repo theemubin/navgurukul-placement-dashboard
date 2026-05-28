@@ -5,7 +5,7 @@ import { useAuth } from './context/AuthContext';
 const SlashRedirect = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const cleanPath = location.pathname.replace(/\\/\\/+/g, '/');
+  const cleanPath = location.pathname.replace(/\/+/g, '/');
   // If path changed, redirect to cleaned path preserving query params
   React.useEffect(() => {
     if (location.pathname !== cleanPath) {
