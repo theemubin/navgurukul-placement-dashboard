@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Normalize API base and ensure it always includes '/api'
-const rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5006';
+const rawApi = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://navgurukul-placement-api.onrender.com' : 'http://localhost:5007');
 const API_URL = rawApi.replace(/\/+$/, '') + '/api';
 
 const api = axios.create({
