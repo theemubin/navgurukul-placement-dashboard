@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const { JobReadinessConfig, StudentJobReadiness, DEFAULT_CRITERIA } = require('../models/JobReadiness');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const PlacementCycle = require('../models/PlacementCycle');
 const upload = require('../middleware/upload');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 // ...existing code...
@@ -790,7 +791,7 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), upload.single
  */
 router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
-    const { school, isJobReady, status, page = 1, limit = 20 } = req.query;
+    const { school, isJobReady, status, campus, page = 1, limit = 20 } = req.query;
 
     let query = {};
 
@@ -803,6 +804,9 @@ router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'man
       if (managedCampuses.length > 0) {
         query.campus = { $in: managedCampuses };
       }
+    } else if (campus) {
+      // Coordinator/Manager can optionally filter by a specific campus
+      query.campus = campus;
     }
 
     if (school) query.school = school;
@@ -813,7 +817,11 @@ router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'man
     }
 
     const readinessRecords = await StudentJobReadiness.find(query)
-      .populate('student', 'firstName lastName email studentProfile.currentSchool studentProfile.currentModule')
+      .populate({
+        path: 'student',
+        select: 'firstName lastName email campus studentProfile.currentSchool studentProfile.currentModule studentProfile.openForRoles',
+        populate: { path: 'campus', select: 'name' }
+      })
       .populate('approvedBy', 'firstName lastName')
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
@@ -821,8 +829,30 @@ router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'man
 
     const total = await StudentJobReadiness.countDocuments(query);
 
+    // Build a map of studentId -> cycle name by checking snapshotStudents
+    const studentIds = readinessRecords.map(r => r.student?._id).filter(Boolean);
+    const cycles = await PlacementCycle.find({
+      'snapshotStudents.student': { $in: studentIds }
+    }).select('name month year snapshotStudents');
+
+    const cycleMap = new Map();
+    cycles.forEach(cycle => {
+      cycle.snapshotStudents.forEach(ss => {
+        const sid = ss.student?.toString();
+        if (sid && !cycleMap.has(sid)) {
+          cycleMap.set(sid, cycle.name);
+        }
+      });
+    });
+
+    const recordsWithCycle = readinessRecords.map(r => {
+      const obj = r.toObject ? r.toObject() : r;
+      obj.placementCycle = cycleMap.get(r.student?._id?.toString()) || null;
+      return obj;
+    });
+
     res.json({
-      records: readinessRecords,
+      records: recordsWithCycle,
       pagination: {
         current: parseInt(page),
         pages: Math.ceil(total / limit),

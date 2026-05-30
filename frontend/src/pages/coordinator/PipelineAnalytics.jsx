@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { statsAPI, settingsAPI, campusAPI } from '../../services/api';
+import { Link } from 'react-router-dom';
+import { statsAPI, settingsAPI, campusAPI, jobReadinessAPI } from '../../services/api';
 import { Card, LoadingSpinner, Badge } from '../../components/common/UIComponents';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -7,7 +8,8 @@ import {
 } from 'recharts';
 import { 
   Target, Briefcase, Users, ArrowUpRight, Search, 
-  Layers, Zap, Info, ChevronRight, MapPin, Flag
+  Layers, Zap, Info, ChevronRight, MapPin, Flag,
+  CheckCircle, ExternalLink, ChevronDown, ChevronUp
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -23,13 +25,40 @@ const PipelineAnalytics = () => {
   });
   const [selectedRole, setSelectedRole] = useState(null);
 
+  // Job-Ready Roster state
+  const [roster, setRoster] = useState([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [rosterPage, setRosterPage] = useState(1);
+  const [rosterTotal, setRosterTotal] = useState(0);
+  const [rosterOpen, setRosterOpen] = useState(true);
+
   useEffect(() => {
     fetchInitialData();
   }, []);
 
   useEffect(() => {
     fetchPipelineData();
+    fetchRoster(1);
+    setRosterSearch('');
   }, [filters]);
+
+  const fetchRoster = async (page = 1) => {
+    try {
+      setRosterLoading(true);
+      const params = { isJobReady: 'true', limit: 20, page };
+      if (filters.campus) params.campus = filters.campus;
+      if (filters.school) params.school = filters.school;
+      const res = await jobReadinessAPI.getCampusStudents(params);
+      setRoster(res.data.records || []);
+      setRosterTotal(res.data.pagination?.total || 0);
+      setRosterPage(page);
+    } catch (err) {
+      console.error('Failed to load job-ready roster', err);
+    } finally {
+      setRosterLoading(false);
+    }
+  };
 
   const fetchInitialData = async () => {
     try {
@@ -454,6 +483,190 @@ const PipelineAnalytics = () => {
           </Card>
         </div>
       )}
+
+      {/* Job-Ready Roster */}
+      <Card className="overflow-hidden border-gray-100 shadow-sm bg-white">
+        {/* Section Header */}
+        <div
+          className="px-6 py-4 border-b border-gray-50 bg-gray-50/50 flex items-center justify-between cursor-pointer select-none"
+          onClick={() => setRosterOpen(o => !o)}
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">Job-Ready Student Roster</h3>
+              <p className="text-xs text-gray-500 mt-0.5">All students who have achieved job readiness</p>
+            </div>
+            <span className="ml-2 px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
+              {rosterTotal} students
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-gray-400">
+            {rosterOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </div>
+        </div>
+
+        {rosterOpen && (
+          <div className="p-6 space-y-4">
+            {/* Search */}
+            <div className="relative max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={rosterSearch}
+                onChange={e => setRosterSearch(e.target.value)}
+                className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm w-full focus:ring-2 focus:ring-emerald-400 outline-none transition-all"
+              />
+            </div>
+
+            {rosterLoading ? (
+              <div className="flex justify-center py-10">
+                <LoadingSpinner size="md" />
+              </div>
+            ) : roster.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 italic text-sm">
+                No job-ready students found{filters.campus || filters.school ? ' for the selected filters' : ''}.
+              </div>
+            ) : (
+              <>
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left border-b border-gray-100">
+                        <th className="pb-3 text-xs font-bold text-gray-400 uppercase tracking-widest">Student</th>
+                        <th className="pb-3 text-xs font-bold text-gray-400 uppercase tracking-widest">Campus</th>
+                        <th className="pb-3 text-xs font-bold text-gray-400 uppercase tracking-widest">Placement Cycle</th>
+                        <th className="pb-3 text-xs font-bold text-gray-400 uppercase tracking-widest">School / Module</th>
+                        <th className="pb-3 text-xs font-bold text-gray-400 uppercase tracking-widest">Open For Roles</th>
+                        <th className="pb-3 text-xs font-bold text-gray-400 uppercase tracking-widest">Readiness</th>
+                        <th className="pb-3 text-xs font-bold text-gray-400 uppercase tracking-widest"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {roster
+                        .filter(r => {
+                          if (!rosterSearch.trim()) return true;
+                          const q = rosterSearch.toLowerCase();
+                          const name = `${r.student?.firstName} ${r.student?.lastName}`.toLowerCase();
+                          const email = (r.student?.email || '').toLowerCase();
+                          return name.includes(q) || email.includes(q);
+                        })
+                        .map(record => {
+                          const student = record.student || {};
+                          const name = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+                          const school = student.studentProfile?.currentSchool || '—';
+                          const module = student.studentProfile?.currentModule || null;
+                          const campus = student.campus?.name || '—';
+                          const roles = student.studentProfile?.openForRoles || [];
+                          const pct = record.readinessPercentage ?? 0;
+                          const cycle = record.placementCycle || null;
+
+                          return (
+                            <tr key={record._id} className="hover:bg-emerald-50/20 transition-colors group">
+                              <td className="py-4 pr-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 text-sm shrink-0">
+                                    {name[0] || '?'}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-gray-900 text-sm truncate">{name}</p>
+                                    <p className="text-xs text-gray-400 truncate">{student.email}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 pr-4">
+                                <span className="text-sm font-medium text-gray-700">{campus}</span>
+                              </td>
+                              <td className="py-4 pr-4">
+                                {cycle ? (
+                                  <span className="px-2.5 py-1 bg-violet-50 text-violet-700 text-xs font-semibold rounded-full border border-violet-100">
+                                    {cycle}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-400 italic">—</span>
+                                )}
+                              </td>
+                              <td className="py-4 pr-4">
+                                <p className="text-sm font-medium text-gray-700">{school}</p>
+                                {module && <p className="text-xs text-gray-400 mt-0.5">{module}</p>}
+                              </td>
+                              <td className="py-4 pr-4">
+                                {roles.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {roles.slice(0, 3).map(role => (
+                                      <span key={role} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-semibold rounded-full border border-indigo-100">
+                                        {role}
+                                      </span>
+                                    ))}
+                                    {roles.length > 3 && (
+                                      <span className="px-2 py-0.5 bg-gray-50 text-gray-500 text-[10px] font-semibold rounded-full border border-gray-100">
+                                        +{roles.length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 italic">Not set</span>
+                                )}
+                              </td>
+                              <td className="py-4 pr-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-emerald-500 rounded-full"
+                                      style={{ width: `${Math.min(pct, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs font-bold text-emerald-700">{pct}%</span>
+                                </div>
+                              </td>
+                              <td className="py-4 text-right">
+                                <Link
+                                  to="/coordinator/job-readiness"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                  View <ExternalLink className="w-3 h-3" />
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {rosterTotal > 20 && (
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <p className="text-xs text-gray-500">
+                      Showing {(rosterPage - 1) * 20 + 1}–{Math.min(rosterPage * 20, rosterTotal)} of {rosterTotal}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => fetchRoster(rosterPage - 1)}
+                        disabled={rosterPage <= 1}
+                        className="px-3 py-1.5 text-xs font-semibold border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => fetchRoster(rosterPage + 1)}
+                        disabled={rosterPage * 20 >= rosterTotal}
+                        className="px-3 py-1.5 text-xs font-semibold border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </Card>
     </div>
   );
 };

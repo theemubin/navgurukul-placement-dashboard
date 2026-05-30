@@ -647,10 +647,6 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
     const job = await Job.findById(jobId);
     if (!job) return res.status(404).json({ message: 'Job not found' });
 
-    // Only managers, job coordinator, or job creator can perform bulk updates
-    const allowed = req.user.role === 'manager' || (job.coordinator && job.coordinator.toString() === req.userId.toString()) || (job.createdBy && job.createdBy.toString() === req.userId.toString());
-    if (!allowed) return res.status(403).json({ message: 'Not authorized for this operation' });
-
     if (!Array.isArray(applicationIds) || applicationIds.length === 0) {
       return res.status(400).json({ message: 'No applicationIds provided' });
     }

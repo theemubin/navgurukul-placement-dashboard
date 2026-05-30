@@ -259,10 +259,11 @@ studentJobReadinessSchema.methods.calculateReadiness = async function () {
   }).sort({ campus: 1 }); // Global first, then campus overrides
 
   if (!configs || configs.length === 0) {
-    this.readinessPercentage = 100;
-    this.isJobReady = true;
-    this.readinessStatus = 'Job Ready';
-    return 100;
+    // No criteria configured — student cannot be auto-approved
+    this.readinessPercentage = 0;
+    this.isJobReady = false;
+    this.readinessStatus = 'Not Job Ready';
+    return 0;
   }
 
   // Merge criteria from all applicable configs, campus-specific overrides global
@@ -287,10 +288,11 @@ studentJobReadinessSchema.methods.calculateReadiness = async function () {
   const activeCriteria = Array.from(criteriaMap.values());
 
   if (activeCriteria.length === 0) {
-    this.readinessPercentage = 100;
-    this.isJobReady = true;
-    this.readinessStatus = 'Job Ready';
-    return 100;
+    // Config exists but has no active criteria — student cannot be auto-approved
+    this.readinessPercentage = 0;
+    this.isJobReady = false;
+    this.readinessStatus = 'Not Job Ready';
+    return 0;
   }
 
   let totalWeight = 0;
