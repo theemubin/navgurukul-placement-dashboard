@@ -7,6 +7,42 @@ const Notification = require('../models/Notification');
 const discordService = require('../services/discordService');
 const { auth, authorize } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: SelfApplications
+ *   description: Student-submitted off-platform job applications
+ */
+
+/**
+ * @swagger
+ * /api/self-applications:
+ *   get:
+ *     summary: List self-applications (role-filtered)
+ *     tags: [SelfApplications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: Paginated self-application list
+ *       401:
+ *         description: Unauthorized
+ */
 // Get all self-applications (filtered by role)
 router.get('/', auth, async (req, res) => {
   try {
@@ -59,6 +95,28 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get single self-application
+/**
+ * @swagger
+ * /api/self-applications/{id}:
+ *   get:
+ *     summary: Get a single self-application
+ *     tags: [SelfApplications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Self-application details
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Not found
+ */
 router.get('/:id', auth, async (req, res) => {
   try {
     const selfApplication = await SelfApplication.findById(req.params.id)
@@ -83,6 +141,37 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create self-application (Students only)
+/**
+ * @swagger
+ * /api/self-applications:
+ *   post:
+ *     summary: Create a self-application (student)
+ *     tags: [SelfApplications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [companyName, position, applicationDate]
+ *             properties:
+ *               companyName:
+ *                 type: string
+ *               position:
+ *                 type: string
+ *               applicationDate:
+ *                 type: string
+ *                 format: date
+ *               jobUrl:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Self-application created
+ *       400:
+ *         description: Validation error
+ */
 router.post('/', auth, authorize('student'), [
   body('company.name').trim().notEmpty().withMessage('Company name is required'),
   body('jobTitle').trim().notEmpty().withMessage('Job title is required'),
@@ -145,6 +234,33 @@ router.post('/', auth, authorize('student'), [
 });
 
 // Update self-application (Student owner only)
+/**
+ * @swagger
+ * /api/self-applications/{id}:
+ *   put:
+ *     summary: Update a self-application (student)
+ *     tags: [SelfApplications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Updated
+ *       403:
+ *         description: Not your application
+ *       404:
+ *         description: Not found
+ */
 router.put('/:id', auth, authorize('student'), async (req, res) => {
   try {
     const selfApplication = await SelfApplication.findById(req.params.id);
@@ -179,6 +295,35 @@ router.put('/:id', auth, authorize('student'), async (req, res) => {
 });
 
 // Update status with notification
+/**
+ * @swagger
+ * /api/self-applications/{id}/status:
+ *   patch:
+ *     summary: Update self-application status (student)
+ *     tags: [SelfApplications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *       404:
+ *         description: Not found
+ */
 router.patch('/:id/status', auth, authorize('student'), async (req, res) => {
   try {
     const { status, notes } = req.body;
@@ -245,6 +390,38 @@ router.patch('/:id/status', auth, authorize('student'), async (req, res) => {
 });
 
 // Verify self-application (Campus PoC only)
+/**
+ * @swagger
+ * /api/self-applications/{id}/verify:
+ *   patch:
+ *     summary: Verify a self-application (campus_poc/coordinator/manager)
+ *     tags: [SelfApplications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               verificationStatus:
+ *                 type: string
+ *                 enum: [verified, rejected]
+ *               verificationNotes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Verification recorded
+ *       404:
+ *         description: Not found
+ */
 router.patch('/:id/verify', auth, authorize('campus_poc', 'coordinator', 'manager'), [
   body('isVerified').isBoolean(),
   body('verificationNotes').optional().trim()
@@ -298,6 +475,28 @@ router.patch('/:id/verify', auth, authorize('campus_poc', 'coordinator', 'manage
 });
 
 // Delete self-application
+/**
+ * @swagger
+ * /api/self-applications/{id}:
+ *   delete:
+ *     summary: Delete a self-application (student)
+ *     tags: [SelfApplications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Deleted
+ *       403:
+ *         description: Not your application
+ *       404:
+ *         description: Not found
+ */
 router.delete('/:id', auth, authorize('student'), async (req, res) => {
   try {
     const selfApplication = await SelfApplication.findById(req.params.id);
@@ -320,6 +519,18 @@ router.delete('/:id', auth, authorize('student'), async (req, res) => {
 });
 
 // Get stats for campus (Campus PoC)
+/**
+ * @swagger
+ * /api/self-applications/stats/campus:
+ *   get:
+ *     summary: Get campus self-application statistics
+ *     tags: [SelfApplications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Campus stats
+ */
 router.get('/stats/campus', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     let campusId;

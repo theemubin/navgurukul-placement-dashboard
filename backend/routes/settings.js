@@ -167,6 +167,23 @@ router.get('/', auth, async (req, res) => {
  *       200:
  *         description: Settings updated
  */
+/**
+ * @swagger
+ * /api/settings:
+ *   put:
+ *     summary: Update system settings
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Settings updated
+ */
 router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     // Diagnostic logging to help debug accidental overwrites in production
@@ -282,6 +299,33 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
  *       200:
  *         description: Module added
  */
+/**
+ * @swagger
+ * /api/settings/schools/{school}/modules:
+ *   post:
+ *     summary: Add a module to a school
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: school
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               module:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Module added
+ */
 router.post('/schools/:school/modules', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { school } = req.params;
@@ -334,6 +378,29 @@ router.post('/schools/:school/modules', auth, authorize('manager', 'coordinator'
  *       200:
  *         description: Module removed
  */
+/**
+ * @swagger
+ * /api/settings/schools/{school}/modules/{module}:
+ *   delete:
+ *     summary: Remove a module from a school
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: school
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: module
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Module removed
+ */
 router.delete('/schools/:school/modules/:module', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { school, module } = req.params;
@@ -363,6 +430,27 @@ router.delete('/schools/:school/modules/:module', auth, authorize('manager', 'co
 });
 
 // Add role preference (manager/coordinator only)
+/**
+ * @swagger
+ * /api/settings/roles:
+ *   post:
+ *     summary: Add a role preference option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               role:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Role added
+ */
 router.post('/roles', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { role } = req.body;
@@ -389,6 +477,24 @@ router.post('/roles', auth, authorize('manager', 'coordinator'), async (req, res
 });
 
 // Remove role preference (manager/coordinator only)
+/**
+ * @swagger
+ * /api/settings/roles/{role}:
+ *   delete:
+ *     summary: Remove a role preference option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: role
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Role removed
+ */
 router.delete('/roles/:role', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { role } = req.params;
@@ -416,6 +522,27 @@ router.delete('/roles/:role', auth, authorize('manager', 'coordinator'), async (
 });
 
 // Add technical skill (manager/coordinator only)
+/**
+ * @swagger
+ * /api/settings/skills:
+ *   post:
+ *     summary: Add a technical skill option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               skill:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Skill added
+ */
 router.post('/skills', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { skill } = req.body;
@@ -442,6 +569,24 @@ router.post('/skills', auth, authorize('manager', 'coordinator'), async (req, re
 });
 
 // Remove technical skill (manager/coordinator only)
+/**
+ * @swagger
+ * /api/settings/skills/{skill}:
+ *   delete:
+ *     summary: Remove a technical skill option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: skill
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Skill removed
+ */
 router.delete('/skills/:skill', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { skill } = req.params;
@@ -469,6 +614,27 @@ router.delete('/skills/:skill', auth, authorize('manager', 'coordinator'), async
 });
 
 // Add a new school (coordinator/manager/campus_poc)
+/**
+ * @swagger
+ * /api/settings/schools:
+ *   post:
+ *     summary: Add a new school
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               school:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: School added
+ */
 router.post('/schools', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { school } = req.body;
@@ -494,6 +660,27 @@ router.post('/schools', auth, authorize('manager', 'coordinator', 'campus_poc'),
 });
 
 // Add course skill (any authenticated user can add - becomes available to all)
+/**
+ * @swagger
+ * /api/settings/course-skills:
+ *   post:
+ *     summary: Get/set skills for a course
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               course:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Course skills data
+ */
 router.post('/course-skills', auth, async (req, res) => {
   try {
     const { skill } = req.body;
@@ -589,6 +776,29 @@ router.get('/pipeline-stages', auth, async (req, res) => {
  *       201:
  *         description: Stage created
  */
+/**
+ * @swagger
+ * /api/settings/pipeline-stages:
+ *   post:
+ *     summary: Add a pipeline stage
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               color:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Pipeline stage created
+ */
 router.post('/pipeline-stages', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { id, label, description, color, order, visibleToStudents, studentLabel } = req.body;
@@ -622,6 +832,31 @@ router.post('/pipeline-stages', auth, authorize('coordinator', 'manager'), async
 });
 
 // Update a pipeline stage (coordinator/manager only)
+/**
+ * @swagger
+ * /api/settings/pipeline-stages/{stageId}:
+ *   put:
+ *     summary: Update a pipeline stage
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: stageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Stage updated
+ *       404:
+ *         description: Not found
+ */
 router.put('/pipeline-stages/:stageId', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { stageId } = req.params;
@@ -647,6 +882,26 @@ router.put('/pipeline-stages/:stageId', auth, authorize('coordinator', 'manager'
 });
 
 // Delete a pipeline stage (coordinator/manager only)
+/**
+ * @swagger
+ * /api/settings/pipeline-stages/{stageId}:
+ *   delete:
+ *     summary: Delete a pipeline stage
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: stageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Stage deleted
+ *       404:
+ *         description: Not found
+ */
 router.delete('/pipeline-stages/:stageId', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { stageId } = req.params;
@@ -665,6 +920,29 @@ router.delete('/pipeline-stages/:stageId', auth, authorize('coordinator', 'manag
 });
 
 // Reorder pipeline stages (coordinator/manager only)
+/**
+ * @swagger
+ * /api/settings/pipeline-stages-order:
+ *   put:
+ *     summary: Reorder pipeline stages
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               stageIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Order updated
+ */
 router.put('/pipeline-stages-order', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { stageIds } = req.body;
@@ -687,6 +965,29 @@ router.put('/pipeline-stages-order', auth, authorize('coordinator', 'manager'), 
 });
 
 // Add council post (manager/coordinator/campus_poc)
+/**
+ * @swagger
+ * /api/settings/council-posts:
+ *   post:
+ *     summary: Set council posts list (bulk replace)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               posts:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Council posts updated
+ */
 router.post('/council-posts', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { post } = req.body;
@@ -718,6 +1019,27 @@ router.post('/council-posts', auth, authorize('manager', 'coordinator', 'campus_
 });
 
 // Backward-compatible alias for council post creation
+/**
+ * @swagger
+ * /api/settings/council-posts/add:
+ *   post:
+ *     summary: Add a single council post option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               post:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Post added
+ */
 router.post('/council-posts/add', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { post } = req.body;
@@ -748,6 +1070,24 @@ router.post('/council-posts/add', auth, authorize('manager', 'coordinator', 'cam
 });
 
 // Remove council post (manager/coordinator/campus_poc)
+/**
+ * @swagger
+ * /api/settings/council-posts/{post}:
+ *   delete:
+ *     summary: Remove a council post option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: post
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Post removed
+ */
 router.delete('/council-posts/:post', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { post } = req.params;
@@ -804,6 +1144,27 @@ router.delete('/council-posts/:post', auth, authorize('manager', 'coordinator', 
 });
 
 // Remove higher education option (department or specialization)
+/**
+ * @swagger
+ * /api/settings/higher-education:
+ *   delete:
+ *     summary: Remove a higher education option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               value:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Option removed
+ */
 router.delete('/higher-education', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { department, specialization, force = false } = req.body || {};
@@ -926,6 +1287,18 @@ router.delete('/higher-education', auth, authorize('manager', 'coordinator', 'ca
 });
 
 // Get AI config (manager only)
+/**
+ * @swagger
+ * /api/settings/ai-config:
+ *   get:
+ *     summary: Get AI service configuration (manager)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: AI config
+ */
 router.get('/ai-config', auth, authorize('manager'), async (req, res) => {
   try {
     const settings = await Settings.getSettings();
@@ -959,6 +1332,23 @@ router.get('/ai-config', auth, authorize('manager'), async (req, res) => {
  *       - bearerAuth: []
  *     requestBody:
  *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: AI config updated
+ */
+/**
+ * @swagger
+ * /api/settings/ai-config:
+ *   put:
+ *     summary: Update AI service configuration (manager)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
  *       content:
  *         application/json:
  *           schema:
@@ -1011,6 +1401,18 @@ router.put('/ai-config', auth, authorize('manager'), async (req, res) => {
 });
 
 // Get AI runtime status (manager only) - shows whether API key is valid and model accessible
+/**
+ * @swagger
+ * /api/settings/ai-status:
+ *   get:
+ *     summary: Get AI service availability status (manager)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: AI service status
+ */
 router.get('/ai-status', auth, authorize('manager'), async (req, res) => {
   try {
     const AIService = require('../services/aiService');
@@ -1025,6 +1427,27 @@ router.get('/ai-status', auth, authorize('manager'), async (req, res) => {
 });
 
 // Add higher education option (Department or Specialization)
+/**
+ * @swagger
+ * /api/settings/higher-education/add:
+ *   post:
+ *     summary: Add a higher education option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               value:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Option added
+ */
 router.post('/higher-education/add', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { department, specialization } = req.body;
@@ -1066,6 +1489,18 @@ router.post('/higher-education/add', auth, authorize('manager', 'coordinator', '
 });
 
 // Profile options analytics (counts of student selections)
+/**
+ * @swagger
+ * /api/settings/analytics/profile-options:
+ *   get:
+ *     summary: Get profile field options for analytics filtering
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile field options
+ */
 router.get('/analytics/profile-options', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const User = require('../models/User');
@@ -1120,6 +1555,27 @@ router.get('/analytics/profile-options', auth, authorize('manager', 'coordinator
 });
 
 // Get students who selected a specific profile option
+/**
+ * @swagger
+ * /api/settings/analytics/option-students:
+ *   get:
+ *     summary: Get students matching a specific profile option
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: field
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: value
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Matching students
+ */
 router.get('/analytics/option-students', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
   try {
     const { type, value, department } = req.query;
@@ -1164,6 +1620,18 @@ router.get('/analytics/option-students', auth, authorize('manager', 'coordinator
 });
 
 // Get education analytics (clubbed counts)
+/**
+ * @swagger
+ * /api/settings/analytics/education:
+ *   get:
+ *     summary: Get education analytics data (manager)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Education analytics
+ */
 router.get('/analytics/education', auth, authorize('manager'), async (req, res) => {
   try {
     const User = require('../models/User');
@@ -1196,6 +1664,29 @@ router.get('/analytics/education', auth, authorize('manager'), async (req, res) 
 });
 
 // Rename education item globally
+/**
+ * @swagger
+ * /api/settings/education/rename:
+ *   post:
+ *     summary: Rename an education option across students (manager)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               oldValue:
+ *                 type: string
+ *               newValue:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Option renamed
+ */
 router.post('/education/rename', auth, authorize('manager'), async (req, res) => {
   try {
     const { type, oldName, newName } = req.body;
@@ -1261,6 +1752,27 @@ router.post('/education/rename', auth, authorize('manager'), async (req, res) =>
 });
 
 // Add new institution dynamically (Student/Campus POC/Manager)
+/**
+ * @swagger
+ * /api/settings/institutions/add:
+ *   post:
+ *     summary: Add an institution to the lookup list
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Institution added
+ */
 router.post('/institutions/add', auth, async (req, res) => {
   try {
     const { institution, pincode } = req.body;
@@ -1298,6 +1810,27 @@ router.post('/institutions/add', auth, async (req, res) => {
 });
 
 // Add job location dynamically (authenticated user)
+/**
+ * @swagger
+ * /api/settings/locations/add:
+ *   post:
+ *     summary: Add a location to the lookup list
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Location added
+ */
 router.post('/locations/add', auth, async (req, res) => {
   try {
     const { location } = req.body;
@@ -1328,6 +1861,23 @@ router.post('/locations/add', auth, async (req, res) => {
 });
 
 // Update proficiency rubrics (manager only)
+/**
+ * @swagger
+ * /api/settings/proficiency-rubrics:
+ *   put:
+ *     summary: Update proficiency rubrics for skills (manager)
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Rubrics updated
+ */
 router.put('/proficiency-rubrics', auth, authorize('manager'), async (req, res) => {
   try {
     const { rubrics } = req.body; // Expects object { "1": { label, description }, ... }
@@ -1363,6 +1913,27 @@ router.put('/proficiency-rubrics', auth, authorize('manager'), async (req, res) 
 });
 
 // Add/Update master company (authenticated user)
+/**
+ * @swagger
+ * /api/settings/companies/add:
+ *   post:
+ *     summary: Add a company to the lookup list
+ *     tags: [Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Company added
+ */
 router.post('/companies/add', auth, async (req, res) => {
   try {
     const { name, website, description, logo, pocName, pocContact, pocEmail } = req.body;

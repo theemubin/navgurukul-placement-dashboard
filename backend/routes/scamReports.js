@@ -3,6 +3,53 @@ const router = express.Router();
 const ScamReport = require('../models/ScamReport');
 const { auth } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: ScamReports
+ *   description: Scam job posting reports and community votes
+ */
+
+/**
+ * @swagger
+ * /api/scam-reports:
+ *   post:
+ *     summary: Save a scam analysis report
+ *     tags: [ScamReports]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [companyName, roleName, trustScore, verdict, summary]
+ *             properties:
+ *               companyName:
+ *                 type: string
+ *               roleName:
+ *                 type: string
+ *               trustScore:
+ *                 type: number
+ *               verdict:
+ *                 type: string
+ *                 enum: [SAFE, WARNING, DANGER]
+ *               summary:
+ *                 type: string
+ *               isPublic:
+ *                 type: boolean
+ *                 default: true
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       201:
+ *         description: Report saved
+ *       400:
+ *         description: Missing required fields
+ */
 // @route   POST /api/scam-reports
 // @desc    Save a scam analysis report
 // @access  Private
@@ -84,6 +131,41 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/scam-reports/public:
+ *   get:
+ *     summary: Get public scam reports
+ *     tags: [ScamReports]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *       - in: query
+ *         name: verdict
+ *         schema:
+ *           type: string
+ *           enum: [SAFE, WARNING, DANGER]
+ *       - in: query
+ *         name: company
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [recent, popular, trustScore]
+ *     responses:
+ *       200:
+ *         description: Paginated public reports
+ */
 // @route   GET /api/scam-reports/public
 // @desc    Get public scam reports for browsing
 // @access  Public
@@ -204,6 +286,27 @@ router.get('/public', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/scam-reports/company/{companyName}:
+ *   get:
+ *     summary: Get reports for a specific company
+ *     tags: [ScamReports]
+ *     parameters:
+ *       - in: path
+ *         name: companyName
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Company reports and stats
+ */
 // @route   GET /api/scam-reports/company/:companyName
 // @desc    Get reports for a specific company
 // @access  Public
@@ -239,6 +342,24 @@ router.get('/company/:companyName', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/scam-reports/{id}:
+ *   get:
+ *     summary: Get a scam report by ID
+ *     tags: [ScamReports]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Report details
+ *       404:
+ *         description: Not found
+ */
 // @route   GET /api/scam-reports/:id
 // @desc    Get a specific report by ID
 // @access  Public
@@ -270,6 +391,38 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/scam-reports/{id}/vote:
+ *   post:
+ *     summary: Vote on a scam report
+ *     tags: [ScamReports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               voteType:
+ *                 type: string
+ *                 enum: [agree, disagree, helpful]
+ *     responses:
+ *       200:
+ *         description: Vote recorded
+ *       400:
+ *         description: Already voted
+ *       404:
+ *         description: Not found
+ */
 // @route   POST /api/scam-reports/:id/vote
 // @desc    Vote on a scam report (agree/disagree/helpful)
 // @access  Private  
@@ -332,6 +485,28 @@ router.post('/:id/vote', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/scam-reports/{id}:
+ *   delete:
+ *     summary: Delete a scam report (author or admin)
+ *     tags: [ScamReports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Report deleted
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Not found
+ */
 // @route   DELETE /api/scam-reports/:id
 // @desc    Delete a report (only by report author or admin)
 // @access  Private
@@ -362,6 +537,40 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/scam-reports/{id}/comments:
+ *   post:
+ *     summary: Add a comment to a scam report
+ *     tags: [ScamReports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [content]
+ *             properties:
+ *               content:
+ *                 type: string
+ *               parentId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Comment added
+ *       400:
+ *         description: Invalid content
+ *       404:
+ *         description: Report not found
+ */
 // @route   POST /api/scam-reports/:id/comments
 // @desc    Add a comment to a report
 // @access  Private
@@ -410,6 +619,33 @@ router.post('/:id/comments', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/scam-reports/{id}/comments/{commentId}:
+ *   delete:
+ *     summary: Delete a comment (author or admin)
+ *     tags: [ScamReports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: commentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Comment deleted
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Not found
+ */
 // @route   DELETE /api/scam-reports/:id/comments/:commentId
 // @desc    Delete a comment (author or admin only)
 // @access  Private
@@ -446,6 +682,31 @@ router.delete('/:id/comments/:commentId', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/scam-reports/{id}/comments/{commentId}/like:
+ *   post:
+ *     summary: Like or unlike a comment
+ *     tags: [ScamReports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: commentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Like toggled
+ *       404:
+ *         description: Not found
+ */
 // @route   POST /api/scam-reports/:id/comments/:commentId/like
 // @desc    Like/unlike a comment
 // @access  Private

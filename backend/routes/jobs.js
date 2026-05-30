@@ -15,6 +15,25 @@ const { calculateMatch, getJobsWithMatch } = require('../services/matchService')
 const discordService = require('../services/discordService');
 const multer = require('multer');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Jobs
+ *   description: Job listing management and pipeline
+ */
+
+/**
+ * @swagger
+ * /api/jobs/companies:
+ *   get:
+ *     summary: Get unique company names (autocomplete)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of company names
+ */
 // Get unique companies for autocomplete
 router.get('/companies', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
@@ -37,6 +56,18 @@ router.get('/companies', auth, authorize('coordinator', 'manager'), async (req, 
 });
 
 // Get unique locations for autocomplete
+/**
+ * @swagger
+ * /api/jobs/locations:
+ *   get:
+ *     summary: Get unique job locations (autocomplete)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of locations
+ */
 router.get('/locations', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const locations = await Job.distinct('location');
@@ -61,6 +92,31 @@ const upload = multer({
 });
 
 // Parse JD with AI (PDF or URL)
+/**
+ * @swagger
+ * /api/jobs/parse-jd:
+ *   post:
+ *     summary: Parse job description PDF using AI
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               pdf:
+ *                 type: string
+ *                 format: binary
+ *               text:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Parsed job description fields
+ *       400:
+ *         description: No input provided
+ */
 router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.single('pdf'), async (req, res) => {
   try {
     const { url, text: rawText } = req.body;
@@ -207,6 +263,47 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
   }
 });
 
+/**
+ * @swagger
+ * /api/jobs:
+ *   get:
+ *     summary: List jobs (role-filtered and eligibility-checked)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: company
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: jobType
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: Paginated job list
+ *       401:
+ *         description: Unauthorized
+ */
 // Get all jobs (filtered by role and eligibility)
 router.get('/', auth, async (req, res) => {
   try {
@@ -357,6 +454,18 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get matching jobs for student with detailed match calculation
+/**
+ * @swagger
+ * /api/jobs/matching:
+ *   get:
+ *     summary: Get skill-matched jobs for student
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Matched jobs with scores
+ */
 router.get('/matching', auth, authorize('student'), async (req, res) => {
   try {
     const student = await User.findById(req.userId)
@@ -408,6 +517,26 @@ router.get('/matching', auth, authorize('student'), async (req, res) => {
 });
 
 // Get single job with match details for student
+/**
+ * @swagger
+ * /api/jobs/{id}/match:
+ *   get:
+ *     summary: Get match score between student and a specific job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Match score and details
+ *       404:
+ *         description: Job not found
+ */
 router.get('/:id/match', auth, authorize('student'), async (req, res) => {
   try {
     const student = await User.findById(req.userId)
@@ -448,6 +577,28 @@ router.get('/:id/match', auth, authorize('student'), async (req, res) => {
 });
 
 // Get single job
+/**
+ * @swagger
+ * /api/jobs/{id}:
+ *   get:
+ *     summary: Get job by ID
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Job details
+ *       403:
+ *         description: Not eligible for this job
+ *       404:
+ *         description: Not found
+ */
 router.get('/:id', auth, async (req, res) => {
   try {
     const job = await Job.findById(req.params.id)
@@ -491,6 +642,39 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create job (Coordinators only)
+/**
+ * @swagger
+ * /api/jobs:
+ *   post:
+ *     summary: Create a new job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title:
+ *                 type: string
+ *               company:
+ *                 type: object
+ *               jobType:
+ *                 type: string
+ *               eligibility:
+ *                 type: object
+ *               status:
+ *                 type: string
+ *                 default: active
+ *     responses:
+ *       201:
+ *         description: Job created
+ *       400:
+ *         description: Validation error
+ */
 router.post('/', auth, authorize('coordinator', 'manager'), [
   body('title').trim().notEmpty(),
   body('company.name').trim().notEmpty(),
@@ -571,6 +755,31 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
 });
 
 // Update job
+/**
+ * @swagger
+ * /api/jobs/{id}:
+ *   put:
+ *     summary: Update a job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Job updated
+ *       404:
+ *         description: Not found
+ */
 router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const job = await Job.findById(req.params.id);
@@ -639,6 +848,39 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
 });
 
 // Bulk update applications for a job (set status, advance round, with optional general feedback)
+/**
+ * @swagger
+ * /api/jobs/{id}/bulk-update:
+ *   post:
+ *     summary: Bulk-update application statuses for a job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               applicationIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Applications updated
+ *       404:
+ *         description: Job not found
+ */
 router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const jobId = req.params.id;
@@ -817,6 +1059,26 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
 });
 
 // Delete job
+/**
+ * @swagger
+ * /api/jobs/{id}:
+ *   delete:
+ *     summary: Delete a job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Job deleted
+ *       404:
+ *         description: Not found
+ */
 router.delete('/:id', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const job = await Job.findById(req.params.id);
@@ -834,6 +1096,36 @@ router.delete('/:id', auth, authorize('coordinator', 'manager'), async (req, res
 });
 
 // Update job status (for Kanban drag-and-drop)
+/**
+ * @swagger
+ * /api/jobs/{id}/status:
+ *   patch:
+ *     summary: Update job status
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [active, paused, closed, draft]
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *       404:
+ *         description: Not found
+ */
 router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { status: newStatus, notes } = req.body;
@@ -922,6 +1214,26 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
 });
 
 // Manual broadcast to Discord
+/**
+ * @swagger
+ * /api/jobs/{id}/broadcast:
+ *   post:
+ *     summary: Broadcast job to Discord/notification channels
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Broadcast sent
+ *       404:
+ *         description: Not found
+ */
 router.post('/:id/broadcast', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const job = await Job.findById(req.params.id).populate('coordinator createdBy');
@@ -965,6 +1277,34 @@ router.post('/:id/broadcast', auth, authorize('coordinator', 'manager'), async (
 // === Interest Request Routes ===
 
 // Submit interest request (for students with <60% match)
+/**
+ * @swagger
+ * /api/jobs/{id}/interest:
+ *   post:
+ *     summary: Express interest in a job (student)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               message:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Interest recorded
+ *       400:
+ *         description: Already expressed interest
+ */
 router.post('/:id/interest', auth, authorize('student'), [
   body('reason').trim().isLength({ min: 50 }).withMessage('Please provide a detailed reason (at least 50 characters)'),
   body('acknowledgedGaps').isArray(),
@@ -1059,6 +1399,18 @@ router.post('/:id/interest', auth, authorize('student'), [
 });
 
 // Get ALL interest requests for Campus PoC (across all jobs)
+/**
+ * @swagger
+ * /api/jobs/interest-requests/all:
+ *   get:
+ *     summary: Get all interest requests across jobs
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Interest requests list
+ */
 router.get('/interest-requests/all', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
@@ -1101,6 +1453,24 @@ router.get('/interest-requests/all', auth, authorize('campus_poc', 'coordinator'
 });
 
 // Get interest requests for a job (Coordinators/Managers)
+/**
+ * @swagger
+ * /api/jobs/{id}/interest-requests:
+ *   get:
+ *     summary: Get interest requests for a specific job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Interest requests for the job
+ */
 router.get('/:id/interest-requests', auth, authorize('coordinator', 'manager', 'campus_poc'), async (req, res) => {
   try {
     const { status } = req.query;
@@ -1132,6 +1502,36 @@ router.get('/:id/interest-requests', auth, authorize('coordinator', 'manager', '
 });
 
 // Review interest request (Campus PoC)
+/**
+ * @swagger
+ * /api/jobs/interest-requests/{requestId}:
+ *   patch:
+ *     summary: Approve or reject an interest request
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [approved, rejected]
+ *     responses:
+ *       200:
+ *         description: Request updated
+ *       404:
+ *         description: Not found
+ */
 router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coordinator', 'manager'), [
   body('status').isIn(['approved', 'rejected']),
   body('reviewNotes').optional().trim(),
@@ -1224,6 +1624,24 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
 // === FAQ Routes ===
 
 // Get questions for a job
+/**
+ * @swagger
+ * /api/jobs/{id}/questions:
+ *   get:
+ *     summary: Get Q&A for a job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Job questions list
+ */
 router.get('/:id/questions', auth, async (req, res) => {
   try {
     const job = await Job.findById(req.params.id)
@@ -1247,6 +1665,34 @@ router.get('/:id/questions', auth, async (req, res) => {
 });
 
 // Ask a question (Students only)
+/**
+ * @swagger
+ * /api/jobs/{id}/questions:
+ *   post:
+ *     summary: Ask a question about a job (student)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [text]
+ *             properties:
+ *               text:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Question submitted
+ */
 router.post('/:id/questions', auth, authorize('student'), [
   body('question').trim().isLength({ min: 10 }).withMessage('Question must be at least 10 characters')
 ], async (req, res) => {
@@ -1292,6 +1738,42 @@ router.post('/:id/questions', auth, authorize('student'), [
 });
 
 // Answer a question (Coordinators/Managers only)
+/**
+ * @swagger
+ * /api/jobs/{id}/questions/{questionId}:
+ *   patch:
+ *     summary: Answer a question (coordinator/manager)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: questionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               answer:
+ *                 type: string
+ *               isVisible:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Question answered
+ *       404:
+ *         description: Not found
+ */
 router.patch('/:id/questions/:questionId', auth, authorize('coordinator', 'manager'), [
   body('answer').trim().notEmpty().withMessage('Answer is required')
 ], async (req, res) => {
@@ -1341,6 +1823,38 @@ router.patch('/:id/questions/:questionId', auth, authorize('coordinator', 'manag
 // === Job Timeline/Journey Routes ===
 
 // Add timeline event
+/**
+ * @swagger
+ * /api/jobs/{id}/timeline:
+ *   post:
+ *     summary: Add a timeline event to a job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               event:
+ *                 type: string
+ *               date:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: Timeline event added
+ *       404:
+ *         description: Not found
+ */
 router.post('/:id/timeline', auth, authorize('coordinator', 'manager'), [
   body('event').isIn(['created', 'status_changed', 'deadline_extended', 'positions_updated', 'coordinator_assigned', 'custom']),
   body('description').trim().notEmpty()
@@ -1369,6 +1883,34 @@ router.post('/:id/timeline', auth, authorize('coordinator', 'manager'), [
 });
 
 // Update expected update date
+/**
+ * @swagger
+ * /api/jobs/{id}/expected-update:
+ *   patch:
+ *     summary: Set expected next update date for a job
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               expectedUpdateDate:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: Expected update date set
+ */
 router.patch('/:id/expected-update', auth, authorize('coordinator', 'manager'), [
   body('expectedUpdateDate').optional().isISO8601(),
   body('expectedUpdateNote').optional().trim()
@@ -1400,6 +1942,35 @@ router.patch('/:id/expected-update', auth, authorize('coordinator', 'manager'), 
 });
 
 // Assign coordinator to job
+/**
+ * @swagger
+ * /api/jobs/{id}/coordinator:
+ *   patch:
+ *     summary: Reassign job coordinator (manager only)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               coordinatorId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Coordinator reassigned
+ *       404:
+ *         description: Not found
+ */
 router.patch('/:id/coordinator', auth, authorize('manager'), [
   body('coordinatorId').notEmpty()
 ], async (req, res) => {
@@ -1446,6 +2017,18 @@ router.patch('/:id/coordinator', auth, authorize('manager'), [
 });
 
 // Get coordinators with their job counts (for Manager dashboard)
+/**
+ * @swagger
+ * /api/jobs/stats/coordinator-jobs:
+ *   get:
+ *     summary: Get job stats by coordinator (manager only)
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Coordinator job stats
+ */
 router.get('/stats/coordinator-jobs', auth, authorize('manager'), async (req, res) => {
   try {
     const coordinatorStats = await Job.aggregate([
@@ -1487,6 +2070,37 @@ router.get('/stats/coordinator-jobs', auth, authorize('manager'), async (req, re
 });
 
 // Export job applications with field selection
+/**
+ * @swagger
+ * /api/jobs/{id}/export:
+ *   post:
+ *     summary: Export job applications data
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fields:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               format:
+ *                 type: string
+ *                 enum: [csv, xls]
+ *     responses:
+ *       200:
+ *         description: Export file download
+ */
 router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const { id } = req.params;

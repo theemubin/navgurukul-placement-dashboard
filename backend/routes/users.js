@@ -14,6 +14,29 @@ const upload = require('../middleware/upload');
  *   description: User profile and student management
  */
 
+/**
+ * @swagger
+ * /api/users/sync-student:
+ *   post:
+ *     summary: Sync student data from Ghar/Zoho integration
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *               userId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Student data synced
+ */
 // Sync student data from Ghar API (External Zoho integration)
 router.post('/sync-student', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
@@ -261,6 +284,35 @@ router.get('/students/:studentId', auth, authorize('campus_poc', 'coordinator', 
   }
 });
 
+/**
+ * @swagger
+ * /api/users/students/{studentId}/status:
+ *   put:
+ *     summary: Update student placement status
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *       404:
+ *         description: Student not found
+ */
 // Update student status (placed, unplaced, etc.)
 router.put('/students/:studentId/status', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, async (req, res) => {
   try {
@@ -518,6 +570,18 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
 });
 
 // Submit profile for approval (for students)
+/**
+ * @swagger
+ * /api/users/profile/submit:
+ *   post:
+ *     summary: Submit student profile for approval
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile submitted for review
+ */
 router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
   try {
     const user = await User.findById(req.userId);
@@ -556,6 +620,29 @@ router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
 });
 
 // Update managed campuses (for Campus POCs)
+/**
+ * @swagger
+ * /api/users/managed-campuses:
+ *   put:
+ *     summary: Update managed campuses for a coordinator/campus_poc
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               campusIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Managed campuses updated
+ */
 router.put('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { campusIds } = req.body;
@@ -589,6 +676,18 @@ router.put('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'ma
 });
 
 // Get managed campuses (for Campus POCs)
+/**
+ * @swagger
+ * /api/users/managed-campuses:
+ *   get:
+ *     summary: Get managed campuses for current user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of managed campuses
+ */
 router.get('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const user = await User.findById(req.userId)
@@ -607,6 +706,37 @@ router.get('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'ma
 });
 
 // Approve/Reject student profile (for Campus POCs)
+/**
+ * @swagger
+ * /api/users/students/{studentId}/profile/approve:
+ *   put:
+ *     summary: Approve or reject a student profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               approved:
+ *                 type: boolean
+ *               feedback:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Profile approval recorded
+ *       404:
+ *         description: Student not found
+ */
 router.put('/students/:studentId/profile/approve', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, async (req, res) => {
   try {
     const { status, revisionNotes } = req.body; // 'approved' or 'needs_revision'
@@ -658,6 +788,18 @@ router.put('/students/:studentId/profile/approve', auth, authorize('campus_poc',
 });
 
 // Get students pending profile approval (for Campus POCs)
+/**
+ * @swagger
+ * /api/users/pending-profiles:
+ *   get:
+ *     summary: Get students with pending profile approval
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of students pending approval
+ */
 router.get('/pending-profiles', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { status, school } = req.query;
@@ -707,6 +849,31 @@ router.get('/pending-profiles', auth, authorize('campus_poc', 'coordinator', 'ma
 });
 
 // Update student profile by manager/coordinator/POC
+/**
+ * @swagger
+ * /api/users/students/{studentId}/profile:
+ *   put:
+ *     summary: Edit a student's profile (staff)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ *       404:
+ *         description: Student not found
+ */
 router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordinator', 'manager'), sameCampus, async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -812,6 +979,29 @@ router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordi
 });
 
 // Add skill to student profile
+/**
+ * @swagger
+ * /api/users/profile/skills:
+ *   post:
+ *     summary: Add skill to own profile (student)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               skillId:
+ *                 type: string
+ *               level:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Skill added, pending approval
+ */
 router.post('/profile/skills', auth, authorize('student'), async (req, res) => {
   try {
     const { skillId, selfRating } = req.body;
@@ -860,6 +1050,40 @@ router.post('/profile/skills', auth, authorize('student'), async (req, res) => {
 });
 
 // Approve/Reject student skill (for Campus POCs)
+/**
+ * @swagger
+ * /api/users/students/{studentId}/skills/{skillId}:
+ *   put:
+ *     summary: Verify or reject a student's skill
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: skillId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               approved:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Skill verification recorded
+ *       404:
+ *         description: Not found
+ */
 router.put('/students/:studentId/skills/:skillId', auth, authorize('campus_poc', 'coordinator'), sameCampus, async (req, res) => {
   try {
     const { status } = req.body; // 'approved' or 'rejected'
@@ -925,6 +1149,18 @@ router.put('/students/:studentId/skills/:skillId', auth, authorize('campus_poc',
 });
 
 // Get students with pending skills (for Campus POCs)
+/**
+ * @swagger
+ * /api/users/pending-skills:
+ *   get:
+ *     summary: Get students with pending skill verifications
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pending skill approvals
+ */
 router.get('/pending-skills', auth, authorize('campus_poc', 'coordinator'), async (req, res) => {
   try {
     let query = {
@@ -955,6 +1191,27 @@ router.get('/pending-skills', auth, authorize('campus_poc', 'coordinator'), asyn
 });
 
 // Upload avatar
+/**
+ * @swagger
+ * /api/users/avatar:
+ *   post:
+ *     summary: Upload avatar (multipart/form-data)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Avatar uploaded
+ */
 router.post('/avatar', auth, upload.single('avatar'), async (req, res) => {
   try {
     if (!req.file) {
@@ -973,6 +1230,18 @@ router.post('/avatar', auth, upload.single('avatar'), async (req, res) => {
 });
 
 // Get unique student locations (hometown/state) for eligibility
+/**
+ * @swagger
+ * /api/users/student-locations:
+ *   get:
+ *     summary: Get student location distribution
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Location data for students
+ */
 router.get('/student-locations', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const locations = await User.aggregate([
@@ -1001,6 +1270,18 @@ router.get('/student-locations', auth, authorize('coordinator', 'manager'), asyn
 });
 
 // Get eligible student count based on criteria (for Coordinators)
+/**
+ * @swagger
+ * /api/users/eligible-count:
+ *   get:
+ *     summary: Get count of eligible students for job criteria
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Eligible student count
+ */
 router.get('/eligible-count', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
     const {
@@ -1293,6 +1574,26 @@ router.get('/', auth, authorize('manager'), async (req, res) => {
 });
 
 // Get user by id (manager only)
+/**
+ * @swagger
+ * /api/users/{userId}:
+ *   get:
+ *     summary: Get user by ID (manager)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User details
+ *       404:
+ *         description: Not found
+ */
 router.get('/:userId', auth, authorize('manager'), async (req, res) => {
   try {
     const user = await User.findById(req.params.userId).select('-password').populate('campus managedCampuses');
@@ -1305,6 +1606,31 @@ router.get('/:userId', auth, authorize('manager'), async (req, res) => {
 });
 
 // Update user (manager only) - role changes, basic fields
+/**
+ * @swagger
+ * /api/users/{userId}:
+ *   put:
+ *     summary: Update user (manager)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: User updated
+ *       404:
+ *         description: Not found
+ */
 router.put('/:userId', auth, authorize('manager'), async (req, res) => {
   try {
     const { userId } = req.params;
@@ -1436,6 +1762,24 @@ router.put('/:userId', auth, authorize('manager'), async (req, res) => {
 });
 
 // Get audit history for a user (manager only)
+/**
+ * @swagger
+ * /api/users/{userId}/audit:
+ *   get:
+ *     summary: Get audit log for a user (manager)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Audit log entries
+ */
 router.get('/:userId/audit', auth, authorize('manager'), async (req, res) => {
   try {
     const UserChangeLog = require('../models/UserChangeLog');
@@ -1447,6 +1791,18 @@ router.get('/:userId/audit', auth, authorize('manager'), async (req, res) => {
   }
 });
 // Export-presets API for saving user presets (max 2)
+/**
+ * @swagger
+ * /api/users/me/export-presets:
+ *   get:
+ *     summary: Get saved export presets for current user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of export presets
+ */
 router.get('/me/export-presets', auth, async (req, res) => {
   try {
     const user = await User.findById(req.userId).select('exportPresets');
@@ -1457,6 +1813,31 @@ router.get('/me/export-presets', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/users/me/export-presets:
+ *   post:
+ *     summary: Save an export preset
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               fields:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       201:
+ *         description: Preset saved
+ */
 router.post('/me/export-presets', auth, async (req, res) => {
   try {
     const { name, fields, format, layout } = req.body;
@@ -1481,6 +1862,26 @@ router.post('/me/export-presets', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/users/me/export-presets/{presetId}:
+ *   delete:
+ *     summary: Delete a saved export preset
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: presetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Preset deleted
+ *       404:
+ *         description: Not found
+ */
 router.delete('/me/export-presets/:presetId', auth, async (req, res) => {
   try {
     const { presetId } = req.params;
@@ -1586,6 +1987,34 @@ router.post('/me/ai-keys', auth, async (req, res) => {
 });
 
 // Update AI API key (toggle active status or update label)
+/**
+ * @swagger
+ * /api/users/me/ai-keys/{keyId}:
+ *   patch:
+ *     summary: Toggle an AI key active/inactive
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: keyId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               isActive:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Key updated
+ *       404:
+ *         description: Not found
+ */
 router.patch('/me/ai-keys/:keyId', auth, async (req, res) => {
   try {
     const { keyId } = req.params;
@@ -1624,6 +2053,26 @@ router.patch('/me/ai-keys/:keyId', auth, async (req, res) => {
 });
 
 // Delete AI API key
+/**
+ * @swagger
+ * /api/users/me/ai-keys/{keyId}:
+ *   delete:
+ *     summary: Delete a personal AI key
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: keyId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Key deleted
+ *       404:
+ *         description: Not found
+ */
 router.delete('/me/ai-keys/:keyId', auth, async (req, res) => {
   try {
     const { keyId } = req.params;

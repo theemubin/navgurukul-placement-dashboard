@@ -10,6 +10,55 @@ const { StudentJobReadiness } = require('../models/JobReadiness');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Applications
+ *   description: Job application management
+ */
+
+/**
+ * @swagger
+ * /api/applications:
+ *   get:
+ *     summary: List applications (role-filtered)
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: job
+ *         schema:
+ *           type: string
+ *         description: Filter by job ID
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: student
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *       - in: query
+ *         name: myLeads
+ *         schema:
+ *           type: boolean
+ *     responses:
+ *       200:
+ *         description: Paginated application list
+ *       401:
+ *         description: Unauthorized
+ */
 // Get applications (filtered by role)
 router.get('/', auth, async (req, res) => {
   try {
@@ -70,6 +119,28 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/applications/{id}:
+ *   get:
+ *     summary: Get a single application
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Application details
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Not found
+ */
 // Get single application
 router.get('/:id', auth, async (req, res) => {
   try {
@@ -103,6 +174,39 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/applications:
+ *   post:
+ *     summary: Apply for a job (students only)
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [jobId]
+ *             properties:
+ *               jobId:
+ *                 type: string
+ *               coverLetter:
+ *                 type: string
+ *               customResponses:
+ *                 type: object
+ *               type:
+ *                 type: string
+ *                 default: regular
+ *     responses:
+ *       201:
+ *         description: Application submitted
+ *       400:
+ *         description: Validation error or already applied
+ *       404:
+ *         description: Job not found
+ */
 // Apply for a job (Students only)
 router.post('/', auth, authorize('student'), [
   body('jobId').notEmpty()
@@ -217,6 +321,38 @@ router.post('/', auth, authorize('student'), [
   }
 });
 
+/**
+ * @swagger
+ * /api/applications/{id}/status:
+ *   put:
+ *     summary: Update application status
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, shortlisted, interviewing, selected, rejected, withdrawn]
+ *               feedback:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *       404:
+ *         description: Not found
+ */
 // Update application status (Coordinators only)
 router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
@@ -300,6 +436,43 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
   }
 });
 
+/**
+ * @swagger
+ * /api/applications/{id}/rounds:
+ *   put:
+ *     summary: Update interview round result
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               round:
+ *                 type: integer
+ *               roundName:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               score:
+ *                 type: number
+ *               feedback:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Round result updated
+ *       404:
+ *         description: Not found
+ */
 // Update interview round result
 router.put('/:id/rounds', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
@@ -360,6 +533,35 @@ router.put('/:id/rounds', auth, authorize('coordinator', 'manager'), async (req,
   }
 });
 
+/**
+ * @swagger
+ * /api/applications/{id}/recommend:
+ *   put:
+ *     summary: Add special recommendation (Campus POC)
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Recommendation added
+ *       404:
+ *         description: Not found
+ */
 // Add special recommendation (Campus POCs)
 router.put('/:id/recommend', auth, authorize('campus_poc'), async (req, res) => {
   try {
@@ -407,6 +609,28 @@ router.put('/:id/recommend', auth, authorize('campus_poc'), async (req, res) => 
   }
 });
 
+/**
+ * @swagger
+ * /api/applications/{id}/withdraw:
+ *   put:
+ *     summary: Withdraw an application (student)
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Application withdrawn
+ *       403:
+ *         description: Not your application
+ *       404:
+ *         description: Not found
+ */
 // Withdraw application (Students only)
 router.put('/:id/withdraw', auth, authorize('student'), async (req, res) => {
   try {
@@ -433,6 +657,31 @@ router.put('/:id/withdraw', auth, authorize('student'), async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/applications/export/csv:
+ *   get:
+ *     summary: Export applications as CSV
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: job
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: CSV file
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ */
 // Export applications data
 router.get('/export/csv', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
@@ -486,6 +735,35 @@ router.get('/export/csv', auth, authorize('coordinator', 'manager'), async (req,
   }
 });
 
+/**
+ * @swagger
+ * /api/applications/export/xls:
+ *   post:
+ *     summary: Export applications as XLS (tab-separated)
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               job:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               campus:
+ *                 type: string
+ *               fields:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: XLS file download
+ */
 // Export applications with field selection (XLS format)
 router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
@@ -657,6 +935,18 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
   }
 });
 
+/**
+ * @swagger
+ * /api/applications/export/fields:
+ *   get:
+ *     summary: Get available export field options
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of exportable field groups
+ */
 // Get available export fields
 router.get('/export/fields', auth, authorize('coordinator', 'manager'), async (req, res) => {
   const fields = [

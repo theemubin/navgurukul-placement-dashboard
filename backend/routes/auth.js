@@ -14,6 +14,25 @@ const getFrontendBase = () => (process.env.FRONTEND_URL || 'http://localhost:517
 // Google OAuth routes
 const isGoogleConfigured = () => !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
+/**
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: Authentication and user session management
+ */
+
+/**
+ * @swagger
+ * /api/auth/google:
+ *   get:
+ *     summary: Initiate Google OAuth flow
+ *     tags: [Auth]
+ *     responses:
+ *       302:
+ *         description: Redirect to Google OAuth
+ *       503:
+ *         description: Google OAuth not configured
+ */
 router.get('/google', (req, res, next) => {
   if (!isGoogleConfigured()) {
     return res.status(503).json({ message: 'Google OAuth is not configured on the server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in environment.' });
@@ -21,6 +40,16 @@ router.get('/google', (req, res, next) => {
   return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
 });
 
+/**
+ * @swagger
+ * /api/auth/google/config:
+ *   get:
+ *     summary: Get Google OAuth configuration status
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: OAuth config info
+ */
 router.get('/google/config', (req, res) => {
   res.json({
     configured: isGoogleConfigured(),
@@ -53,6 +82,29 @@ const cookieOptionsForToken = (ttlMs = 7 * 24 * 60 * 60 * 1000) => {
 };
 
 // Exchange short-lived code for a JWT token (single-use) and set an HttpOnly cookie
+/**
+ * @swagger
+ * /api/auth/google/exchange:
+ *   post:
+ *     summary: Exchange Google OAuth authorization code for JWT
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code]
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 description: OAuth authorization code from Google
+ *     responses:
+ *       200:
+ *         description: JWT token and user info
+ *       400:
+ *         description: Invalid or missing code
+ */
 router.post('/google/exchange', async (req, res) => {
   try {
     const { code } = req.body;
@@ -105,6 +157,16 @@ router.post('/google/exchange', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/google/callback:
+ *   get:
+ *     summary: Google OAuth callback (handled by Passport)
+ *     tags: [Auth]
+ *     responses:
+ *       302:
+ *         description: Redirect after OAuth success or failure
+ */
 router.get('/google/callback', (req, res, next) => {
   if (!isGoogleConfigured()) {
     console.error('Google callback hit but OAuth not configured. Returning 503.');
@@ -176,6 +238,16 @@ router.get('/google/callback', (req, res, next) => {
 });
 
 // Logout (clear cookie)
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Logout and clear session/cookie
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Logged out
+ */
 router.post('/logout', (req, res) => {
   try {
     const opts = cookieOptionsForToken();
@@ -196,6 +268,27 @@ router.post('/logout', (req, res) => {
 
 // Temporary debug endpoint to verify a JWT token with the server's secret
 // WARNING: This is for debugging only; remove or protect before leaving in production
+/**
+ * @swagger
+ * /api/auth/debug/verify-token:
+ *   post:
+ *     summary: Verify a JWT token (debug)
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Token payload
+ *       401:
+ *         description: Invalid token
+ */
 router.post('/debug/verify-token', async (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ message: 'Token required' });
@@ -209,6 +302,29 @@ router.post('/debug/verify-token', async (req, res) => {
 });
 
 // Role Request endpoint (for users to request role change from profile)
+/**
+ * @swagger
+ * /api/auth/request-role:
+ *   post:
+ *     summary: Request a role change
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               requestedRole:
+ *                 type: string
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Role change request submitted
+ */
 router.post('/request-role', auth, async (req, res) => {
   try {
     const { role, reason } = req.body;
@@ -267,6 +383,33 @@ router.post('/request-role', auth, async (req, res) => {
 });
 
 // Manager approval endpoint (Handles both user activation and role requests)
+/**
+ * @swagger
+ * /api/auth/approve-user:
+ *   post:
+ *     summary: Approve or reject a user role request
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               approved:
+ *                 type: boolean
+ *               role:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: User approved/rejected
+ *       404:
+ *         description: User not found
+ */
 router.post('/approve-user', auth, async (req, res) => {
   try {
     const { userId, approvedRole, action = 'approve' } = req.body;
@@ -344,6 +487,18 @@ router.post('/approve-user', auth, async (req, res) => {
 });
 
 // Get pending role requests (for manager)
+/**
+ * @swagger
+ * /api/auth/pending-approvals:
+ *   get:
+ *     summary: List pending role approval requests
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pending approval list
+ */
 router.get('/pending-approvals', auth, async (req, res) => {
   try {
     if (req.user.role !== 'manager') {
