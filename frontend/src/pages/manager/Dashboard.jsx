@@ -9,7 +9,7 @@ import ReadinessDetailedModal from '../../components/manager/ReadinessDetailedMo
 import {
   Users, Briefcase, Building2, Award, TrendingUp,
   CheckCircle, Clock, BarChart3, PieChart, Download, UserCog,
-  CheckSquare, MessageCircle
+  CheckSquare, MessageCircle, ExternalLink
 } from 'lucide-react';
 import { DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -245,6 +245,20 @@ const Dashboard = () => {
               <Download className="w-4 h-4" />
               Excel
             </button>
+            <a
+              href={(() => {
+                const base = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+                // Strip trailing /api to get the backend root, then append /api-docs
+                return base.replace(/\/api\/?$/, '') + '/api-docs';
+              })()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary flex items-center gap-2"
+              title="Open API Documentation"
+            >
+              <ExternalLink className="w-4 h-4" />
+              API Docs
+            </a>
           </div>
         </div>
       </div>
