@@ -120,10 +120,10 @@ const JobDetails = () => {
   }, [id, user?.role]);
 
   useEffect(() => {
-    if (job) {
+    if (job && user) {
       fetchQuestions();
     }
-  }, [job]);
+  }, [job, user]);
 
   const fetchQuestions = async () => {
     if (!job?.company?.name) return;

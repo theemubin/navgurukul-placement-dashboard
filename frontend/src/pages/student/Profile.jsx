@@ -474,26 +474,15 @@ const StudentProfile = () => {
     if (pincode.length === 6) {
       setFetchingPincode(true);
       try {
-        const response = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
-        const data = await response.json();
-
-        if (data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
-          const postOffice = data[0].PostOffice[0];
-          setFormData(prev => ({
-            ...prev,
-            hometown: {
-              pincode,
-              village: postOffice.Name || '',
-              district: postOffice.District || '',
-              state: postOffice.State || ''
-            }
-          }));
-          toast.success('Location fetched successfully');
-        } else {
-          toast.error('Invalid pincode');
-        }
-      } catch (error) {
-        toast.error('Error fetching location');
+        const res = await utilsAPI.lookupPincode(pincode);
+        const { name, district, state } = res.data;
+        setFormData(prev => ({
+          ...prev,
+          hometown: { pincode, village: name, district, state }
+        }));
+        toast.success('Location fetched successfully');
+      } catch (err) {
+        toast.error('Pincode not found in current database. Please fill in district and state manually.');
       } finally {
         setFetchingPincode(false);
       }

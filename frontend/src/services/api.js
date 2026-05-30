@@ -43,7 +43,7 @@ api.interceptors.response.use(
       // Only redirect to login and clear state if we're not already on an auth/login route 
       // to avoid reload loops or wiping state during AuthCallback's initialization.
       const pathname = window.location.pathname || '';
-      const isPublicPath = ['/auth', '/login', '/register', '/portfolios', '/public', '/shared'].some(p => pathname.startsWith(p));
+      const isPublicPath = ['/auth', '/login', '/register', '/portfolios', '/public', '/shared', '/jobs'].some(p => pathname.startsWith(p));
       if (!isPublicPath) {
         // Clear client-side auth state
         localStorage.removeItem('token');
@@ -300,7 +300,8 @@ export const utilsAPI = {
   checkUrl: (url) => api.post('/utils/check-url', { url }),
   checkResumeAts: () => api.post('/utils/resume-ats/check', {}),
   analyzeScam: (data) => api.post('/utils/analyze-scam', data),
-  testAIKey: () => api.post('/utils/test-ai-key')
+  testAIKey: () => api.post('/utils/test-ai-key'),
+  lookupPincode: (pincode) => api.get(`/utils/pincode/${pincode}`)
 };
 
 // Scam Reports API

@@ -751,4 +751,42 @@ router.post('/analyze-scam', auth, async (req, res) => {
   }
 });
 
+// Pincode lookup proxy — avoids browser CORS/SSL issues with external APIs
+router.get('/pincode/:pincode', auth, async (req, res) => {
+  const { pincode } = req.params;
+  if (!/^\d{6}$/.test(pincode)) {
+    return res.status(400).json({ message: 'Invalid pincode format' });
+  }
+
+  let postOffice = null;
+
+  // Primary API
+  try {
+    const r1 = await axios.get(`https://api.postalpincode.in/pincode/${pincode}`, { timeout: 8000 });
+    if (r1.data?.[0]?.Status === 'Success' && r1.data[0].PostOffice?.length > 0) {
+      postOffice = r1.data[0].PostOffice[0];
+    }
+  } catch (_) { /* try fallback */ }
+
+  // Fallback API
+  if (!postOffice) {
+    try {
+      const r2 = await axios.get(`http://www.postalpincode.in/api/pincode/${pincode}`, { timeout: 8000 });
+      if (r2.data?.Status === 'Success' && r2.data.PostOffice?.length > 0) {
+        postOffice = r2.data.PostOffice[0];
+      }
+    } catch (_) { /* both failed */ }
+  }
+
+  if (!postOffice) {
+    return res.status(404).json({ message: 'Pincode not found in current database' });
+  }
+
+  res.json({
+    name: postOffice.Name || '',
+    district: postOffice.District || '',
+    state: postOffice.State || ''
+  });
+});
+
 module.exports = router;
