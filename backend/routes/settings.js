@@ -1947,8 +1947,6 @@ router.post('/companies/add', auth, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Company description is required' });
     }
 
-    const settings = await Settings.getSettings();
-    const current = settings.masterCompanies || new Map();
     const normalizedName = name.trim();
 
     // Auto-fetch logo if website is provided but logo is not
@@ -1962,60 +1960,63 @@ router.post('/companies/add', auth, async (req, res) => {
       }
     }
 
-    let existing = current.get(normalizedName);
-    if (existing) {
-      if (typeof existing.toObject === 'function') {
-        existing = existing.toObject();
-      } else if (existing._doc) {
-        existing = { ...existing._doc };
-      } else {
-        existing = JSON.parse(JSON.stringify(existing));
-      }
-    } else {
-      existing = { name: normalizedName, website: '', description: '', pocs: [] };
+    // Use lean() to get the raw plain object — avoids Mongoose Map casting issues
+    // and prevents full-document validation from blocking this partial update.
+    const leanSettings = await Settings.findOne({}).lean();
+    if (!leanSettings) {
+      // No settings document yet — initialise one, then retry
+      await Settings.getSettings();
+      return res.status(503).json({ success: false, message: 'Settings initialising, please retry' });
     }
 
+    const existingCompanies = leanSettings.masterCompanies || {};
+
+    // Get or create the company entry as a plain object
+    let company = existingCompanies[normalizedName] || { name: normalizedName, website: '', description: '', pocs: [] };
+
     // Update basic info if provided
-    if (website) existing.website = website;
-    if (description) existing.description = description;
-    if (logoUrl) existing.logo = logoUrl;
+    if (website) company.website = website;
+    if (description) company.description = description;
+    if (logoUrl) company.logo = logoUrl;
 
     // Manage PoCs
     if (pocName) {
-      if (!existing.pocs) existing.pocs = [];
-      const pocIndex = existing.pocs.findIndex(p => p.name.toLowerCase() === pocName.toLowerCase());
+      if (!Array.isArray(company.pocs)) company.pocs = [];
+      // Guard against pocs with missing names (data integrity)
+      const pocIndex = company.pocs.findIndex(p => p && p.name && p.name.toLowerCase() === pocName.toLowerCase());
       const newPoc = {
         name: pocName,
         contact: pocContact || '',
         email: pocEmail || '',
-        isPrimary: existing.pocs.length === 0 // First one added becomes primary
+        isPrimary: company.pocs.length === 0 // First PoC becomes primary
       };
 
       if (pocIndex > -1) {
-        existing.pocs[pocIndex] = { ...existing.pocs[pocIndex], ...newPoc };
+        company.pocs[pocIndex] = { ...company.pocs[pocIndex], ...newPoc };
       } else {
-        existing.pocs.push(newPoc);
+        company.pocs.push(newPoc);
       }
     }
 
-    current.set(normalizedName, {
-      ...existing,
-      addedBy: req.userId
-    });
+    company.addedBy = req.userId;
+    existingCompanies[normalizedName] = company;
 
-    settings.masterCompanies = current;
-    settings.markModified('masterCompanies');
-    settings.lastUpdatedBy = req.userId;
-    await settings.save();
+    // Update only the masterCompanies field — avoids triggering full-document
+    // Mongoose validation (pipeline stages, hiring partners, etc.) which can fail
+    // for reasons unrelated to this operation.
+    await Settings.updateOne(
+      { _id: leanSettings._id },
+      { $set: { masterCompanies: existingCompanies, lastUpdatedBy: req.userId } }
+    );
 
     res.json({
       success: true,
       message: 'Company info saved successfully',
-      data: Object.fromEntries(current)
+      data: existingCompanies
     });
   } catch (error) {
-    console.error('Add company error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Add company error:', error.name, error.message, error.stack);
+    res.status(500).json({ success: false, message: error.message || 'Server error' });
   }
 });
 
