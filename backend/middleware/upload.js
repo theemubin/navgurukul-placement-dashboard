@@ -5,89 +5,76 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 require('dotenv').config();
 
-// Check if Cloudinary credentials exist
-const useCloudinary = process.env.CLOUDINARY_CLOUD_NAME &&
-  process.env.CLOUDINARY_API_KEY &&
-  process.env.CLOUDINARY_API_SECRET;
+// Resolve Cloudinary Credentials (mandatory, no local fallback)
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME;
+const apiKey = process.env.CLOUDINARY_API_KEY;
+const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
-let storage;
-
-// Debug Cloudinary Config
-if (useCloudinary) {
-  console.log('Cloudinary Config Found:', {
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY ? '***' : 'MISSING',
-    api_secret: process.env.CLOUDINARY_API_SECRET ? '***' : 'MISSING'
-  });
-
-  // Configure Cloudinary
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-  });
-
-  // Configure Cloudinary Storage
-  storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-      folder: (req, file) => {
-        if (file.fieldname === 'resume') return 'placements/resumes';
-        if (file.fieldname === 'avatar') return 'placements/avatars';
-        if (file.fieldname === 'heroImage') return 'placements/hero_images';
-        return 'placements/documents';
-      },
-      // use resource_type: 'auto' to support PDFs etc.
-      resource_type: 'auto',
-      public_id: (req, file) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        return file.fieldname + '-' + uniqueSuffix;
-      }
-    },
-  });
-  console.log('Using Cloudinary Storage for uploads');
-} else {
-  // Fallback to Local Disk Storage
-  console.log('Using Local Disk Storage for uploads (Cloudinary credentials missing)');
-
-  // Ensure upload directories exist
-  const uploadDirs = ['uploads/resumes', 'uploads/avatars', 'uploads/documents', 'uploads/hero_images'];
-  const uploadsRoot = path.join(__dirname, '../'); // Prepare absolute path base
-
-  uploadDirs.forEach(dir => {
-    const absoluteDir = path.join(uploadsRoot, dir);
-    if (!fs.existsSync(absoluteDir)) {
-      fs.mkdirSync(absoluteDir, { recursive: true });
-    }
-  });
-
-  storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      // Resolve absolute path to uploads directory (backend/uploads)
-      const uploadsRoot = path.join(__dirname, '../uploads');
-      let uploadPath = path.join(uploadsRoot, 'documents');
-
-      if (file.fieldname === 'resume') {
-        uploadPath = path.join(uploadsRoot, 'resumes');
-      } else if (file.fieldname === 'avatar') {
-        uploadPath = path.join(uploadsRoot, 'avatars');
-      } else if (file.fieldname === 'heroImage') {
-        uploadPath = path.join(uploadsRoot, 'hero_images');
-      }
-
-      // Ensure directory exists
-      if (!fs.existsSync(uploadPath)) {
-        fs.mkdirSync(uploadPath, { recursive: true });
-      }
-
-      cb(null, uploadPath);
-    },
-    filename: (req, file, cb) => {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-    }
-  });
+if (!cloudName || !apiKey || !apiSecret) {
+  throw new Error(
+    'Cloudinary configuration error: CLOUDINARY_NAME (or CLOUDINARY_CLOUD_NAME), ' +
+    'CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET must be set. ' +
+    'Local disk storage fallback is disabled.'
+  );
 }
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: cloudName,
+  api_key: apiKey,
+  api_secret: apiSecret
+});
+
+// Debug Cloudinary Config (without exposing secrets)
+console.log('Cloudinary Configured:', {
+  cloud_name: cloudName,
+  api_key: apiKey ? '***' : 'MISSING',
+  api_secret: apiSecret ? '***' : 'MISSING'
+});
+
+// Configure Cloudinary Storage (Cloudinary only)
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+
+    if (file.fieldname === 'avatar') {
+      return {
+        folder: 'placements/avatars',
+        resource_type: 'image',
+        public_id: `avatar-${uniqueSuffix}`
+      };
+    }
+
+    if (file.fieldname === 'heroImage') {
+      return {
+        folder: 'placements/hero_images',
+        resource_type: 'image',
+        public_id: `heroImage-${uniqueSuffix}`
+      };
+    }
+
+    if (file.fieldname === 'resume') {
+      const ext = path.extname(file.originalname) || '.pdf';
+      return {
+        folder: 'placements/resumes',
+        resource_type: 'raw',
+        public_id: `resume-${uniqueSuffix}${ext}`
+      };
+    }
+
+    // Default fallback for any other documents
+    const ext = path.extname(file.originalname) || '';
+    return {
+      folder: 'placements/documents',
+      resource_type: 'raw',
+      public_id: `document-${uniqueSuffix}${ext}`
+    };
+  }
+});
+
+console.log('Using Cloudinary Storage for uploads (disk storage disabled)');
+
 
 // File filter (same as before)
 const fileFilter = (req, file, cb) => {
@@ -120,7 +107,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 100 * 1024 // 100KB limit
+    fileSize: 5 * 1024 * 1024 // 5MB limit
   }
 });
 

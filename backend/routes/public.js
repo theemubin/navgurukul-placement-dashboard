@@ -57,7 +57,7 @@ router.get('/portfolios', async (req, res) => {
 
         // Fetch students with populated fields
         let students = await User.find(query)
-            .select('firstName lastName avatar campus studentProfile.technicalSkills studentProfile.softSkills studentProfile.officeSkills studentProfile.openForRoles studentProfile.github studentProfile.linkedIn studentProfile.portfolio studentProfile.resumeLink studentProfile.about studentProfile.languages studentProfile.tenthGrade studentProfile.twelfthGrade studentProfile.higherEducation studentProfile.courses placementCycle')
+            .select('firstName lastName avatar campus studentProfile.technicalSkills studentProfile.softSkills studentProfile.officeSkills studentProfile.openForRoles studentProfile.github studentProfile.linkedIn studentProfile.portfolio studentProfile.resumeLink studentProfile.resumes studentProfile.about studentProfile.languages studentProfile.tenthGrade studentProfile.twelfthGrade studentProfile.higherEducation studentProfile.courses placementCycle')
             .populate('campus', 'name code')
             .populate('placementCycle', 'name year')
             .populate('studentProfile.technicalSkills.skillId', 'name category')
@@ -118,6 +118,7 @@ router.get('/portfolios', async (req, res) => {
             linkedIn: student.studentProfile?.linkedIn || null,
             portfolio: student.studentProfile?.portfolio || null,
             resumeLink: student.studentProfile?.resumeLink || null,
+            resumes: student.studentProfile?.resumes || [],
             about: student.studentProfile?.about || null,
             languages: student.studentProfile?.languages || [],
             education: {
