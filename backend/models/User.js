@@ -701,8 +701,14 @@ userSchema.set('toObject', { virtuals: true });
         if (options.targetCampusId) {
           user.campus = options.targetCampusId;
         } else {
-          const Campus = mongoose.model('Campus');
-          const matchedCampus = await Campus.findOne({ name: new RegExp(`^${campusValue}$`, 'i') });
+          let searchName = campusValue.trim();
+          if (searchName.toLowerCase() === 'eternal campus') {
+            searchName = 'Eternal BCA';
+          } else if (searchName.toLowerCase() === 'sarjapura') {
+            searchName = 'Sarjapur';
+          }
+          const Campus = mongoose.models.Campus || require('./Campus');
+          const matchedCampus = await Campus.findOne({ name: new RegExp(`^${searchName}$`, 'i') });
           if (matchedCampus) {
             user.campus = matchedCampus._id;
           }

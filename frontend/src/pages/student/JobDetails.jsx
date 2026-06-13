@@ -6,7 +6,7 @@ import { LoadingSpinner, StatusBadge, Modal } from '../../components/common/UICo
 import {
   ArrowLeft, Briefcase, MapPin, IndianRupee, Calendar, Clock,
   Users, Building, Globe, CheckCircle, AlertCircle, Heart, XCircle,
-  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History, Check, Trash, Home, Eye, Bell
+  TrendingUp, Award, GraduationCap, MessageCircle, Send, User, History, Check, Trash, Home, Eye, Bell, FileText
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -87,7 +87,16 @@ const JobDetails = () => {
   const { user } = useAuth();
   
   // Eligible students modal state (for POC view)
-  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ open: false, students: [], loading: false, total: 0, applied: 0, notApplied: 0 });
+  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ 
+    open: false, 
+    activeTab: 'eligible', 
+    students: [], 
+    appliedStudents: [], 
+    loading: false, 
+    total: 0, 
+    applied: 0, 
+    notApplied: 0 
+  });
   const [notifying, setNotifying] = useState(false);
 
   // Debug helper to log decision variables (removed in production)
@@ -307,21 +316,31 @@ const JobDetails = () => {
     return `Up to ${format(salary.max)}`;
   };
 
-  const fetchEligibleStudents = async () => {
-    setEligibleStudentsModal(prev => ({ ...prev, open: true, loading: true }));
+  const fetchEligibleStudents = async (initialTab = 'eligible') => {
+    setEligibleStudentsModal(prev => ({ 
+      ...prev, 
+      open: true, 
+      loading: true, 
+      activeTab: initialTab 
+    }));
     try {
-      const response = await statsAPI.getJobEligibleStudents(id);
+      const [eligibleRes, appsRes] = await Promise.all([
+        statsAPI.getJobEligibleStudents(id),
+        applicationAPI.getApplications({ job: id, limit: 1000 })
+      ]);
       setEligibleStudentsModal({ 
         open: true, 
-        students: response.data.students, 
-        total: response.data.total,
-        applied: response.data.applied,
-        notApplied: response.data.notApplied,
+        activeTab: initialTab,
+        students: eligibleRes.data.students || [], 
+        appliedStudents: appsRes.data.applications || [],
+        total: eligibleRes.data.total || 0,
+        applied: eligibleRes.data.applied || 0,
+        notApplied: eligibleRes.data.notApplied || 0,
         loading: false 
       });
     } catch (error) {
-      console.error('Error fetching eligible students:', error);
-      toast.error('Failed to load eligible students');
+      console.error('Error fetching students data:', error);
+      toast.error('Failed to load students data');
       setEligibleStudentsModal(prev => ({ ...prev, open: false, loading: false }));
     }
   };
@@ -476,22 +495,30 @@ const JobDetails = () => {
           ) : user.role === 'campus_poc' ? (
             <div className="flex items-center gap-3">
               <button
-                onClick={fetchEligibleStudents}
+                onClick={() => fetchEligibleStudents('eligible')}
                 className="btn btn-primary flex items-center gap-2 shadow-lg hover:translate-y-[-1px] transition-transform"
               >
                 <Users className="w-4 h-4" />
                 View Eligible Students
               </button>
-              <div className="bg-gray-50 px-4 py-2 rounded-xl border flex gap-4">
-                 <div className="text-center">
+              <div className="bg-gray-50 px-4 py-2 rounded-xl border flex gap-4 items-center">
+                 <button 
+                   onClick={() => fetchEligibleStudents('applied')}
+                   className="text-center hover:bg-gray-200/60 active:scale-95 px-2.5 py-1 rounded-xl transition-all cursor-pointer focus:outline-none"
+                   title="View Applied Students"
+                 >
                     <p className="text-lg font-bold text-blue-600">{job.applicationCount || 0}</p>
                     <p className="text-[10px] text-gray-400 font-black uppercase">Applied</p>
-                 </div>
+                 </button>
                  <div className="w-px h-8 bg-gray-200" />
-                 <div className="text-center">
+                 <button 
+                   onClick={() => fetchEligibleStudents('selected')}
+                   className="text-center hover:bg-gray-200/60 active:scale-95 px-2.5 py-1 rounded-xl transition-all cursor-pointer focus:outline-none"
+                   title="View Selected Students"
+                 >
                     <p className="text-lg font-bold text-green-600">{job.selectedCount || 0}</p>
                     <p className="text-[10px] text-gray-400 font-black uppercase">Selected</p>
-                 </div>
+                 </button>
               </div>
             </div>
           ) : (
@@ -1281,24 +1308,75 @@ const JobDetails = () => {
       <Modal
         isOpen={eligibleStudentsModal.open}
         onClose={() => setEligibleStudentsModal(prev => ({ ...prev, open: false }))}
-        title={`Eligible Students for ${job.title}`}
+        title={`Job Candidates for ${job.title}`}
         size="xl"
         headerActions={
-          <button
-            onClick={handleNotifyEligible}
-            disabled={notifying || eligibleStudentsModal.loading || eligibleStudentsModal.notApplied === 0}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
-              notifying 
-                ? 'bg-gray-100 text-gray-400' 
-                : 'bg-primary-600 text-white hover:bg-primary-700 active:scale-95'
-            }`}
-          >
-            <Bell className={`w-4 h-4 ${notifying ? 'animate-bounce' : ''}`} />
-            {notifying ? 'Sending...' : 'Notify All Eligible'}
-          </button>
+          eligibleStudentsModal.activeTab === 'eligible' && (
+            <button
+              onClick={handleNotifyEligible}
+              disabled={notifying || eligibleStudentsModal.loading || eligibleStudentsModal.notApplied === 0}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
+                notifying 
+                  ? 'bg-gray-100 text-gray-400' 
+                  : 'bg-primary-600 text-white hover:bg-primary-700 active:scale-95'
+              }`}
+            >
+              <Bell className={`w-4 h-4 ${notifying ? 'animate-bounce' : ''}`} />
+              {notifying ? 'Sending...' : 'Notify All Eligible'}
+            </button>
+          )
         }
       >
         <div className="space-y-4">
+          {/* Tab Selector */}
+          <div className="flex border-b border-gray-100 mb-6 gap-2">
+            <button
+              onClick={() => setEligibleStudentsModal(prev => ({ ...prev, activeTab: 'eligible' }))}
+              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${
+                eligibleStudentsModal.activeTab === 'eligible'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <span>Eligible (Not Applied)</span>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${
+                eligibleStudentsModal.activeTab === 'eligible' ? 'bg-primary-100 text-primary-800' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {eligibleStudentsModal.students.filter(s => !s.hasApplied).length}
+              </span>
+            </button>
+            <button
+              onClick={() => setEligibleStudentsModal(prev => ({ ...prev, activeTab: 'applied' }))}
+              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${
+                eligibleStudentsModal.activeTab === 'applied'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <span>Applied</span>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${
+                eligibleStudentsModal.activeTab === 'applied' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {eligibleStudentsModal.appliedStudents.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setEligibleStudentsModal(prev => ({ ...prev, activeTab: 'selected' }))}
+              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${
+                eligibleStudentsModal.activeTab === 'selected'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <span>Selected</span>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${
+                eligibleStudentsModal.activeTab === 'selected' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {eligibleStudentsModal.appliedStudents.filter(app => app.status === 'selected').length}
+              </span>
+            </button>
+          </div>
+
           <div className="flex gap-6 mb-4 px-1">
             <div className="text-center">
               <p className="text-2xl font-bold text-indigo-600">{eligibleStudentsModal.total ?? 0}</p>
@@ -1313,71 +1391,232 @@ const JobDetails = () => {
               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Not Applied</p>
             </div>
           </div>
+          
           {eligibleStudentsModal.loading ? (
             <div className="flex justify-center p-8">
               <LoadingSpinner />
             </div>
-          ) : eligibleStudentsModal.students.length > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-              <table className="w-full text-left">
-                <thead className="bg-gray-50 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b">
-                  <tr>
-                    <th className="px-4 py-3">Student</th>
-                    <th className="px-4 py-3">Skills</th>
-                    <th className="px-4 py-3 text-center">Eligibility</th>
-                    <th className="px-4 py-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {eligibleStudentsModal.students.map((student) => (
-                    <tr key={student._id} className="hover:bg-gray-50 transition-colors group">
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-primary-50 text-primary-700 flex items-center justify-center font-bold text-xs">
-                            {student.firstName?.[0]}{student.lastName?.[0]}
-                          </div>
-                          <div>
-                            <p className="font-bold text-gray-900 text-sm">{student.firstName} {student.lastName}</p>
-                            <p className="text-[10px] text-gray-500 font-medium">{student.email}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {student.studentProfile?.technicalSkills?.slice(0, 2).map((s, i) => (
-                             <span key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-600">{s.skillName}</span>
-                          ))}
-                          {student.studentProfile?.technicalSkills?.length > 2 && <span className="text-[10px] text-gray-400">+{student.studentProfile.technicalSkills.length - 2}</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <div className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[10px] font-black ${
-                          student.skillMatch === 100 ? 'bg-green-50 text-green-700' :
-                          student.skillMatch >= 50 ? 'bg-yellow-50 text-yellow-700' :
-                          'bg-orange-50 text-orange-700'
-                        }`}>
-                          {student.skillMatch ?? 100}% MATCH
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <Link 
-                          to={`/campus-poc/students/${student._id}`}
-                          className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors inline-block"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           ) : (
-            <div className="text-center py-12 text-gray-500">
-               <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
-               <p className="font-bold">No eligible students found on your campus.</p>
-               <p className="text-sm">Either no students match the criteria or all have already applied.</p>
-            </div>
+            <>
+              {eligibleStudentsModal.activeTab === 'eligible' && (
+                <>
+                  {eligibleStudentsModal.students.filter(s => !s.hasApplied).length > 0 ? (
+                    <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+                      <table className="w-full text-left">
+                        <thead className="bg-gray-50 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b">
+                          <tr>
+                            <th className="px-4 py-3">Student</th>
+                            <th className="px-4 py-3">Skills</th>
+                            <th className="px-4 py-3 text-center">Eligibility</th>
+                            <th className="px-4 py-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {eligibleStudentsModal.students.filter(s => !s.hasApplied).map((student) => (
+                            <tr key={student._id} className="hover:bg-gray-50 transition-colors group">
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-primary-50 text-primary-700 flex items-center justify-center font-bold text-xs">
+                                    {student.firstName?.[0]}{student.lastName?.[0]}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-gray-900 text-sm">{student.firstName} {student.lastName}</p>
+                                    <p className="text-[10px] text-gray-500 font-medium">{student.email}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex flex-wrap gap-1">
+                                  {student.studentProfile?.technicalSkills?.slice(0, 2).map((s, i) => (
+                                     <span key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-600">{s.skillName}</span>
+                                  ))}
+                                  {student.studentProfile?.technicalSkills?.length > 2 && <span className="text-[10px] text-gray-400">+{student.studentProfile.technicalSkills.length - 2}</span>}
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 text-center">
+                                <div className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[10px] font-black ${
+                                  student.skillMatch === 100 ? 'bg-green-50 text-green-700' :
+                                  student.skillMatch >= 50 ? 'bg-yellow-50 text-yellow-700' :
+                                  'bg-orange-50 text-orange-700'
+                                }`}>
+                                  {student.skillMatch ?? 100}% MATCH
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 text-right">
+                                <Link 
+                                  to={`/campus-poc/students/${student._id}`}
+                                  className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                       <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                       <p className="font-bold">No eligible students found on your campus.</p>
+                       <p className="text-sm">Either no students match the criteria or all have already applied.</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {eligibleStudentsModal.activeTab === 'applied' && (
+                <>
+                  {eligibleStudentsModal.appliedStudents.length > 0 ? (
+                    <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+                      <table className="w-full text-left">
+                        <thead className="bg-gray-50 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b">
+                          <tr>
+                            <th className="px-4 py-3">Student</th>
+                            <th className="px-4 py-3">Applied Date</th>
+                            <th className="px-4 py-3 text-center">Status</th>
+                            <th className="px-4 py-3 text-right">Resume</th>
+                            <th className="px-4 py-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {eligibleStudentsModal.appliedStudents.map((app) => {
+                            const student = app.student || {};
+                            return (
+                              <tr key={app._id} className="hover:bg-gray-50 transition-colors group">
+                                <td className="px-4 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs">
+                                      {student.firstName?.[0]}{student.lastName?.[0]}
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-gray-900 text-sm">{student.firstName} {student.lastName}</p>
+                                      <p className="text-[10px] text-gray-500 font-medium">{student.email}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 text-sm text-gray-600">
+                                  {format(new Date(app.createdAt), 'MMM dd, yyyy')}
+                                </td>
+                                <td className="px-4 py-4 text-center">
+                                  <StatusBadge status={app.status} />
+                                </td>
+                                <td className="px-4 py-4 text-right">
+                                  {app.resume ? (
+                                    <a
+                                      href={app.resume}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1.5 text-primary-600 hover:text-primary-800 transition-colors inline-block"
+                                      title="View Resume"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">No Resume</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-4 text-right">
+                                  <Link 
+                                    to={`/campus-poc/students/${student._id}`}
+                                    className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                                    title="View Profile"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Link>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                       <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                       <p className="font-bold">No applications yet.</p>
+                       <p className="text-sm">No students have applied for this job yet.</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {eligibleStudentsModal.activeTab === 'selected' && (
+                <>
+                  {eligibleStudentsModal.appliedStudents.filter(app => app.status === 'selected').length > 0 ? (
+                    <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+                      <table className="w-full text-left">
+                        <thead className="bg-gray-50 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b">
+                          <tr>
+                            <th className="px-4 py-3">Student</th>
+                            <th className="px-4 py-3">Applied Date</th>
+                            <th className="px-4 py-3 text-center">Status</th>
+                            <th className="px-4 py-3 text-right">Resume</th>
+                            <th className="px-4 py-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {eligibleStudentsModal.appliedStudents.filter(app => app.status === 'selected').map((app) => {
+                            const student = app.student || {};
+                            return (
+                              <tr key={app._id} className="hover:bg-gray-50 transition-colors group">
+                                <td className="px-4 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-green-50 text-green-700 flex items-center justify-center font-bold text-xs">
+                                      {student.firstName?.[0]}{student.lastName?.[0]}
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-gray-900 text-sm">{student.firstName} {student.lastName}</p>
+                                      <p className="text-[10px] text-gray-500 font-medium">{student.email}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 text-sm text-gray-600">
+                                  {format(new Date(app.createdAt), 'MMM dd, yyyy')}
+                                </td>
+                                <td className="px-4 py-4 text-center">
+                                  <StatusBadge status={app.status} />
+                                </td>
+                                <td className="px-4 py-4 text-right">
+                                  {app.resume ? (
+                                    <a
+                                      href={app.resume}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1.5 text-primary-600 hover:text-primary-800 transition-colors inline-block"
+                                      title="View Resume"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">No Resume</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-4 text-right">
+                                  <Link 
+                                    to={`/campus-poc/students/${student._id}`}
+                                    className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                                    title="View Profile"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Link>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                       <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                       <p className="font-bold">No students selected yet.</p>
+                       <p className="text-sm">No student's application has been marked as selected yet.</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           )}
         </div>
       </Modal>
