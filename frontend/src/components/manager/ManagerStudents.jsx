@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { userAPI, jobReadinessAPI, applicationAPI, statsAPI, settingsAPI } from '../../services/api';
+import { userAPI, jobReadinessAPI, applicationAPI, statsAPI, settingsAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner, Pagination, Modal, Button, Badge } from '../common/UIComponents';
 import {
   User,
@@ -351,23 +351,25 @@ const ManagerStudents = () => {
 
                         {selectedStudent.studentProfile?.onInternship && (
                           <div className="flex items-center gap-3 ml-12 animate-fadeIn transition-all">
-                            <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+                             <label className="flex items-center gap-2 text-xs font-medium text-gray-600 cursor-pointer">
                               <input
                                 type="radio"
                                 name="internshipType"
                                 value="Paid"
                                 checked={selectedStudent.studentProfile?.internshipType === 'Paid'}
                                 onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), internshipType: e.target.value } }))}
+                                className="w-4 h-4 text-primary-600 focus:ring-primary-500 cursor-pointer"
                               />
                               Paid
                             </label>
-                            <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+                            <label className="flex items-center gap-2 text-xs font-medium text-gray-600 cursor-pointer">
                               <input
                                 type="radio"
                                 name="internshipType"
                                 value="Unpaid"
                                 checked={selectedStudent.studentProfile?.internshipType === 'Unpaid'}
                                 onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), internshipType: e.target.value } }))}
+                                className="w-4 h-4 text-primary-600 focus:ring-primary-500 cursor-pointer"
                               />
                               Unpaid
                             </label>
@@ -549,7 +551,7 @@ const ManagerStudents = () => {
                       </Button>
                       {selectedStudent.studentProfile?.resumeLink && (
                         <a
-                          href={selectedStudent.studentProfile.resumeLink}
+                          href={resolveResumeUrl(selectedStudent.studentProfile.resumeLink)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 transition-all"

@@ -19,6 +19,20 @@ function extractGoogleDriveFileId(url = '') {
 }
 
 async function downloadResumeBuffer(url) {
+  if (url.startsWith('/uploads/')) {
+    const fs = require('fs');
+    const path = require('path');
+    const absolutePath = path.join(__dirname, '..', url);
+    if (!fs.existsSync(absolutePath)) {
+      throw new Error('Local resume file not found');
+    }
+    const buffer = fs.readFileSync(absolutePath);
+    let contentType = 'application/pdf';
+    if (url.endsWith('.doc')) contentType = 'application/msword';
+    if (url.endsWith('.docx')) contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    return { buffer, contentType, status: 200 };
+  }
+
   const response = await axios.get(url, {
     responseType: 'arraybuffer',
     timeout: 20000,
@@ -293,23 +307,49 @@ router.post('/resume-ats/check', auth, async (req, res) => {
       return res.status(403).json({ message: 'Only students can run ATS check on their profile resume.' });
     }
 
-    // Always use profile resume link to avoid checking arbitrary links.
-    const resumeUrl = (currentUser.studentProfile?.resumeLink || '').trim();
+    const { resumeId } = req.body;
+    let resumeUrl = '';
+    let resumeItem = null;
+
+    if (resumeId) {
+      resumeItem = (currentUser.studentProfile?.resumes || []).find(r => r._id.toString() === resumeId);
+      if (!resumeItem) {
+        return res.status(404).json({ message: 'Resume not found' });
+      }
+      resumeUrl = (resumeItem.resumeLink || '').trim();
+    } else {
+      resumeUrl = (currentUser.studentProfile?.resumeLink || '').trim();
+      if (currentUser.studentProfile?.resumes?.length > 0) {
+        resumeItem = currentUser.studentProfile.resumes.find(r => r.isPrimary);
+      }
+    }
 
     if (!resumeUrl) {
       return res.status(400).json({ message: 'Resume link is required. Please add it in profile first.' });
     }
 
-    const { checkUrlAccessible } = require('../utils/urlChecker');
-    const accessResult = await checkUrlAccessible(resumeUrl);
+    let isLocalFile = resumeUrl.startsWith('/uploads/');
+    let accessResult = { ok: true, candidate: resumeUrl };
+
+    if (!isLocalFile) {
+      const { checkUrlAccessible } = require('../utils/urlChecker');
+      accessResult = await checkUrlAccessible(resumeUrl);
+    }
 
     if (!accessResult.ok) {
-      currentUser.studentProfile.resumeAts = {
+      const errorObj = {
         status: 'failed',
         sourceUrl: resumeUrl,
         checkedAt: new Date(),
         errorMessage: 'Resume link is not accessible'
       };
+      if (resumeItem) {
+        resumeItem.resumeAts = errorObj;
+      }
+      if (!resumeItem || resumeItem.isPrimary) {
+        currentUser.studentProfile.resumeAts = errorObj;
+      }
+      currentUser.markModified('studentProfile.resumes');
       await currentUser.save();
       return res.status(400).json({ message: 'Resume link is not accessible. Make sure it is public.', reason: accessResult.reason || 'inaccessible' });
     }
@@ -330,12 +370,19 @@ router.post('/resume-ats/check', auth, async (req, res) => {
     const resumeText = normalizeWhitespace(parsedText || '');
 
     if (!resumeText) {
-      currentUser.studentProfile.resumeAts = {
+      const errorObj = {
         status: 'failed',
         sourceUrl: resumeUrl,
         checkedAt: new Date(),
         errorMessage: 'No extractable text found in resume PDF'
       };
+      if (resumeItem) {
+        resumeItem.resumeAts = errorObj;
+      }
+      if (!resumeItem || resumeItem.isPrimary) {
+        currentUser.studentProfile.resumeAts = errorObj;
+      }
+      currentUser.markModified('studentProfile.resumes');
       await currentUser.save();
       return res.status(422).json({ message: 'Could not extract text from resume. Please upload a text-based PDF.' });
     }
@@ -388,7 +435,6 @@ router.post('/resume-ats/check', auth, async (req, res) => {
           nameMatch.reason = `Second-pass AI verification accepted: ${secondPass.reason}`;
         }
       } catch (verifyErr) {
-        // Keep primary AI decision when second-pass verification fails.
         console.warn('Second-pass AI identity verification failed:', verifyErr.message);
       }
     }
@@ -401,7 +447,7 @@ router.post('/resume-ats/check', auth, async (req, res) => {
         mismatchMessage = 'The uploaded file does not look like a resume.';
       }
 
-      currentUser.studentProfile.resumeAts = {
+      const errorObj = {
         status: 'failed',
         sourceUrl: resumeUrl,
         checkedAt: new Date(),
@@ -413,11 +459,19 @@ router.post('/resume-ats/check', auth, async (req, res) => {
           reason: nameMatch?.reason || 'AI could not confirm ownership'
         }
       };
+
+      if (resumeItem) {
+        resumeItem.resumeAts = errorObj;
+      }
+      if (!resumeItem || resumeItem.isPrimary) {
+        currentUser.studentProfile.resumeAts = errorObj;
+      }
+      currentUser.markModified('studentProfile.resumes');
       await currentUser.save();
       return res.status(422).json({
         message: mismatchMessage,
         documentType,
-        nameMatch: currentUser.studentProfile.resumeAts.nameMatch
+        nameMatch: errorObj.nameMatch
       });
     }
 
@@ -448,7 +502,13 @@ router.post('/resume-ats/check', auth, async (req, res) => {
       actionItems: normalizeActionItems(aiScore?.actionItems).slice(0, 10)
     };
 
-    currentUser.studentProfile.resumeAts = storedAts;
+    if (resumeItem) {
+      resumeItem.resumeAts = storedAts;
+    }
+    if (!resumeItem || resumeItem.isPrimary) {
+      currentUser.studentProfile.resumeAts = storedAts;
+    }
+    currentUser.markModified('studentProfile.resumes');
     await currentUser.save();
 
     return res.json({

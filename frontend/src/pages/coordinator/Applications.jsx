@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { applicationAPI, jobAPI, settingsAPI } from '../../services/api';
+import { applicationAPI, jobAPI, settingsAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Modal } from '../../components/common/UIComponents';
 import { Search, Filter, Eye, CheckCircle, XCircle, Clock, MessageSquare, Download, Users, ExternalLink, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -353,7 +353,7 @@ const Applications = () => {
               </button>
               {app.student?.profile?.resume && (
                 <a
-                  href={`${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.student.profile.resume}`}
+                  href={resolveResumeUrl(app.student.profile.resume)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
@@ -461,7 +461,7 @@ const Applications = () => {
                       </button>
                       {app.student?.profile?.resume && (
                         <a
-                          href={`${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.student.profile.resume}`}
+                          href={resolveResumeUrl(app.student.profile.resume)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
@@ -654,7 +654,7 @@ const Applications = () => {
             <div className="flex flex-wrap gap-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
               {selectedApplication.student?.profile?.resume && (
                 <a
-                  href={`${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedApplication.student.profile.resume}`}
+                  href={resolveResumeUrl(selectedApplication.student.profile.resume)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white text-primary-600 border border-primary-100 rounded-lg hover:bg-primary-50 transition shadow-sm text-xs font-bold uppercase tracking-tight"

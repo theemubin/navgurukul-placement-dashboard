@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { authAPI, userAPI, settingsAPI, campusAPI, placementCycleAPI, skillAPI, utilsAPI } from '../../services/api';
+import { authAPI, userAPI, settingsAPI, campusAPI, placementCycleAPI, skillAPI, utilsAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner } from '../../components/common/UIComponents';
 import SearchableSelect from '../../components/common/SearchableSelect';
 import {
@@ -103,6 +103,7 @@ const StudentProfile = () => {
   const [activeTab, setActiveTab] = useState('personal');
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingResume, setUploadingResume] = useState(false);
   const [campuses, setCampuses] = useState([]);
   const [placementCycles, setPlacementCycles] = useState([]);
   const [selectedCampus, setSelectedCampus] = useState('');
@@ -150,6 +151,7 @@ const StudentProfile = () => {
   const [newLanguage, setNewLanguage] = useState({ language: '', speaking: '', writing: '', isNative: false });
   const [resumeLinkStatus, setResumeLinkStatus] = useState({ checked: false, ok: false, status: null });
   const [atsLoading, setAtsLoading] = useState(false);
+  const [atsCheckingId, setAtsCheckingId] = useState(null);
   const [atsResult, setAtsResult] = useState(null);
   const [atsPrompts, setAtsPrompts] = useState(null);
 
@@ -300,39 +302,101 @@ const StudentProfile = () => {
     }
   };
 
-  const handleCheckAtsScore = async () => {
-    const typedLink = (formData.resumeLink || '').trim();
-    const savedLink = (profile?.studentProfile?.resumeLink || '').trim();
+  const handleSetPrimaryResume = async (resumeId) => {
+    try {
+      setUploadingResume(true);
+      const res = await userAPI.setPrimaryResume(resumeId);
+      const updatedUser = res.data.user;
+      setProfile(updatedUser);
+      setFormData(prev => ({
+        ...prev,
+        resumeLink: updatedUser.studentProfile?.resumeLink || '',
+        resume: updatedUser.studentProfile?.resume || ''
+      }));
+      setAtsResult(updatedUser.studentProfile?.resumeAts || null);
+      setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
+      toast.success('Primary resume updated');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to set primary resume');
+    } finally {
+      setUploadingResume(false);
+    }
+  };
 
-    if (!typedLink) {
-      toast.error('Please add a resume link first');
-      return;
+  const handleDeleteResume = async (resumeId) => {
+    if (!confirm('Are you sure you want to remove this resume?')) return;
+    try {
+      setUploadingResume(true);
+      const res = await userAPI.deleteResume(resumeId);
+      const updatedUser = res.data.user;
+      setProfile(updatedUser);
+      setFormData(prev => ({
+        ...prev,
+        resumeLink: updatedUser.studentProfile?.resumeLink || '',
+        resume: updatedUser.studentProfile?.resume || ''
+      }));
+      setAtsResult(updatedUser.studentProfile?.resumeAts || null);
+      setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
+      toast.success('Resume deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete resume');
+    } finally {
+      setUploadingResume(false);
+    }
+  };
+
+  const handleCheckAtsScore = async (resumeId = '') => {
+    let targetLink = '';
+    if (resumeId) {
+      const found = (profile?.studentProfile?.resumes || []).find(r => r._id === resumeId);
+      targetLink = found ? found.resumeLink : '';
+    } else {
+      targetLink = (formData.resumeLink || '').trim();
+      const savedLink = (profile?.studentProfile?.resumeLink || '').trim();
+      if (targetLink !== savedLink) {
+        toast.error('Resume link changed. Please Save Profile first, then run ATS check.');
+        return;
+      }
     }
 
-    // Backend intentionally uses saved profile link only; require save first if changed.
-    if (typedLink !== savedLink) {
-      toast.error('Resume link changed. Please Save Profile first, then run ATS check.');
+    if (!targetLink) {
+      toast.error('Please add or upload a resume first');
       return;
     }
 
     setAtsLoading(true);
+    setAtsCheckingId(resumeId);
     try {
-      const res = await utilsAPI.checkResumeAts();
+      const res = await utilsAPI.checkResumeAts(resumeId);
       const data = res?.data?.data;
       if (!data) {
         toast.error('ATS response is empty');
         return;
       }
 
-      setAtsResult(data);
-      setAtsPrompts(data.prompts || null);
+      const isPrimary = !resumeId || (profile?.studentProfile?.resumes || []).find(r => r._id === resumeId)?.isPrimary;
+      if (isPrimary) {
+        setAtsResult(data);
+        setAtsPrompts(data.prompts || null);
+      }
+      
       setProfile((prev) => {
         if (!prev) return prev;
+        let updatedResumes = prev.studentProfile?.resumes || [];
+        if (resumeId) {
+          updatedResumes = updatedResumes.map(r => {
+            if (r._id === resumeId) {
+              return { ...r, resumeAts: data };
+            }
+            return r;
+          });
+        }
         return {
           ...prev,
           studentProfile: {
             ...prev.studentProfile,
-            resumeAts: data
+            resumes: updatedResumes,
+            resumeAts: isPrimary ? data : prev.studentProfile.resumeAts
           }
         };
       });
@@ -348,6 +412,7 @@ const StudentProfile = () => {
       }
     } finally {
       setAtsLoading(false);
+      setAtsCheckingId(null);
     }
   };
 
@@ -603,6 +668,50 @@ const StudentProfile = () => {
       setAvatarPreview(profile?.avatar || null);
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const handleResumeUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Resume size should be less than 10MB');
+      return;
+    }
+
+    // Validate format (PDF, DOC, DOCX)
+    const allowedExtensions = ['pdf', 'doc', 'docx'];
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    if (!allowedExtensions.includes(fileExtension)) {
+      toast.error('Resume must be PDF, DOC, or DOCX');
+      return;
+    }
+
+    setUploadingResume(true);
+
+    try {
+      const response = await userAPI.uploadResume(file);
+      if (response.data.user) {
+        setProfile(response.data.user);
+        setFormData(prev => ({
+          ...prev,
+          resumeLink: response.data.user.studentProfile?.resumeLink || '',
+          resume: response.data.user.studentProfile?.resume || ''
+        }));
+        setAtsResult(null);
+        setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
+        toast.success('Resume uploaded successfully');
+      } else {
+        toast.error('Failed to upload resume');
+      }
+    } catch (error) {
+      console.error('Resume upload error:', error);
+      toast.error(error.response?.data?.message || 'Failed to upload resume');
+    } finally {
+      setUploadingResume(false);
+      e.target.value = '';
     }
   };
 
@@ -2321,153 +2430,158 @@ const StudentProfile = () => {
           <div className="card">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Upload className="w-5 h-5 text-gray-500" />
-              Resume
+              Resumes
             </h2>
 
-            {/* Uploaded file badge */}
-            {profile?.studentProfile?.resume && (
-              <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg mb-4">
-                <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-green-800">File uploaded</p>
-                  <a href={`/${profile.studentProfile.resume}`} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-green-700 hover:underline truncate block">View Resume</a>
-                </div>
-              </div>
-            )}
-
-            {/* ── Link row ── */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700">Resume Link</label>
-                {formData.resumeLink && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        setFormData({ ...formData, resumeLink: '' });
-                        setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
-                        const response = await userAPI.updateProfile({ resumeLink: '' });
-                        setProfile(response.data);
-                        toast.success('Resume link removed');
-                      } catch (err) {
-                        toast.error('Failed to remove resume link');
-                      }
-                    }}
-                    className="text-xs text-red-500 hover:text-red-700 font-medium"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={formData.resumeLink || ''}
-                  onChange={(e) => {
-                    setFormData({ ...formData, resumeLink: e.target.value });
-                    setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
-                  }}
-                  placeholder="https://drive.google.com/..."
-                  className="flex-1 min-w-0"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const url = (formData.resumeLink || '').trim();
-                    if (!url) return toast.error('Enter a link first');
-                    try {
-                      setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
-                      const res = await utilsAPI.checkUrl(url);
-                      const ok = res.data?.ok === true;
-                      setResumeLinkStatus({ checked: true, ok, status: res.data?.status, reason: res.data?.reason });
-                    } catch {
-                      setResumeLinkStatus({ checked: true, ok: false, status: null, reason: null });
-                      toast.error('Error checking link');
-                    }
-                  }}
-                  className="btn btn-outline shrink-0"
+            {/* List of resumes */}
+            <div className="space-y-4 mb-4">
+              {profile?.studentProfile?.resumes?.map((resItem) => (
+                <div 
+                  key={resItem._id} 
+                  className={`p-4 rounded-xl border flex flex-col gap-3 transition-all ${
+                    resItem.isPrimary 
+                      ? 'bg-green-50/50 border-green-200 shadow-sm shadow-green-50/20' 
+                      : 'bg-gray-50 border-gray-200'
+                  }`}
                 >
-                  Check Link
-                </button>
-              </div>
-
-              <p className="text-[11px] text-gray-500">
-                Paste a publicly accessible Google Drive, Notion, or PDF link. To update, replace the link and click <strong>Save Changes</strong>.
-              </p>
-            </div>
-
-            {/* ── Accessibility result ── */}
-            {resumeLinkStatus.checked && (
-              <div className={`mt-3 p-3 rounded-lg text-sm border ${resumeLinkStatus.ok
-                ? 'bg-green-50 border-green-200 text-green-800'
-                : 'bg-red-50 border-red-200 text-red-800'}`}>
-                <p className="font-semibold flex items-center gap-1.5">
-                  {resumeLinkStatus.ok ? '✅ Accessible' : '❌ Not accessible'}
-                  {resumeLinkStatus.status ? <span className="font-normal text-xs opacity-75">(HTTP {resumeLinkStatus.status})</span> : null}
-                  {resumeLinkStatus.ok && profile?.studentProfile?.resumeLink && (
-                    <a href={profile.studentProfile.resumeLink} target="_blank" rel="noopener noreferrer"
-                      className="ml-auto text-xs text-green-700 underline font-medium">Open →</a>
-                  )}
-                </p>
-                {!resumeLinkStatus.ok && (() => {
-                  const url = (formData.resumeLink || '').toLowerCase();
-                  if (url.includes('drive.google.com')) return (
-                    <div className="mt-2 text-xs text-red-700 bg-red-100 p-2.5 rounded border border-red-300">
-                      <p className="font-bold mb-1">Google Drive sharing tips:</p>
-                      <ol className="list-decimal pl-4 space-y-0.5">
-                        <li>Open the file → click <strong>Share</strong></li>
-                        <li>Change access to <strong>Anyone with the link</strong> (Viewer)</li>
-                        <li>Copy the link and paste it here again</li>
-                      </ol>
+                  <div className="min-w-0">
+                    <div className="flex items-start justify-between gap-2 flex-wrap mb-1">
+                      <p className="text-sm font-bold text-gray-900 truncate max-w-[180px] md:max-w-xs" title={resItem.fileName}>
+                        {resItem.fileName || 'Uploaded Resume'}
+                      </p>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {resItem.isPrimary && (
+                          <span className="bg-green-100 text-green-800 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-green-200">
+                            Primary
+                          </span>
+                        )}
+                        {resItem.resumeAts?.overallScore != null && (
+                          <span className="bg-indigo-100 text-indigo-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-indigo-200">
+                            ATS: {resItem.resumeAts.overallScore}/100
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  );
-                  if (url.includes('notion.so')) return (
-                    <div className="mt-2 text-xs text-red-700 bg-red-100 p-2.5 rounded border border-red-300">
-                      <p className="font-bold mb-1">Notion publishing tips:</p>
-                      <ol className="list-decimal pl-4 space-y-0.5">
-                        <li>Open page → click <strong>Publish</strong></li>
-                        <li>Enable <strong>Publish to web</strong></li>
-                        <li>Copy the public link and paste here</li>
-                      </ol>
-                    </div>
-                  );
-                  return <p className="mt-1 text-xs opacity-90">Make sure this link is publicly accessible (no login required).</p>;
-                })()}
-              </div>
-            )}
-
-            {/* ── ATS Score section ── */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">ATS Score Check</p>
-                  <p className="text-xs text-gray-500">Analyse your resume against job-readiness criteria</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase font-black tracking-widest border border-amber-200">Beta</span>
-                  <div className="relative group">
-                    <button
-                      type="button"
-                      onClick={handleCheckAtsScore}
-                      disabled={atsLoading}
-                      className="btn btn-primary"
-                    >
-                      {atsLoading ? 'Checking…' : 'Check ATS Score'}
-                    </button>
-                    <div className="absolute bottom-full right-0 mb-2 w-52 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
-                      Save your profile first before running the ATS check. Results are in beta and actively improving.
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>Uploaded {new Date(resItem.uploadedAt).toLocaleDateString()}</span>
+                      <span>•</span>
+                      <a
+                        href={resolveResumeUrl(resItem.resumeLink || resItem.resume)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 hover:underline font-bold"
+                      >
+                        View Resume
+                      </a>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              {atsResult && atsResult.status === 'ok' && (
+                  <div className="flex items-center gap-2 justify-end flex-wrap border-t border-gray-200/40 pt-3 mt-1">
+                    {!resItem.isPrimary && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetPrimaryResume(resItem._id)}
+                        className="btn border border-primary-600 text-primary-600 hover:bg-primary-50 bg-white text-xs py-1.5 px-2.5 font-semibold"
+                        disabled={uploadingResume}
+                      >
+                        Set Primary
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleCheckAtsScore(resItem._id)}
+                      disabled={atsLoading}
+                      className="btn btn-secondary text-xs py-1.5 px-2.5 font-semibold flex items-center gap-1"
+                    >
+                      {atsCheckingId === resItem._id ? 'Checking...' : 'Check ATS'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteResume(resItem._id)}
+                      className="btn border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 bg-white text-xs py-1.5 px-2.5 font-semibold"
+                      disabled={uploadingResume}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Legacy fallback if resumes array doesn't exist yet but resumeLink is present */}
+              {(!profile?.studentProfile?.resumes || profile.studentProfile.resumes.length === 0) && (profile?.studentProfile?.resumeLink || profile?.studentProfile?.resume) && (
+                <div className="p-4 rounded-xl border flex flex-col gap-3 transition-all bg-green-50/50 border-green-200">
+                  <div className="min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <p className="text-sm font-bold text-gray-900 truncate">
+                        Legacy Profile Resume
+                      </p>
+                      <span className="bg-green-100 text-green-800 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-green-200">
+                        Primary
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <a
+                        href={resolveResumeUrl(profile.studentProfile.resumeLink || profile.studentProfile.resume)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 hover:underline font-bold"
+                      >
+                        View Resume
+                      </a>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 justify-end border-t border-green-200/40 pt-3 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleCheckAtsScore()}
+                      disabled={atsLoading}
+                      className="btn btn-secondary text-xs py-1.5 px-2.5 font-semibold"
+                    >
+                      {atsLoading ? 'Checking...' : 'Check ATS'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {(!profile?.studentProfile?.resumes || profile.studentProfile.resumes.length === 0) && !(profile?.studentProfile?.resumeLink || profile?.studentProfile?.resume) && (
+                <p className="text-sm text-gray-500 italic text-center py-4">No resumes uploaded yet. Upload one below to get started.</p>
+              )}
+            </div>
+
+            {/* Upload Zone */}
+            <div className="border-t pt-4">
+              {uploadingResume ? (
+                <div className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-primary-200 rounded-xl bg-primary-50/50">
+                  <LoadingSpinner size="md" />
+                  <p className="text-sm font-semibold text-primary-700 mt-2 animate-pulse">Uploading resume...</p>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center py-6 px-4 border-2 border-dashed border-gray-300 hover:border-primary-500 rounded-xl bg-gray-50/50 hover:bg-primary-50/10 cursor-pointer transition-all group">
+                  <Upload className="w-6 h-6 text-gray-400 group-hover:text-primary-500 transition-colors mb-1" />
+                  <span className="text-sm font-bold text-gray-700 group-hover:text-primary-700 transition-colors">
+                    Upload new resume file
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-medium mt-1">
+                    PDF, DOC, DOCX (Max 10MB)
+                  </span>
+                  <input
+                    type="file"
+                    id="resume-upload"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx"
+                    onChange={handleResumeUpload}
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* ── ATS Score details ── */}
+            {atsResult && atsResult.status === 'ok' && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="text-sm font-bold text-indigo-800">Overall Score</p>
+                      <p className="text-sm font-bold text-indigo-800">Primary Resume ATS Score</p>
                       <p className="text-xs text-indigo-600">
                         Last checked: {atsResult.checkedAt ? new Date(atsResult.checkedAt).toLocaleString() : 'just now'}
                         {atsResult.qualityFlag === 'low_text_extraction' ? ' · Low extraction quality' : ''}
@@ -2507,9 +2621,9 @@ const StudentProfile = () => {
                     </details>
                   )}
                 </div>
-              )}
+              </div>
+            )}
             </div>
-          </div>
 
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">Profile Completion</h2>

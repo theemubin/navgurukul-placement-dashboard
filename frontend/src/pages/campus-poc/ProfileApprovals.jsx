@@ -936,11 +936,11 @@ const ProfileApprovals = () => {
                 <div>
                   {selectedStudent.studentProfile?.resume ? (
                     <div className="p-3 bg-gray-50 rounded">
-                      <a href={`/${selectedStudent.studentProfile.resume}`} target="_blank" rel="noreferrer" className="text-primary-600">View Resume</a>
+                      <a href={selectedStudent.studentProfile.resume.startsWith('http') ? selectedStudent.studentProfile.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resume}`} target="_blank" rel="noreferrer" className="text-primary-600">View Resume</a>
                     </div>
                   ) : selectedStudent.studentProfile?.resumeLink ? (
                     <div className="p-3 bg-gray-50 rounded">
-                      <a href={selectedStudent.studentProfile.resumeLink} target="_blank" rel="noreferrer" className="text-primary-600">Resume Link</a>
+                      <a href={selectedStudent.studentProfile.resumeLink.startsWith('http') ? selectedStudent.studentProfile.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resumeLink}`} target="_blank" rel="noreferrer" className="text-primary-600">Resume Link</a>
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500">No resume uploaded</p>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI, statsAPI, publicAPI } from '../../services/api';
+import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI, statsAPI, publicAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Modal } from '../../components/common/UIComponents';
 import {
   ArrowLeft, Briefcase, MapPin, IndianRupee, Calendar, Clock,
@@ -115,6 +115,8 @@ const JobDetails = () => {
   const [questions, setQuestions] = useState([]);
   const [newQuestion, setNewQuestion] = useState('');
   const [askingQuestion, setAskingQuestion] = useState(false);
+  const [resumes, setResumes] = useState([]);
+  const [selectedResume, setSelectedResume] = useState(null);
 
   useEffect(() => {
     if (user?.role === 'student') {
@@ -165,7 +167,18 @@ const JobDetails = () => {
   const fetchProfileStatus = async () => {
     try {
       const response = await authAPI.getMe();
-      setProfileStatus(response.data?.studentProfile?.profileStatus || 'draft');
+      const studentProfile = response.data?.studentProfile;
+      setProfileStatus(studentProfile?.profileStatus || 'draft');
+      const studentResumes = studentProfile?.resumes || [];
+      setResumes(studentResumes);
+      const primary = studentResumes.find(r => r.isPrimary);
+      if (primary) {
+        setSelectedResume(primary.resume);
+      } else if (studentResumes.length > 0) {
+        setSelectedResume(studentResumes[0].resume);
+      } else {
+        setSelectedResume(studentProfile?.resume || null);
+      }
     } catch (error) {
       console.error('Error fetching profile status:', error);
     }
@@ -248,7 +261,7 @@ const JobDetails = () => {
           isMandatory: req.isMandatory
         })) || []
       };
-      await applicationAPI.apply(id, applicationData.coverLetter, applicationData.customResponses);
+      await applicationAPI.apply(id, applicationData.coverLetter, applicationData.customResponses, 'regular', selectedResume);
       toast.success('Application submitted successfully!');
       setHasApplied(true);
       setShowApplyModal(false);
@@ -1175,6 +1188,90 @@ const JobDetails = () => {
               </div>
             )}
 
+            {/* Resume Selection */}
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Select Resume for Application
+              </label>
+              {resumes.length > 0 ? (
+                <div className="space-y-2 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50">
+                  {resumes.map((r) => (
+                    <label
+                      key={r._id}
+                      className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        selectedResume === r.resume
+                          ? 'border-primary-500 bg-primary-50/50'
+                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="application-resume"
+                        value={r.resume}
+                        checked={selectedResume === r.resume}
+                        onChange={() => setSelectedResume(r.resume)}
+                        className="w-4 h-4 mt-1 text-primary-600 focus:ring-primary-500 cursor-pointer flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-xs font-bold text-gray-900 truncate max-w-[200px]">
+                            {r.fileName || 'Resume'}
+                          </p>
+                          {r.isPrimary && (
+                            <span className="bg-primary-100 text-primary-800 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-primary-200">
+                              Primary
+                            </span>
+                          )}
+                          <a
+                            href={resolveResumeUrl(r.resume)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-primary-600 hover:underline font-semibold ml-auto"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View
+                          </a>
+                        </div>
+                        <p className="text-[10px] text-gray-400 font-medium">
+                          Uploaded on {new Date(r.uploadedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : selectedResume ? (
+                <div className="p-3 border border-gray-200 rounded-lg bg-gray-50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    <div>
+                      <p className="text-xs font-bold text-gray-900">Current Resume</p>
+                      <p className="text-[10px] text-gray-400 font-medium">Legacy Profile Resume</p>
+                    </div>
+                  </div>
+                  <a
+                    href={resolveResumeUrl(selectedResume)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary-600 hover:underline font-bold"
+                  >
+                    View
+                  </a>
+                </div>
+              ) : (
+                <div className="p-3 text-center border border-dashed border-gray-300 rounded-lg bg-gray-50">
+                  <p className="text-xs text-red-500 font-semibold animate-pulse">
+                    No resumes found in your profile. You must upload a resume before applying.
+                  </p>
+                  <Link
+                    to="/student/profile"
+                    className="text-xs text-primary-600 hover:underline font-bold mt-1 inline-block"
+                  >
+                    Go to Profile to upload a resume
+                  </Link>
+                </div>
+              )}
+            </div>
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Cover Letter (Optional)
@@ -1197,7 +1294,7 @@ const JobDetails = () => {
               <button
                 onClick={handleApply}
                 className="btn btn-primary"
-                disabled={applying || (job.customRequirements?.some(r => r.isMandatory && !customResponses[job.customRequirements.indexOf(r)]))}
+                disabled={applying || !selectedResume || (job.customRequirements?.some(r => r.isMandatory && !customResponses[job.customRequirements.indexOf(r)]))}
               >
                 {applying ? 'Submitting...' : 'Submit Application'}
               </button>
@@ -1504,7 +1601,7 @@ const JobDetails = () => {
                                 <td className="px-4 py-4 text-right">
                                   {app.resume ? (
                                     <a
-                                      href={app.resume}
+                                      href={app.resume.startsWith('http') ? app.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.resume}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="p-1.5 text-primary-600 hover:text-primary-800 transition-colors inline-block"
@@ -1580,7 +1677,7 @@ const JobDetails = () => {
                                 <td className="px-4 py-4 text-right">
                                   {app.resume ? (
                                     <a
-                                      href={app.resume}
+                                      href={app.resume.startsWith('http') ? app.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.resume}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="p-1.5 text-primary-600 hover:text-primary-800 transition-colors inline-block"

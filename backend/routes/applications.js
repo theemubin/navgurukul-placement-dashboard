@@ -291,10 +291,12 @@ router.post('/', auth, authorize('student'), [
     // Get student's resume
     const student = await User.findById(req.userId);
 
+    const resumeToUse = req.body.resume || student.studentProfile.resume;
+
     const application = new Application({
       student: req.userId,
       job: jobId,
-      resume: student.studentProfile.resume,
+      resume: resumeToUse,
       coverLetter,
       customResponses: customResponses || [],
       applicationType: type,
