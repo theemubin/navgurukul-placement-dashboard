@@ -122,6 +122,8 @@ export const userAPI = {
   addAIKey: (data) => api.post('/users/me/ai-keys', data),
   updateAIKey: (keyId, data) => api.patch(`/users/me/ai-keys/${keyId}`, data),
   deleteAIKey: (keyId) => api.delete(`/users/me/ai-keys/${keyId}`),
+  setPrimaryResume: (resumeId) => api.put(`/users/profile/resumes/${resumeId}/primary`),
+  deleteResume: (resumeId) => api.delete(`/users/profile/resumes/${resumeId}`),
   updateStudentStatus: (studentId, status) => api.put(`/users/students/${studentId}/status`, { status })
 };
 
@@ -209,7 +211,7 @@ export const jobAPI = {
 export const applicationAPI = {
   getApplications: (params) => api.get('/applications', { params }),
   getApplication: (id) => api.get(`/applications/${id}`),
-  apply: (jobId, coverLetter, customResponses, type = 'regular') => api.post('/applications', { jobId, coverLetter, customResponses, type }),
+  apply: (jobId, coverLetter, customResponses, type = 'regular', resume = '') => api.post('/applications', { jobId, coverLetter, customResponses, type, resume }),
   updateStatus: (id, status, feedback) =>
     api.put(`/applications/${id}/status`, { status, feedback }),
   updateRound: (id, roundData) => api.put(`/applications/${id}/rounds`, roundData),
@@ -298,7 +300,7 @@ export const campusAPI = {
 // Utilities
 export const utilsAPI = {
   checkUrl: (url) => api.post('/utils/check-url', { url }),
-  checkResumeAts: () => api.post('/utils/resume-ats/check', {}),
+  checkResumeAts: (resumeId = '') => api.post('/utils/resume-ats/check', { resumeId }),
   analyzeScam: (data) => api.post('/utils/analyze-scam', data),
   testAIKey: () => api.post('/utils/test-ai-key'),
   lookupPincode: (pincode) => api.get(`/utils/pincode/${pincode}`)
@@ -480,6 +482,15 @@ export const loginBackgroundAPI = {
 export const publicAPI = {
   submitLead: (data) => axios.post(`${API_URL}/public/leads`, data),
   getJob: (id) => axios.get(`${API_URL}/public/jobs/${id}`)
+};
+
+// Resolve local upload relative paths or absolute Cloudinary URLs
+export const resolveResumeUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  // Fallback to backend base url
+  const cleanApi = rawApi.replace(/\/+$/, '');
+  return `${cleanApi}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
 export default api;

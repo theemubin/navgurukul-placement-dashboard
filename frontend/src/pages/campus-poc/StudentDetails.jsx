@@ -291,7 +291,7 @@ const POCStudentDetails = () => {
                   </a>
                 )}
                 {profile.resumeLink && (
-                  <a href={profile.resumeLink} target="_blank" rel="noopener noreferrer"
+                  <a href={profile.resumeLink.startsWith('http') ? profile.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${profile.resumeLink}`} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors">
                     <FileText className="w-3.5 h-3.5" /> Resume Link
                   </a>

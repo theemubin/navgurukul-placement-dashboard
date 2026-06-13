@@ -6,7 +6,7 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 require('dotenv').config();
 
 // Check if Cloudinary credentials exist
-const useCloudinary = process.env.CLOUDINARY_CLOUD_NAME &&
+const useCloudinary = (process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME) &&
   process.env.CLOUDINARY_API_KEY &&
   process.env.CLOUDINARY_API_SECRET;
 
@@ -15,14 +15,14 @@ let storage;
 // Debug Cloudinary Config
 if (useCloudinary) {
   console.log('Cloudinary Config Found:', {
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME,
     api_key: process.env.CLOUDINARY_API_KEY ? '***' : 'MISSING',
     api_secret: process.env.CLOUDINARY_API_SECRET ? '***' : 'MISSING'
   });
 
   // Configure Cloudinary
   cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET
   });
@@ -94,6 +94,10 @@ const fileFilter = (req, file, cb) => {
   console.log(`Processing upload: field=${file.fieldname}, mimetype=${file.mimetype}, name=${file.originalname}`);
 
   if (file.fieldname === 'resume') {
+    if (!useCloudinary) {
+      console.error('Upload rejected: Cloudinary is not configured');
+      return cb(new Error('Cloudinary is not configured. Resume upload requires Cloudinary storage.'), false);
+    }
     // Allow PDF, DOC, DOCX for resumes
     if (file.mimetype === 'application/pdf' ||
       file.mimetype === 'application/msword' ||
@@ -120,7 +124,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 100 * 1024 // 100KB limit
+    fileSize: 10 * 1024 * 1024 // 10MB limit
   }
 });
 
