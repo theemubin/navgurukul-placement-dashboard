@@ -927,18 +927,24 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
       .populate('studentProfile.skills.skill', 'name')
       .select('firstName lastName email studentProfile.currentSchool studentProfile.enrollmentNumber studentProfile.skills studentProfile.academicRecords');
 
-    // Check if each student has already applied
+    // Check if each student has already applied (including placed/inactive students)
+    const allCampusStudents = await User.find({
+      role: 'student',
+      campus: { $in: campusIds }
+    }).select('_id');
+    const allCampusStudentIds = allCampusStudents.map(s => s._id);
+
     const applicationMap = {};
     const applications = await Application.find({
       job: jobId,
-      student: { $in: students.map(s => s._id) }
+      student: { $in: allCampusStudentIds }
     }).select('student status');
 
     applications.forEach(app => {
       applicationMap[app.student.toString()] = app.status;
     });
 
-    // Build student list with match info
+    // Build student list with match info (only active/eligible students are returned in list)
     const eligibleStudents = students.map(student => {
       const studentSkillIds = (student.studentProfile?.skills || [])
         .filter(s => s.verified)
@@ -983,7 +989,7 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
       },
       students: eligibleStudents,
       total: eligibleStudents.length,
-      applied: eligibleStudents.filter(s => s.hasApplied).length,
+      applied: applications.length,
       notApplied: eligibleStudents.filter(s => !s.hasApplied).length
     });
   } catch (error) {
@@ -1154,19 +1160,16 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
       'studentProfile.currentStatus': { $in: ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'] }
     });
 
-    // Get application counts for each job — only approved students
-    const studentIds = await User.find({
+    // Get application counts for each job (including placed/inactive students)
+    const allCampusStudents = await User.find({
       role: 'student',
-      campus: { $in: campusIds },
-      isActive: true,
-      'studentProfile.profileStatus': 'approved',
-      'studentProfile.currentStatus': { $in: ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'] }
+      campus: { $in: campusIds }
     }).select('_id');
 
     const jobsWithStats = await Promise.all(jobs.map(async (job) => {
       const applications = await Application.find({
         job: job._id,
-        student: { $in: studentIds.map(s => s._id) }
+        student: { $in: allCampusStudents.map(s => s._id) }
       }).select('status');
 
       return {
