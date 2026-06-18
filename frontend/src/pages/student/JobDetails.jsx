@@ -108,6 +108,7 @@ const JobDetails = () => {
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [showInterestModal, setShowInterestModal] = useState(false);
   const [interestForm, setInterestForm] = useState({
+    reason: '',
     improvementPlan: ''
   });
   const [readiness, setReadiness] = useState(null);
@@ -308,7 +309,7 @@ const JobDetails = () => {
     try {
       const response = await jobAPI.submitInterest(id, {
         reason: interestForm.reason,
-        acknowledgedGaps: interestForm.acknowledgedGaps,
+        acknowledgedGaps: interestForm.acknowledgedGaps || [],
         improvementPlan: interestForm.improvementPlan
       });
       toast.success('Interest request submitted! Your Campus PoC will review it.');
