@@ -184,6 +184,7 @@ export const StatusBadge = ({ status }) => {
     approved: { label: 'Approved', class: 'badge-approved' },
     rejected: { label: 'Rejected', class: 'badge-rejected' },
     applied: { label: 'Applied', class: 'bg-blue-100 text-blue-800' },
+    interested: { label: 'Interested', class: 'bg-teal-100 text-teal-800' },
     shortlisted: { label: 'Shortlisted', class: 'bg-purple-100 text-purple-800' },
     in_progress: { label: 'In Progress', class: 'bg-yellow-100 text-yellow-800' },
     selected: { label: 'Selected', class: 'bg-green-100 text-green-800' },

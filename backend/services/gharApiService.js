@@ -8,7 +8,7 @@ class GharApiService {
     constructor() {
         this.baseURL = 'https://ghar.navgurukul.org';
         this.token = process.env.NAVGURUKUL_API_TOKEN;
-        
+
         if (this.token) {
             console.log(`[GharAPI] Service initialized with token: ${this.token.substring(0, 10)}...`);
         } else {
@@ -35,10 +35,10 @@ class GharApiService {
                     if (tokenToUse.includes(jwtMarker)) {
                         tokenToUse = jwtMarker + tokenToUse.split(jwtMarker).pop();
                     }
-                    
+
                     // Most APIs expect Bearer prefix for JWT
-                    config.headers['Authorization'] = tokenToUse.startsWith('Bearer ') 
-                        ? tokenToUse 
+                    config.headers['Authorization'] = tokenToUse.startsWith('Bearer ')
+                        ? tokenToUse
                         : `Bearer ${tokenToUse}`;
                 }
                 return config;
@@ -73,14 +73,14 @@ class GharApiService {
     async fetchFilteredStudents(filters = {}, _isDev = true) {
         try {
             // Force isDev to true as requested by user
-            const isDev = true; 
+            const isDev = true;
             const params = {
                 ...filters,
                 isDev,
                 stdIdStart: filters.stdIdStart || 1,
                 stdIdEnd: filters.stdIdEnd || 5000
             };
-            
+
             console.log(`[GharSync] Fetching students:`, {
                 url: this.baseURL + '/gharZoho/students/filter',
                 params,
@@ -159,12 +159,12 @@ class GharApiService {
      */
     async syncStudentData(email) {
         if (!email) return null;
-        
+
         try {
             // Normalize email: trim and lowercase
             const normalizedEmail = email.trim().toLowerCase();
             // Force isDev to true as requested
-            const isDev = true; 
+            const isDev = true;
 
             console.log(`[GharAPI] Attempting sync for: "${normalizedEmail}" (isDev: true)`);
 
@@ -185,7 +185,7 @@ class GharApiService {
             if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
                 const externalData = response.data.data[0];
                 console.log(`[GharAPI] Found data for ${normalizedEmail}. Status: ${externalData.Status}`);
-                
+
                 const User = require('../models/User');
                 await User.syncGharData(normalizedEmail, externalData);
                 return externalData;

@@ -519,6 +519,7 @@ const Applications = () => {
     { value: '', label: 'All Status' },
     { value: 'pending', label: 'Pending' },
     { value: 'under_review', label: 'Under Review' },
+    { value: 'interested', label: 'Interested' },
     { value: 'shortlisted', label: 'Shortlisted' },
     { value: 'interviewing', label: 'Interviewing' },
     { value: 'selected', label: 'Selected' },

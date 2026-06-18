@@ -235,20 +235,20 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
         const { campus, school, status, stdIdStart, stdIdEnd } = req.query;
         console.log(`[GharSync] Starting mass import (isDev: ${isDev}, Campus: ${campus || 'All'}, School: ${school || 'All'}, Status: ${status || 'All'}, Range: ${stdIdStart || 1}-${stdIdEnd || 10000})`);
 
-        const studentsToProcess = await gharApiService.fetchFilteredStudents({ 
-          campus, 
-          school, 
-          status,
-          stdIdStart: stdIdStart || 1, 
-          stdIdEnd: stdIdEnd || 5000 // Default 5k to be safe
+        const studentsToProcess = await gharApiService.fetchFilteredStudents({
+            campus,
+            school,
+            status,
+            stdIdStart: stdIdStart || 1,
+            stdIdEnd: stdIdEnd || 5000 // Default 5k to be safe
         }, isDev);
-        
+
         if (!studentsToProcess || studentsToProcess.length === 0) {
             return res.status(200).json({
                 success: false,
-                message: campus || school || status 
-                  ? 'No students found matching your filters' 
-                  : 'No students found to import'
+                message: campus || school || status
+                    ? 'No students found matching your filters'
+                    : 'No students found to import'
             });
         }
 
@@ -257,32 +257,32 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
             created: 0,
             updated: 0,
             failed: 0,
-            processedStudents: [] 
+            processedStudents: []
         };
 
         // Pre-fetch campus ID once to avoid 292 redundant queries
         let resolvedCampusId = null;
         if (campus) {
-          try {
-            const Campus = mongoose.model('Campus');
-            const campusDoc = await Campus.findOne({ name: new RegExp(`^${campus}$`, 'i') });
-            if (campusDoc) resolvedCampusId = campusDoc._id;
-          } catch (e) {
-            console.warn('[GharSync] Could not pre-cache campus ID');
-          }
+            try {
+                const Campus = mongoose.model('Campus');
+                const campusDoc = await Campus.findOne({ name: new RegExp(`^${campus}$`, 'i') });
+                if (campusDoc) resolvedCampusId = campusDoc._id;
+            } catch (e) {
+                console.warn('[GharSync] Could not pre-cache campus ID');
+            }
         }
 
         // Get all emails in one batch to check existence in one go
         const studentEmailsInGhar = studentsToProcess.map(st => {
-           // Reuse the email finding logic but carefully
-           return [
-              'Navgurukul_Email', 'Student_ng_email', 'Email', 'Email_ID', 
-              'student_email', 'Ng_Email_ID', 'Personal_Email'
+            // Reuse the email finding logic but carefully
+            return [
+                'Navgurukul_Email', 'Student_ng_email', 'Email', 'Email_ID',
+                'student_email', 'Ng_Email_ID', 'Personal_Email'
             ].map(k => st[k]).find(v => v);
         }).filter(v => v);
 
-        const existingUsers = await User.find({ 
-           email: { $in: studentEmailsInGhar.map(e => new RegExp(`^${e.trim()}$`, 'i')) } 
+        const existingUsers = await User.find({
+            email: { $in: studentEmailsInGhar.map(e => new RegExp(`^${e.trim()}$`, 'i')) }
         }, 'email');
         const existingEmailsSet = new Set(existingUsers.map(u => u.email.toLowerCase()));
 
@@ -295,53 +295,53 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
                 try {
                     // Reuse the finding logic
                     const emailField = [
-                      'Navgurukul_Email', 'Student_ng_email', 'Email', 'Email_ID', 
-                      'student_email', 'Ng_Email_ID', 'Personal_Email',
-                      'Select_Campus.Campus_Email', 'Email_Address'
+                        'Navgurukul_Email', 'Student_ng_email', 'Email', 'Email_ID',
+                        'student_email', 'Ng_Email_ID', 'Personal_Email',
+                        'Select_Campus.Campus_Email', 'Email_Address'
                     ].find(k => {
-                      if (k.includes('.')) {
-                        const [p, c] = k.split('.');
-                        return st[p] && st[p][c];
-                      }
-                      return st[k];
+                        if (k.includes('.')) {
+                            const [p, c] = k.split('.');
+                            return st[p] && st[p][c];
+                        }
+                        return st[k];
                     });
 
                     if (emailField && emailField.includes('.')) {
-                      const [p, c] = emailField.split('.');
-                      currentEmail = st[p][c];
+                        const [p, c] = emailField.split('.');
+                        currentEmail = st[p][c];
                     } else if (emailField) {
-                      currentEmail = st[emailField];
+                        currentEmail = st[emailField];
                     }
-                    
+
                     if (st.Name && typeof st.Name === 'object') {
-                      currentName = `${st.Name.first_name || ''} ${st.Name.last_name || ''}`.trim() || 'No Name';
+                        currentName = `${st.Name.first_name || ''} ${st.Name.last_name || ''}`.trim() || 'No Name';
                     } else if (typeof st.Name === 'string') {
-                      currentName = st.Name;
+                        currentName = st.Name;
                     }
 
                     if (!currentEmail) {
-                      stats.failed++;
-                      return;
+                        stats.failed++;
+                        return;
                     }
 
                     const normalizedEmail = currentEmail.trim().toLowerCase();
                     const exists = existingEmailsSet.has(normalizedEmail);
-                    
+
                     // Sync data 
-                    const result = await User.syncGharData(normalizedEmail, st, { 
-                      createIfNotFound: true,
-                      targetCampusId: resolvedCampusId // Pass if already found
+                    const result = await User.syncGharData(normalizedEmail, st, {
+                        createIfNotFound: true,
+                        targetCampusId: resolvedCampusId // Pass if already found
                     });
-                    
+
                     if (result) {
                         const isNew = !exists;
                         if (isNew) stats.created++;
                         else stats.updated++;
-                        
+
                         stats.processedStudents.push({
-                           name: currentName,
-                           email: currentEmail,
-                           status: isNew ? 'Created' : 'Updated'
+                            name: currentName,
+                            email: currentEmail,
+                            status: isNew ? 'Created' : 'Updated'
                         });
                     } else {
                         stats.failed++;
@@ -355,9 +355,9 @@ router.post('/import-all-students', isAuthenticated, authorize('manager', 'campu
 
         res.json({
             success: true,
-            message: campus 
-              ? `Sync for ${campus} completed: ${stats.created} new imported, ${stats.updated} updated`
-              : `Mass sync completed: ${stats.created} imported, ${stats.updated} updated`,
+            message: campus
+                ? `Sync for ${campus} completed: ${stats.created} new imported, ${stats.updated} updated`
+                : `Mass sync completed: ${stats.created} imported, ${stats.updated} updated`,
             stats,
             debug: stats.failed > 0 ? {
                 sampleStudentKeys: studentsToProcess[0] ? Object.keys(studentsToProcess[0]) : [],
