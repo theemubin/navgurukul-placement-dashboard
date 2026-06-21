@@ -81,15 +81,19 @@ router.get('/', auth, async (req, res) => {
     if (job) query.job = job;
     if (status) query.status = status;
 
-    // Campus POC can only see applications from their campus students (including managed campuses)
+    // Campus POC can only see applications from their allowed campus students (primary and managed)
     if (req.user.role === 'campus_poc') {
-      const campusIds = (req.user.managedCampuses || []).map(id => id.toString());
-      if (req.user.campus) campusIds.push(req.user.campus.toString());
-      const uniqueCampusIds = [...new Set(campusIds)];
-
+      const allowedCampuses = [];
+      if (req.user.campus) allowedCampuses.push(req.user.campus.toString());
+      if (req.user.managedCampuses && req.user.managedCampuses.length > 0) {
+        req.user.managedCampuses.forEach(c => {
+          const cid = c.toString();
+          if (!allowedCampuses.includes(cid)) allowedCampuses.push(cid);
+        });
+      }
       const campusStudents = await User.find({
         role: 'student',
-        campus: { $in: uniqueCampusIds }
+        campus: { $in: allowedCampuses }
       }).select('_id');
       query.student = { $in: campusStudents.map(s => s._id) };
     }
@@ -221,7 +225,7 @@ router.post('/', auth, authorize('student'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { jobId, coverLetter, customResponses, type = 'regular' } = req.body;
+    const { jobId, coverLetter, customResponses, type = 'regular', selectedResumeId } = req.body;
 
     // Check if job exists and is active
     const job = await Job.findById(jobId);
@@ -291,12 +295,41 @@ router.post('/', auth, authorize('student'), [
     // Get student's resume
     const student = await User.findById(req.userId);
 
-    const resumeToUse = req.body.resume || student.studentProfile.resume;
+    let resumeUrl = student.studentProfile?.resume;
+    let resumeSnapshot = null;
+
+    if (selectedResumeId && student.studentProfile?.resumes) {
+      const selectedResume = student.studentProfile.resumes.find(
+        r => r._id.toString() === selectedResumeId.toString()
+      );
+      if (selectedResume) {
+        resumeUrl = selectedResume.url;
+        resumeSnapshot = {
+          role: selectedResume.role,
+          url: selectedResume.url,
+          publicId: selectedResume.publicId,
+          uploadedAt: selectedResume.uploadedAt
+        };
+      }
+    }
+
+    if (!resumeSnapshot) {
+      resumeSnapshot = {
+        role: 'Primary',
+        url: resumeUrl || student.studentProfile?.resume || student.studentProfile?.resumeLink || '',
+        publicId: '',
+        uploadedAt: new Date()
+      };
+      if (!resumeUrl) {
+        resumeUrl = resumeSnapshot.url;
+      }
+    }
 
     const application = new Application({
       student: req.userId,
       job: jobId,
-      resume: resumeToUse,
+      resume: resumeUrl,
+      resumeSnapshot,
       coverLetter,
       customResponses: customResponses || [],
       applicationType: type,

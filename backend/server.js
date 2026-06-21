@@ -120,6 +120,12 @@ app.use('/api/scam-reports', scamReportsRoutes);
 app.use('/api/ghar', gharIntegrationRoutes);
 app.use('/api/login-backgrounds', loginBackgroundRoutes);
 
+// Redirect root to frontend
+app.get('/', (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  res.redirect(frontendUrl);
+});
+
 // Serve uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -226,7 +232,7 @@ const PORT = process.env.PORT || 5001;
 
 // Start server and attach helpful error handling
 const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port http://localhost:${PORT}`);
 });
 
 server.on('error', (err) => {

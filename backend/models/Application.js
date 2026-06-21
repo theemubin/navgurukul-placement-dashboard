@@ -55,6 +55,12 @@ const applicationSchema = new mongoose.Schema({
     recommendedAt: Date
   },
   resume: String, // Resume used for this application
+  resumeSnapshot: {
+    role: String,
+    url: String,
+    publicId: String,
+    uploadedAt: Date
+  },
   coverLetter: String,
   customResponses: [{
     requirement: String,

@@ -407,6 +407,12 @@ const userSchema = new mongoose.Schema({
 
     resume: String,
     resumeLink: String,
+    resumes: [{
+      role: { type: String, required: true },
+      url: { type: String, required: true },
+      publicId: { type: String },
+      uploadedAt: { type: Date, default: Date.now }
+    }],
     resumeAts: {
       overallScore: { type: Number, min: 0, max: 100, default: null },
       qualityFlag: { type: String, enum: ['ok', 'low_text_extraction'], default: null },

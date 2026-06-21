@@ -52,10 +52,10 @@ router.post('/sync-student', auth, authorize('campus_poc', 'coordinator', 'manag
     // Find student (case-insensitive search by email or direct ID)
     const student = userId
       ? await User.findById(userId)
-      : await User.findOne({ 
-          email: new RegExp(`^${(email || '').trim()}$`, 'i'), 
-          role: 'student' 
-        });
+      : await User.findOne({
+        email: new RegExp(`^${(email || '').trim()}$`, 'i'),
+        role: 'student'
+      });
 
     if (!student) {
       console.warn(`[StudentSync] No student found with email: "${email}" or ID: "${userId}"`);
@@ -128,7 +128,7 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
       sortField, sortOrder, gharAttendanceMin, gharStatus
     } = req.query;
 
-    let query = { 
+    let query = {
       role: 'student'
     };
 
@@ -154,14 +154,18 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
       query['studentProfile.currentStatus'] = 'Active';
     }
     // Note: If statusFilter is undefined and role is staff/poc/coordinator/manager, we show all students.
-    // Campus POCs can see students from their managed campuses
+    // Campus POCs can see students from their primary campus and managed campuses
     if (req.user.role === 'campus_poc') {
-      const managedCampuses = req.user.managedCampuses?.length > 0
-        ? req.user.managedCampuses
-        : (req.user.campus ? [req.user.campus] : []);
-
-      if (managedCampuses.length > 0) {
-        query.campus = { $in: managedCampuses };
+      const allowedCampuses = [];
+      if (req.user.campus) allowedCampuses.push(req.user.campus.toString());
+      if (req.user.managedCampuses && req.user.managedCampuses.length > 0) {
+        req.user.managedCampuses.forEach(c => {
+          const cid = c.toString();
+          if (!allowedCampuses.includes(cid)) allowedCampuses.push(cid);
+        });
+      }
+      if (allowedCampuses.length > 0) {
+        query.campus = { $in: allowedCampuses };
       }
     } else if (campus) {
       query.campus = campus;
@@ -424,8 +428,9 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
       } else {
         fileUrl = `/uploads/resumes/${req.file.filename}`;
       }
-      user.studentProfile.resume = fileUrl;
-      user.studentProfile.resumeLink = fileUrl;
+      user.studentProfile.resumeLink = user.studentProfile.resume;
+      user.studentProfile.resumeAccessible = true;
+      user.studentProfile.resumeAccessibilityRemark = 'Uploaded via dashboard';
     }
 
     // Update basic info
@@ -461,58 +466,17 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
     if (user.role === 'student') {
       const profileUpdates = [
         'linkedIn', 'github', 'portfolio', 'about',
-        'currentSchool', 'currentModule', 'customModuleDescription', 'resumeLink', 'resume', 'houseName'
+        'currentSchool', 'currentModule', 'customModuleDescription', 'resumeLink', 'houseName', 'resume'
       ];
 
       // Validate resume link if present before applying
       if (updates.resumeLink !== undefined && updates.resumeLink !== '') {
-        // Skip validation for local uploads paths (starts with /uploads/)
-        if (!updates.resumeLink.startsWith('/uploads/')) {
+        const isUploaded = updates.resumeLink.startsWith('/uploads/') || updates.resumeLink.includes('cloudinary.com');
+        if (!isUploaded) {
           const { checkUrlAccessible } = require('../utils/urlChecker');
           const check = await checkUrlAccessible(updates.resumeLink);
           if (!check.ok) {
             return res.status(400).json({ message: 'Resume link is not accessible', reason: check.reason || 'inaccessible' });
-          }
-
-          if (!user.studentProfile.resumes) {
-            user.studentProfile.resumes = [];
-          }
-
-          const exists = user.studentProfile.resumes.some(r => r.resumeLink === updates.resumeLink);
-          if (!exists) {
-            const isFirst = user.studentProfile.resumes.length === 0;
-            const newResume = {
-              resume: updates.resumeLink,
-              resumeLink: updates.resumeLink,
-              fileName: updates.resumeLink.split('/').pop() || 'External Resume Link',
-              isPrimary: isFirst,
-              uploadedAt: new Date(),
-              resumeAts: {
-                overallScore: null,
-                qualityFlag: null,
-                textLength: 0,
-                status: null,
-                sourceUrl: '',
-                errorMessage: '',
-                atsSummary: '',
-                nameMatch: { isMatch: null, confidence: 0, matchedName: '', reason: '' },
-                breakdown: { keywordAlignment: 0, skillsRelevance: 0, projectImpact: 0, structureReadability: 0, experienceStrength: 0 },
-                strengths: [],
-                gaps: [],
-                actionItems: []
-              },
-              resumeAccessible: null,
-              resumeAccessibilityRemark: ''
-            };
-            user.studentProfile.resumes.push(newResume);
-
-            if (isFirst) {
-              user.studentProfile.resume = updates.resumeLink;
-              user.studentProfile.resumeLink = updates.resumeLink;
-              user.studentProfile.resumeAccessible = null;
-              user.studentProfile.resumeAccessibilityRemark = '';
-              user.studentProfile.resumeAts = newResume.resumeAts;
-            }
           }
         }
       }
@@ -609,8 +573,7 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
       }
 
       // Handle resume upload
-      if (req.file) {
-        let fileUrl = '';
+      if (req.file && req.file.fieldname === 'resume') {
         if (req.file.path.startsWith('http')) {
           fileUrl = req.file.path;
         } else {
@@ -654,6 +617,9 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
           user.studentProfile.resumeAccessibilityRemark = '';
           user.studentProfile.resumeAts = newResume.resumeAts;
         }
+        user.studentProfile.resumeLink = user.studentProfile.resume;
+        user.studentProfile.resumeAccessible = true;
+        user.studentProfile.resumeAccessibilityRemark = 'Uploaded via dashboard';
       }
 
       // If profile was approved and user made changes, set to draft and save snapshot
@@ -674,6 +640,175 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
     res.json({ message: 'Profile updated successfully', user: updatedUser });
   } catch (error) {
     console.error('Update profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/profile/resumes:
+ *   post:
+ *     summary: Upload a resume for a dynamic role (student)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               role:
+ *                 type: string
+ *               resume:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Resume uploaded successfully
+ *       400:
+ *         description: Bad request
+ */
+router.post('/profile/resumes', auth, authorize('student'), upload.single('resume'), async (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!role || !role.trim()) {
+      return res.status(400).json({ message: 'Role name is required' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No resume file uploaded' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.studentProfile.resumes) {
+      user.studentProfile.resumes = [];
+    }
+
+    // Check if a resume for this exact role already exists (case-insensitive)
+    const existingIndex = user.studentProfile.resumes.findIndex(
+      r => r.role.toLowerCase() === role.trim().toLowerCase()
+    );
+
+    const url = req.file.path;
+    const publicId = req.file.filename || req.file.public_id || '';
+
+    // If there was an existing one, delete it from Cloudinary first
+    if (existingIndex !== -1) {
+      const oldResume = user.studentProfile.resumes[existingIndex];
+      if (oldResume.publicId && oldResume.url.startsWith('http')) {
+        try {
+          const cloudinary = require('cloudinary').v2;
+          cloudinary.config({
+            cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME,
+            api_key: process.env.CLOUDINARY_API_KEY,
+            api_secret: process.env.CLOUDINARY_API_SECRET
+          });
+          await cloudinary.uploader.destroy(oldResume.publicId, { resource_type: 'raw' });
+        } catch (cloudinaryErr) {
+          console.error('Error deleting old resume from Cloudinary:', cloudinaryErr);
+        }
+      }
+
+      user.studentProfile.resumes[existingIndex] = {
+        role: role.trim(),
+        url,
+        publicId,
+        uploadedAt: new Date()
+      };
+    } else {
+      user.studentProfile.resumes.push({
+        role: role.trim(),
+        url,
+        publicId,
+        uploadedAt: new Date()
+      });
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Resume uploaded successfully',
+      resumes: user.studentProfile.resumes
+    });
+  } catch (error) {
+    console.error('Upload resume error:', error);
+    res.status(500).json({ message: 'Server error during upload' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/profile/resumes/{resumeId}:
+ *   delete:
+ *     summary: Delete a specific role-based resume (student)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: resumeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Resume deleted successfully
+ *       404:
+ *         description: Resume not found
+ */
+router.delete('/profile/resumes/:resumeId', auth, authorize('student'), async (req, res) => {
+  try {
+    const { resumeId } = req.params;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.studentProfile.resumes) {
+      return res.status(400).json({ message: 'No resumes found' });
+    }
+
+    const resumeIndex = user.studentProfile.resumes.findIndex(
+      r => r._id.toString() === resumeId
+    );
+
+    if (resumeIndex === -1) {
+      return res.status(404).json({ message: 'Resume not found' });
+    }
+
+    const resume = user.studentProfile.resumes[resumeIndex];
+
+    if (resume.publicId && resume.url.startsWith('http')) {
+      try {
+        const cloudinary = require('cloudinary').v2;
+        cloudinary.config({
+          cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME,
+          api_key: process.env.CLOUDINARY_API_KEY,
+          api_secret: process.env.CLOUDINARY_API_SECRET
+        });
+        await cloudinary.uploader.destroy(resume.publicId, { resource_type: 'raw' });
+      } catch (cloudinaryErr) {
+        console.error('Error deleting resume from Cloudinary:', cloudinaryErr);
+      }
+    }
+
+    user.studentProfile.resumes.splice(resumeIndex, 1);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Resume deleted successfully',
+      resumes: user.studentProfile.resumes
+    });
+  } catch (error) {
+    console.error('Delete resume error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -803,11 +938,17 @@ router.get('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'ma
       .populate('managedCampuses', 'name code')
       .populate('campus', 'name code');
 
-    const managedCampuses = user.managedCampuses?.length > 0
-      ? user.managedCampuses
-      : (user.campus ? [user.campus] : []);
+    const allowed = [];
+    if (user.campus) allowed.push(user.campus);
+    if (user.managedCampuses && user.managedCampuses.length > 0) {
+      user.managedCampuses.forEach(c => {
+        const cid = c._id ? c._id.toString() : c.toString();
+        const exists = allowed.some(a => (a._id ? a._id.toString() : a.toString()) === cid);
+        if (!exists) allowed.push(c);
+      });
+    }
 
-    res.json({ managedCampuses });
+    res.json({ managedCampuses: allowed });
   } catch (error) {
     console.error('Get managed campuses error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -934,14 +1075,18 @@ router.get('/pending-profiles', auth, authorize('campus_poc', 'coordinator', 'ma
       ];
     }
 
-    // Campus POC can see students from their managed campuses
+    // Campus POC can see students from their primary campus and managed campuses
     if (req.user.role === 'campus_poc') {
-      const managedCampuses = req.user.managedCampuses?.length > 0
-        ? req.user.managedCampuses
-        : (req.user.campus ? [req.user.campus] : []);
-
-      if (managedCampuses.length > 0) {
-        query.campus = { $in: managedCampuses };
+      const allowedCampuses = [];
+      if (req.user.campus) allowedCampuses.push(req.user.campus.toString());
+      if (req.user.managedCampuses && req.user.managedCampuses.length > 0) {
+        req.user.managedCampuses.forEach(c => {
+          const cid = c.toString();
+          if (!allowedCampuses.includes(cid)) allowedCampuses.push(cid);
+        });
+      }
+      if (allowedCampuses.length > 0) {
+        query.campus = { $in: allowedCampuses };
       }
     }
 
@@ -999,11 +1144,14 @@ router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordi
     if (updates.phone) student.phone = updates.phone;
 
     // Validate resume link if present before applying (by manager/POC)
-    if (updates.resumeLink !== undefined) {
-      const { checkUrlAccessible } = require('../utils/urlChecker');
-      const check = await checkUrlAccessible(updates.resumeLink);
-      if (!check.ok) {
-        return res.status(400).json({ message: 'Resume link is not accessible', reason: check.reason || 'inaccessible' });
+    if (updates.resumeLink !== undefined && updates.resumeLink !== '') {
+      const isUploaded = updates.resumeLink.startsWith('/uploads/') || updates.resumeLink.includes('cloudinary.com');
+      if (!isUploaded) {
+        const { checkUrlAccessible } = require('../utils/urlChecker');
+        const check = await checkUrlAccessible(updates.resumeLink);
+        if (!check.ok) {
+          return res.status(400).json({ message: 'Resume link is not accessible', reason: check.reason || 'inaccessible' });
+        }
       }
       // Apply it
       student.studentProfile.resumeLink = updates.resumeLink;
@@ -1012,7 +1160,7 @@ router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordi
     // Update student profile fields
     const profileUpdates = [
       'currentSchool', 'currentModule', 'customModuleDescription',
-      'linkedIn', 'github', 'portfolio', 'about'
+      'linkedIn', 'github', 'portfolio', 'about', 'resume'
     ];
 
     profileUpdates.forEach(field => {
@@ -1278,7 +1426,17 @@ router.get('/pending-skills', auth, authorize('campus_poc', 'coordinator'), asyn
     };
 
     if (req.user.role === 'campus_poc') {
-      query.campus = req.user.campus;
+      const allowedCampuses = [];
+      if (req.user.campus) allowedCampuses.push(req.user.campus.toString());
+      if (req.user.managedCampuses && req.user.managedCampuses.length > 0) {
+        req.user.managedCampuses.forEach(c => {
+          const cid = c.toString();
+          if (!allowedCampuses.includes(cid)) allowedCampuses.push(cid);
+        });
+      }
+      if (allowedCampuses.length > 0) {
+        query.campus = { $in: allowedCampuses };
+      }
     }
 
     const students = await User.find(query)
