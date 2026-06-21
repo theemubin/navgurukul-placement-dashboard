@@ -275,7 +275,7 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
     const totalStudents = await User.countDocuments(studentQuery);
     const totalJobs = await Job.countDocuments({ ...jobQuery, status: { $in: activeStatuses } });
     const totalApplications = await Application.countDocuments(applicationQuery);
-    
+
     // For placements, we look at updatedAt or status change date if available, 
     // but createdAt with status 'selected' is common too. 
     // Let's use applicationQuery which already has the date filter.
@@ -644,9 +644,10 @@ router.get('/student', auth, authorize('student'), async (req, res) => {
 
     const stats = {
       totalApplications: applications.length,
-      inProgress: applications.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status)).length,
+      inProgress: applications.filter(a => ['applied', 'shortlisted', 'in_progress', 'interviewing'].includes(a.status)).length,
       selected: applications.filter(a => a.status === 'selected').length,
-      rejected: applications.filter(a => a.status === 'rejected').length
+      rejected: applications.filter(a => a.status === 'rejected').length,
+      interested: applications.filter(a => a.status === 'interested').length
     };
 
     const recentApplications = applications
@@ -1041,7 +1042,7 @@ router.post('/campus-poc/job/:jobId/notify-eligible', auth, authorize('campus_po
     // 3. Get first managed campus to find Discord channel (or use user's primary campus)
     const primaryCampusId = campusIds[0];
     const campus = await Campus.findById(primaryCampusId);
-    
+
     if (!campus || !campus.discordChannelId) {
       return res.status(400).json({ message: 'No Discord channel configured for your campus' });
     }
@@ -1062,7 +1063,7 @@ router.post('/campus-poc/job/:jobId/notify-eligible', auth, authorize('campus_po
     // 4.5 Save thread info if new
     if (discordResult?.threadId && (!existingThread || existingThread.threadId !== discordResult.threadId)) {
       if (!job.discordThreads) job.discordThreads = [];
-      
+
       const threadIndex = job.discordThreads.findIndex(t => t.campus.toString() === primaryCampusId.toString());
       if (threadIndex > -1) {
         job.discordThreads[threadIndex].threadId = discordResult.threadId;
@@ -1095,8 +1096,8 @@ router.post('/campus-poc/job/:jobId/notify-eligible', auth, authorize('campus_po
 
     await Promise.all(notificationPromises);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: `Notifications sent to ${eligibleStudents.length} students via Discord and system.`,
       discordResult
     });
@@ -1520,7 +1521,7 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
       // Resolve status: prioritize explicitly marked "Placed" in profile (e.g. from Ghar)
       // or if they have a selected application in this system
       const resolvedStatus = student.resolvedProfile?.currentStatus || student.studentProfile?.currentStatus;
-      
+
       let placementStatus = 'not_applied';
       if (selectedApp || resolvedStatus === 'Placed' || resolvedStatus === 'placed') placementStatus = 'placed';
       else if (inProgressApps.length > 0) placementStatus = 'in_progress';
@@ -1709,7 +1710,7 @@ router.get('/manager/students-readiness', auth, authorize('manager'), async (req
 router.get('/historical-cycles', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { campus: campusId } = req.query;
-    
+
     // Fetch all cycles sorted by date (newest first for the list, frontend reverses for charts)
     const cycles = await PlacementCycle.find({})
       .sort({ year: -1, month: -1 })
@@ -1718,12 +1719,12 @@ router.get('/historical-cycles', auth, authorize('manager', 'coordinator'), asyn
     const historicalData = cycles.map(cycle => {
       // If campus filter is applied, filter the snapshot
       let students = cycle.snapshotStudents || [];
-      
+
       // Note: In the current schema, snapshotStudents doesn't have campus info directly.
       // We would need to populate or have it in the snapshot.
       // For now, return global stats if campusId is provided but we can't filter precisely,
       // or implement the filter if we assume all students in snapshot belong to cycles.
-      
+
       const total = students.length;
       const placed = students.filter(s => s.status === 'placed').length;
       const released = students.filter(s => s.status === 'released').length;
@@ -1776,7 +1777,7 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
     // 1. Build filters
     let studentFilter = { role: 'student', isActive: true };
     if (campus) studentFilter.campus = campus;
-    
+
     // For POC, enforce campus restriction if not manager/coordinator
     if (req.user.role === 'campus_poc') {
       const managedIds = getPOCManagedCampusIds(req.user);
@@ -1805,7 +1806,7 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const activeJobs = await Job.find({ 
+    const activeJobs = await Job.find({
       status: { $nin: ['draft', 'closed', 'filled'] },
       applicationDeadline: { $gte: startOfToday }
     }).select('roleCategory title status company.name');
@@ -1816,7 +1817,7 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
     const currentMonth = now_date.getMonth() + 1;
     const currentYear = now_date.getFullYear();
 
-    let activeCycle = await PlacementCycle.findOne({ 
+    let activeCycle = await PlacementCycle.findOne({
       status: 'active',
       month: currentMonth,
       year: currentYear
@@ -1827,13 +1828,13 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
     }
 
     let totalPlaced = 0;
-    
+
     if (activeCycle) {
       const startDate = new Date(activeCycle.year, activeCycle.month - 1, 1);
       const endDate = new Date(activeCycle.year, activeCycle.month, 0, 23, 59, 59);
 
-      totalPlaced = await User.countDocuments({ 
-        role: 'student', 
+      totalPlaced = await User.countDocuments({
+        role: 'student',
         'studentProfile.currentStatus': { $in: ['Placed', 'Intern (In Campus)', 'Intern (Out Campus)'] },
         'studentProfile.dateOfPlacement': { $gte: startDate, $lte: endDate }
       });
@@ -1864,7 +1865,7 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
 
       // Filter by school if provided
       if (school && studentSchool !== school) return;
-      
+
       // Only include Active/Intern statuses as per user's earlier requirement for readiness dashboards
       const allowedStatuses = ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'];
       if (!allowedStatuses.includes(studentStatus)) return;

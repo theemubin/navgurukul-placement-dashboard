@@ -14,6 +14,17 @@ const StudentApplications = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawingId, setWithdrawingId] = useState(null);
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [counts, setCounts] = useState({
+    total: 0,
+    applied: 0,
+    interested: 0,
+    shortlisted: 0,
+    in_progress: 0,
+    selected: 0,
+    rejected: 0,
+    withdrawn: 0
+  });
   const location = useLocation();
 
   useEffect(() => {
@@ -22,19 +33,59 @@ const StudentApplications = () => {
     if (appId) {
       viewDetails(appId);
     }
+    const filterParam = params.get('filter');
+    if (filterParam) {
+      setActiveFilter(filterParam);
+    } else {
+      setActiveFilter('all');
+    }
   }, [location.search]);
 
   useEffect(() => {
     fetchApplications();
-  }, [pagination.current]);
+  }, [pagination.current, activeFilter]);
+
+  useEffect(() => {
+    fetchCounts();
+  }, []);
+
+  const fetchCounts = async () => {
+    try {
+      const response = await applicationAPI.getApplications({ limit: 1000 });
+      const allApps = response.data.applications || [];
+      setCounts({
+        total: allApps.length,
+        applied: allApps.filter(a => a.status === 'applied').length,
+        interested: allApps.filter(a => a.status === 'interested').length,
+        shortlisted: allApps.filter(a => a.status === 'shortlisted' || a.status === 'hr_shortlisting').length,
+        in_progress: allApps.filter(a => a.status === 'in_progress' || a.status === 'interviewing').length,
+        selected: allApps.filter(a => a.status === 'selected').length,
+        rejected: allApps.filter(a => a.status === 'rejected').length,
+        withdrawn: allApps.filter(a => a.status === 'withdrawn').length
+      });
+    } catch (error) {
+      console.error('Error fetching application counts:', error);
+    }
+  };
 
   const fetchApplications = async () => {
     setLoading(true);
     try {
-      const response = await applicationAPI.getApplications({
+      const params = {
         page: pagination.current,
         limit: 10
-      });
+      };
+      if (activeFilter !== 'all') {
+        if (activeFilter === 'in_progress') {
+          params.status = 'in_progress,interviewing';
+        } else if (activeFilter === 'shortlisted') {
+          // Include hr_shortlisting as it maps to the student-facing 'Shortlisted' stage
+          params.status = 'shortlisted,hr_shortlisting';
+        } else {
+          params.status = activeFilter;
+        }
+      }
+      const response = await applicationAPI.getApplications(params);
       setApplications(response.data.applications);
       setPagination(response.data.pagination);
     } catch (error) {
@@ -53,6 +104,7 @@ const StudentApplications = () => {
       setShowWithdrawModal(false);
       setWithdrawingId(null);
       fetchApplications();
+      fetchCounts();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Error withdrawing application');
     }
@@ -135,18 +187,67 @@ const StudentApplications = () => {
 
       {/* Quick status counts - Gen Z Pills */}
       <div className="flex flex-wrap gap-4 items-center">
+        {/* All Applicants button */}
+        <button
+          onClick={() => {
+            setActiveFilter('all');
+            setPagination(prev => ({ ...prev, current: 1 }));
+          }}
+          className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold ring-1 transition-all hover:scale-105 active:scale-95 ${
+            activeFilter === 'all'
+              ? 'bg-gray-800 text-white ring-gray-800'
+              : 'bg-gray-100 text-gray-700 ring-gray-200 hover:bg-gray-200'
+          }`}
+        >
+          All Applicants
+          <span className={`px-2 py-0.5 rounded-full text-[10px] shadow-sm transition-colors ${
+            activeFilter === 'all' ? 'bg-white text-gray-900' : 'bg-white text-gray-700'
+          }`}>
+            {counts.total || 0}
+          </span>
+        </button>
+
         {[
-          { label: 'Applied', count: 'applied', color: 'bg-blue-50 text-blue-600 ring-blue-100' },
-          { label: 'Shortlisted', count: 'shortlisted', color: 'bg-purple-50 text-purple-600 ring-purple-100' },
-          { label: 'In Process', count: 'in_progress', color: 'bg-yellow-50 text-yellow-600 ring-yellow-100' },
-          { label: 'Selected', count: 'selected', color: 'bg-green-50 text-green-600 ring-green-100' },
-          { label: 'Rejected', count: 'rejected', color: 'bg-red-50 text-red-600 ring-red-100' },
-        ].map((pill) => (
-          <div key={pill.label} className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold ring-1 transition-all ${pill.color}`}>
-            {pill.label}
-            <span className="bg-white px-2 rounded-full text-[10px] shadow-sm">{applications.filter(a => a.status === pill.count).length}</span>
-          </div>
-        ))}
+          { label: 'Applied', count: 'applied', activeStyle: 'bg-blue-600 text-white ring-blue-600', inactiveStyle: 'bg-blue-50 text-blue-600 ring-blue-100 hover:bg-blue-100' },
+          { label: 'Interested', count: 'interested', activeStyle: 'bg-pink-600 text-white ring-pink-600', inactiveStyle: 'bg-pink-50 text-pink-600 ring-pink-100 hover:bg-pink-100' },
+          { label: 'Shortlisted', count: 'shortlisted', activeStyle: 'bg-purple-600 text-white ring-purple-600', inactiveStyle: 'bg-purple-50 text-purple-600 ring-purple-100 hover:bg-purple-100' },
+          { label: 'In Process', count: 'in_progress', activeStyle: 'bg-yellow-600 text-white ring-yellow-600', inactiveStyle: 'bg-yellow-50 text-yellow-600 ring-yellow-100 hover:bg-yellow-100' },
+          { label: 'Selected', count: 'selected', activeStyle: 'bg-green-600 text-white ring-green-600', inactiveStyle: 'bg-green-50 text-green-600 ring-green-100 hover:bg-green-100' },
+          { label: 'Rejected', count: 'rejected', activeStyle: 'bg-red-600 text-white ring-red-600', inactiveStyle: 'bg-red-50 text-red-600 ring-red-100 hover:bg-red-100' },
+          { label: 'Withdrawn', count: 'withdrawn', activeStyle: 'bg-gray-600 text-white ring-gray-600', inactiveStyle: 'bg-gray-50 text-gray-600 ring-gray-200 hover:bg-gray-100' },
+        ].map((pill) => {
+          const isActive = activeFilter === pill.count;
+          return (
+            <button
+              key={pill.label}
+              onClick={() => {
+                setActiveFilter(isActive ? 'all' : pill.count);
+                setPagination(prev => ({ ...prev, current: 1 }));
+              }}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold ring-1 transition-all hover:scale-105 active:scale-95 ${
+                isActive ? pill.activeStyle : pill.inactiveStyle
+              }`}
+            >
+              {pill.label}
+              <span className={`px-2 py-0.5 rounded-full text-[10px] shadow-sm transition-colors ${
+                isActive ? 'bg-white text-gray-900' : 'bg-white text-gray-700'
+              }`}>
+                {counts[pill.count] || 0}
+              </span>
+            </button>
+          );
+        })}
+        {activeFilter !== 'all' && (
+          <button
+            onClick={() => {
+              setActiveFilter('all');
+              setPagination(prev => ({ ...prev, current: 1 }));
+            }}
+            className="text-xs text-gray-500 hover:text-gray-700 underline font-semibold ml-2"
+          >
+            Clear Filter
+          </button>
+        )}
       </div>
 
 
@@ -223,7 +324,7 @@ const StudentApplications = () => {
                 </div>
 
                 {/* Progress Bar with Round Details */}
-                {['applied', 'shortlisted', 'in_progress'].includes(app.status) && app.job?.interviewRounds && app.job.interviewRounds.length > 0 && (
+                {['applied', 'shortlisted', 'in_progress', 'interviewing'].includes(app.status) && app.job?.interviewRounds && app.job.interviewRounds.length > 0 && (
                   <div className="mt-4 pt-4 border-t">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-medium text-gray-700">Interview Progress</span>
@@ -316,7 +417,7 @@ const StudentApplications = () => {
                 )}
 
                 {/* Actions */}
-                {['applied', 'shortlisted', 'in_progress'].includes(app.status) && (
+                {['applied', 'interested', 'shortlisted', 'in_progress', 'interviewing'].includes(app.status) && (
                   <div className="mt-4 pt-4 border-t flex justify-end">
                     <button
                       onClick={(e) => {
