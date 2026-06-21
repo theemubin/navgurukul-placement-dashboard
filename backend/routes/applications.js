@@ -79,7 +79,14 @@ router.get('/', auth, async (req, res) => {
     }
 
     if (job) query.job = job;
-    if (status) query.status = status;
+
+    if (status) {
+      if (status.includes(',')) {
+        query.status = { $in: status.split(',') };
+      } else {
+        query.status = status;
+      }
+    }
 
     // Campus POC can only see applications from their campus students (including managed campuses)
     if (req.user.role === 'campus_poc') {

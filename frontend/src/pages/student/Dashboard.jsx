@@ -5,7 +5,7 @@ import { StatsCard, LoadingSpinner, StatusBadge } from '../../components/common/
 import { 
   FileText, Briefcase, CheckCircle, XCircle, Clock, 
   TrendingUp, DollarSign, User, ArrowRight, ArrowUpRight,
-  ShieldCheck, AlertTriangle, Search
+  ShieldCheck, AlertTriangle, Search, Heart
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -157,35 +157,57 @@ const StudentDashboard = () => {
           )}
 
           {/* Core Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <Link 
+              to="/student/applications" 
+              className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 group cursor-pointer block"
+            >
                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 transition-transform group-hover:scale-110">
                   <FileText size={20} />
                </div>
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Apps</p>
                <h4 className="text-3xl font-black text-gray-900">{stats?.totalApplications || 0}</h4>
-            </div>
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
+            </Link>
+            <Link 
+              to="/student/applications?filter=interested" 
+              className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 group cursor-pointer block"
+            >
+               <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center mb-4 transition-transform group-hover:scale-110">
+                  <Heart size={20} />
+               </div>
+               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Interested</p>
+               <h4 className="text-3xl font-black text-gray-900">{stats?.interested || 0}</h4>
+            </Link>
+            <Link 
+              to="/student/applications?filter=in_progress" 
+              className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 group cursor-pointer block"
+            >
                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4 transition-transform group-hover:scale-110">
                   <Clock size={20} />
                </div>
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">In Process</p>
                <h4 className="text-3xl font-black text-gray-900">{stats?.inProgress || 0}</h4>
-            </div>
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
+            </Link>
+            <Link 
+              to="/student/applications?filter=selected" 
+              className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 group cursor-pointer block"
+            >
                <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mb-4 transition-transform group-hover:scale-110">
                   <CheckCircle size={20} />
                </div>
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Selected</p>
                <h4 className="text-3xl font-black text-gray-900">{stats?.selected || 0}</h4>
-            </div>
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
+            </Link>
+            <Link 
+              to="/student/applications?filter=rejected" 
+              className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 group cursor-pointer block"
+            >
                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4 transition-transform group-hover:scale-110">
                   <XCircle size={20} />
                </div>
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Rejected</p>
                <h4 className="text-3xl font-black text-gray-900">{stats?.rejected || 0}</h4>
-            </div>
+            </Link>
           </div>
 
           <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-xl shadow-gray-100/50">
