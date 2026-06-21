@@ -610,9 +610,23 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Job not found' });
     }
 
+    let countMatchQuery = { job: job._id };
+
+    if (req.user && req.user.role === 'campus_poc') {
+      const campusIds = (req.user.managedCampuses || []).map(id => id.toString());
+      if (req.user.campus) campusIds.push(req.user.campus.toString());
+      const uniqueCampusIds = [...new Set(campusIds)];
+
+      const campusStudents = await User.find({
+        role: 'student',
+        campus: { $in: uniqueCampusIds }
+      }).select('_id');
+      countMatchQuery.student = { $in: campusStudents.map(s => s._id) };
+    }
+
     // Add application status counts
     const statusCounts = await Application.aggregate([
-      { $match: { job: job._id } },
+      { $match: countMatchQuery },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
 
@@ -2155,6 +2169,7 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
       email: (app) => app.student?.email || '',
       phone: (app) => app.student?.phone || '',
       gender: (app) => app.student?.gender || '',
+      campus: (app) => app.student?.campus?.name || '',
       hometown: (app) => {
         const hometown = app.student?.studentProfile?.hometown;
         if (!hometown) return '';

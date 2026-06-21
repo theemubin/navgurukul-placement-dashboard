@@ -81,6 +81,10 @@ const fileFilter = (req, file, cb) => {
   console.log(`Processing upload: field=${file.fieldname}, mimetype=${file.mimetype}, name=${file.originalname}`);
 
   if (file.fieldname === 'resume') {
+    if (!useCloudinary) {
+      console.error('Upload rejected: Cloudinary is not configured');
+      return cb(new Error('Cloudinary is not configured. Resume upload requires Cloudinary storage.'), false);
+    }
     // Allow PDF, DOC, DOCX for resumes
     if (file.mimetype === 'application/pdf' ||
       file.mimetype === 'application/msword' ||

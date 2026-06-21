@@ -848,6 +848,7 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
       email: (app) => app.student?.email || '',
       phone: (app) => app.student?.phone || '',
       gender: (app) => app.student?.gender || '',
+      campus: (app) => app.student?.campus?.name || '',
       hometown: (app) => {
         const h = app.student?.studentProfile?.hometown;
         if (!h) return '';
@@ -929,7 +930,7 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
     // Maintain consistent column order based on fieldMap indices
     // Priority fields that must always come first if selected
     const fixedPriority = [
-      'studentName', 'school', 'joiningDate',
+      'studentName', 'campus', 'school', 'joiningDate',
       'resume', 'github', 'portfolio', 'linkedIn'
     ];
 
@@ -994,6 +995,7 @@ router.get('/export/fields', auth, authorize('coordinator', 'manager'), async (r
     { key: 'email', label: 'Email', category: 'Student Info' },
     { key: 'phone', label: 'Phone', category: 'Student Info' },
     { key: 'gender', label: 'Gender', category: 'Student Info' },
+    { key: 'campus', label: 'Campus Name', category: 'Campus Info' },
     { key: 'hometown', label: 'Hometown Details', category: 'Student Info' },
     { key: 'about', label: 'About/Bio', category: 'Student Info' },
     // 2. Education (Navgurukul)

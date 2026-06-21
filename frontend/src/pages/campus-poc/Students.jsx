@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { userAPI, statsAPI, gharAPI } from '../../services/api';
+import { userAPI, statsAPI, gharAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner, Pagination, EmptyState, StatusBadge, Button, StatsCard } from '../../components/common/UIComponents';
 import { BulkUploadModal } from '../../components/common/BulkUpload';
 import { Users, Search, ChevronRight, GraduationCap, Upload, Filter, UserCheck, UserX, Clock, Briefcase, RefreshCw } from 'lucide-react';
@@ -442,7 +442,7 @@ const POCStudents = () => {
                           <div><span className="text-gray-400 font-semibold">LinkedIn:</span> <a href={student.studentProfile?.linkedIn} target="_blank" rel="noreferrer" className="text-primary-700 break-all">{student.studentProfile?.linkedIn || '-'}</a></div>
                           <div><span className="text-gray-400 font-semibold">GitHub:</span> <a href={student.studentProfile?.github} target="_blank" rel="noreferrer" className="text-primary-700 break-all">{student.studentProfile?.github || '-'}</a></div>
                           <div><span className="text-gray-400 font-semibold">Portfolio:</span> <a href={student.studentProfile?.portfolio} target="_blank" rel="noreferrer" className="text-primary-700 break-all">{student.studentProfile?.portfolio || '-'}</a></div>
-                          <div><span className="text-gray-400 font-semibold">Resume:</span> <a href={student.studentProfile?.resumeLink} target="_blank" rel="noreferrer" className="text-primary-700 break-all">{student.studentProfile?.resumeLink || '-'}</a></div>
+                          <div><span className="text-gray-400 font-semibold">Resume:</span> <a href={resolveResumeUrl(student.studentProfile?.resumeLink)} target="_blank" rel="noreferrer" className="text-primary-700 break-all">{student.studentProfile?.resumeLink || '-'}</a></div>
                         </div>
 
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

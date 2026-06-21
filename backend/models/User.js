@@ -443,6 +443,42 @@ const userSchema = new mongoose.Schema({
     resumeAccessible: { type: Boolean, default: null },
     // Free-text remark about accessibility or instructions (set by manager or system checks)
     resumeAccessibilityRemark: String,
+    resumes: [{
+      _id: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
+      resume: String,
+      resumeLink: String,
+      fileName: String,
+      isPrimary: { type: Boolean, default: false },
+      uploadedAt: { type: Date, default: Date.now },
+      resumeAts: {
+        overallScore: { type: Number, min: 0, max: 100, default: null },
+        qualityFlag: { type: String, enum: ['ok', 'low_text_extraction'], default: null },
+        textLength: { type: Number, default: 0 },
+        status: { type: String, enum: ['ok', 'failed'], default: null },
+        sourceUrl: String,
+        checkedAt: Date,
+        errorMessage: String,
+        atsSummary: String,
+        nameMatch: {
+          isMatch: { type: Boolean, default: null },
+          confidence: { type: Number, min: 0, max: 100, default: 0 },
+          matchedName: String,
+          reason: String
+        },
+        breakdown: {
+          keywordAlignment: { type: Number, min: 0, max: 30, default: 0 },
+          skillsRelevance: { type: Number, min: 0, max: 20, default: 0 },
+          projectImpact: { type: Number, min: 0, max: 20, default: 0 },
+          structureReadability: { type: Number, min: 0, max: 15, default: 0 },
+          experienceStrength: { type: Number, min: 0, max: 15, default: 0 }
+        },
+        strengths: [{ type: String }],
+        gaps: [{ type: String }],
+        actionItems: [{ type: String }]
+      },
+      resumeAccessible: { type: Boolean, default: null },
+      resumeAccessibilityRemark: String
+    }],
     linkedIn: String,
     github: String,
     portfolio: String,
@@ -707,8 +743,14 @@ userSchema.set('toObject', { virtuals: true });
         if (options.targetCampusId) {
           user.campus = options.targetCampusId;
         } else {
-          const Campus = mongoose.model('Campus');
-          const matchedCampus = await Campus.findOne({ name: new RegExp(`^${campusValue}$`, 'i') });
+          let searchName = campusValue.trim();
+          if (searchName.toLowerCase() === 'eternal campus') {
+            searchName = 'Eternal BCA';
+          } else if (searchName.toLowerCase() === 'sarjapura') {
+            searchName = 'Sarjapur';
+          }
+          const Campus = mongoose.models.Campus || require('./Campus');
+          const matchedCampus = await Campus.findOne({ name: new RegExp(`^${searchName}$`, 'i') });
           if (matchedCampus) {
             user.campus = matchedCampus._id;
           }

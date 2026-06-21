@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { resolveResumeUrl } from '../../services/api';
 
 const PortfolioModal = ({ portfolio, selectedRole, onClose }) => {
     const { user } = useAuth();
@@ -364,7 +365,7 @@ const PortfolioModal = ({ portfolio, selectedRole, onClose }) => {
                                         <h3 className="text-lg font-semibold text-gray-900">Resume</h3>
                                         {user ? (
                                             <a
-                                                href={portfolio.resumeLink}
+                                                href={resolveResumeUrl(portfolio.resumeLink)}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
@@ -386,7 +387,7 @@ const PortfolioModal = ({ portfolio, selectedRole, onClose }) => {
                                             <iframe
                                                 src={portfolio.resumeLink.includes('drive.google.com')
                                                     ? portfolio.resumeLink.replace('/view', '/preview').replace('?usp=sharing', '')
-                                                    : `${portfolio.resumeLink}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                    : `${resolveResumeUrl(portfolio.resumeLink)}#toolbar=0&navpanes=0&scrollbar=0`}
                                                 className="w-full h-full"
                                                 title="Resume"
                                             />
