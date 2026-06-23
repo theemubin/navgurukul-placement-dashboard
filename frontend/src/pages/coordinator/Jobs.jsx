@@ -875,7 +875,11 @@ const CoordinatorJobs = () => {
 
       <ApplicantTriageModal
         isOpen={showApplicantModal}
-        onClose={() => { setShowApplicantModal(false); setModalNewStatus(null); }}
+        onClose={() => {
+          setShowApplicantModal(false);
+          setModalApplicants([]);
+          setModalNewStatus(null);
+        }}
         job={modalJob}
         applicants={modalApplicants}
         targetStatus={modalNewStatus}

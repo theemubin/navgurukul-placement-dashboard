@@ -58,6 +58,7 @@ const ApplicantTriageModal = ({
     const isInterviewingStage = activeStatus === 'interviewing' || activeStatus?.includes('interview');
     const hasInterviewRounds = job?.interviewRounds?.length > 0;
 
+
     // Initialize applicants with buckets
     useEffect(() => {
         if (isOpen && initialApplicants && applicants.length === 0) {
@@ -76,6 +77,18 @@ const ApplicantTriageModal = ({
             setDiscordThreadId(job?.discordThreadId || '');
         }
     }, [isOpen, initialApplicants, hasInterviewRounds, job?.discordThreadId, applicants.length]);
+
+    // Reset state when modal is closed
+    useEffect(() => {
+        if (!isOpen) {
+            setApplicants([]);
+            setSearchTerm('');
+            setViewMode('triage');
+            setSelectedRoundIndex(0);
+            setDiscordThreadId('');
+            setActiveTab('promote');
+        }
+    }, [isOpen]);
 
     if (!isOpen || !job) return null;
 
