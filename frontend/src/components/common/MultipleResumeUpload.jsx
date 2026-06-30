@@ -180,10 +180,10 @@ const MultipleResumeUpload = ({ initialResumes = [], onUploadSuccess }) => {
           <div
             key={row.id || row._id}
             className={`flex flex-row items-start gap-4 p-5 rounded-2xl border transition-all ${row.status === 'success'
-                ? 'bg-emerald-50/5 border-emerald-100'
-                : row.status === 'error'
-                  ? 'bg-rose-50/5 border-rose-100'
-                  : 'bg-gray-50/50 border-gray-150 hover:border-gray-200'
+              ? 'bg-emerald-50/5 border-emerald-100'
+              : row.status === 'error'
+                ? 'bg-rose-50/5 border-rose-100'
+                : 'bg-gray-50/50 border-gray-150 hover:border-gray-200'
               }`}
           >
             {/* Index badge */}
@@ -275,10 +275,10 @@ const MultipleResumeUpload = ({ initialResumes = [], onUploadSuccess }) => {
                         onClick={() => uploadResume(row.id || row._id)}
                         disabled={row.status === 'uploading' || !row.file}
                         className={`flex items-center justify-center gap-1.5 px-5 py-2.5 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all select-none w-full sm:w-auto ${row.status === 'uploading'
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : !row.file
-                              ? 'bg-gray-200 cursor-not-allowed text-gray-400'
-                              : 'bg-indigo-650 hover:bg-indigo-700 transform active:scale-95'
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : !row.file
+                            ? 'bg-gray-200 cursor-not-allowed text-gray-400'
+                            : 'bg-indigo-650 hover:bg-indigo-700 transform active:scale-95'
                           }`}
                       >
                         {row.status === 'uploading' ? (

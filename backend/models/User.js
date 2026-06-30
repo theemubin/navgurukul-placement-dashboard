@@ -120,12 +120,12 @@ const userSchema = new mongoose.Schema({
   },
   // Role Change Request
   roleRequest: {
-    role: { 
-      type: String, 
-      enum: ['student', 'campus_poc', 'coordinator', 'manager'] 
+    role: {
+      type: String,
+      enum: ['student', 'campus_poc', 'coordinator', 'manager']
     },
-    status: { 
-      type: String, 
+    status: {
+      type: String,
       enum: ['pending', 'approved', 'rejected']
     },
     requestedAt: Date,
@@ -602,256 +602,256 @@ userSchema.virtual('resolvedProfile').get(function () {
 userSchema.set('toJSON', { virtuals: true });
 userSchema.set('toObject', { virtuals: true });
 
+/**
+ * Static method to sync Ghar data for a user
+ * @param {string} email - Student email
+ * @param {Object} externalData - Raw data from Ghar API
+ * @param {Object} options - Sync options (e.g., createIfNotFound)
+ */
+userSchema.statics.syncGharData = async function (email, externalData, options = {}) {
+  if (!externalData) return null;
+  if (!email) return null;
+
+  const normalizedEmail = email.trim().toLowerCase();
+  let user = await this.findOne({ email: normalizedEmail, role: 'student' });
+
+  if (!user && options.createIfNotFound) {
+    console.log(`[GharSync] Creating new student user for ${normalizedEmail}`);
+
+    // Robust Name parsing (handle both object and string from different Zoho reports)
+    let resolvedFirstName = 'Student';
+    let resolvedLastName = 'User';
+
+    if (externalData.Name && typeof externalData.Name === 'object') {
+      resolvedFirstName = externalData.Name.first_name || resolvedFirstName;
+      resolvedLastName = externalData.Name.last_name || resolvedLastName;
+    } else if (typeof externalData.Name === 'string') {
+      const parts = externalData.Name.split(' ');
+      resolvedFirstName = parts[0];
+      resolvedLastName = parts.slice(1).join(' ') || 'User';
+    } else if (externalData.Student_Name) {
+      const parts = String(externalData.Student_Name).split(' ');
+      resolvedFirstName = parts[0];
+      resolvedLastName = parts.slice(1).join(' ') || 'User';
+    }
+
+    user = new this({
+      email: normalizedEmail,
+      role: 'student',
+      isActive: true, // Mark as active to ensure they appear in "Active" counts as requested
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
+      authProvider: 'google',
+      studentProfile: {
+        profileStatus: 'draft',
+        externalData: { ghar: {} }
+      }
+    });
+  }
+
+  if (!user) return null;
+
+  if (!user.studentProfile) user.studentProfile = { profileStatus: 'draft', externalData: { ghar: {} } };
+  if (!user.studentProfile.externalData) user.studentProfile.externalData = { ghar: {} };
+  if (!user.studentProfile.externalData.ghar) user.studentProfile.externalData.ghar = {};
+
+  const now = new Date();
+  const gharData = user.studentProfile.externalData.ghar;
+
   /**
-   * Static method to sync Ghar data for a user
-   * @param {string} email - Student email
-   * @param {Object} externalData - Raw data from Ghar API
-   * @param {Object} options - Sync options (e.g., createIfNotFound)
+   * MAPPING LOGIC (Deduplicated & Robust)
    */
-  userSchema.statics.syncGharData = async function (email, externalData, options = {}) {
-    if (!externalData) return null;
-    if (!email) return null;
-    
-    const normalizedEmail = email.trim().toLowerCase();
-    let user = await this.findOne({ email: normalizedEmail, role: 'student' });
-  
-    if (!user && options.createIfNotFound) {
-      console.log(`[GharSync] Creating new student user for ${normalizedEmail}`);
-      
-      // Robust Name parsing (handle both object and string from different Zoho reports)
-      let resolvedFirstName = 'Student';
-      let resolvedLastName = 'User';
-      
-      if (externalData.Name && typeof externalData.Name === 'object') {
-        resolvedFirstName = externalData.Name.first_name || resolvedFirstName;
-        resolvedLastName = externalData.Name.last_name || resolvedLastName;
-      } else if (typeof externalData.Name === 'string') {
-        const parts = externalData.Name.split(' ');
-        resolvedFirstName = parts[0];
-        resolvedLastName = parts.slice(1).join(' ') || 'User';
-      } else if (externalData.Student_Name) {
-        const parts = String(externalData.Student_Name).split(' ');
-        resolvedFirstName = parts[0];
-        resolvedLastName = parts.slice(1).join(' ') || 'User';
-      }
 
-      user = new this({
-        email: normalizedEmail,
-        role: 'student',
-        isActive: true, // Mark as active to ensure they appear in "Active" counts as requested
-        firstName: resolvedFirstName,
-        lastName: resolvedLastName,
-        authProvider: 'google',
-        studentProfile: {
-          profileStatus: 'draft',
-          externalData: { ghar: {} }
+  // 1. Identifiers
+  const gharId = externalData.Student_ID1 || externalData.ID;
+  if (gharId) gharData.stdId = { value: gharId.toString(), lastUpdated: now };
+
+  // 2. Status & Academic
+  const statusValue = externalData.Status || externalData.Academic_Status || externalData.Student_Status;
+  if (statusValue) {
+    const trimmedStatus = statusValue.toString().trim();
+    gharData.currentStatus = { value: trimmedStatus, lastUpdated: now };
+
+    const knownStatuses = [
+      'Active', 'Placed', 'Intern (In Campus)', 'Intern (Out Campus)',
+      'Dropout', 'DropOut', 'InActive', 'Completed-Opted out for placement'
+    ];
+
+    const matchedStatus = knownStatuses.find(s => s.toLowerCase() === trimmedStatus.toLowerCase()) ||
+      knownStatuses.find(s => trimmedStatus.includes(s));
+
+    if (matchedStatus) {
+      user.studentProfile.currentStatus = matchedStatus;
+      // Request: Ensure user is marked as Active if Zoho status is Active
+      if (matchedStatus.toLowerCase() === 'active') {
+        user.isActive = true;
+      }
+    }
+  }
+
+  // 3. Dates
+  const joinDateValue = externalData.Joining_Date || externalData.Admission_Date || externalData.Date_of_Joining;
+  if (joinDateValue) {
+    const jd = new Date(joinDateValue);
+    if (!isNaN(jd.getTime())) gharData.joiningDate = { value: jd, lastUpdated: now };
+  }
+
+  const dobValue = externalData.Date_of_Birth || externalData.DOB;
+  if (dobValue) {
+    const dob = new Date(dobValue);
+    if (!isNaN(dob.getTime())) gharData.dob = { value: dob, lastUpdated: now };
+  }
+
+  const placementDateValue = externalData.Placed_Date || externalData.Date_of_Placement || externalData.Placement_Date;
+  if (placementDateValue) {
+    const pd = new Date(placementDateValue);
+    if (!isNaN(pd.getTime())) gharData.dateOfPlacement = { value: pd, lastUpdated: now };
+  }
+
+  // 4. Academic Metrics
+  const moduleValue = externalData.Current_Module || externalData.Current_Module_Avg;
+  if (moduleValue) gharData.currentModule = { value: moduleValue, lastUpdated: now };
+
+  const attendanceValue = externalData.Attendance_Rate1 || externalData.Attendance_Rate || externalData.Attendance_Percentage;
+  if (attendanceValue) {
+    const rate = parseFloat(attendanceValue);
+    if (!isNaN(rate)) gharData.attendancePercentage = { value: rate, lastUpdated: now };
+  }
+
+  // 5. General Info
+  if (externalData.Gender) gharData.gender = { value: externalData.Gender, lastUpdated: now };
+  if (externalData.Caste) gharData.caste = { value: externalData.Caste, lastUpdated: now };
+  if (externalData.Religion) gharData.religion = { value: externalData.Religion, lastUpdated: now };
+  if (externalData.Qualification) gharData.qualification = { value: externalData.Qualification, lastUpdated: now };
+  if (externalData.Marital_status) gharData.maritalStatus = { value: externalData.Marital_status, lastUpdated: now };
+  if (externalData.Days_in_Campus) gharData.daysInCampus = { value: parseInt(externalData.Days_in_Campus), lastUpdated: now };
+
+  // 6. Contact & Personal
+  const phoneValue = externalData.Phone_Number || externalData.Mobile || externalData.Mobile_Number;
+  if (phoneValue) gharData.phone = { value: phoneValue, lastUpdated: now };
+
+  if (externalData.Personal_Email) gharData.personalEmail = { value: externalData.Personal_Email, lastUpdated: now };
+  if (externalData.Aadhar_No || externalData.Aadhar_Number) gharData.aadharNo = { value: externalData.Aadhar_No || externalData.Aadhar_Number, lastUpdated: now };
+
+  // 7. Campus & School
+  const campusValue = externalData.Select_Campus?.Campus_Name || externalData.Campus_Name || externalData.Campus;
+  if (campusValue) {
+    gharData.campus = { value: campusValue, lastUpdated: now };
+
+    // Attempt to resolve top-level campus reference
+    try {
+      if (options.targetCampusId) {
+        user.campus = options.targetCampusId;
+      } else {
+        let searchName = campusValue.trim();
+        if (searchName.toLowerCase() === 'eternal campus') {
+          searchName = 'Eternal BCA';
+        } else if (searchName.toLowerCase() === 'sarjapura') {
+          searchName = 'Sarjapur';
         }
-      });
-    }
-  
-    if (!user) return null;
-
-    if (!user.studentProfile) user.studentProfile = { profileStatus: 'draft', externalData: { ghar: {} } };
-    if (!user.studentProfile.externalData) user.studentProfile.externalData = { ghar: {} };
-    if (!user.studentProfile.externalData.ghar) user.studentProfile.externalData.ghar = {};
-
-    const now = new Date();
-    const gharData = user.studentProfile.externalData.ghar;
-
-    /**
-     * MAPPING LOGIC (Deduplicated & Robust)
-     */
-    
-    // 1. Identifiers
-    const gharId = externalData.Student_ID1 || externalData.ID;
-    if (gharId) gharData.stdId = { value: gharId.toString(), lastUpdated: now };
-
-    // 2. Status & Academic
-    const statusValue = externalData.Status || externalData.Academic_Status || externalData.Student_Status;
-    if (statusValue) {
-      const trimmedStatus = statusValue.toString().trim();
-      gharData.currentStatus = { value: trimmedStatus, lastUpdated: now };
-      
-      const knownStatuses = [
-        'Active', 'Placed', 'Intern (In Campus)', 'Intern (Out Campus)', 
-        'Dropout', 'DropOut', 'InActive', 'Completed-Opted out for placement'
-      ];
-      
-      const matchedStatus = knownStatuses.find(s => s.toLowerCase() === trimmedStatus.toLowerCase()) || 
-                            knownStatuses.find(s => trimmedStatus.includes(s));
-
-      if (matchedStatus) {
-        user.studentProfile.currentStatus = matchedStatus;
-        // Request: Ensure user is marked as Active if Zoho status is Active
-        if (matchedStatus.toLowerCase() === 'active') {
-          user.isActive = true;
+        const Campus = mongoose.models.Campus || require('./Campus');
+        const matchedCampus = await Campus.findOne({ name: new RegExp(`^${searchName}$`, 'i') });
+        if (matchedCampus) {
+          user.campus = matchedCampus._id;
         }
       }
+    } catch (e) {
+      console.warn('[GharSync] Could not resolve campus reference for:', campusValue);
     }
+  }
 
-    // 3. Dates
-    const joinDateValue = externalData.Joining_Date || externalData.Admission_Date || externalData.Date_of_Joining;
-    if (joinDateValue) {
-       const jd = new Date(joinDateValue);
-       if (!isNaN(jd.getTime())) gharData.joiningDate = { value: jd, lastUpdated: now };
-    }
+  const schoolValue = externalData.Select_School1 || externalData.Current_School || externalData.School_Name;
+  if (schoolValue) gharData.currentSchool = { value: schoolValue, lastUpdated: now };
 
-    const dobValue = externalData.Date_of_Birth || externalData.DOB;
-    if (dobValue) {
-      const dob = new Date(dobValue);
-      if (!isNaN(dob.getTime())) gharData.dob = { value: dob, lastUpdated: now };
-    }
-
-    const placementDateValue = externalData.Placed_Date || externalData.Date_of_Placement || externalData.Placement_Date;
-    if (placementDateValue) {
-      const pd = new Date(placementDateValue);
-      if (!isNaN(pd.getTime())) gharData.dateOfPlacement = { value: pd, lastUpdated: now };
-    }
-
-    // 4. Academic Metrics
-    const moduleValue = externalData.Current_Module || externalData.Current_Module_Avg;
-    if (moduleValue) gharData.currentModule = { value: moduleValue, lastUpdated: now };
-
-    const attendanceValue = externalData.Attendance_Rate1 || externalData.Attendance_Rate || externalData.Attendance_Percentage;
-    if (attendanceValue) {
-      const rate = parseFloat(attendanceValue);
-      if (!isNaN(rate)) gharData.attendancePercentage = { value: rate, lastUpdated: now };
-    }
-
-    // 5. General Info
-    if (externalData.Gender) gharData.gender = { value: externalData.Gender, lastUpdated: now };
-    if (externalData.Caste) gharData.caste = { value: externalData.Caste, lastUpdated: now };
-    if (externalData.Religion) gharData.religion = { value: externalData.Religion, lastUpdated: now };
-    if (externalData.Qualification) gharData.qualification = { value: externalData.Qualification, lastUpdated: now };
-    if (externalData.Marital_status) gharData.maritalStatus = { value: externalData.Marital_status, lastUpdated: now };
-    if (externalData.Days_in_Campus) gharData.daysInCampus = { value: parseInt(externalData.Days_in_Campus), lastUpdated: now };
-    
-    // 6. Contact & Personal
-    const phoneValue = externalData.Phone_Number || externalData.Mobile || externalData.Mobile_Number;
-    if (phoneValue) gharData.phone = { value: phoneValue, lastUpdated: now };
-    
-    if (externalData.Personal_Email) gharData.personalEmail = { value: externalData.Personal_Email, lastUpdated: now };
-    if (externalData.Aadhar_No || externalData.Aadhar_Number) gharData.aadharNo = { value: externalData.Aadhar_No || externalData.Aadhar_Number, lastUpdated: now };
-    
-    // 7. Campus & School
-    const campusValue = externalData.Select_Campus?.Campus_Name || externalData.Campus_Name || externalData.Campus;
-    if (campusValue) {
-      gharData.campus = { value: campusValue, lastUpdated: now };
-      
-      // Attempt to resolve top-level campus reference
-      try {
-        if (options.targetCampusId) {
-          user.campus = options.targetCampusId;
-        } else {
-          let searchName = campusValue.trim();
-          if (searchName.toLowerCase() === 'eternal campus') {
-            searchName = 'Eternal BCA';
-          } else if (searchName.toLowerCase() === 'sarjapura') {
-            searchName = 'Sarjapur';
-          }
-          const Campus = mongoose.models.Campus || require('./Campus');
-          const matchedCampus = await Campus.findOne({ name: new RegExp(`^${searchName}$`, 'i') });
-          if (matchedCampus) {
-            user.campus = matchedCampus._id;
-          }
-        }
-      } catch (e) {
-        console.warn('[GharSync] Could not resolve campus reference for:', campusValue);
-      }
-    }
-
-    const schoolValue = externalData.Select_School1 || externalData.Current_School || externalData.School_Name;
-    if (schoolValue) gharData.currentSchool = { value: schoolValue, lastUpdated: now };
-
-    // 8. Hometown
-    if (externalData.Address) {
-      const state = externalData.Address.state_province || externalData.State;
-      const district = externalData.Address.district_city || externalData.District;
-      if (state || district) {
-        gharData.hometown = {
-          value: { state, district },
-          lastUpdated: now
-        };
-      }
-    }
-
-    // 9. English & Coding
-    if (externalData.Speak_Improve_Latest_Grade) gharData.englishSpeaking = { value: externalData.Speak_Improve_Latest_Grade, lastUpdated: now };
-    if (externalData.Write_Improve_Latest_Grade) gharData.englishWriting = { value: externalData.Write_Improve_Latest_Grade, lastUpdated: now };
-    if (externalData.AtCoder_Rating) gharData.atCoderRating = { value: externalData.AtCoder_Rating, lastUpdated: now };
-    if (externalData.ReadTheory_Avg_Quize_Level) gharData.readTheoryLevel = { value: externalData.ReadTheory_Avg_Quize_Level, lastUpdated: now };
-
-    gharData.lastSyncedAt = now;
-
-    // -----------------------------------------------------------------------
-    // PROMOTE Ghar data into top-level profile fields so all DB filters work.
-    // These are overwritten on every sync so they stay fresh.
-    // When a student logs in and manually updates their profile, those manual
-    // entries are kept and Ghar data is stored alongside in externalData.ghar.
-    // -----------------------------------------------------------------------
-
-    // Joining date → used by batch year filter
-    if (gharData.joiningDate?.value) {
-      user.studentProfile.joiningDate = gharData.joiningDate.value;
-    }
-
-    // School → used by school filter
-    if (gharData.currentSchool?.value) {
-      user.studentProfile.currentSchool = gharData.currentSchool.value;
-    }
-
-    // Attendance
-    if (gharData.attendancePercentage?.value != null) {
-      user.studentProfile.attendancePercentage = gharData.attendancePercentage.value;
-    }
-
-    // Current module
-    if (gharData.currentModule?.value) {
-      user.studentProfile.currentModule = gharData.currentModule.value;
-    }
-
-    // Gender → top-level user field
-    if (gharData.gender?.value) {
-      user.gender = gharData.gender.value.toLowerCase();
-    }
-
-    // Phone → top-level user field
-    if (gharData.phone?.value && !user.phone) {
-      user.phone = gharData.phone.value;
-    }
-
-    // Hometown → studentProfile.hometown (district / state)
-    if (gharData.hometown?.value) {
-      const { state, district } = gharData.hometown.value;
-      user.studentProfile.hometown = {
-        ...user.studentProfile.hometown,
-        state: state || user.studentProfile.hometown?.state,
-        district: district || user.studentProfile.hometown?.district
+  // 8. Hometown
+  if (externalData.Address) {
+    const state = externalData.Address.state_province || externalData.State;
+    const district = externalData.Address.district_city || externalData.District;
+    if (state || district) {
+      gharData.hometown = {
+        value: { state, district },
+        lastUpdated: now
       };
     }
+  }
 
-    // Date of placement
-    if (gharData.dateOfPlacement?.value) {
-      user.studentProfile.dateOfPlacement = gharData.dateOfPlacement.value;
+  // 9. English & Coding
+  if (externalData.Speak_Improve_Latest_Grade) gharData.englishSpeaking = { value: externalData.Speak_Improve_Latest_Grade, lastUpdated: now };
+  if (externalData.Write_Improve_Latest_Grade) gharData.englishWriting = { value: externalData.Write_Improve_Latest_Grade, lastUpdated: now };
+  if (externalData.AtCoder_Rating) gharData.atCoderRating = { value: externalData.AtCoder_Rating, lastUpdated: now };
+  if (externalData.ReadTheory_Avg_Quize_Level) gharData.readTheoryLevel = { value: externalData.ReadTheory_Avg_Quize_Level, lastUpdated: now };
+
+  gharData.lastSyncedAt = now;
+
+  // -----------------------------------------------------------------------
+  // PROMOTE Ghar data into top-level profile fields so all DB filters work.
+  // These are overwritten on every sync so they stay fresh.
+  // When a student logs in and manually updates their profile, those manual
+  // entries are kept and Ghar data is stored alongside in externalData.ghar.
+  // -----------------------------------------------------------------------
+
+  // Joining date → used by batch year filter
+  if (gharData.joiningDate?.value) {
+    user.studentProfile.joiningDate = gharData.joiningDate.value;
+  }
+
+  // School → used by school filter
+  if (gharData.currentSchool?.value) {
+    user.studentProfile.currentSchool = gharData.currentSchool.value;
+  }
+
+  // Attendance
+  if (gharData.attendancePercentage?.value != null) {
+    user.studentProfile.attendancePercentage = gharData.attendancePercentage.value;
+  }
+
+  // Current module
+  if (gharData.currentModule?.value) {
+    user.studentProfile.currentModule = gharData.currentModule.value;
+  }
+
+  // Gender → top-level user field
+  if (gharData.gender?.value) {
+    user.gender = gharData.gender.value.toLowerCase();
+  }
+
+  // Phone → top-level user field
+  if (gharData.phone?.value && !user.phone) {
+    user.phone = gharData.phone.value;
+  }
+
+  // Hometown → studentProfile.hometown (district / state)
+  if (gharData.hometown?.value) {
+    const { state, district } = gharData.hometown.value;
+    user.studentProfile.hometown = {
+      ...user.studentProfile.hometown,
+      state: state || user.studentProfile.hometown?.state,
+      district: district || user.studentProfile.hometown?.district
+    };
+  }
+
+  // Date of placement
+  if (gharData.dateOfPlacement?.value) {
+    user.studentProfile.dateOfPlacement = gharData.dateOfPlacement.value;
+  }
+
+  // -----------------------------------------------------------------------
+
+  // Safely update extraAttributes Map
+  if (externalData) {
+    if (!user.studentProfile.externalData.ghar.extraAttributes || typeof user.studentProfile.externalData.ghar.extraAttributes.set !== 'function') {
+      user.studentProfile.externalData.ghar.extraAttributes = new Map();
     }
 
-    // -----------------------------------------------------------------------
+    Object.keys(externalData).forEach(key => {
+      const safeKey = key.replace(/\./g, '_');
+      user.studentProfile.externalData.ghar.extraAttributes.set(safeKey, externalData[key]);
+    });
+    user.studentProfile.externalData.ghar.extraAttributes.set('syncTimestamp', now);
+  }
 
-    // Safely update extraAttributes Map
-    if (externalData) {
-      if (!user.studentProfile.externalData.ghar.extraAttributes || typeof user.studentProfile.externalData.ghar.extraAttributes.set !== 'function') {
-        user.studentProfile.externalData.ghar.extraAttributes = new Map();
-      }
-
-      Object.keys(externalData).forEach(key => {
-        const safeKey = key.replace(/\./g, '_');
-        user.studentProfile.externalData.ghar.extraAttributes.set(safeKey, externalData[key]);
-      });
-      user.studentProfile.externalData.ghar.extraAttributes.set('syncTimestamp', now);
-    }
-
-    user.markModified('studentProfile.externalData');
-    return await user.save();
-  };
+  user.markModified('studentProfile.externalData');
+  return await user.save();
+};
 
 module.exports = mongoose.model('User', userSchema);
