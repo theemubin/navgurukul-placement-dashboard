@@ -310,22 +310,22 @@ export const utilsAPI = {
 export const scamReportsAPI = {
   // Save a new scam report
   saveReport: (data) => api.post('/scam-reports', data),
-  
+
   // Get public reports for browsing
   getPublicReports: (params) => api.get('/scam-reports/public', { params }),
-  
+
   // Get reports for a specific company
   getCompanyReports: (companyName, params) => api.get(`/scam-reports/company/${encodeURIComponent(companyName)}`, { params }),
-  
+
   // Get specific report by ID
   getReport: (id) => api.get(`/scam-reports/${id}`),
-  
+
   // Vote on a report
   voteOnReport: (id, voteType) => api.post(`/scam-reports/${id}/vote`, { voteType }),
-  
+
   // Delete report (author or admin only)
   deleteReport: (id) => api.delete(`/scam-reports/${id}`),
-  
+
   // Comments API
   addComment: (reportId, content) => api.post(`/scam-reports/${reportId}/comments`, { content }),
   deleteComment: (reportId, commentId) => api.delete(`/scam-reports/${reportId}/comments/${commentId}`),
