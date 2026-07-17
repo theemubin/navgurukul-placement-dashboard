@@ -63,6 +63,50 @@ router.get('/reports', auth, authorize('manager'), async (req, res) => {
     const totalJobs = await Job.countDocuments({});
     const totalCompaniesCount = (await Job.distinct('company.name')).length;
 
+    // 1b. Jobs by Type (full_time, part_time, internship, contract, paid_project)
+    const jobsByTypeRaw = await Job.aggregate([
+      {
+        $group: {
+          _id: { $ifNull: ['$jobType', 'full_time'] },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const jobTypeLabels = {
+      full_time: 'Full Time',
+      part_time: 'Part Time',
+      internship: 'Internship',
+      contract: 'Contract',
+      paid_project: 'Paid Project'
+    };
+
+    const jobsByType = jobsByTypeRaw.map(item => ({
+      type: item._id,
+      label: jobTypeLabels[item._id] || item._id,
+      count: item.count,
+      percentage: totalJobs > 0 ? Math.round((item.count / totalJobs) * 100) : 0
+    }));
+
+    // 1c. Jobs by Role Category
+    const jobsByCategoryRaw = await Job.aggregate([
+      {
+        $group: {
+          _id: { $ifNull: ['$roleCategory', 'Uncategorized'] },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 15 }
+    ]);
+
+    const jobsByCategory = jobsByCategoryRaw.map(item => ({
+      category: item._id || 'Uncategorized',
+      count: item.count,
+      percentage: totalJobs > 0 ? Math.round((item.count / totalJobs) * 100) : 0
+    }));
+
     // 2. Monthly Placement Trend (last 12 months)
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
@@ -204,6 +248,8 @@ router.get('/reports', auth, authorize('manager'), async (req, res) => {
       schoolPerformance: schoolPerformance.filter(Boolean).sort((a, b) => b.rate - a.rate),
       topCompanies,
       campusStats,
+      jobsByType,
+      jobsByCategory,
       quickStats: {
         highestPackage: salaryStats[0]?.max ? `${Math.round(salaryStats[0].max / 100000)} LPA` : 'N/A',
         averagePackage: salaryStats[0]?.avg ? `${Math.round(salaryStats[0].avg / 100000)} LPA` : 'N/A',
