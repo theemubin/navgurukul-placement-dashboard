@@ -3,7 +3,8 @@ import { statsAPI } from '../../services/api';
 import { LoadingSpinner } from '../../components/common/UIComponents';
 import {
   BarChart3, TrendingUp, TrendingDown, Download,
-  Users, Briefcase, Building2, Award, Calendar
+  Users, Briefcase, Building2, Award, Calendar,
+  PieChart, Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -223,6 +224,122 @@ const Reports = () => {
               <p className="text-sm text-gray-500 text-center py-4">No data available</p>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Job Type & Role Category Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Job Type Distribution */}
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-5 flex items-center gap-2">
+            <PieChart className="w-5 h-5 text-indigo-500" />
+            Job Type Distribution
+          </h2>
+          {(reportData?.jobsByType || []).length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-8">No job data available</p>
+          ) : (
+            <div className="space-y-1">
+              {/* Visual Donut-style segments */}
+              <div className="flex h-6 rounded-full overflow-hidden mb-5 gap-0.5">
+                {(() => {
+                  const typeColors = {
+                    full_time: '#6366f1',
+                    part_time: '#f59e0b',
+                    internship: '#10b981',
+                    contract: '#ef4444',
+                    paid_project: '#8b5cf6',
+                  };
+                  return (reportData?.jobsByType || []).map((item, i) => (
+                    <div
+                      key={i}
+                      className="transition-all duration-700 relative group"
+                      style={{
+                        width: `${item.percentage}%`,
+                        backgroundColor: typeColors[item.type] || '#94a3b8',
+                        minWidth: item.percentage > 0 ? '4px' : '0'
+                      }}
+                      title={`${item.label}: ${item.count} jobs (${item.percentage}%)`}
+                    />
+                  ));
+                })()}
+              </div>
+              {/* Legend rows */}
+              {(() => {
+                const typeColors = {
+                  full_time: { bg: 'bg-indigo-500', light: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+                  part_time: { bg: 'bg-amber-500', light: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+                  internship: { bg: 'bg-emerald-500', light: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+                  contract: { bg: 'bg-red-500', light: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+                  paid_project: { bg: 'bg-purple-500', light: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+                };
+                return (reportData?.jobsByType || []).map((item, i) => {
+                  const colors = typeColors[item.type] || { bg: 'bg-gray-400', light: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
+                  return (
+                    <div key={i} className={`flex items-center gap-3 p-3 rounded-lg border ${colors.light} ${colors.border}`}>
+                      <div className={`w-3 h-3 rounded-full flex-shrink-0 ${colors.bg}`} />
+                      <span className="text-sm font-medium text-gray-700 flex-1">{item.label}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">{item.count} job{item.count !== 1 ? 's' : ''}</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${colors.light} ${colors.text} border ${colors.border}`}>
+                          {item.percentage}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* Role Category Distribution */}
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-5 flex items-center gap-2">
+            <Tag className="w-5 h-5 text-purple-500" />
+            Role Category Distribution
+          </h2>
+          {(reportData?.jobsByCategory || []).length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-8">No category data available</p>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {(() => {
+                const categoryPalette = [
+                  '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
+                  '#0ea5e9', '#f97316', '#ec4899', '#14b8a6', '#84cc16',
+                  '#06b6d4', '#a78bfa', '#fb923c', '#34d399', '#f43f5e'
+                ];
+                const maxCount = Math.max(...(reportData?.jobsByCategory || []).map(c => c.count), 1);
+                return (reportData?.jobsByCategory || []).map((item, i) => {
+                  const color = categoryPalette[i % categoryPalette.length];
+                  const barWidth = Math.max((item.count / maxCount) * 100, 4);
+                  return (
+                    <div key={i} className="group">
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="font-medium text-gray-700 truncate max-w-[55%]" title={item.category}>
+                          {item.category}
+                        </span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-gray-400 text-xs">{item.count} job{item.count !== 1 ? 's' : ''}</span>
+                          <span
+                            className="text-xs font-bold px-1.5 py-0.5 rounded text-white"
+                            style={{ backgroundColor: color }}
+                          >
+                            {item.percentage}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700 group-hover:opacity-80"
+                          style={{ width: `${barWidth}%`, backgroundColor: color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          )}
         </div>
       </div>
 
