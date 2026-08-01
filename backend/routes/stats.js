@@ -115,7 +115,8 @@ router.get('/reports', auth, authorize('manager'), async (req, res) => {
     const monthlyDataRaw = await Application.aggregate([
       {
         $match: {
-          createdAt: { $gte: twelveMonthsAgo }
+          createdAt: { $gte: twelveMonthsAgo },
+          status: { $ne: 'interested' }
         }
       },
       {
@@ -303,7 +304,7 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
 
     // Base queries
     let studentQuery = { role: 'student', isActive: true };
-    let applicationQuery = {};
+    let applicationQuery = { status: { $ne: 'interested' } };
     let jobQuery = {};
 
     if (Object.keys(dateFilter).length > 0) {
@@ -777,7 +778,7 @@ router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) =>
       const coordinatorJobs = await Job.find(coordinatorJobQuery).select('_id');
       const jobIds = coordinatorJobs.map(j => j._id);
 
-      const applicationFilter = { job: { $in: jobIds } };
+      const applicationFilter = { job: { $in: jobIds }, status: { $ne: 'interested' } };
       const placementFilter = { job: { $in: jobIds }, status: 'selected' };
 
       if (campus) {

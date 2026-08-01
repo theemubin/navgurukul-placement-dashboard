@@ -305,17 +305,11 @@ const StudentProfile = () => {
   const handleSetPrimaryResume = async (resumeId) => {
     try {
       setUploadingResume(true);
-      const res = await userAPI.setPrimaryResume(resumeId);
-      const updatedUser = res.data.user;
-      setProfile(updatedUser);
-      setFormData(prev => ({
-        ...prev,
-        resumeLink: updatedUser.studentProfile?.resumeLink || '',
-        resume: updatedUser.studentProfile?.resume || ''
-      }));
-      setAtsResult(updatedUser.studentProfile?.resumeAts || null);
-      setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
+      await userAPI.setPrimaryResume(resumeId);
       toast.success('Primary resume updated');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to set primary resume');
     } finally {
@@ -327,17 +321,11 @@ const StudentProfile = () => {
     if (!confirm('Are you sure you want to remove this resume?')) return;
     try {
       setUploadingResume(true);
-      const res = await userAPI.deleteResume(resumeId);
-      const updatedUser = res.data.user;
-      setProfile(updatedUser);
-      setFormData(prev => ({
-        ...prev,
-        resumeLink: updatedUser.studentProfile?.resumeLink || '',
-        resume: updatedUser.studentProfile?.resume || ''
-      }));
-      setAtsResult(updatedUser.studentProfile?.resumeAts || null);
-      setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
+      await userAPI.deleteResume(resumeId);
       toast.success('Resume deleted');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to delete resume');
     } finally {
@@ -379,7 +367,7 @@ const StudentProfile = () => {
         setAtsResult(data);
         setAtsPrompts(data.prompts || null);
       }
-      
+
       setProfile((prev) => {
         if (!prev) return prev;
         let updatedResumes = prev.studentProfile?.resumes || [];
@@ -694,15 +682,10 @@ const StudentProfile = () => {
     try {
       const response = await userAPI.uploadResume(file);
       if (response.data.user) {
-        setProfile(response.data.user);
-        setFormData(prev => ({
-          ...prev,
-          resumeLink: response.data.user.studentProfile?.resumeLink || '',
-          resume: response.data.user.studentProfile?.resume || ''
-        }));
-        setAtsResult(null);
-        setResumeLinkStatus({ checked: false, ok: false, status: null, reason: null });
         toast.success('Resume uploaded successfully');
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
       } else {
         toast.error('Failed to upload resume');
       }
@@ -1840,7 +1823,7 @@ const StudentProfile = () => {
                   )}
                 </div>
 
-                </div>
+              </div>
             )}
 
             {activeTab === 'skills' && (
@@ -2395,7 +2378,7 @@ const StudentProfile = () => {
                   ))}
                 </div>
 
-                </div>
+              </div>
             )}
           </form>
         </div >
@@ -2436,13 +2419,12 @@ const StudentProfile = () => {
             {/* List of resumes */}
             <div className="space-y-4 mb-4">
               {profile?.studentProfile?.resumes?.map((resItem) => (
-                <div 
-                  key={resItem._id} 
-                  className={`p-4 rounded-xl border flex flex-col gap-3 transition-all ${
-                    resItem.isPrimary 
-                      ? 'bg-green-50/50 border-green-200 shadow-sm shadow-green-50/20' 
+                <div
+                  key={resItem._id}
+                  className={`p-4 rounded-xl border flex flex-col gap-3 transition-all ${resItem.isPrimary
+                      ? 'bg-green-50/50 border-green-200 shadow-sm shadow-green-50/20'
                       : 'bg-gray-50 border-gray-200'
-                  }`}
+                    }`}
                 >
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-2 flex-wrap mb-1">
@@ -2508,7 +2490,10 @@ const StudentProfile = () => {
               ))}
 
               {/* Legacy fallback if resumes array doesn't exist yet but resumeLink is present */}
-              {(!profile?.studentProfile?.resumes || profile.studentProfile.resumes.length === 0) && (profile?.studentProfile?.resumeLink || profile?.studentProfile?.resume) && (
+              {(!profile?.studentProfile?.resumes || profile.studentProfile.resumes.length === 0) &&
+                (profile?.studentProfile?.resumeLink || profile?.studentProfile?.resume) &&
+                !(profile?.studentProfile?.resumeLink || '').includes('duxtmfi5t') &&
+                !(profile?.studentProfile?.resume || '').includes('duxtmfi5t') && (
                 <div className="p-4 rounded-xl border flex flex-col gap-3 transition-all bg-green-50/50 border-green-200">
                   <div className="min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
@@ -2543,7 +2528,10 @@ const StudentProfile = () => {
                 </div>
               )}
 
-              {(!profile?.studentProfile?.resumes || profile.studentProfile.resumes.length === 0) && !(profile?.studentProfile?.resumeLink || profile?.studentProfile?.resume) && (
+              {(!profile?.studentProfile?.resumes || profile.studentProfile.resumes.length === 0) &&
+                (!(profile?.studentProfile?.resumeLink || profile?.studentProfile?.resume) ||
+                  (profile?.studentProfile?.resumeLink || '').includes('duxtmfi5t') ||
+                  (profile?.studentProfile?.resume || '').includes('duxtmfi5t')) && (
                 <p className="text-sm text-gray-500 italic text-center py-4">No resumes uploaded yet. Upload one below to get started.</p>
               )}
             </div>
@@ -2623,7 +2611,7 @@ const StudentProfile = () => {
                 </div>
               </div>
             )}
-            </div>
+          </div>
 
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">Profile Completion</h2>
@@ -2639,7 +2627,7 @@ const StudentProfile = () => {
                 { label: 'Office/Professional Skills', done: formData.officeSkills.length > 0 },
                 { label: 'English Level', done: formData.englishProficiency.speaking },
                 { label: 'Open For Roles', done: formData.openForRoles.length > 0 },
-                { label: 'Resume', done: profile?.studentProfile?.resume || profile?.studentProfile?.resumeLink }
+                { label: 'Resume', done: (profile?.studentProfile?.resume && !profile.studentProfile.resume.includes('duxtmfi5t')) || (profile?.studentProfile?.resumeLink && !profile.studentProfile.resumeLink.includes('duxtmfi5t')) }
               ];
               const completedCount = completionItems.filter(item => item.done).length;
               const completionPercent = Math.round((completedCount / completionItems.length) * 100);
