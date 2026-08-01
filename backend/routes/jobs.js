@@ -8,6 +8,7 @@ const Settings = require('../models/Settings');
 const Skill = require('../models/Skill');
 const InterestRequest = require('../models/InterestRequest');
 const Application = require('../models/Application');
+const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
 const AIService = require('../services/aiService');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
@@ -433,8 +434,9 @@ router.get('/', auth, async (req, res) => {
         interested: 0
       }, statusMap[j._id.toString()] || {});
 
-      // totalApplications: sum of all status counts (exclude withdrawn if you prefer)
-      jobObj.totalApplications = Object.values(jobObj.statusCounts || {}).reduce((a, b) => a + (b || 0), 0);
+      // totalApplications: sum of all status counts (exclude withdrawn and interested)
+      const validAppliedKeys = ['applied', 'shortlisted', 'in_progress', 'selected', 'rejected'];
+      jobObj.totalApplications = validAppliedKeys.reduce((sum, key) => sum + (jobObj.statusCounts[key] || 0), 0);
 
       return jobObj;
     });
@@ -644,8 +646,9 @@ router.get('/:id', auth, async (req, res) => {
 
     const jobObj = job.toObject();
     jobObj.statusCounts = statusMap;
-    // applicationCount for backward compatibility with dashboard
-    jobObj.applicationCount = Object.values(statusMap).reduce((a, b) => a + b, 0);
+    // applicationCount for backward compatibility with dashboard (exclude interested status)
+    const activeAppliedKeys = ['applied', 'shortlisted', 'in_progress', 'selected', 'rejected'];
+    jobObj.applicationCount = activeAppliedKeys.reduce((a, key) => a + (statusMap[key] || 0), 0);
     jobObj.selectedCount = statusMap.selected || 0;
 
     res.json(jobObj);
@@ -1322,7 +1325,8 @@ router.post('/:id/broadcast', auth, authorize('coordinator', 'manager'), async (
 router.post('/:id/interest', auth, authorize('student'), [
   body('reason').trim().isLength({ min: 50 }).withMessage('Please provide a detailed reason (at least 50 characters)'),
   body('acknowledgedGaps').isArray(),
-  body('improvementPlan').optional().trim()
+  body('improvementPlan').optional().trim(),
+  body('resume').optional().trim()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -1330,7 +1334,7 @@ router.post('/:id/interest', auth, authorize('student'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { reason, acknowledgedGaps, improvementPlan } = req.body;
+    const { reason, acknowledgedGaps, improvementPlan, resume } = req.body;
     const jobId = req.params.id;
 
     // Get job and student
@@ -1346,8 +1350,18 @@ router.post('/:id/interest', auth, authorize('student'), [
     // Calculate match
     const matchDetails = calculateMatch(student, job);
 
-    // Only allow interest requests for <60% match
-    if (matchDetails.overallPercentage >= 60) {
+    // Calculate readiness to see if they meet the readiness requirement
+    const studentReadiness = await StudentJobReadiness.findOne({ student: req.userId });
+    const readinessRequirement = job.eligibility?.readinessRequirement || 'no';
+    let meetsReadiness = true;
+    if (readinessRequirement === 'yes') {
+      meetsReadiness = studentReadiness && studentReadiness.readinessPercentage === 100;
+    } else if (readinessRequirement === 'in_progress') {
+      meetsReadiness = studentReadiness && studentReadiness.readinessPercentage >= 30;
+    }
+
+    // Only allow interest requests if they cannot apply directly (i.e. match < 60 OR they don't meet readiness)
+    if (matchDetails.overallPercentage >= 60 && meetsReadiness) {
       return res.status(400).json({
         message: 'You meet the requirements. Please apply directly instead of showing interest.'
       });
@@ -1377,7 +1391,8 @@ router.post('/:id/interest', auth, authorize('student'), [
       },
       reason,
       acknowledgedGaps,
-      improvementPlan
+      improvementPlan,
+      resume
     });
 
     await interestRequest.save();
@@ -1587,6 +1602,9 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
           // Convert to regular application
           interestApp.applicationType = 'regular';
           interestApp.status = 'applied';
+          if (request.resume) {
+            interestApp.resume = request.resume;
+          }
           await interestApp.save();
           request.applicationCreated = interestApp._id;
         } else {
@@ -1595,7 +1613,7 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
           const newApp = new Application({
             student: request.student._id,
             job: request.job._id,
-            resume: student.studentProfile?.resume,
+            resume: request.resume || student.studentProfile?.resume,
             coverLetter: '',
             customResponses: [],
             applicationType: 'regular',

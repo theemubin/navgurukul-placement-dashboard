@@ -622,10 +622,30 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
         user.studentProfile.resumeAccessibilityRemark = 'Uploaded via dashboard';
       }
 
-      // If profile was approved and user made changes, set to draft and save snapshot
+      // If profile was approved and user made changes, set to draft and save snapshot (except when only resume fields changed)
       if (user.studentProfile.profileStatus === 'approved') {
-        user.studentProfile.lastApprovedSnapshot = { ...user.studentProfile.toObject() };
-        user.studentProfile.profileStatus = 'draft';
+        const modifiedPaths = user.modifiedPaths();
+        const resumePaths = [
+          'studentProfile.resume',
+          'studentProfile.resumeLink',
+          'studentProfile.resumes',
+          'studentProfile.resumeAccessible',
+          'studentProfile.resumeAccessibilityRemark',
+          'studentProfile.resumeAts'
+        ];
+
+        const hasNonResumeChanges = modifiedPaths.some(path => {
+          if (path === 'updatedAt' || path === 'studentProfile.lastApprovedSnapshot' || path === 'studentProfile') return false;
+          if (path.startsWith('studentProfile')) {
+            return !resumePaths.some(rp => path === rp || path.startsWith(rp + '.'));
+          }
+          return true;
+        });
+
+        if (hasNonResumeChanges) {
+          user.studentProfile.lastApprovedSnapshot = { ...user.studentProfile.toObject() };
+          user.studentProfile.profileStatus = 'draft';
+        }
       }
     }
 

@@ -86,6 +86,11 @@ router.get('/', auth, async (req, res) => {
       } else {
         query.status = status;
       }
+    } else {
+      // By default, exclude 'interested' status applications for coordinators and managers
+      if (req.user.role === 'coordinator' || req.user.role === 'manager') {
+        query.status = { $ne: 'interested' };
+      }
     }
 
     // Campus POC can only see applications from their allowed campus students (primary and managed)

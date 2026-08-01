@@ -49,6 +49,8 @@ const interestRequestSchema = new mongoose.Schema({
   }],
   // How student plans to address the gaps
   improvementPlan: String,
+  // The specific resume the student chose to apply with
+  resume: String,
   // Request status
   status: {
     type: String,

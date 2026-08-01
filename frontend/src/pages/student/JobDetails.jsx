@@ -108,6 +108,7 @@ const JobDetails = () => {
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [showInterestModal, setShowInterestModal] = useState(false);
   const [interestForm, setInterestForm] = useState({
+    reason: '',
     improvementPlan: ''
   });
   const [readiness, setReadiness] = useState(null);
@@ -177,7 +178,12 @@ const JobDetails = () => {
       } else if (studentResumes.length > 0) {
         setSelectedResume(studentResumes[0].resume);
       } else {
-        setSelectedResume(studentProfile?.resume || null);
+        const legacyResume = studentProfile?.resume || '';
+        if (legacyResume && !legacyResume.includes('duxtmfi5t')) {
+          setSelectedResume(legacyResume);
+        } else {
+          setSelectedResume(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching profile status:', error);
@@ -273,7 +279,7 @@ const JobDetails = () => {
       if (error.response?.status === 403 && /Job Ready|must be/i.test(msg)) {
         const wantInterest = window.confirm(`${msg}\n\nWould you like to express interest instead?`);
         if (wantInterest) {
-          await handleInterestExpression();
+          setShowInterestModal(true);
           setApplying(false);
           return;
         }
@@ -299,17 +305,35 @@ const JobDetails = () => {
   };
 
   const handleSubmitInterest = async () => {
+    if (!selectedResume) {
+      toast.error('Please upload or select a resume first');
+      return;
+    }
     if (interestForm.reason.length < 50) {
       toast.error('Please provide a detailed reason (at least 50 characters)');
       return;
+    }
+
+    // Automatically collect missing skills and eligibility criteria as acknowledged gaps
+    const gaps = [];
+    if (matchDetails) {
+      matchDetails.breakdown?.skills?.details?.filter(s => !s.meets).forEach(skill => {
+        gaps.push(`${skill.skillName} (Required: ${skill.requiredLevelLabel})`);
+      });
+      Object.entries(matchDetails.breakdown?.eligibility?.details || {})
+        .filter(([_, d]) => d.required && !d.meets)
+        .forEach(([_, detail]) => {
+          gaps.push(detail.message || detail.requirement || 'Eligibility requirement unmet');
+        });
     }
 
     setSubmittingInterest(true);
     try {
       const response = await jobAPI.submitInterest(id, {
         reason: interestForm.reason,
-        acknowledgedGaps: interestForm.acknowledgedGaps,
-        improvementPlan: interestForm.improvementPlan
+        acknowledgedGaps: gaps,
+        improvementPlan: interestForm.improvementPlan,
+        resume: selectedResume
       });
       toast.success('Interest request submitted! Your Campus PoC will review it.');
       setInterestRequest({ status: 'pending', createdAt: new Date() });
@@ -624,7 +648,7 @@ const JobDetails = () => {
                     } else {
                       return (
                         <button
-                          onClick={handleInterestExpression}
+                          onClick={() => setShowInterestModal(true)}
                           disabled={applying}
                           className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2 shadow-lg shadow-orange-100"
                         >
@@ -1341,6 +1365,90 @@ const JobDetails = () => {
               </div>
             )}
 
+            {/* Resume Selection */}
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Select Resume for Interest Request
+              </label>
+              {resumes.length > 0 ? (
+                <div className="space-y-2 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50">
+                  {resumes.map((r) => (
+                    <label
+                      key={r._id}
+                      className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        selectedResume === r.resume
+                          ? 'border-primary-500 bg-primary-50/50'
+                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="interest-resume"
+                        value={r.resume}
+                        checked={selectedResume === r.resume}
+                        onChange={() => setSelectedResume(r.resume)}
+                        className="w-4 h-4 mt-1 text-primary-600 focus:ring-primary-500 cursor-pointer flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-xs font-bold text-gray-900 truncate max-w-[200px]">
+                            {r.fileName || 'Resume'}
+                          </p>
+                          {r.isPrimary && (
+                            <span className="bg-primary-100 text-primary-800 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-primary-200">
+                              Primary
+                            </span>
+                          )}
+                          <a
+                            href={resolveResumeUrl(r.resume)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-primary-600 hover:underline font-semibold ml-auto"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View
+                          </a>
+                        </div>
+                        <p className="text-[10px] text-gray-400 font-medium">
+                          Uploaded on {new Date(r.uploadedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : selectedResume ? (
+                <div className="p-3 border border-gray-200 rounded-lg bg-gray-50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    <div>
+                      <p className="text-xs font-bold text-gray-900">Current Resume</p>
+                      <p className="text-[10px] text-gray-400 font-medium">Legacy Profile Resume</p>
+                    </div>
+                  </div>
+                  <a
+                    href={resolveResumeUrl(selectedResume)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary-600 hover:underline font-bold"
+                  >
+                    View
+                  </a>
+                </div>
+              ) : (
+                <div className="p-3 text-center border border-dashed border-gray-300 rounded-lg bg-gray-50">
+                  <p className="text-xs text-red-500 font-semibold animate-pulse">
+                    No resumes found in your profile. You must upload a resume before showing interest.
+                  </p>
+                  <Link
+                    to="/student/profile"
+                    className="text-xs text-primary-600 hover:underline font-bold mt-1 inline-block"
+                  >
+                    Go to Profile to upload a resume
+                  </Link>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1383,7 +1491,7 @@ const JobDetails = () => {
               <button
                 onClick={handleSubmitInterest}
                 className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2"
-                disabled={submittingInterest || interestForm.reason.length < 50}
+                disabled={submittingInterest || interestForm.reason.length < 50 || !selectedResume}
               >
                 {submittingInterest ? (
                   <>

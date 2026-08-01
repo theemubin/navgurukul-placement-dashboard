@@ -1,10 +1,10 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const PlacementCycle = require('../models/PlacementCycle');
-const User = require('../models/User');
-const Application = require('../models/Application');
-const { auth, authorize } = require('../middleware/auth');
+const { body, validationResult } = require("express-validator");
+const PlacementCycle = require("../models/PlacementCycle");
+const User = require("../models/User");
+const Application = require("../models/Application");
+const { auth, authorize } = require("../middleware/auth");
 
 /**
  * @swagger
@@ -31,58 +31,67 @@ const { auth, authorize } = require('../middleware/auth');
  *       200:
  *         description: List of cycles
  */
-router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager'), async (req, res) => {
-  try {
-    const { activeOnly } = req.query;
-    let query = {};
+router.get(
+  "/",
+  auth,
+  authorize("student", "campus_poc", "coordinator", "manager"),
+  async (req, res) => {
+    try {
+      const { activeOnly } = req.query;
+      let query = {};
 
-    if (activeOnly === 'true') {
-      query.isActive = true;
-    }
-
-    const cycles = await PlacementCycle.find(query)
-      .populate('createdBy', 'firstName lastName')
-      .sort({ year: -1, month: -1 });
-
-    // For students, just return the cycles list
-    if (req.user.role === 'student') {
-      return res.json(cycles);
-    }
-
-    // For POC/Coordinator/Manager, include stats
-    // POC sees only their campus stats
-    const cyclesWithStats = await Promise.all(cycles.map(async (cycle) => {
-      let studentQuery = { role: 'student', placementCycle: cycle._id };
-
-      // POC only sees their campus students
-      if (req.user.role === 'campus_poc') {
-        studentQuery.campus = req.user.campus;
-      } else if (req.query.campus) {
-        studentQuery.campus = req.query.campus;
+      if (activeOnly === "true") {
+        query.isActive = true;
       }
 
-      const studentCount = await User.countDocuments(studentQuery);
+      const cycles = await PlacementCycle.find(query)
+        .populate("createdBy", "firstName lastName")
+        .sort({ year: -1, month: -1 });
 
-      const studentIds = await User.find(studentQuery).select('_id').then(users => users.map(u => u._id));
+      // For students, just return the cycles list
+      if (req.user.role === "student") {
+        return res.json(cycles);
+      }
 
-      const placedCount = await Application.countDocuments({
-        student: { $in: studentIds },
-        status: 'selected'
-      });
+      // For POC/Coordinator/Manager, include stats
+      // POC sees only their campus stats
+      const cyclesWithStats = await Promise.all(
+        cycles.map(async (cycle) => {
+          let studentQuery = { role: "student", placementCycle: cycle._id };
 
-      return {
-        ...cycle.toJSON(),
-        studentCount,
-        placedCount
-      };
-    }));
+          // POC only sees their campus students
+          if (req.user.role === "campus_poc") {
+            studentQuery.campus = req.user.campus;
+          } else if (req.query.campus) {
+            studentQuery.campus = req.query.campus;
+          }
 
-    res.json(cyclesWithStats);
-  } catch (error) {
-    console.error('Get placement cycles error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+          const studentCount = await User.countDocuments(studentQuery);
+
+          const studentIds = await User.find(studentQuery)
+            .select("_id")
+            .then((users) => users.map((u) => u._id));
+
+          const placedCount = await Application.countDocuments({
+            student: { $in: studentIds },
+            status: "selected",
+          });
+
+          return {
+            ...cycle.toJSON(),
+            studentCount,
+            placedCount,
+          };
+        }),
+      );
+
+      res.json(cyclesWithStats);
+    } catch (error) {
+      console.error("Get placement cycles error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
 
 /**
  * @swagger
@@ -114,12 +123,15 @@ router.get('/', auth, authorize('student', 'campus_poc', 'coordinator', 'manager
  *       201:
  *         description: Cycle created
  */
-router.post('/',
+router.post(
+  "/",
   auth,
-  authorize('manager', 'coordinator', 'campus_poc'),
+  authorize("manager", "coordinator", "campus_poc"),
   [
-    body('month').isInt({ min: 1, max: 12 }).withMessage('Month must be between 1 and 12'),
-    body('year').isInt({ min: 2020, max: 2050 }).withMessage('Invalid year')
+    body("month")
+      .isInt({ min: 1, max: 12 })
+      .withMessage("Month must be between 1 and 12"),
+    body("year").isInt({ min: 2020, max: 2050 }).withMessage("Invalid year"),
   ],
   async (req, res) => {
     try {
@@ -131,14 +143,28 @@ router.post('/',
       const { month, year, description, targetPlacements } = req.body;
 
       // Generate name from month and year
-      const months = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
+      const months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
       const name = `${months[month - 1]} ${year}`;
 
       // Check if cycle already exists (global - no campus)
       const existing = await PlacementCycle.findOne({ month, year });
       if (existing) {
-        return res.status(400).json({ message: 'Placement cycle already exists for this month' });
+        return res
+          .status(400)
+          .json({ message: "Placement cycle already exists for this month" });
       }
 
       const cycle = new PlacementCycle({
@@ -147,17 +173,17 @@ router.post('/',
         year,
         description,
         targetPlacements: targetPlacements || 0,
-        createdBy: req.userId
+        createdBy: req.userId,
       });
 
       await cycle.save();
 
       res.status(201).json(cycle);
     } catch (error) {
-      console.error('Create placement cycle error:', error);
-      res.status(500).json({ message: 'Server error' });
+      console.error("Create placement cycle error:", error);
+      res.status(500).json({ message: "Server error" });
     }
-  }
+  },
 );
 
 // Update placement cycle (Manager only)
@@ -185,28 +211,34 @@ router.post('/',
  *       200:
  *         description: Cycle updated
  */
-router.put('/:cycleId', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
-  try {
-    const { status, description, targetPlacements, isActive } = req.body;
+router.put(
+  "/:cycleId",
+  auth,
+  authorize("manager", "coordinator", "campus_poc"),
+  async (req, res) => {
+    try {
+      const { status, description, targetPlacements, isActive } = req.body;
 
-    const cycle = await PlacementCycle.findById(req.params.cycleId);
-    if (!cycle) {
-      return res.status(404).json({ message: 'Placement cycle not found' });
+      const cycle = await PlacementCycle.findById(req.params.cycleId);
+      if (!cycle) {
+        return res.status(404).json({ message: "Placement cycle not found" });
+      }
+
+      if (status) cycle.status = status;
+      if (description !== undefined) cycle.description = description;
+      if (targetPlacements !== undefined)
+        cycle.targetPlacements = targetPlacements;
+      if (isActive !== undefined) cycle.isActive = isActive;
+
+      await cycle.save();
+
+      res.json(cycle);
+    } catch (error) {
+      console.error("Update placement cycle error:", error);
+      res.status(500).json({ message: "Server error" });
     }
-
-    if (status) cycle.status = status;
-    if (description !== undefined) cycle.description = description;
-    if (targetPlacements !== undefined) cycle.targetPlacements = targetPlacements;
-    if (isActive !== undefined) cycle.isActive = isActive;
-
-    await cycle.save();
-
-    res.json(cycle);
-  } catch (error) {
-    console.error('Update placement cycle error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+  },
+);
 
 // Delete placement cycle (Manager only)
 /**
@@ -227,26 +259,28 @@ router.put('/:cycleId', auth, authorize('manager', 'coordinator', 'campus_poc'),
  *       200:
  *         description: Cycle deleted
  */
-router.delete('/:cycleId', auth, authorize('manager'), async (req, res) => {
+router.delete("/:cycleId", auth, authorize("manager"), async (req, res) => {
   try {
     const cycle = await PlacementCycle.findById(req.params.cycleId);
     if (!cycle) {
-      return res.status(404).json({ message: 'Placement cycle not found' });
+      return res.status(404).json({ message: "Placement cycle not found" });
     }
 
     // Check if any students are assigned to this cycle
-    const assignedStudents = await User.countDocuments({ placementCycle: cycle._id });
+    const assignedStudents = await User.countDocuments({
+      placementCycle: cycle._id,
+    });
     if (assignedStudents > 0) {
       return res.status(400).json({
-        message: `Cannot delete cycle with ${assignedStudents} assigned students. Remove students first.`
+        message: `Cannot delete cycle with ${assignedStudents} assigned students. Remove students first.`,
       });
     }
 
     await PlacementCycle.findByIdAndDelete(req.params.cycleId);
-    res.json({ message: 'Placement cycle deleted' });
+    res.json({ message: "Placement cycle deleted" });
   } catch (error) {
-    console.error('Delete placement cycle error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Delete placement cycle error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -282,72 +316,85 @@ router.delete('/:cycleId', auth, authorize('manager'), async (req, res) => {
  *       200:
  *         description: Students assigned
  */
-router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
-  try {
-    const { cycleId } = req.params;
-    const { studentIds } = req.body;
+router.post(
+  "/:cycleId/students",
+  auth,
+  authorize("campus_poc", "coordinator", "manager"),
+  async (req, res) => {
+    try {
+      const { cycleId } = req.params;
+      const { studentIds } = req.body;
 
-    const cycle = await PlacementCycle.findById(cycleId);
-    if (!cycle) {
-      return res.status(404).json({ message: 'Placement cycle not found' });
-    }
+      const cycle = await PlacementCycle.findById(cycleId);
+      if (!cycle) {
+        return res.status(404).json({ message: "Placement cycle not found" });
+      }
 
-    // Build student query - POC can only assign their managed campus students
-    let studentQuery = { _id: { $in: studentIds }, role: 'student' };
-    if (req.user.role === 'campus_poc') {
-      const campusIds = Array.from(new Set([
-        req.user.campus?.toString(),
-        ...(req.user.managedCampuses?.map(c => c.toString()) || [])
-      ])).filter(Boolean);
-      studentQuery.campus = { $in: campusIds };
-    }
+      // Build student query - POC can only assign their managed campus students
+      let studentQuery = { _id: { $in: studentIds }, role: "student" };
+      if (req.user.role === "campus_poc") {
+        const campusIds = Array.from(
+          new Set([
+            req.user.campus?.toString(),
+            ...(req.user.managedCampuses?.map((c) => c.toString()) || []),
+          ]),
+        ).filter(Boolean);
+        studentQuery.campus = { $in: campusIds };
+      }
 
-    const studentsToAssign = await User.find(studentQuery);
-    if (!studentsToAssign.length) {
-      return res.status(404).json({ message: 'No eligible students found' });
-    }
+      const studentsToAssign = await User.find(studentQuery);
+      if (!studentsToAssign.length) {
+        return res.status(404).json({ message: "No eligible students found" });
+      }
 
-    // 1. Release from old cycles if any
-    for (const student of studentsToAssign) {
-      if (student.placementCycle && student.placementCycle.toString() !== cycleId) {
+      // 1. Release from old cycles if any
+      for (const student of studentsToAssign) {
+        if (
+          student.placementCycle &&
+          student.placementCycle.toString() !== cycleId
+        ) {
+          await PlacementCycle.updateOne(
+            {
+              _id: student.placementCycle,
+              "snapshotStudents.student": student._id,
+            },
+            { $set: { "snapshotStudents.$.status": "released" } },
+          );
+        }
+      }
+
+      // 2. Add to new cycle snapshot
+      const snapshotEntries = studentsToAssign.map((s) => ({
+        student: s._id,
+        addedAt: new Date(),
+        status: "active",
+      }));
+
+      // Use $addToSet to avoid duplicates in snapshot (by student ID)
+      for (const entry of snapshotEntries) {
         await PlacementCycle.updateOne(
-          { _id: student.placementCycle, 'snapshotStudents.student': student._id },
-          { $set: { 'snapshotStudents.$.status': 'released' } }
+          { _id: cycleId, "snapshotStudents.student": { $ne: entry.student } },
+          { $push: { snapshotStudents: entry } },
         );
       }
-    }
 
-    // 2. Add to new cycle snapshot
-    const snapshotEntries = studentsToAssign.map(s => ({
-      student: s._id,
-      addedAt: new Date(),
-      status: 'active'
-    }));
-
-    // Use $addToSet to avoid duplicates in snapshot (by student ID)
-    for (const entry of snapshotEntries) {
-      await PlacementCycle.updateOne(
-        { _id: cycleId, 'snapshotStudents.student': { $ne: entry.student } },
-        { $push: { snapshotStudents: entry } }
-      );
-    }
-
-    // Update students
-    const result = await User.updateMany(
-      studentQuery,
-      {
+      // Update students
+      const result = await User.updateMany(studentQuery, {
         placementCycle: cycle._id,
         placementCycleAssignedAt: new Date(),
-        placementCycleAssignedBy: req.userId
-      }
-    );
+        placementCycleAssignedBy: req.userId,
+      });
 
-    res.json({ message: `${result.modifiedCount} students assigned to cycle`, count: result.modifiedCount });
-  } catch (error) {
-    console.error('Assign students error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+      res.json({
+        message: `${result.modifiedCount} students assigned to cycle`,
+        count: result.modifiedCount,
+      });
+    } catch (error) {
+      console.error("Assign students error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
 
 // Remove students from a placement cycle
 /**
@@ -381,115 +428,140 @@ router.post('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', '
  *       200:
  *         description: Students removed
  */
-router.delete('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
-  try {
-    const { studentIds } = req.body;
+router.delete(
+  "/:cycleId/students",
+  auth,
+  authorize("campus_poc", "coordinator", "manager"),
+  async (req, res) => {
+    try {
+      const { studentIds } = req.body;
 
-    const cycle = await PlacementCycle.findById(req.params.cycleId);
-    if (!cycle) {
-      return res.status(404).json({ message: 'Placement cycle not found' });
-    }
+      const cycle = await PlacementCycle.findById(req.params.cycleId);
+      if (!cycle) {
+        return res.status(404).json({ message: "Placement cycle not found" });
+      }
 
-    // Build student query - POC can only remove their managed campus students
-    let studentQuery = { _id: { $in: studentIds }, placementCycle: cycle._id };
-    if (req.user.role === 'campus_poc') {
-      const campusIds = Array.from(new Set([
-        req.user.campus?.toString(),
-        ...(req.user.managedCampuses?.map(c => c.toString()) || [])
-      ])).filter(Boolean);
-      studentQuery.campus = { $in: campusIds };
-    }
+      // Build student query - POC can only remove their managed campus students
+      let studentQuery = {
+        _id: { $in: studentIds },
+        placementCycle: cycle._id,
+      };
+      if (req.user.role === "campus_poc") {
+        const campusIds = Array.from(
+          new Set([
+            req.user.campus?.toString(),
+            ...(req.user.managedCampuses?.map((c) => c.toString()) || []),
+          ]),
+        ).filter(Boolean);
+        studentQuery.campus = { $in: campusIds };
+      }
 
-    await User.updateMany(
-      studentQuery,
-      {
+      await User.updateMany(studentQuery, {
         $unset: {
           placementCycle: 1,
           placementCycleAssignedAt: 1,
-          placementCycleAssignedBy: 1
-        }
-      }
-    );
+          placementCycleAssignedBy: 1,
+        },
+      });
 
-    res.json({ message: 'Students removed from cycle' });
-  } catch (error) {
-    console.error('Remove students error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+      res.json({ message: "Students removed from cycle" });
+    } catch (error) {
+      console.error("Remove students error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
 
 // Auto-release students from expired cycles (month has ended, not placed/dropout)
-router.post('/release-expired', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
-  try {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1; // 1-indexed
+router.post(
+  "/release-expired",
+  auth,
+  authorize("manager", "coordinator", "campus_poc"),
+  async (req, res) => {
+    try {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1; // 1-indexed
 
-    // Find all cycles whose month/year is in the PAST and not yet completed
-    const expiredCycles = await PlacementCycle.find({
-      $or: [
-        { year: { $lt: currentYear } },
-        { year: currentYear, month: { $lt: currentMonth } }
-      ],
-      status: { $ne: 'completed' }
-    });
+      // Find all cycles whose month/year is in the PAST and not yet completed
+      const expiredCycles = await PlacementCycle.find({
+        $or: [
+          { year: { $lt: currentYear } },
+          { year: currentYear, month: { $lt: currentMonth } },
+        ],
+        status: { $ne: "completed" },
+      });
 
-    let totalReleased = 0;
-    const results = [];
+      let totalReleased = 0;
+      const results = [];
 
-    for (const cycle of expiredCycles) {
-      // Simple query: students in this cycle who are NOT placed or dropout
-      const studentsToRelease = await User.find({
-        placementCycle: cycle._id,
-        role: 'student',
-        'studentProfile.currentStatus': {
-          $nin: ['Placed', 'placed', 'Dropout', 'DropOut', 'dropout', 'Intern (Out Campus)']
-        }
-      }).select('_id');
+      for (const cycle of expiredCycles) {
+        // Simple query: students in this cycle who are NOT placed or dropout
+        const studentsToRelease = await User.find({
+          placementCycle: cycle._id,
+          role: "student",
+          "studentProfile.currentStatus": {
+            $nin: [
+              "Placed",
+              "placed",
+              "Dropout",
+              "DropOut",
+              "dropout",
+              "Intern (Out Campus)",
+            ],
+          },
+        }).select("_id");
 
-      const releaseIds = studentsToRelease.map(s => s._id);
+        const releaseIds = studentsToRelease.map((s) => s._id);
 
-      // Mark cycle as completed (separate from arrayFilters update)
-      await PlacementCycle.updateOne({ _id: cycle._id }, { $set: { status: 'completed' } });
-
-      if (releaseIds.length > 0) {
-        // Update snapshot statuses for released students (separate operation)
+        // Mark cycle as completed (separate from arrayFilters update)
         await PlacementCycle.updateOne(
           { _id: cycle._id },
-          { $set: { 'snapshotStudents.$[elem].status': 'released' } },
-          { arrayFilters: [{ 'elem.student': { $in: releaseIds } }] }
+          { $set: { status: "completed" } },
         );
 
-        // Unset placementCycle on released students
-        await User.updateMany(
-          { _id: { $in: releaseIds } },
-          {
-            $unset: {
-              placementCycle: 1,
-              placementCycleAssignedAt: 1,
-              placementCycleAssignedBy: 1
-            }
-          }
-        );
+        if (releaseIds.length > 0) {
+          // Update snapshot statuses for released students (separate operation)
+          await PlacementCycle.updateOne(
+            { _id: cycle._id },
+            { $set: { "snapshotStudents.$[elem].status": "released" } },
+            { arrayFilters: [{ "elem.student": { $in: releaseIds } }] },
+          );
 
-        totalReleased += releaseIds.length;
+          // Unset placementCycle on released students
+          await User.updateMany(
+            { _id: { $in: releaseIds } },
+            {
+              $unset: {
+                placementCycle: 1,
+                placementCycleAssignedAt: 1,
+                placementCycleAssignedBy: 1,
+              },
+            },
+          );
+
+          totalReleased += releaseIds.length;
+        }
+        results.push({
+          cycle: cycle.name,
+          released: releaseIds.length,
+          marked: "completed",
+        });
       }
-      results.push({ cycle: cycle.name, released: releaseIds.length, marked: 'completed' });
+
+      res.json({
+        message:
+          totalReleased > 0
+            ? `Released ${totalReleased} students from ${results.length} expired cycle(s)`
+            : `No students to release. ${results.length} expired cycle(s) marked completed.`,
+        results,
+      });
+    } catch (error) {
+      console.error("Release expired error:", error);
+      res.status(500).json({ message: "Server error", detail: error.message });
     }
-
-    res.json({
-      message: totalReleased > 0
-        ? `Released ${totalReleased} students from ${results.length} expired cycle(s)`
-        : `No students to release. ${results.length} expired cycle(s) marked completed.`,
-      results
-    });
-  } catch (error) {
-    console.error('Release expired error:', error);
-    res.status(500).json({ message: 'Server error', detail: error.message });
-  }
-});
-
-
+  },
+);
 
 // Get unassigned students (POC sees their campus, others can filter)
 /**
@@ -509,37 +581,64 @@ router.post('/release-expired', auth, authorize('manager', 'coordinator', 'campu
  *       200:
  *         description: List of unassigned students
  */
-router.get('/unassigned/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
-  try {
-    let query = {
-      role: 'student',
-      $or: [
-        { placementCycle: null },
-        { placementCycle: { $exists: false } }
-      ]
-    };
+router.get(
+  "/unassigned/students",
+  auth,
+  authorize("campus_poc", "coordinator", "manager"),
+  async (req, res) => {
+    try {
+      const placedStatuses = [
+        "Placed",
+        "placed",
+        "Dropout",
+        "DropOut",
+        "dropout",
+        "Intern (Out Campus)",
+      ];
 
-    // POC only sees their managed campus students
-    if (req.user.role === 'campus_poc') {
-      const campusIds = Array.from(new Set([
-        req.user.campus?.toString(),
-        ...(req.user.managedCampuses?.map(c => c.toString()) || [])
-      ])).filter(Boolean);
-      query.campus = { $in: campusIds };
-    } else if (req.query.campus) {
-      query.campus = req.query.campus;
+      let query = {
+        role: "student",
+        $or: [{ placementCycle: null }, { placementCycle: { $exists: false } }],
+        $and: [
+          {
+            $or: [
+              { "studentProfile.currentStatus": { $exists: false } },
+              { "studentProfile.currentStatus": { $nin: placedStatuses } },
+            ],
+          },
+          {
+            $or: [
+              { "studentProfile.dateOfPlacement": { $exists: false } },
+              { "studentProfile.dateOfPlacement": null },
+            ],
+          },
+        ],
+      };
+
+      // POC only sees their managed campus students
+      if (req.user.role === "campus_poc") {
+        const campusIds = Array.from(
+          new Set([
+            req.user.campus?.toString(),
+            ...(req.user.managedCampuses?.map((c) => c.toString()) || []),
+          ]),
+        ).filter(Boolean);
+        query.campus = { $in: campusIds };
+      } else if (req.query.campus) {
+        query.campus = req.query.campus;
+      }
+
+      const students = await User.find(query)
+        .select("-password")
+        .populate("campus", "name code");
+
+      res.json(students);
+    } catch (error) {
+      console.error("Get unassigned students error:", error);
+      res.status(500).json({ message: "Server error" });
     }
-
-    const students = await User.find(query)
-      .select('-password')
-      .populate('campus', 'name code');
-
-    res.json(students);
-  } catch (error) {
-    console.error('Get unassigned students error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+  },
+);
 
 // Get students in a placement cycle (with campus filter for POC)
 /**
@@ -564,51 +663,62 @@ router.get('/unassigned/students', auth, authorize('campus_poc', 'coordinator', 
  *       200:
  *         description: List of students in cycle
  */
-router.get('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
-  try {
-    const cycle = await PlacementCycle.findById(req.params.cycleId);
-    if (!cycle) {
-      return res.status(404).json({ message: 'Placement cycle not found' });
+router.get(
+  "/:cycleId/students",
+  auth,
+  authorize("campus_poc", "coordinator", "manager"),
+  async (req, res) => {
+    try {
+      const cycle = await PlacementCycle.findById(req.params.cycleId);
+      if (!cycle) {
+        return res.status(404).json({ message: "Placement cycle not found" });
+      }
+
+      let studentQuery = { role: "student", placementCycle: cycle._id };
+
+      // POC only sees their managed campus students
+      if (req.user.role === "campus_poc") {
+        const campusIds = Array.from(
+          new Set([
+            req.user.campus?.toString(),
+            ...(req.user.managedCampuses?.map((c) => c.toString()) || []),
+          ]),
+        ).filter(Boolean);
+        studentQuery.campus = { $in: campusIds };
+      } else if (req.query.campus) {
+        studentQuery.campus = req.query.campus;
+      }
+
+      const students = await User.find(studentQuery)
+        .select("-password")
+        .populate("campus", "name code");
+
+      // Get application stats for each student
+      const studentsWithStats = await Promise.all(
+        students.map(async (student) => {
+          const applications = await Application.find({
+            student: student._id,
+            status: { $ne: "interested" }
+          }).populate("job", "title company.name");
+
+          const placed = applications.find((a) => a.status === "selected");
+
+          return {
+            ...student.toJSON(),
+            applicationCount: applications.length,
+            placementStatus: placed ? "placed" : "not_placed",
+            placedCompany: placed ? placed.job?.company?.name : null,
+          };
+        }),
+      );
+
+      res.json(studentsWithStats);
+    } catch (error) {
+      console.error("Get cycle students error:", error);
+      res.status(500).json({ message: "Server error" });
     }
-
-    let studentQuery = { role: 'student', placementCycle: cycle._id };
-
-    // POC only sees their managed campus students
-    if (req.user.role === 'campus_poc') {
-      const campusIds = Array.from(new Set([
-        req.user.campus?.toString(),
-        ...(req.user.managedCampuses?.map(c => c.toString()) || [])
-      ])).filter(Boolean);
-      studentQuery.campus = { $in: campusIds };
-    } else if (req.query.campus) {
-      studentQuery.campus = req.query.campus;
-    }
-
-    const students = await User.find(studentQuery)
-      .select('-password')
-      .populate('campus', 'name code');
-
-    // Get application stats for each student
-    const studentsWithStats = await Promise.all(students.map(async (student) => {
-      const applications = await Application.find({ student: student._id })
-        .populate('job', 'title company.name');
-
-      const placed = applications.find(a => a.status === 'selected');
-
-      return {
-        ...student.toJSON(),
-        applicationCount: applications.length,
-        placementStatus: placed ? 'placed' : 'not_placed',
-        placedCompany: placed ? placed.job?.company?.name : null
-      };
-    }));
-
-    res.json(studentsWithStats);
-  } catch (error) {
-    console.error('Get cycle students error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+  },
+);
 
 // Student can select their own placement cycle
 /**
@@ -634,61 +744,68 @@ router.get('/:cycleId/students', auth, authorize('campus_poc', 'coordinator', 'm
  *       200:
  *         description: Cycle updated and profile submitted for approval
  */
-router.put('/my-cycle', auth, authorize('student'), async (req, res) => {
+router.put("/my-cycle", auth, authorize("student"), async (req, res) => {
   try {
-    console.log(`Update my-cycle request from user ${req.userId} role=${req.user?.role}`);
+    console.log(
+      `Update my-cycle request from user ${req.userId} role=${req.user?.role}`,
+    );
     const { cycleId } = req.body;
 
     const cycle = await PlacementCycle.findById(cycleId);
     if (!cycle) {
-      return res.status(404).json({ message: 'Placement cycle not found' });
+      return res.status(404).json({ message: "Placement cycle not found" });
     }
 
     // Business rule: students may change their placement cycle only if the target cycle is not 'active'.
     // This prevents selecting a cycle that is already 'active'.
-    if (cycle.status === 'active') {
-      return res.status(400).json({ message: 'Cannot change to an active placement cycle. Please contact your Campus POC.' });
+    if (cycle.status === "active") {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Cannot change to an active placement cycle. Please contact your Campus POC.",
+        });
     }
 
     // Update student placement cycle and mark for approval (reuse profile submission flow)
     const user = await User.findById(req.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     user.placementCycle = cycle._id;
     user.placementCycleAssignedAt = new Date();
     user.placementCycleAssignedBy = req.userId;
 
     // Trigger profile re-approval flow: mark profile as pending approval and clear previous approval
-    user.studentProfile.profileStatus = 'pending_approval';
+    user.studentProfile.profileStatus = "pending_approval";
     user.studentProfile.lastSubmittedAt = new Date();
-    user.studentProfile.revisionNotes = '';
+    user.studentProfile.revisionNotes = "";
 
     await user.save();
 
     // Notify Campus POCs who manage this campus
     const campusPocs = await User.find({
-      role: 'campus_poc',
-      $or: [
-        { campus: user.campus },
-        { managedCampuses: user.campus }
-      ]
+      role: "campus_poc",
+      $or: [{ campus: user.campus }, { managedCampuses: user.campus }],
     });
-    const Notification = require('../models/Notification');
+    const Notification = require("../models/Notification");
     for (const poc of campusPocs) {
       await Notification.create({
         recipient: poc._id,
-        type: 'profile_approval_needed',
-        title: 'Profile Approval Needed',
+        type: "profile_approval_needed",
+        title: "Profile Approval Needed",
         message: `${user.firstName} ${user.lastName} changed their placement cycle and submitted profile for approval.`,
         link: `/students/${user._id}`,
-        relatedEntity: { type: 'user', id: user._id }
+        relatedEntity: { type: "user", id: user._id },
       });
     }
 
-    res.json({ message: 'Placement cycle updated and profile submitted for approval', cycle });
+    res.json({
+      message: "Placement cycle updated and profile submitted for approval",
+      cycle,
+    });
   } catch (error) {
-    console.error('Update my cycle error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Update my cycle error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -711,42 +828,62 @@ router.put('/my-cycle', auth, authorize('student'), async (req, res) => {
  *       200:
  *         description: Student cycle updated
  */
-router.put('/student/:studentId/placement-success', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
-  try {
-    const { studentId } = req.params;
+router.put(
+  "/student/:studentId/placement-success",
+  auth,
+  authorize("campus_poc", "coordinator", "manager"),
+  async (req, res) => {
+    try {
+      const { studentId } = req.params;
 
-    // Find or create current month's cycle
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
+      // Find or create current month's cycle
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
 
-    const months = ['January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'];
+      const months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
 
-    let cycle = await PlacementCycle.findOne({ month: currentMonth, year: currentYear });
-
-    if (!cycle) {
-      // Create the cycle if it doesn't exist
-      cycle = await PlacementCycle.create({
-        name: `${months[currentMonth - 1]} ${currentYear}`,
+      let cycle = await PlacementCycle.findOne({
         month: currentMonth,
         year: currentYear,
-        status: 'active',
-        createdBy: req.userId
       });
+
+      if (!cycle) {
+        // Create the cycle if it doesn't exist
+        cycle = await PlacementCycle.create({
+          name: `${months[currentMonth - 1]} ${currentYear}`,
+          month: currentMonth,
+          year: currentYear,
+          status: "active",
+          createdBy: req.userId,
+        });
+      }
+
+      await User.findByIdAndUpdate(studentId, {
+        placementCycle: cycle._id,
+        placementCycleAssignedAt: new Date(),
+        placementCycleAssignedBy: req.userId,
+      });
+
+      res.json({ message: "Student cycle updated to current month", cycle });
+    } catch (error) {
+      console.error("Update placement success cycle error:", error);
+      res.status(500).json({ message: "Server error" });
     }
-
-    await User.findByIdAndUpdate(studentId, {
-      placementCycle: cycle._id,
-      placementCycleAssignedAt: new Date(),
-      placementCycleAssignedBy: req.userId
-    });
-
-    res.json({ message: 'Student cycle updated to current month', cycle });
-  } catch (error) {
-    console.error('Update placement success cycle error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+  },
+);
 
 module.exports = router;
