@@ -434,9 +434,10 @@ router.get('/', auth, async (req, res) => {
         interested: 0
       }, statusMap[j._id.toString()] || {});
 
-      // totalApplications: sum of all status counts (exclude withdrawn and interested)
-      const validAppliedKeys = ['applied', 'shortlisted', 'in_progress', 'selected', 'rejected'];
-      jobObj.totalApplications = validAppliedKeys.reduce((sum, key) => sum + (jobObj.statusCounts[key] || 0), 0);
+      // totalApplications: sum of all status counts (exclude withdrawn)
+      jobObj.totalApplications = Object.keys(jobObj.statusCounts)
+        .filter(key => key !== 'withdrawn')
+        .reduce((sum, key) => sum + (jobObj.statusCounts[key] || 0), 0);
 
       return jobObj;
     });
@@ -646,9 +647,10 @@ router.get('/:id', auth, async (req, res) => {
 
     const jobObj = job.toObject();
     jobObj.statusCounts = statusMap;
-    // applicationCount for backward compatibility with dashboard (exclude interested status)
-    const activeAppliedKeys = ['applied', 'shortlisted', 'in_progress', 'selected', 'rejected'];
-    jobObj.applicationCount = activeAppliedKeys.reduce((a, key) => a + (statusMap[key] || 0), 0);
+    // applicationCount for backward compatibility with dashboard (exclude withdrawn status)
+    jobObj.applicationCount = Object.keys(statusMap)
+      .filter(key => key !== 'withdrawn')
+      .reduce((a, key) => a + (statusMap[key] || 0), 0);
     jobObj.selectedCount = statusMap.selected || 0;
 
     res.json(jobObj);

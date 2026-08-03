@@ -87,8 +87,8 @@ router.get('/', auth, async (req, res) => {
         query.status = status;
       }
     } else {
-      // By default, exclude 'interested' status applications for coordinators and managers
-      if (req.user.role === 'coordinator' || req.user.role === 'manager') {
+      // By default, exclude 'interested' status applications for coordinators and managers (unless a specific job is queried)
+      if ((req.user.role === 'coordinator' || req.user.role === 'manager') && !job) {
         query.status = { $ne: 'interested' };
       }
     }
