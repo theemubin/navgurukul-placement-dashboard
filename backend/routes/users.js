@@ -622,27 +622,16 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
         user.studentProfile.resumeAccessibilityRemark = 'Uploaded via dashboard';
       }
 
-      // If profile was approved and user made changes, set to draft and save snapshot (except when only resume fields changed)
+      // If profile was approved and user made changes (including resume changes), set to draft and save snapshot
       if (user.studentProfile.profileStatus === 'approved') {
         const modifiedPaths = user.modifiedPaths();
-        const resumePaths = [
-          'studentProfile.resume',
-          'studentProfile.resumeLink',
-          'studentProfile.resumes',
-          'studentProfile.resumeAccessible',
-          'studentProfile.resumeAccessibilityRemark',
-          'studentProfile.resumeAts'
-        ];
 
-        const hasNonResumeChanges = modifiedPaths.some(path => {
+        const hasChanges = modifiedPaths.some(path => {
           if (path === 'updatedAt' || path === 'studentProfile.lastApprovedSnapshot' || path === 'studentProfile') return false;
-          if (path.startsWith('studentProfile')) {
-            return !resumePaths.some(rp => path === rp || path.startsWith(rp + '.'));
-          }
           return true;
         });
 
-        if (hasNonResumeChanges) {
+        if (hasChanges) {
           user.studentProfile.lastApprovedSnapshot = { ...user.studentProfile.toObject() };
           user.studentProfile.profileStatus = 'draft';
         }
@@ -750,6 +739,11 @@ router.post('/profile/resumes', auth, authorize('student'), upload.single('resum
       });
     }
 
+    if (user.studentProfile.profileStatus === 'approved') {
+      user.studentProfile.lastApprovedSnapshot = { ...user.studentProfile.toObject() };
+      user.studentProfile.profileStatus = 'draft';
+    }
+
     await user.save();
 
     res.json({
@@ -787,12 +781,12 @@ router.delete('/profile/resumes/:resumeId', auth, authorize('student'), async (r
   try {
     const { resumeId } = req.params;
     const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    if (!user || user.role !== 'student') {
+      return res.status(404).json({ message: 'Student not found' });
     }
 
-    if (!user.studentProfile.resumes) {
-      return res.status(400).json({ message: 'No resumes found' });
+    if (!user.studentProfile.resumes || user.studentProfile.resumes.length === 0) {
+      return res.status(404).json({ message: 'No resumes found to delete' });
     }
 
     const resumeIndex = user.studentProfile.resumes.findIndex(
@@ -805,7 +799,7 @@ router.delete('/profile/resumes/:resumeId', auth, authorize('student'), async (r
 
     const resume = user.studentProfile.resumes[resumeIndex];
 
-    if (resume.publicId && resume.url.startsWith('http')) {
+    if (resume.publicId && (resume.url?.startsWith('http') || resume.resume?.startsWith('http'))) {
       try {
         const cloudinary = require('cloudinary').v2;
         cloudinary.config({
@@ -819,13 +813,60 @@ router.delete('/profile/resumes/:resumeId', auth, authorize('student'), async (r
       }
     }
 
+    const deletedPrimary = resume.isPrimary;
     user.studentProfile.resumes.splice(resumeIndex, 1);
+
+    // If we deleted the primary resume, promote the first remaining resume to primary
+    if (deletedPrimary && user.studentProfile.resumes.length > 0) {
+      user.studentProfile.resumes[0].isPrimary = true;
+      const r = user.studentProfile.resumes[0];
+      
+      // Mirror to legacy fields
+      user.studentProfile.resume = r.resume || r.url || '';
+      user.studentProfile.resumeLink = r.resumeLink || r.url || '';
+      user.studentProfile.resumeAccessible = r.resumeAccessible;
+      user.studentProfile.resumeAccessibilityRemark = r.resumeAccessibilityRemark;
+      user.studentProfile.resumeAts = r.resumeAts;
+    } else if (user.studentProfile.resumes.length === 0) {
+      // No resumes left, clear legacy fields
+      user.studentProfile.resume = '';
+      user.studentProfile.resumeLink = '';
+      user.studentProfile.resumeAccessible = null;
+      user.studentProfile.resumeAccessibilityRemark = '';
+      user.studentProfile.resumeAts = {
+        overallScore: null,
+        qualityFlag: null,
+        textLength: 0,
+        status: null,
+        sourceUrl: '',
+        errorMessage: '',
+        atsSummary: '',
+        nameMatch: { isMatch: null, confidence: 0, matchedName: '', reason: '' },
+        breakdown: { keywordAlignment: 0, skillsRelevance: 0, projectImpact: 0, structureReadability: 0, experienceStrength: 0 },
+        strengths: [],
+        gaps: [],
+        actionItems: []
+      };
+    }
+
+    if (user.studentProfile.profileStatus === 'approved') {
+      user.studentProfile.lastApprovedSnapshot = { ...user.studentProfile.toObject() };
+      user.studentProfile.profileStatus = 'draft';
+    }
+
+    user.markModified('studentProfile.resumes');
     await user.save();
+
+    const updatedUser = await User.findById(req.userId)
+      .select('-password')
+      .populate('campus')
+      .populate('studentProfile.skills.skill');
 
     res.json({
       success: true,
       message: 'Resume deleted successfully',
-      resumes: user.studentProfile.resumes
+      resumes: user.studentProfile.resumes,
+      user: updatedUser
     });
   } catch (error) {
     console.error('Delete resume error:', error);
@@ -2428,80 +2469,6 @@ router.put('/profile/resumes/:resumeId/primary', auth, authorize('student'), asy
     res.json({ message: 'Primary resume updated successfully', user: updatedUser });
   } catch (error) {
     console.error('Set primary resume error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Delete a specific resume
-router.delete('/profile/resumes/:resumeId', auth, authorize('student'), async (req, res) => {
-  try {
-    const { resumeId } = req.params;
-    const user = await User.findById(req.userId);
-    if (!user || user.role !== 'student') {
-      return res.status(404).json({ message: 'Student not found' });
-    }
-
-    if (!user.studentProfile.resumes || user.studentProfile.resumes.length === 0) {
-      return res.status(404).json({ message: 'No resumes found to delete' });
-    }
-
-    const initialLength = user.studentProfile.resumes.length;
-    let deletedPrimary = false;
-
-    const deletedIndex = user.studentProfile.resumes.findIndex(r => r._id.toString() === resumeId);
-    if (deletedIndex !== -1) {
-      deletedPrimary = user.studentProfile.resumes[deletedIndex].isPrimary;
-      user.studentProfile.resumes.splice(deletedIndex, 1);
-    }
-
-    if (user.studentProfile.resumes.length === initialLength) {
-      return res.status(404).json({ message: 'Resume not found' });
-    }
-
-    // If we deleted the primary resume, promote the first remaining resume to primary
-    if (deletedPrimary && user.studentProfile.resumes.length > 0) {
-      user.studentProfile.resumes[0].isPrimary = true;
-      const r = user.studentProfile.resumes[0];
-      
-      // Mirror to legacy fields
-      user.studentProfile.resume = r.resume;
-      user.studentProfile.resumeLink = r.resumeLink;
-      user.studentProfile.resumeAccessible = r.resumeAccessible;
-      user.studentProfile.resumeAccessibilityRemark = r.resumeAccessibilityRemark;
-      user.studentProfile.resumeAts = r.resumeAts;
-    } else if (user.studentProfile.resumes.length === 0) {
-      // No resumes left, clear legacy fields
-      user.studentProfile.resume = '';
-      user.studentProfile.resumeLink = '';
-      user.studentProfile.resumeAccessible = null;
-      user.studentProfile.resumeAccessibilityRemark = '';
-      user.studentProfile.resumeAts = {
-        overallScore: null,
-        qualityFlag: null,
-        textLength: 0,
-        status: null,
-        sourceUrl: '',
-        errorMessage: '',
-        atsSummary: '',
-        nameMatch: { isMatch: null, confidence: 0, matchedName: '', reason: '' },
-        breakdown: { keywordAlignment: 0, skillsRelevance: 0, projectImpact: 0, structureReadability: 0, experienceStrength: 0 },
-        strengths: [],
-        gaps: [],
-        actionItems: []
-      };
-    }
-
-    user.markModified('studentProfile.resumes');
-    await user.save();
-
-    const updatedUser = await User.findById(req.userId)
-      .select('-password')
-      .populate('campus')
-      .populate('studentProfile.skills.skill');
-
-    res.json({ message: 'Resume deleted successfully', user: updatedUser });
-  } catch (error) {
-    console.error('Delete resume error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

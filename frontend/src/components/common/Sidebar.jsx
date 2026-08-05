@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { questionAPI, userAPI } from '../../services/api';
+import { questionAPI, userAPI, jobAPI } from '../../services/api';
 import {
   Home, User, Briefcase, FileText, Users, CheckSquare, BarChart3, Settings,
   X, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle,
@@ -14,6 +14,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const [forumUnreadCount, setForumUnreadCount] = useState(0);
   const [pendingProfilesCount, setPendingProfilesCount] = useState(0);
   const [pendingSkillsCount, setPendingSkillsCount] = useState(0);
+  const [pendingInterestCount, setPendingInterestCount] = useState(0);
 
   useEffect(() => {
     if (user?.role === 'coordinator') {
@@ -30,9 +31,13 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const fetchUnreadCount = async () => {
     try {
-      const response = await questionAPI.getQuestions();
-      const count = response.data.filter(q => !q.answer).length;
+      const [questionRes, interestRes] = await Promise.all([
+        questionAPI.getQuestions(),
+        jobAPI.getAllInterestRequests({ status: 'pending', page: 1, limit: 1 })
+      ]);
+      const count = questionRes.data.filter(q => !q.answer).length;
       setForumUnreadCount(count);
+      setPendingInterestCount(interestRes.data?.total || interestRes.data?.counts?.pending || 0);
     } catch (error) {
       console.error('Error fetching forum unread count:', error);
     }
@@ -40,12 +45,14 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const fetchPoCCounts = async () => {
     try {
-      const [profilesRes, skillsRes] = await Promise.all([
+      const [profilesRes, skillsRes, interestRes] = await Promise.all([
         userAPI.getPendingProfiles(),
-        userAPI.getPendingSkills()
+        userAPI.getPendingSkills(),
+        jobAPI.getAllInterestRequests({ status: 'pending', page: 1, limit: 1 })
       ]);
       setPendingProfilesCount(profilesRes.data?.data?.length || profilesRes.data?.total || 0);
       setPendingSkillsCount(skillsRes.data?.length || 0);
+      setPendingInterestCount(interestRes.data?.total || interestRes.data?.counts?.pending || 0);
     } catch (error) {
       console.error('Error fetching PoC counts:', error);
     }
@@ -73,7 +80,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/campus-poc/profile-options', icon: Settings, label: 'Profile Options' },
           { path: '/campus-poc/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' },
-          { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests' },
+          { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests', badge: pendingInterestCount },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
         ];
@@ -82,7 +89,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/coordinator', icon: Home, label: 'Dashboard', exact: true },
           { path: '/coordinator/jobs', icon: Briefcase, label: 'Job Management' },
           { path: '/coordinator/applications', icon: FileText, label: 'Applications' },
-          { path: '/coordinator/interest-requests', icon: Heart, label: 'Interest Requests' },
+          { path: '/coordinator/interest-requests', icon: Heart, label: 'Interest Requests', badge: pendingInterestCount },
           { path: '/coordinator/forum', icon: MessageCircle, label: 'Q&A Forum', badge: forumUnreadCount },
           { path: '/coordinator/skills', icon: Settings, label: 'Skill Categories' },
           { path: '/coordinator/profile-options', icon: Settings, label: 'Profile Options' },
