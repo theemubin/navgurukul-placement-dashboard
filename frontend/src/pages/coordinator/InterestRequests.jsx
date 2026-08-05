@@ -28,6 +28,7 @@ function CoordinatorInterestRequests() {
     const [searchTerm, setSearchTerm] = useState('');
     const [detailModal, setDetailModal] = useState({ open: false, request: null });
     const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+    const [statusCounts, setStatusCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
 
     useEffect(() => {
         fetchRequests();
@@ -49,6 +50,9 @@ function CoordinatorInterestRequests() {
                 pages: response.data.pages,
                 total: response.data.total
             });
+            if (response.data.counts) {
+                setStatusCounts(response.data.counts);
+            }
             setError(null);
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to load interest requests');
@@ -132,7 +136,7 @@ function CoordinatorInterestRequests() {
                         <div>
                             <p className="text-sm text-gray-600">Pending</p>
                             <p className="text-2xl font-bold text-yellow-600">
-                                {filter === 'pending' ? pagination.total : '...'}
+                                {statusCounts.pending}
                             </p>
                         </div>
                     </div>
@@ -145,7 +149,7 @@ function CoordinatorInterestRequests() {
                         <div>
                             <p className="text-sm text-gray-600">Approved</p>
                             <p className="text-2xl font-bold text-green-600">
-                                {filter === 'approved' ? pagination.total : '...'}
+                                {statusCounts.approved}
                             </p>
                         </div>
                     </div>
@@ -158,7 +162,7 @@ function CoordinatorInterestRequests() {
                         <div>
                             <p className="text-sm text-gray-600">Rejected</p>
                             <p className="text-2xl font-bold text-red-600">
-                                {filter === 'rejected' ? pagination.total : '...'}
+                                {statusCounts.rejected}
                             </p>
                         </div>
                     </div>

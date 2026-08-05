@@ -1402,8 +1402,11 @@ router.post('/:id/interest', auth, authorize('student'), [
     // Notify Campus PoC
     const campusPoCs = await User.find({
       role: 'campus_poc',
-      campus: student.campus?._id,
-      isActive: true
+      isActive: true,
+      $or: [
+        { campus: student.campus?._id },
+        { managedCampuses: student.campus?._id }
+      ]
     });
 
     const notifications = campusPoCs.map(poc => ({
@@ -1445,19 +1448,25 @@ router.post('/:id/interest', auth, authorize('student'), [
 router.get('/interest-requests/all', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
-    let query = {};
-
-    if (status) {
-      query.status = status;
-    }
+    let allowedStudentsQuery = {};
 
     // Campus PoC can only see requests from their campus students
     if (req.user.role === 'campus_poc') {
+      const campusIds = (req.user.managedCampuses || []).map(id => id.toString());
+      if (req.user.campus) campusIds.push(req.user.campus.toString());
+      const uniqueCampusIds = [...new Set(campusIds)];
+
       const campusStudents = await User.find({
         role: 'student',
-        campus: req.user.campus
+        campus: { $in: uniqueCampusIds }
       }).select('_id');
-      query.student = { $in: campusStudents.map(s => s._id) };
+      allowedStudentsQuery.student = { $in: campusStudents.map(s => s._id) };
+    }
+
+    let query = { ...allowedStudentsQuery };
+
+    if (status) {
+      query.status = status;
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -1471,11 +1480,18 @@ router.get('/interest-requests/all', auth, authorize('campus_poc', 'coordinator'
       .skip(skip)
       .limit(parseInt(limit));
 
+    const counts = {
+      pending: await InterestRequest.countDocuments({ ...allowedStudentsQuery, status: 'pending' }),
+      approved: await InterestRequest.countDocuments({ ...allowedStudentsQuery, status: 'approved' }),
+      rejected: await InterestRequest.countDocuments({ ...allowedStudentsQuery, status: 'rejected' })
+    };
+
     res.json({
       requests,
       total,
       page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit))
+      pages: Math.ceil(total / parseInt(limit)),
+      counts
     });
   } catch (error) {
     console.error('Get all interest requests error:', error);
@@ -1513,9 +1529,13 @@ router.get('/:id/interest-requests', auth, authorize('coordinator', 'manager', '
 
     // Campus PoC can only see requests from their campus
     if (req.user.role === 'campus_poc') {
+      const campusIds = (req.user.managedCampuses || []).map(id => id.toString());
+      if (req.user.campus) campusIds.push(req.user.campus.toString());
+      const uniqueCampusIds = [...new Set(campusIds)];
+
       const campusStudents = await User.find({
         role: 'student',
-        campus: req.user.campus
+        campus: { $in: uniqueCampusIds }
       }).select('_id');
       query.student = { $in: campusStudents.map(s => s._id) };
     }
@@ -1580,7 +1600,11 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
 
     // Campus PoC can only review their campus students
     if (req.user.role === 'campus_poc') {
-      if (request.student.campus?.toString() !== req.user.campus?.toString()) {
+      const campusIds = (req.user.managedCampuses || []).map(id => id.toString());
+      if (req.user.campus) campusIds.push(req.user.campus.toString());
+      const uniqueCampusIds = [...new Set(campusIds)];
+
+      if (!request.student.campus || !uniqueCampusIds.includes(request.student.campus.toString())) {
         return res.status(403).json({ message: 'Not authorized to review this request' });
       }
     }
