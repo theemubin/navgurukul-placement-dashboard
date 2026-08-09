@@ -603,7 +603,6 @@ router.get(
         "Dropout",
         "DropOut",
         "dropout",
-        "Intern (Out Campus)",
       ];
 
       let query = {

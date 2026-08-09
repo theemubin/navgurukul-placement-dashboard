@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { formatDistanceToNow, isPast, format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { statsAPI, placementCycleAPI, userAPI, campusAPI, gharAPI } from '../../services/api';
@@ -1332,6 +1332,8 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [studentSearch, setStudentSearch] = useState('');
+  const [selectedSchool, setSelectedSchool] = useState('all');
+  const [selectedMonths, setSelectedMonths] = useState('all');
   const [editingTargetId, setEditingTargetId] = useState(null);
   const [editTargetValue, setEditTargetValue] = useState('');
   const [expandedSchools, setExpandedSchools] = useState({});
@@ -1350,10 +1352,64 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
     setExpandedSchools(prev => ({ ...prev, [school]: !prev[school] }));
   };
 
-  const filteredUnassigned = unassignedStudents.filter(s => 
-    `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()) || 
-    s.email.toLowerCase().includes(studentSearch.toLowerCase())
-  );
+  const unassignedWithMonths = useMemo(() => {
+    return unassignedStudents.map(student => {
+      const doj = student.studentProfile?.joiningDate || student.dateOfJoining || student.joiningDate;
+      let monthsSpent = null;
+      if (doj) {
+        const d = new Date(doj);
+        if (!isNaN(d.getTime())) {
+          monthsSpent = Math.max(0, Math.floor((new Date() - d) / (1000 * 60 * 60 * 24 * 30.44)));
+        }
+      }
+      return { ...student, monthsSpent };
+    });
+  }, [unassignedStudents]);
+
+  const availableSchools = useMemo(() => {
+    const schools = new Set();
+    unassignedWithMonths.forEach(s => {
+      const status = s.studentProfile?.currentStatus || s.status || '';
+      if (status === 'Active' || status.includes('Intern')) {
+        schools.add(s.studentProfile?.currentSchool || s.campus?.name || 'No School');
+      }
+    });
+    return Array.from(schools).sort();
+  }, [unassignedWithMonths]);
+
+  const availableMonths = useMemo(() => {
+    const months = new Set();
+    unassignedWithMonths.forEach(s => {
+      const status = s.studentProfile?.currentStatus || s.status || '';
+      if ((status === 'Active' || status.includes('Intern')) && s.monthsSpent !== null) {
+        months.add(s.monthsSpent);
+      }
+    });
+    return Array.from(months).sort((a, b) => b - a);
+  }, [unassignedWithMonths]);
+
+  const filteredUnassigned = useMemo(() => {
+    let filtered = unassignedWithMonths.filter(s => {
+      const status = s.studentProfile?.currentStatus || s.status || '';
+      const validStatus = status === 'Active' || status === 'Intern (In Campus)' || status === 'Intern (Out Campus)' || status === 'Intern';
+      if (!validStatus) return false;
+
+      if (selectedSchool !== 'all') {
+        const school = s.studentProfile?.currentSchool || s.campus?.name || 'No School';
+        if (school !== selectedSchool) return false;
+      }
+      if (selectedMonths !== 'all') {
+        if (s.monthsSpent?.toString() !== selectedMonths) return false;
+      }
+
+      return `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()) || 
+             (s.email && s.email.toLowerCase().includes(studentSearch.toLowerCase()));
+    });
+    
+    // Sort by highest months spent
+    filtered.sort((a, b) => (b.monthsSpent || 0) - (a.monthsSpent || 0));
+    return filtered;
+  }, [unassignedWithMonths, studentSearch, selectedSchool, selectedMonths]);
 
   const schoolGroups = cycleStudents.reduce((acc, student) => {
     const school = student.studentProfile?.currentSchool || student.campus?.name || 'No School';
@@ -1571,6 +1627,26 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                           className="pl-9 input w-full text-sm py-2"
                         />
                       </div>
+                      <select 
+                        value={selectedSchool}
+                        onChange={(e) => setSelectedSchool(e.target.value)}
+                        className="input text-sm py-2"
+                      >
+                        <option value="all">All Schools</option>
+                        {availableSchools.map(school => (
+                          <option key={school} value={school}>{school}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={selectedMonths}
+                        onChange={(e) => setSelectedMonths(e.target.value)}
+                        className="input text-sm py-2"
+                      >
+                        <option value="all">All Months</option>
+                        {availableMonths.map(month => (
+                          <option key={month} value={month.toString()}>{month} Months</option>
+                        ))}
+                      </select>
                       <button
                         onClick={() => {
                           if (selectedStudents.length === filteredUnassigned.length && filteredUnassigned.length > 0) {
@@ -1609,27 +1685,33 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                               <p className="text-xs text-gray-500 truncate">{student.email || 'No email'}</p>
                             </div>
 
-                            {/* 2. DOJ & Months */}
-                            <div className="flex flex-col min-w-0 px-2 justify-center border-l border-gray-200" style={{ flex: '1.5' }}>
-                              <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Joined</span>
-                              <span className="text-xs text-gray-800 truncate">
-                                {doj ? new Date(doj).toLocaleDateString() : 'N/A'}
+                            {/* 2. DOJ, Months & Status */}
+                            <div className="flex flex-col min-w-0 px-2 justify-center border-l border-gray-200" style={{ flex: '2' }}>
+                              <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Joined / Status</span>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <span className="text-xs text-gray-800 truncate">
+                                  {doj ? new Date(doj).toLocaleDateString() : 'N/A'}
+                                </span>
+                                {student.monthsSpent !== null && (
+                                  <span className="text-[10px] bg-primary-50 text-primary-700 px-1.5 py-0.5 rounded font-medium">
+                                    {student.monthsSpent}m
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-gray-500 font-medium truncate mt-0.5">
+                                {student.studentProfile?.currentStatus || student.status || 'Active'}
                               </span>
-                              {monthsSpent !== null && (
-                                <span className="text-[10px] text-primary-600 font-medium">
-                                  {monthsSpent} months spent
-                               </span>
-                              )}
                             </div>
 
-                            {/* 3. Module & School */}
+                            {/* 3. Module, School & Readiness */}
                             <div className="flex flex-col min-w-0 px-2 justify-center border-l border-gray-200" style={{ flex: '2' }}>
-                              <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Module / School</span>
-                              <span className="text-xs text-gray-800 truncate">
-                                {student.studentProfile?.currentModule || student.currentModule || 'No Module'}
-                              </span>
+                              <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">School / Readiness</span>
                               <span className="text-[10px] text-gray-500 truncate mt-0.5 max-w-fit bg-gray-100 px-1.5 py-0.5 rounded">
                                 {student.studentProfile?.currentSchool || student.campus?.name || 'No school'}
+                              </span>
+                              <span className="text-[10px] text-gray-600 font-medium mt-0.5 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3 text-green-500" />
+                                {student.jobReadiness?.completeSteps?.length || 0}/5 Readiness
                               </span>
                             </div>
 
