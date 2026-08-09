@@ -3,6 +3,7 @@ import { jobReadinessAPI, settingsAPI } from '../../services/api';
 import { LoadingSpinner, Badge } from '../../components/common/UIComponents';
 import { Plus, Edit, Trash2, Save, X, Eye, Info, CheckCircle2, AlertCircle, ChevronRight, Layout, Settings2, Sparkles, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
 
 const JobReadinessCriteriaConfig = () => {
   const [criteria, setCriteria] = useState([]);
@@ -27,6 +28,11 @@ const JobReadinessCriteriaConfig = () => {
   const [schools, setSchools] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewCriteria, setPreviewCriteria] = useState(null);
+  const [recalcJobId, setRecalcJobId] = useState(null);
+  const [recalcProgress, setRecalcProgress] = useState({ status: null, total: 0, processed: 0 });
+  const { isCampusPOC, isCoordinator, isManager } = useAuth();
+  const canTriggerRefresh = isCampusPOC || isCoordinator || isManager;
+  const isRecalculating = !!recalcJobId && recalcProgress.status && recalcProgress.status !== 'completed' && recalcProgress.status !== 'failed';
 
   const criteriaTypes = [
     { value: 'answer', label: 'Answer (Text Input)' },
@@ -133,14 +139,43 @@ const JobReadinessCriteriaConfig = () => {
 
     setSaving(true);
     try {
-      await jobReadinessAPI.deleteCriterion(configId, crit.criteriaId);
+      const res = await jobReadinessAPI.deleteCriterion(configId, crit.criteriaId);
       toast.success('Criterion deleted');
-      fetchConfig();
+      if (res?.data?.jobId) {
+        const jobId = res.data.jobId;
+        setRecalcJobId(jobId);
+        setRecalcProgress({ status: 'pending', total: 0, processed: 0 });
+        const poll = setInterval(async () => {
+          try {
+            const s = await jobReadinessAPI.getRecalcJob(jobId);
+            setRecalcProgress({ status: s.data.status, total: s.data.total || 0, processed: s.data.processed || 0 });
+            if (s.data.status === 'completed' || s.data.status === 'failed') {
+              clearInterval(poll);
+              setTimeout(() => setRecalcJobId(null), 1500);
+              if (s.data.status === 'completed') {
+                toast.success(`Recalculation completed: ${s.data.processed}/${s.data.total}`);
+                fetchConfig();
+              } else {
+                toast.error('Recalculation failed: ' + (s.data.error || 'unknown'));
+              }
+            }
+          } catch (e) {
+            console.error('Polling recalc job failed', e);
+          }
+        }, 1000);
+      } else {
+        fetchConfig();
+      }
     } catch {
       toast.error('Delete failed');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePreviewCriterion = (crit) => {
+    setPreviewCriteria(crit);
+    setShowPreview(true);
   };
 
   const handleSave = async () => {
@@ -172,16 +207,42 @@ const JobReadinessCriteriaConfig = () => {
         isMandatory: form.isMandatory
       };
 
+      let res;
       if (editingId) {
-        await jobReadinessAPI.editCriterion(currentConfigId, editingId, dataToSend);
+        res = await jobReadinessAPI.editCriterion(currentConfigId, editingId, dataToSend);
         toast.success('Criterion updated successfully');
       } else {
-        await jobReadinessAPI.addCriterion(currentConfigId, dataToSend);
+        res = await jobReadinessAPI.addCriterion(currentConfigId, dataToSend);
         toast.success('New criterion added successfully');
       }
 
       setShowModal(false);
-      fetchConfig();
+      // If backend started a recalc job, show progress
+      if (res?.data?.jobId) {
+        const jobId = res.data.jobId;
+        setRecalcJobId(jobId);
+        setRecalcProgress({ status: 'pending', total: 0, processed: 0 });
+        const poll = setInterval(async () => {
+          try {
+            const s = await jobReadinessAPI.getRecalcJob(jobId);
+            setRecalcProgress({ status: s.data.status, total: s.data.total || 0, processed: s.data.processed || 0 });
+            if (s.data.status === 'completed' || s.data.status === 'failed') {
+              clearInterval(poll);
+              setTimeout(() => setRecalcJobId(null), 1500);
+              if (s.data.status === 'completed') {
+                toast.success(`Recalculation completed: ${s.data.processed}/${s.data.total}`);
+                fetchConfig();
+              } else {
+                toast.error('Recalculation failed: ' + (s.data.error || 'unknown'));
+              }
+            }
+          } catch (e) {
+            console.error('Polling recalc job failed', e);
+          }
+        }, 1000);
+      } else {
+        fetchConfig();
+      }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Save failed');
     } finally {
@@ -207,11 +268,6 @@ const JobReadinessCriteriaConfig = () => {
             <button onClick={onClose} className="text-white/80 hover:text-white transition">
               <X className="w-6 h-6" />
             </button>
-          </div>
-
-          <div className="p-6 space-y-6">
-            <div className="border border-indigo-100 rounded-xl p-5 bg-indigo-50/30">
-              <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                     {criterion.name}
@@ -311,6 +367,47 @@ const JobReadinessCriteriaConfig = () => {
           >
             <Plus className="w-5 h-5" /> Add Criterion
           </button>
+          {canTriggerRefresh && (
+            <button
+              onClick={async () => {
+                if (!selectedSchool) return toast.error('Please select a school first');
+                try {
+                  toast.loading('Starting recalculation...');
+                  const res = await jobReadinessAPI.triggerRecalculate({ school: selectedSchool });
+                  const jobId = res.data.jobId;
+                  setRecalcJobId(jobId);
+                  setRecalcProgress({ status: 'pending', total: 0, processed: 0 });
+                  // Poll status
+                  const poll = setInterval(async () => {
+                    try {
+                      const s = await jobReadinessAPI.getRecalcJob(jobId);
+                      setRecalcProgress({ status: s.data.status, total: s.data.total || 0, processed: s.data.processed || 0 });
+                      if (s.data.status === 'completed' || s.data.status === 'failed') {
+                        clearInterval(poll);
+                        setTimeout(() => setRecalcJobId(null), 1500);
+                        if (s.data.status === 'completed') {
+                          toast.dismiss();
+                          toast.success(`Recalculation completed: ${s.data.processed}/${s.data.total}`);
+                          fetchConfig();
+                        } else {
+                          toast.dismiss();
+                          toast.error('Recalculation failed: ' + (s.data.error || 'unknown'));
+                        }
+                      }
+                    } catch (e) {
+                      console.error('Polling recalc job failed', e);
+                    }
+                  }, 1000);
+                } catch (err) {
+                  toast.error('Failed to start recalculation');
+                  console.error(err);
+                }
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition flex items-center gap-2"
+            >
+              Refresh readiness
+            </button>
+          )}
         </div>
       </div>
 
@@ -356,13 +453,13 @@ const JobReadinessCriteriaConfig = () => {
           ) : (
             <div className="space-y-8">
               {criteria.length === 0 ? (
-                <div className="bg-white rounded-3xl border-2 border-dashed border-gray-200 p-12 text-center">
+                  <div className="bg-white rounded-3xl border-2 border-dashed border-gray-200 p-12 text-center">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Sparkles className="w-10 h-10 text-gray-300" />
                   </div>
                   <h3 className="text-lg font-bold text-gray-900 mb-1">No roadmap defined for {selectedSchool}</h3>
                   <p className="text-gray-500 mb-6">Start by adding the first criterion to the readiness track.</p>
-                  <button onClick={openAddModal} className="text-indigo-600 font-bold hover:underline">
+                  <button onClick={() => { if (isRecalculating) return toast.error('Recalculation in progress'); openAddModal(); }} disabled={isRecalculating} className={`${isRecalculating ? 'text-gray-400 cursor-not-allowed' : 'text-indigo-600 hover:underline'} font-bold`}>
                     + Create First Criterion
                   </button>
                 </div>
@@ -392,23 +489,23 @@ const JobReadinessCriteriaConfig = () => {
                                   {crit.pocRatingRequired && <Badge variant="info" className="text-[10px] py-0">Rating Required</Badge>}
                                 </div>
                               </div>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className={`flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${isRecalculating ? 'pointer-events-none opacity-60' : ''}`}>
                                 <button
-                                  onClick={() => handlePreviewCriterion(crit)}
+                                  onClick={() => { if (isRecalculating) return toast.error('Recalculation in progress'); handlePreviewCriterion(crit); }}
                                   className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
                                   title="Preview"
                                 >
                                   <Eye className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => handleEdit(crit)}
+                                  onClick={() => { if (isRecalculating) return toast.error('Recalculation in progress'); handleEdit(crit); }}
                                   className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
                                   title="Edit"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => handleDelete(crit)}
+                                  onClick={() => { if (isRecalculating) return toast.error('Recalculation in progress'); handleDelete(crit); }}
                                   className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                                   title="Delete"
                                 >
@@ -616,6 +713,23 @@ const JobReadinessCriteriaConfig = () => {
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
       />
+
+      {/* Recalc Progress Modal */}
+      {recalcJobId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60">
+          <div className="bg-white rounded-2xl p-6 w-96">
+            <h3 className="text-lg font-bold mb-2">Recalculating readiness</h3>
+            <p className="text-sm text-gray-500 mb-4">School: <strong>{selectedSchool}</strong></p>
+            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden mb-3">
+              <div className="h-3 bg-indigo-600" style={{ width: `${recalcProgress.total ? Math.min(100, Math.round((recalcProgress.processed / recalcProgress.total) * 100)) : 4}%` }} />
+            </div>
+            <p className="text-sm text-gray-600">{recalcProgress.processed} / {recalcProgress.total} processed — {recalcProgress.status}</p>
+            <div className="mt-4 flex justify-end">
+              <button onClick={() => { if (isRecalculating) return; setRecalcJobId(null); }} disabled={isRecalculating} className={`px-4 py-2 rounded-lg border ${isRecalculating ? 'opacity-50 cursor-not-allowed' : ''}`}>{isRecalculating ? 'Recalculating...' : 'Close'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { JobReadinessConfig, StudentJobReadiness, DEFAULT_CRITERIA } = require('../models/JobReadiness');
+const RecalcJob = require('../models/RecalcJob');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const PlacementCycle = require('../models/PlacementCycle');
@@ -70,7 +71,25 @@ router.post('/config/:configId/criteria', auth, authorize('campus_poc', 'coordin
     console.log('Saving config...');
     await config.save();
     console.log('Config saved successfully');
-    res.json(config);
+
+    // Start tracked recalculation for affected students
+    try {
+      const job = await RecalcJob.create({ school: config.school, campus: config.campus || null, createdBy: req.userId, status: 'pending' });
+      (async () => {
+        try {
+          await recalculateStudentsForConfig(config.school, config.campus, job._id);
+          await RecalcJob.findByIdAndUpdate(job._id, { $set: { status: 'completed', processed: await StudentJobReadiness.countDocuments({ school: config.school, ...(config.campus ? { campus: config.campus } : {}) }) } });
+        } catch (e) {
+          console.error('Error recalculating after adding criterion:', e);
+          await RecalcJob.findByIdAndUpdate(job._id, { $set: { status: 'failed', error: e.message || String(e) } });
+        }
+      })();
+
+      res.json({ config, jobId: job._id });
+    } catch (e) {
+      console.error('Failed to start recalc job after add criterion', e);
+      res.json(config);
+    }
   } catch (error) {
     console.error('Add criterion error:', error);
     console.error('Error details:', error.message);
@@ -129,7 +148,24 @@ router.put('/config/:configId/criteria/:criteriaId', auth, authorize('campus_poc
     if (targetSchools !== undefined) criterion.targetSchools = targetSchools;
     config.updatedBy = req.userId;
     await config.save();
-    res.json(config);
+    // Start tracked recalculation for affected students
+    try {
+      const job = await RecalcJob.create({ school: config.school, campus: config.campus || null, createdBy: req.userId, status: 'pending' });
+      (async () => {
+        try {
+          await recalculateStudentsForConfig(config.school, config.campus, job._id);
+          await RecalcJob.findByIdAndUpdate(job._id, { $set: { status: 'completed', processed: await StudentJobReadiness.countDocuments({ school: config.school, ...(config.campus ? { campus: config.campus } : {}) }) } });
+        } catch (e) {
+          console.error('Error recalculating after editing criterion:', e);
+          await RecalcJob.findByIdAndUpdate(job._id, { $set: { status: 'failed', error: e.message || String(e) } });
+        }
+      })();
+
+      res.json({ config, jobId: job._id });
+    } catch (e) {
+      console.error('Failed to start recalc job after edit criterion', e);
+      res.json(config);
+    }
   } catch (error) {
     console.error('Edit criterion error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -168,7 +204,24 @@ router.delete('/config/:configId/criteria/:criteriaId', auth, authorize('campus_
     config.criteria = config.criteria.filter(c => c.criteriaId !== criteriaId);
     config.updatedBy = req.userId;
     await config.save();
-    res.json(config);
+    // Start tracked recalculation for affected students
+    try {
+      const job = await RecalcJob.create({ school: config.school, campus: config.campus || null, createdBy: req.userId, status: 'pending' });
+      (async () => {
+        try {
+          await recalculateStudentsForConfig(config.school, config.campus, job._id);
+          await RecalcJob.findByIdAndUpdate(job._id, { $set: { status: 'completed', processed: await StudentJobReadiness.countDocuments({ school: config.school, ...(config.campus ? { campus: config.campus } : {}) }) } });
+        } catch (e) {
+          console.error('Error recalculating after delete criterion:', e);
+          await RecalcJob.findByIdAndUpdate(job._id, { $set: { status: 'failed', error: e.message || String(e) } });
+        }
+      })();
+
+      res.json({ config, jobId: job._id });
+    } catch (e) {
+      console.error('Failed to start recalc job after delete criterion', e);
+      res.json(config);
+    }
   } catch (error) {
     console.error('Delete criterion error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -353,6 +406,16 @@ router.post('/config/seed', auth, authorize('manager'), async (req, res) => {
       config
     });
 
+    // Async: recalculate affected student readiness records
+    (async () => {
+      try {
+        await recalculateStudentsForConfig(config.school, config.campus);
+        console.log('Recalculated student readiness after seeding config');
+      } catch (e) {
+        console.error('Error recalculating students after seed:', e);
+      }
+    })();
+
   } catch (error) {
     console.error('Seed criteria error:', error);
     res.status(500).json({ message: 'Server error: ' + error.message });
@@ -392,6 +455,15 @@ router.post('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), 
       config.criteria = criteria;
       config.updatedBy = req.userId;
       await config.save();
+      // Async recalc for affected students
+      (async () => {
+        try {
+          await recalculateStudentsForConfig(config.school, config.campus);
+          console.log('Recalculated student readiness after config update');
+        } catch (e) {
+          console.error('Error recalculating students after config update:', e);
+        }
+      })();
     } else {
       // Create new
       config = new JobReadinessConfig({
@@ -401,6 +473,14 @@ router.post('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), 
         createdBy: req.userId
       });
       await config.save();
+      (async () => {
+        try {
+          await recalculateStudentsForConfig(config.school, config.campus);
+          console.log('Recalculated student readiness after creating config');
+        } catch (e) {
+          console.error('Error recalculating students after creating config:', e);
+        }
+      })();
     }
 
     res.json(config);
@@ -411,6 +491,72 @@ router.post('/config', auth, authorize('campus_poc', 'coordinator', 'manager'), 
 });
 
 // === Student Progress Routes ===
+
+// Helper: Recalculate readiness for students affected by a config change
+async function recalculateStudentsForConfig(school, campus, jobId) {
+  try {
+    // Build query for StudentJobReadiness records to update
+    const query = { school };
+    if (campus) query.campus = campus;
+
+    // Count total for progress reporting if available
+    let total = 0;
+    try { total = await StudentJobReadiness.countDocuments(query); } catch (e) { total = 0; }
+
+    // If job exists, initialize it with total
+    if (jobId) {
+      try {
+        await RecalcJob.findByIdAndUpdate(jobId, { $set: { total, processed: 0, status: 'in_progress' } });
+      } catch (e) { console.error('Failed to init RecalcJob', e); }
+    }
+
+    const cursor = StudentJobReadiness.find(query).cursor();
+    let processed = 0;
+    for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
+      try {
+        // Ensure criteriaStatus includes current merged criteria (student will have missing entries added)
+        const studentId = doc.student;
+        const student = await User.findById(studentId).select('campus studentProfile');
+        const configs = await JobReadinessConfig.find({
+          school: { $in: [doc.school, 'Common'] },
+          $or: [{ campus: student?.campus }, { campus: null }],
+          isActive: true
+        }).sort({ campus: 1 });
+
+        const criteriaMap = new Map();
+        configs.forEach(config => {
+          config.criteria.forEach(c => {
+            if (c.isActive) criteriaMap.set(c.criteriaId, c);
+          });
+        });
+
+        // Add missing criteriaStatus entries
+        const mergedCriteriaIds = Array.from(criteriaMap.keys());
+        mergedCriteriaIds.forEach(criteriaId => {
+          if (!doc.criteriaStatus.some(s => s.criteriaId === criteriaId)) {
+            doc.criteriaStatus.push({ criteriaId, status: 'not_started', updatedAt: new Date() });
+          }
+        });
+
+        // Recalculate and save
+        await doc.calculateReadiness();
+        await doc.save();
+        processed++;
+        // If a job was created for this operation, update it by jobId per student
+        if (jobId) {
+          try {
+            await RecalcJob.findByIdAndUpdate(jobId, { $inc: { processed: 1 } });
+          } catch (e) { /* ignore */ }
+        }
+      } catch (inner) {
+        console.error('Failed to recalc readiness for student', doc.student, inner);
+      }
+    }
+  } catch (err) {
+    console.error('RecalculateStudentsForConfig error:', err);
+    throw err;
+  }
+}
 
 // Get my readiness status (Student)
 /**
@@ -1117,4 +1263,66 @@ router.patch('/student/:studentId/approve', auth, authorize('campus_poc', 'coord
   }
 });
 
+// Admin: trigger recalculation for a school/campus (manual refresh)
+/**
+ * @swagger
+ * /api/job-readiness/recalculate:
+ *   post:
+ *     summary: Recalculate readiness for students in a school/campus (Manager/Coordinator)
+ *     tags: [JobReadiness]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               school:
+ *                 type: string
+ *               campus:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Recalculation triggered
+ */
+router.post('/recalculate', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const { school, campus } = req.body;
+    // Create a RecalcJob record to track progress
+    const job = await RecalcJob.create({ school, campus: campus || null, createdBy: req.userId, status: 'pending' });
+
+    // Fire-and-forget but pass jobId so progress is tracked
+    (async () => {
+      try {
+        await recalculateStudentsForConfig(school, campus, job._id);
+        await RecalcJob.findByIdAndUpdate(job._id, { $set: { status: 'completed', processed: await StudentJobReadiness.countDocuments({ school, ...(campus ? { campus } : {}) }) } });
+        console.log('Admin-triggered readiness recalculation completed', { school, campus });
+      } catch (e) {
+        console.error('Admin-triggered readiness recalculation failed', e);
+        await RecalcJob.findByIdAndUpdate(job._id, { $set: { status: 'failed', error: e.message || String(e) } });
+      }
+    })();
+
+    res.json({ success: true, message: 'Recalculation started', jobId: job._id });
+  } catch (error) {
+    console.error('Recalculate endpoint error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get recalc job status
+router.get('/recalculate/:jobId', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const job = await RecalcJob.findById(jobId).lean();
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+    res.json(job);
+  } catch (error) {
+    console.error('Get recalc job error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;
+

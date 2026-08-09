@@ -305,8 +305,17 @@ studentJobReadinessSchema.methods.calculateReadiness = async function () {
       s => s.criteriaId === criterion.criteriaId
     );
 
-    const isCompleted = studentCriterion &&
-      (studentCriterion.status === 'completed' || studentCriterion.status === 'verified');
+    // Determine if this criterion requires PoC verification
+    const requiresVerification = criterion.pocCommentRequired || criterion.pocRatingRequired;
+
+    // A criterion counts as complete if:
+    // - It requires verification AND status is 'verified', OR
+    // - It doesn't require verification AND status is 'completed' or 'verified'
+    const isCompleted = studentCriterion && (
+      requiresVerification
+        ? studentCriterion.status === 'verified'
+        : (studentCriterion.status === 'completed' || studentCriterion.status === 'verified')
+    );
 
     if (isCompleted) {
       achievedWeight += criterion.weight;

@@ -26,6 +26,11 @@ const placementCycleSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Track the maximum number of students ever in this cycle (for historical reporting)
+  maxStudentsInCycle: {
+    type: Number,
+    default: 0
+  },
   isActive: {
     type: Boolean,
     default: true

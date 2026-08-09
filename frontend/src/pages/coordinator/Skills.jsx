@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { skillAPI, settingsAPI } from '../../services/api';
+import { useSchools } from '../../context/SchoolsContext';
 import { LoadingSpinner, EmptyState, Modal, ConfirmDialog } from '../../components/common/UIComponents';
 import { Search, Plus, Edit2, Trash2, Tag, Layers, Globe, School, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -23,14 +24,16 @@ const Skills = () => {
   });
   const [schools, setSchools] = useState([]);
   const [newSchool, setNewSchool] = useState('');
+  const { schools: globalSchools, refresh: refreshSchools } = useSchools();
 
   const allowedSchools = schools;
 
   useEffect(() => {
     fetchSkills();
     fetchCategoryOptions();
-    fetchSchools();
-  }, []);
+    // load from global provider when available
+    if (globalSchools && globalSchools.length > 0) setSchools(globalSchools);
+  }, [globalSchools]);
 
   const fetchCategoryOptions = async () => {
     // Simplified categories as requested: Technical, Soft Skills, Office Skills
@@ -42,15 +45,7 @@ const Skills = () => {
     setCategoryOptions(simplified);
   };
 
-  const fetchSchools = async () => {
-    try {
-      const res = await settingsAPI.getSettings();
-      const list = res.data?.data?.schools || Object.keys(res.data?.data?.schoolModules || {});
-      setSchools(list);
-    } catch (e) {
-      // non-blocking; keep UI usable
-    }
-  };
+  // No local fetch; `useSchools` provides the canonical list.
 
   const fetchSkills = async () => {
     try {
@@ -189,14 +184,14 @@ const Skills = () => {
             className="w-48"
           />
           <button
-            onClick={async () => {
+                onClick={async () => {
               const name = newSchool.trim();
               if (!name) return;
               try {
                 await settingsAPI.addSchool(name);
                 toast.success('School added');
                 setNewSchool('');
-                await fetchSchools();
+                await refreshSchools();
                 await fetchSkills();
               } catch (e) {
                 toast.error(e.response?.data?.message || 'Error adding school');

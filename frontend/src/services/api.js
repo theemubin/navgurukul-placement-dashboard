@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Normalize API base and ensure it always includes '/api'
-const rawApi = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://navgurukul-placement-api.onrender.com' : 'http://localhost:5007');
+const rawApi = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://navgurukul-placement-api.onrender.com' : 'http://localhost:5001');
 const API_URL = rawApi.replace(/\/+$/, '') + '/api';
 
 const api = axios.create({
@@ -137,6 +137,7 @@ export const settingsAPI = {
   initSettings: () => api.post('/settings/init'),
   addCourseSkill: (skill) => api.post('/settings/course-skills', { skill }),
   addSchool: (school) => api.post('/settings/schools', { school }),
+  syncSchools: () => api.post('/settings/sync-schools'),
   // Pipeline stages
   getPipelineStages: () => api.get('/settings/pipeline-stages'),
   createPipelineStage: (stage) => api.post('/settings/pipeline-stages', stage),
@@ -268,6 +269,8 @@ export const statsAPI = {
   getCycleStats: () => api.get('/stats/campus-poc/cycle-stats'),
   getCoordinatorStats: (params) => api.get('/stats/coordinator-stats', { params }),
   getHistoricalCycles: (campusId) => api.get('/stats/historical-cycles', { params: { campus: campusId } }),
+  getCampusPlacementTrends: () => api.get('/stats/campus-placement-trends'),
+  getLongTermStudentsTrend: () => api.get('/stats/long-term-students-trend'),
   getNeverLoggedInList: (params) => api.get('/stats/never-logged-in-list', { params }),
   getTalentPipeline: (params) => api.get('/stats/talent-pipeline', { params }),
   exportStats: (params) => api.get('/stats/export', { params, responseType: 'blob' })
@@ -386,6 +389,10 @@ export const jobReadinessAPI = {
   getStudentReadiness: (studentId) => api.get(`/job-readiness/student/${studentId}`),
   approveStudentJobReady: (studentId, data) =>
     api.patch(`/job-readiness/student/${studentId}/approve`, data)
+  ,
+  // Admin: trigger recalculation (manual refresh)
+  triggerRecalculate: (data) => api.post('/job-readiness/recalculate', data),
+  getRecalcJob: (jobId) => api.get(`/job-readiness/recalculate/${jobId}`)
 };
 
 // Bulk Upload APIs
@@ -462,7 +469,9 @@ export const gharAPI = {
     return api.post(url);
   },
   batchSync: (campusId) => api.post('/ghar/batch-sync', { campusId }),
-  getAttendanceConfig: (isDev) => api.get(`/ghar/attendance-config?isDev=${isDev}`)
+  getAttendanceConfig: (isDev) => api.get(`/ghar/attendance-config?isDev=${isDev}`),
+  dailyBulkSync: () => api.post('/ghar/daily-bulk-sync'),
+  getSyncStatus: () => api.get('/ghar/sync-status')
 };
 
 // Login Background APIs

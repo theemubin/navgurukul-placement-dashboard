@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { jobAPI, applicationAPI, authAPI, questionAPI, jobReadinessAPI, statsAPI, publicAPI, resolveResumeUrl } from '../../services/api';
-import { LoadingSpinner, StatusBadge, Modal } from '../../components/common/UIComponents';
+import { LoadingSpinner, StatusBadge, Modal, LiveTimer } from '../../components/common/UIComponents';
 import {
   ArrowLeft, Briefcase, MapPin, IndianRupee, Calendar, Clock,
   Users, Building, Globe, CheckCircle, AlertCircle, Heart, XCircle,
@@ -418,7 +418,15 @@ const JobDetails = () => {
 
   if (!job) return null;
 
-  const isDeadlinePassed = new Date(job.applicationDeadline) < new Date();
+  const getEffectiveDeadline = (dl) => {
+    const d = new Date(dl);
+    // Legacy date-only deadlines are stored at midnight; treat as end of that day
+    if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0) {
+      d.setHours(23, 59, 59, 999);
+    }
+    return d;
+  };
+  const isDeadlinePassed = getEffectiveDeadline(job.applicationDeadline) < new Date();
 
   const renderContent = () => (
     <div className="space-y-6 animate-fadeIn">
@@ -514,12 +522,15 @@ const JobDetails = () => {
 
         {/* POC Action Center or Apply Button */}
         <div className="mt-6 pt-6 border-t flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-gray-500">
-            <Calendar className="w-4 h-4" />
-            <span className="text-sm font-medium">Application Deadline: {format(new Date(job.applicationDeadline), 'MMMM dd, yyyy')}</span>
-            {isDeadlinePassed && (
-              <span className="text-red-500 text-sm font-bold">(Passed)</span>
-            )}
+          <div className="flex flex-col items-start gap-1">
+            <div className="flex items-center gap-2 text-gray-500">
+              <Calendar className="w-4 h-4" />
+              <span className="text-sm font-medium">Deadline: {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary-600" />
+              <LiveTimer deadline={job.applicationDeadline} />
+            </div>
           </div>
 
           {!user ? (
@@ -619,7 +630,7 @@ const JobDetails = () => {
                     }
 
                     // Prefer showing Apply Now if the match engine explicitly allows it, even if readiness is not fully met.
-                    const canApplyUi = (matchDetails?.canApply === true) || (meetsReadiness && allowApplyEvenIfMatchLow);
+                    const canApplyUi = meetsReadiness && ((matchDetails?.canApply === true) || allowApplyEvenIfMatchLow);
 
                     // If match details are still loading, avoid showing Show Interest prematurely
                     if (matchLoading) {
@@ -646,15 +657,23 @@ const JobDetails = () => {
                         </div>
                       );
                     } else {
+                      const reqLabel = requirement === 'yes' ? 'Job Ready (100%)' : requirement === 'in_progress' ? 'In Progress (30%+)' : '';
                       return (
-                        <button
-                          onClick={() => setShowInterestModal(true)}
-                          disabled={applying}
-                          className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2 shadow-lg shadow-orange-100"
-                        >
-                          <Heart className="w-4 h-4" />
-                          {applying ? 'Submitting...' : 'Show Interest'}
-                        </button>
+                        <div className="flex flex-col items-start gap-3 w-full">
+                          {!meetsReadiness && (
+                            <div className="text-xs text-orange-700 bg-orange-50 border border-orange-200 px-3 py-2.5 rounded-xl font-medium w-full max-w-xl">
+                              ⚠️ Requires NG Job Readiness to be <strong>{reqLabel}</strong> (Your current readiness is <strong>{studentPct}%</strong>). You cannot apply directly, but you can show interest.
+                            </div>
+                          )}
+                          <button
+                            onClick={() => setShowInterestModal(true)}
+                            disabled={applying}
+                            className="btn bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2 shadow-lg shadow-orange-100"
+                          >
+                            <Heart className="w-4 h-4" />
+                            {applying ? 'Submitting...' : 'Show Interest'}
+                          </button>
+                        </div>
                       );
                     }
                   })()}
@@ -1117,13 +1136,24 @@ const JobDetails = () => {
                   <span className="font-medium">{job.eligibility.minMonthsAtNavgurukul} months</span>
                 </div>
               )}
+              {job.eligibility?.readinessRequirement && job.eligibility.readinessRequirement !== 'no' && (
+                <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
+                  <span className="text-gray-500">NG Job Readiness</span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                    job.eligibility.readinessRequirement === 'yes' ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {job.eligibility.readinessRequirement === 'yes' ? 'Job Ready (100%)' : 'In Progress (30%+)'}
+                  </span>
+                </div>
+              )}
               {(!job.eligibility?.schools?.length &&
                 !job.eligibility?.campuses?.length &&
                 !job.eligibility?.minCgpa &&
                 !job.eligibility?.minModule &&
                 !job.eligibility?.femaleOnly &&
                 !job.eligibility?.minAttendance &&
-                !job.eligibility?.minMonthsAtNavgurukul) && (
+                !job.eligibility?.minMonthsAtNavgurukul &&
+                (!job.eligibility?.readinessRequirement || job.eligibility.readinessRequirement === 'no')) && (
                   <p className="text-green-600 font-medium">Open for all students</p>
                 )}
             </div>

@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from 'react';
+
 export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = 'primary', trend, onClick, compact = false }) => {
   const colorClasses = {
     primary: 'bg-blue-100 text-blue-600',
@@ -334,5 +336,59 @@ export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, conf
         </div>
       </div>
     </div>
+  );
+};
+
+// Live Timer Component
+export const LiveTimer = ({ deadline, compact = false }) => {
+  const [timeLeft, setTimeLeft] = useState('');
+  const [isPassed, setIsPassed] = useState(false);
+
+  useEffect(() => {
+    if (!deadline) return;
+    const d = new Date(deadline);
+    
+    // If the stored deadline has a midnight time component (legacy date-only storage),
+    // treat it as "end of that day" (23:59:59 local time) so the job stays open all day.
+    if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0) {
+      d.setHours(23, 59, 59, 999);
+    }
+    const target = d.getTime();
+    
+    const update = () => {
+      const now = new Date().getTime();
+      const diff = target - now;
+
+      if (diff <= 0) {
+        setIsPassed(true);
+        setTimeLeft('Closed');
+        return;
+      }
+
+      setIsPassed(false);
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      if (compact) {
+        if (days > 0) setTimeLeft(`${days}d ${hours}h left`);
+        else if (hours > 0) setTimeLeft(`${hours}h ${minutes}m left`);
+        else setTimeLeft(`${minutes}m ${seconds}s left`);
+      } else {
+        if (days > 0) setTimeLeft(`${days}d ${hours}h ${minutes}m remaining`);
+        else setTimeLeft(`${hours}h ${minutes}m ${seconds}s remaining`);
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [deadline, compact]);
+
+  return (
+    <span className={isPassed ? 'text-red-500 font-bold' : 'text-primary-600 font-medium'}>
+      {timeLeft}
+    </span>
   );
 };

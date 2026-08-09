@@ -378,6 +378,16 @@ router.post(
         );
       }
 
+      // 3. Update maxStudentsInCycle if current active count exceeds previous max
+      const updatedCycle = await PlacementCycle.findById(cycleId);
+      const activeCount = updatedCycle.snapshotStudents.filter(s => s.status === 'active').length;
+      if (activeCount > (updatedCycle.maxStudentsInCycle || 0)) {
+        await PlacementCycle.updateOne(
+          { _id: cycleId },
+          { $set: { maxStudentsInCycle: activeCount } }
+        );
+      }
+
       // Update students
       const result = await User.updateMany(studentQuery, {
         placementCycle: cycle._id,

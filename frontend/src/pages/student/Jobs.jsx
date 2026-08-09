@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { jobAPI, authAPI, settingsAPI, jobReadinessAPI } from '../../services/api';
-import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Badge } from '../../components/common/UIComponents';
+import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Badge, LiveTimer } from '../../components/common/UIComponents';
 import {
   Briefcase, MapPin, IndianRupee, Calendar, Search, Star,
   AlertCircle, GraduationCap, Clock, CheckCircle, Heart,
@@ -39,7 +39,8 @@ const StudentJobs = () => {
   const [filters, setFilters] = useState({ search: '', roleCategory: '' });
   const [pipelineStages, setPipelineStages] = useState([]);
   const [readiness, setReadiness] = useState(null);
-  const [openForRoles, setOpenForRoles] = useState([]); // roles from student profile
+  const [eligibleCount, setEligibleCount] = useState(0);
+  const [roleCategories, setRoleCategories] = useState([]); // universal role categories from settings
   const [showRoleFilters, setShowRoleFilters] = useState(false);
   const searchRef = useRef(null);
   const searchTimer = useRef(null);
@@ -48,25 +49,35 @@ const StudentJobs = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        const [profileRes, stagesRes, readinessRes] = await Promise.all([
+        const [profileRes, stagesRes, readinessRes, settingsRes] = await Promise.all([
           authAPI.getMe(),
           settingsAPI.getPipelineStages(),
           jobReadinessAPI.getMyStatus().catch(() => ({ data: null })),
+          settingsAPI.getSettings().catch(() => ({ data: { data: {} } })),
         ]);
         const profile = profileRes.data;
         setProfileStatus(profile?.studentProfile?.profileStatus || 'draft');
         setPipelineStages(stagesRes.data.data || []);
         setReadiness(readinessRes.data);
 
-        // Get roles the student is open for — filter bar shows only these
-        const myRoles = profile?.studentProfile?.openForRoles || [];
-        setOpenForRoles(myRoles);
-        // Don't auto-select — default to "All" so all jobs are visible on load
+        // Get universal role categories from settings (same list used everywhere)
+        const categories = settingsRes.data?.data?.roleCategories || [];
+        setRoleCategories(categories);
       } catch (e) {
         console.error('Init error:', e);
       }
     };
     init();
+    // Also fetch eligible/matching jobs count for header badge
+    (async () => {
+      try {
+        const res = await jobAPI.getMatchingJobs();
+        const matching = Array.isArray(res.data) ? res.data.length : (res.data?.length || 0);
+        setEligibleCount(matching);
+      } catch (e) {
+        console.error('Error fetching eligible jobs count:', e);
+      }
+    })();
   }, []);
 
   // Fetch jobs when filters/category/tab/page change
@@ -200,9 +211,16 @@ const StudentJobs = () => {
             <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
               Job Listings
             </h1>
-            <p className="text-primary-100/80 text-sm mt-2 max-w-md font-medium leading-relaxed">
-              Discover your next career move across our network of verified hiring partners.
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-primary-100/80 text-sm mt-2 max-w-md font-medium leading-relaxed">
+                Discover your next career move across our network of verified hiring partners.
+              </p>
+              <div className="mt-2">
+                <span className="inline-flex items-center bg-white/20 text-white px-3 py-1 rounded-full text-sm font-bold border border-white/20">
+                  Eligible: {eligibleCount}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
@@ -298,7 +316,7 @@ const StudentJobs = () => {
         )}
 
         {/* Role Filters Panel - Collapsible */}
-        {openForRoles.length > 0 && activeTab === 'all' && (
+        {roleCategories.length > 0 && (
           <div className="space-y-4 pt-2 border-t border-gray-100 mt-4">
             <button
               onClick={() => setShowRoleFilters(!showRoleFilters)}
@@ -334,7 +352,7 @@ const StudentJobs = () => {
                 >
                   All Roles
                 </button>
-                {openForRoles.map((role) => (
+                {roleCategories.map((role) => (
                   <button
                     key={role}
                     onClick={() => handleRoleFilter(role)}
@@ -419,7 +437,7 @@ const StudentJobs = () => {
                         <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">{job.company?.name}</p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-6 mt-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-y-3 gap-x-6 mt-4">
                         <div className="flex items-center gap-2.5 text-xs text-gray-500 font-medium">
                           <div className="w-6 h-6 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
                              <MapPin size={12} />
@@ -436,7 +454,13 @@ const StudentJobs = () => {
                           <div className="w-6 h-6 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
                              <Calendar size={12} />
                           </div>
-                          Expires {format(new Date(job.applicationDeadline), 'MMM dd')}
+                          {format(new Date(job.applicationDeadline), 'MMM dd')}
+                        </div>
+                        <div className="flex items-center gap-2.5 text-xs font-medium">
+                          <div className="w-6 h-6 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
+                             <Clock size={12} />
+                          </div>
+                          <LiveTimer deadline={job.applicationDeadline} compact={true} />
                         </div>
                       </div>
 

@@ -74,7 +74,7 @@ const HistoricalCycleCharts = ({ campusId = null, title = "Historical Placement 
                   itemStyle={{ fontSize: '12px', fontWeight: '800' }}
                 />
                 <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }} />
-                <Bar name="Total Students" dataKey="total" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={30} />
+                <Bar name="Total in Cycle" dataKey="totalInCycle" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
                 <Bar name="Placed" dataKey="placed" fill="#10b981" radius={[4, 4, 0, 0]} barSize={30} />
               </BarChart>
             </ResponsiveContainer>
@@ -144,7 +144,7 @@ const HistoricalCycleCharts = ({ campusId = null, title = "Historical Placement 
               <thead>
                 <tr className="bg-gray-50 border-b-2 border-gray-100">
                   <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Cycle Name</th>
-                  <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Students</th>
+                  <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Total in Cycle</th>
                   <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Placed</th>
                   <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Success Rate</th>
                 </tr>
@@ -155,7 +155,7 @@ const HistoricalCycleCharts = ({ campusId = null, title = "Historical Placement 
                     <td className="px-6 py-4">
                       <p className="font-bold text-gray-900">{row.name}</p>
                     </td>
-                    <td className="px-6 py-4 text-center font-bold text-gray-600">{row.total}</td>
+                    <td className="px-6 py-4 text-center font-bold text-gray-600">{row.totalInCycle}</td>
                     <td className="px-6 py-4 text-center">
                       <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">
                         {row.placed}

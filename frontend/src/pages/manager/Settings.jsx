@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { settingsAPI, placementCycleAPI, campusAPI } from '../../services/api';
+import { useSchools } from '../../context/SchoolsContext';
 import { Card, Button, Badge, LoadingSpinner, Alert } from '../../components/common/UIComponents';
 import toast from 'react-hot-toast';
 import { Plus, MessageSquare, Edit, Save, X, BookOpen, Globe, Building2, ExternalLink, AlertCircle } from 'lucide-react';
@@ -253,7 +254,8 @@ node scripts/promote_normalized_index_unique.js`;
     try {
       // Detect accidental wipes: compare lengths of major arrays to the initial snapshot
       if (initialSettings) {
-        const keysToCheck = ['rolePreferences', 'technicalSkills', 'degreeOptions', 'softSkills', 'inactiveSchools'];
+        // MERGED: Check roleCategories instead of rolePreferences
+        const keysToCheck = ['roleCategories', 'technicalSkills', 'degreeOptions', 'softSkills', 'inactiveSchools'];
         const emptied = keysToCheck.filter(k => {
           const before = initialSettings[k] || [];
           const after = settings[k] || [];
@@ -305,13 +307,15 @@ node scripts/promote_normalized_index_unique.js`;
 
   // Role preferences management
   const addRole = () => {
-    if (!newRole.trim() || settings.rolePreferences.includes(newRole.trim())) return;
-    setSettings({ ...settings, rolePreferences: [...settings.rolePreferences, newRole.trim()] });
+    // MERGED: Now updates roleCategories (master list)
+    if (!newRole.trim() || settings.roleCategories?.includes(newRole.trim())) return;
+    setSettings({ ...settings, roleCategories: [...(settings.roleCategories || []), newRole.trim()] });
     setNewRole('');
   };
 
   const removeRole = (role) => {
-    setSettings({ ...settings, rolePreferences: settings.rolePreferences.filter(r => r !== role) });
+    // MERGED: Now removes from roleCategories (master list)
+    setSettings({ ...settings, roleCategories: (settings.roleCategories || []).filter(r => r !== role) });
   };
 
   // Technical skills management
@@ -455,6 +459,28 @@ node scripts/promote_normalized_index_unique.js`;
     }
   };
 
+  const [syncingSchools, setSyncingSchools] = useState(false);
+
+  const { lastSynced, refresh: refreshSchools } = useSchools();
+
+  const handleSyncSchools = async () => {
+    if (!confirm('Sync schools from Ghar? This will fetch the latest school list and merge with local schools.')) return;
+    try {
+      setSyncingSchools(true);
+      await settingsAPI.syncSchools();
+      await fetchSettings();
+      await refreshSchools();
+      setSuccess('Schools synced from Ghar');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Failed to sync schools:', err);
+      setError(err.response?.data?.message || 'Failed to sync schools from Ghar');
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setSyncingSchools(false);
+    }
+  };
+
   const handleRename = async (type, oldName) => {
     const newName = prompt(`Rename "${oldName}" to:`, oldName);
     if (!newName || newName === oldName) return;
@@ -588,12 +614,18 @@ node scripts/promote_normalized_index_unique.js`;
         <div className="mb-4 flex justify-end">
           <Button
             variant="secondary"
-            onClick={() => {
+            onClick={async () => {
               const name = prompt('Enter new school name:');
-              if (name) {
-                const updated = { ...settings.schoolModules };
-                updated[name] = [];
-                setSettings({ ...settings, schoolModules: updated });
+              if (!name) return;
+              try {
+                setSaving(true);
+                await settingsAPI.addSchool(name.trim());
+                await fetchSettings();
+                toast.success('School added');
+              } catch (err) {
+                toast.error(err.response?.data?.message || 'Error adding school');
+              } finally {
+                setSaving(false);
               }
             }}
             className="flex items-center gap-2"
@@ -611,22 +643,39 @@ node scripts/promote_normalized_index_unique.js`;
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-gray-900">Schools & Learning Pathway</h3>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    const name = prompt('Enter new school name:');
-                    if (name) {
-                      const updated = { ...settings.schoolModules };
-                      updated[name] = [];
-                      setSettings({ ...settings, schoolModules: updated });
-                    }
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add New School
-                </Button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSyncSchools}
+                      disabled={syncingSchools}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {syncingSchools ? 'Syncing...' : 'Sync Schools from Ghar'}
+                    </Button>
+                    {lastSynced && (
+                      <div className="text-sm text-gray-500">Last sync: {new Date(lastSynced).toLocaleString()}</div>
+                    )}
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const name = prompt('Enter new school name:');
+                      if (name) {
+                        const updated = { ...settings.schoolModules };
+                        updated[name] = [];
+                        setSettings({ ...settings, schoolModules: updated });
+                      }
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add New School
+                  </Button>
+                </div>
               </div>
               <div className="space-y-6">
                 {schools.map((school) => (
@@ -854,14 +903,17 @@ node scripts/promote_normalized_index_unique.js`;
         {activeCategory === 'career' && (
           <div className="space-y-8 animate-fadeIn">
             <Card>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Job Role Categories</h3>
-              <p className="text-gray-600 mb-4">Categories for job filtering (e.g. Frontend, Backend).</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Job Roles</h3>
+              <p className="text-gray-600 mb-4">
+                Available job roles for both job postings (coordinators) and student role preferences.
+                This is the master list used across the platform.
+              </p>
               <div className="flex gap-2 mb-4">
                 <input
                   type="text"
                   value={newRoleCategory}
                   onChange={(e) => setNewRoleCategory(e.target.value)}
-                  placeholder="New category..."
+                  placeholder="New role (e.g. Frontend Developer)..."
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
                   onKeyPress={(e) => e.key === 'Enter' && addRoleCategory()}
                 />
@@ -872,30 +924,6 @@ node scripts/promote_normalized_index_unique.js`;
                   <span key={cat} className="inline-flex items-center px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">
                     {cat}
                     <button onClick={() => removeRoleCategory(cat)} className="ml-2 hover:text-indigo-900"><X className="w-4 h-4" /></button>
-                  </span>
-                ))}
-              </div>
-            </Card>
-
-            <Card>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Role Preferences</h3>
-              <p className="text-gray-600 mb-4">Roles available for student profiles.</p>
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
-                  placeholder="New role..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
-                  onKeyPress={(e) => e.key === 'Enter' && addRole()}
-                />
-                <Button variant="primary" onClick={addRole}>Add</Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {settings.rolePreferences?.map((role) => (
-                  <span key={role} className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                    {role}
-                    <button onClick={() => removeRole(role)} className="ml-2 hover:text-blue-900"><X className="w-4 h-4" /></button>
                   </span>
                 ))}
               </div>

@@ -564,6 +564,7 @@ const ReadinessReviewSection = () => {
 
 // --- Criteria Config Section Component ---
 const CriteriaConfigSection = ({ selectedSchool, setSelectedSchool, schools }) => {
+    const { isCampusPOC, isCoordinator, isManager } = useAuth();
     const [criteria, setCriteria] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState(null);
@@ -585,6 +586,10 @@ const CriteriaConfigSection = ({ selectedSchool, setSelectedSchool, schools }) =
     const [configId, setConfigId] = useState(null);
     const [showPreview, setShowPreview] = useState(false);
     const [previewCriteria, setPreviewCriteria] = useState(null);
+    const [recalcJobId, setRecalcJobId] = useState(null);
+    const [recalcProgress, setRecalcProgress] = useState({ status: null, total: 0, processed: 0 });
+    const canTriggerRefresh = isCampusPOC || isCoordinator || isManager;
+    const isRecalculating = !!recalcJobId && recalcProgress.status && recalcProgress.status !== 'completed' && recalcProgress.status !== 'failed';
 
     const criteriaTypes = [
         { value: 'answer', label: 'Answer (Text Input)' },
@@ -929,12 +934,57 @@ const CriteriaConfigSection = ({ selectedSchool, setSelectedSchool, schools }) =
             <div className="lg:col-span-3 space-y-6">
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl font-bold text-gray-900">{selectedSchool} Track</h2>
-                    <button
-                        onClick={openAddModal}
-                        className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2"
-                    >
-                        <Plus className="w-5 h-5" /> Add Criterion
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {canTriggerRefresh && (
+                            <button
+                                onClick={async () => {
+                                    if (!selectedSchool) return toast.error('Please select a school first');
+                                    try {
+                                        toast.loading('Starting recalculation...');
+                                        const res = await jobReadinessAPI.triggerRecalculate({ school: selectedSchool });
+                                        const jobId = res.data.jobId;
+                                        setRecalcJobId(jobId);
+                                        setRecalcProgress({ status: 'pending', total: 0, processed: 0 });
+                                        // Poll status
+                                        const poll = setInterval(async () => {
+                                            try {
+                                                const s = await jobReadinessAPI.getRecalcJob(jobId);
+                                                setRecalcProgress({ status: s.data.status, total: s.data.total || 0, processed: s.data.processed || 0 });
+                                                if (s.data.status === 'completed' || s.data.status === 'failed') {
+                                                    clearInterval(poll);
+                                                    setTimeout(() => setRecalcJobId(null), 1500);
+                                                    if (s.data.status === 'completed') {
+                                                        toast.dismiss();
+                                                        toast.success(`Recalculation completed: ${s.data.processed}/${s.data.total}`);
+                                                        fetchConfig();
+                                                    } else {
+                                                        toast.dismiss();
+                                                        toast.error('Recalculation failed: ' + (s.data.error || 'unknown'));
+                                                    }
+                                                }
+                                            } catch (e) {
+                                                console.error('Polling recalc job failed', e);
+                                            }
+                                        }, 1000);
+                                    } catch (err) {
+                                        toast.error('Failed to start recalculation');
+                                        console.error(err);
+                                    }
+                                }}
+                                disabled={isRecalculating}
+                                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Refresh readiness
+                            </button>
+                        )}
+                        <button
+                            onClick={openAddModal}
+                            disabled={isRecalculating}
+                            className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Plus className="w-5 h-5" /> Add Criterion
+                        </button>
+                    </div>
                 </div>
 
                 {loading ? (
@@ -1226,6 +1276,38 @@ const CriteriaConfigSection = ({ selectedSchool, setSelectedSchool, schools }) =
                                 {editingId ? 'Save Changes' : 'Create Criterion'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Recalculation Progress Modal */}
+            {isRecalculating && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                            <h3 className="text-lg font-bold text-gray-900">Recalculating Job Readiness</h3>
+                        </div>
+                        <p className="text-gray-600 mb-4">
+                            Updating student readiness documents for <span className="font-semibold">{selectedSchool}</span>
+                        </p>
+                        <div className="bg-gray-100 rounded-lg p-4 mb-4">
+                            <div className="flex justify-between text-sm mb-2">
+                                <span className="text-gray-600">Progress</span>
+                                <span className="font-bold text-gray-900">
+                                    {recalcProgress.processed} / {recalcProgress.total}
+                                </span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                <div
+                                    className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
+                                    style={{ width: `${recalcProgress.total > 0 ? (recalcProgress.processed / recalcProgress.total) * 100 : 0}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-500 text-center">
+                            Please wait while we update student records. This may take a few moments.
+                        </p>
                     </div>
                 </div>
             )}

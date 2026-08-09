@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { questionAPI, userAPI, jobAPI } from '../../services/api';
+import { questionAPI, userAPI, jobAPI, jobReadinessAPI } from '../../services/api';
 import {
   Home, User, Briefcase, FileText, Users, CheckSquare, BarChart3, Settings,
   X, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle,
@@ -15,6 +15,8 @@ const Sidebar = ({ isOpen, onClose }) => {
   const [pendingProfilesCount, setPendingProfilesCount] = useState(0);
   const [pendingSkillsCount, setPendingSkillsCount] = useState(0);
   const [pendingInterestCount, setPendingInterestCount] = useState(0);
+  const [pendingReadinessCount, setPendingReadinessCount] = useState(0);
+  const [eligibleJobsCount, setEligibleJobsCount] = useState(0);
 
   useEffect(() => {
     if (user?.role === 'coordinator') {
@@ -27,7 +29,33 @@ const Sidebar = ({ isOpen, onClose }) => {
       const interval = setInterval(fetchPoCCounts, 30000);
       return () => clearInterval(interval);
     }
+    if (user?.role === 'student') {
+      fetchStudentCounts();
+      const interval = setInterval(fetchStudentCounts, 60000);
+      return () => clearInterval(interval);
+    }
   }, [user]);
+
+  const fetchStudentCounts = async () => {
+    try {
+      const [readinessRes, matchingRes] = await Promise.all([
+        jobReadinessAPI.getMyStatus().catch(() => ({ data: null })),
+        jobAPI.getMatchingJobs().catch(() => ({ data: [] }))
+      ]);
+
+      const config = readinessRes?.data?.config || [];
+      const criteriaStatus = readinessRes?.data?.readiness?.criteriaStatus || [];
+      const total = config.length;
+      const submitted = criteriaStatus.filter(cs => cs.status === 'completed' || cs.status === 'verified').length;
+      const pending = Math.max(0, total - submitted);
+      setPendingReadinessCount(pending);
+
+      const matching = Array.isArray(matchingRes?.data) ? matchingRes.data.length : (matchingRes?.data?.length || 0);
+      setEligibleJobsCount(matching || 0);
+    } catch (error) {
+      console.error('Error fetching student counts:', error);
+    }
+  };
 
   const fetchUnreadCount = async () => {
     try {
@@ -62,15 +90,15 @@ const Sidebar = ({ isOpen, onClose }) => {
     switch (user?.role) {
       case 'student':
         return [
-          { path: '/student', icon: Home, label: 'Dashboard', exact: true },
-          { path: '/student/profile', icon: User, label: 'My Profile' },
-          { path: '/student/jobs', icon: Briefcase, label: 'Job Listings' },
-          { path: '/student/applications', icon: FileText, label: 'My Applications' },
-          { path: '/student/job-readiness', icon: Target, label: 'Job Readiness' },
-          { path: '/student/self-applications', icon: ExternalLink, label: 'Self Applications' },
-          { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
-          { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
-        ];
+            { path: '/student', icon: Home, label: 'Dashboard', exact: true },
+            { path: '/student/profile', icon: User, label: 'My Profile' },
+            { path: '/student/jobs', icon: Briefcase, label: 'Job Listings', badge: eligibleJobsCount },
+            { path: '/student/applications', icon: FileText, label: 'My Applications' },
+            { path: '/student/job-readiness', icon: Target, label: 'Job Readiness', badge: pendingReadinessCount },
+            { path: '/student/self-applications', icon: ExternalLink, label: 'Self Applications' },
+            { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
+            { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
+          ];
       case 'campus_poc':
         return [
           { path: '/campus-poc', icon: Home, label: 'Dashboard', exact: true },
@@ -81,6 +109,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/campus-poc/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' },
           { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests', badge: pendingInterestCount },
+          { path: '/campus-poc/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
         ];

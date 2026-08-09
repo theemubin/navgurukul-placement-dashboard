@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PublicLayout from '../../layouts/PublicLayout';
 import PortfolioCard from '../../components/public/PortfolioCard';
 import PortfolioModal from '../../components/public/PortfolioModal';
 import HeroCarousel from '../../components/public/HeroCarousel';
 import GetInTouchModal from '../../components/public/GetInTouchModal';
-
 const Portfolios = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [portfolios, setPortfolios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedPortfolio, setSelectedPortfolio] = useState(null);
@@ -13,7 +14,16 @@ const Portfolios = () => {
     const [placements, setPlacements] = useState([]);
     const [partners, setPartners] = useState([]);
     const [showGetInTouch, setShowGetInTouch] = useState(false);
-    const [selectedRoles, setSelectedRoles] = useState([]);
+    
+    // Read initial filter values from URL params
+    const [selectedRoles, setSelectedRoles] = useState(() => {
+        const rolesParam = searchParams.get('roles');
+        return rolesParam ? rolesParam.split(',').filter(Boolean) : [];
+    });
+    const [selectedCampus, setSelectedCampus] = useState(() => {
+        return searchParams.get('campus') || '';
+    });
+    
     const [showFilter, setShowFilter] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
     const [testimonials, setTestimonials] = useState([]);
@@ -97,10 +107,36 @@ const Portfolios = () => {
         fetchData();
     }, []);
 
+    // Get unique campus list from portfolios
+    const availableCampuses = useMemo(() => {
+        const campusesSet = new Set();
+        portfolios.forEach(student => {
+            if (student.campus?.name) campusesSet.add(student.campus.name);
+        });
+        return Array.from(campusesSet).sort();
+    }, [portfolios]);
+
+    // Sync state changes back to URL query parameters
+    useEffect(() => {
+        const params = {};
+        if (selectedRoles.length > 0) {
+            params.roles = selectedRoles.join(',');
+        }
+        if (selectedCampus) {
+            params.campus = selectedCampus;
+        }
+        setSearchParams(params, { replace: true });
+    }, [selectedRoles, selectedCampus, setSearchParams]);
+
     // Group portfolios by role
     const portfoliosByRole = useMemo(() => {
         const groups = {};
-        portfolios.forEach(student => {
+        // Filter by selectedCampus first if set
+        const filtered = selectedCampus
+            ? portfolios.filter(student => student.campus?.name === selectedCampus)
+            : portfolios;
+
+        filtered.forEach(student => {
             const roles = student.openForRoles?.length > 0 ? student.openForRoles : ['General Developer'];
             roles.forEach(role => {
                 if (!groups[role]) groups[role] = [];
@@ -108,7 +144,7 @@ const Portfolios = () => {
             });
         });
         return groups;
-    }, [portfolios]);
+    }, [portfolios, selectedCampus]);
 
     // Filter roles based on selection
     const displayedRoles = useMemo(() => {
@@ -289,16 +325,33 @@ const Portfolios = () => {
                                     }`}>
                                     <div className="max-w-[1400px] mx-auto">
                                         <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                                            <p className="text-[7px] sm:text-[8px] font-black text-gray-400 uppercase tracking-[0.15em] sm:tracking-[0.2em]">Filter Pools</p>
-                                            {selectedRoles.length > 0 && (
-                                                <button
-                                                    onClick={() => setSelectedRoles([])}
-                                                    className="text-[7px] sm:text-[8px] font-bold text-blue-600 uppercase tracking-wide sm:tracking-widest hover:underline"
-                                                >
-                                                    Clear ({selectedRoles.length})
-                                                </button>
-                                            )}
-                                        </div>
+                                             <div className="flex items-center gap-2 sm:gap-4">
+                                                 <p className="text-[7px] sm:text-[8px] font-black text-gray-400 uppercase tracking-[0.15em] sm:tracking-[0.2em] whitespace-nowrap">Filter Pools</p>
+                                                 <select
+                                                     value={selectedCampus}
+                                                     onChange={(e) => setSelectedCampus(e.target.value)}
+                                                     className="bg-white border border-gray-200 text-gray-750 rounded-md px-1.5 sm:px-2 py-0.5 sm:py-1 text-[7px] sm:text-[8px] md:text-[9px] font-black uppercase tracking-wider focus:outline-none focus:border-blue-500 cursor-pointer shadow-sm"
+                                                 >
+                                                     <option value="">All Campuses</option>
+                                                     {availableCampuses.map(campusName => (
+                                                         <option key={campusName} value={campusName}>
+                                                             {campusName}
+                                                         </option>
+                                                     ))}
+                                                 </select>
+                                             </div>
+                                             {(selectedRoles.length > 0 || selectedCampus) && (
+                                                 <button
+                                                     onClick={() => {
+                                                         setSelectedRoles([]);
+                                                         setSelectedCampus('');
+                                                     }}
+                                                     className="text-[7px] sm:text-[8px] font-bold text-blue-600 uppercase tracking-wide sm:tracking-widest hover:underline"
+                                                 >
+                                                     Clear Filters
+                                                 </button>
+                                             )}
+                                         </div>
                                         {/* Auto-scrolling Filter Bar */}
                                         <div
                                             id="role-filter-scroll"

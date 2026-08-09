@@ -759,6 +759,56 @@ router.post('/login', loginValidation, async (req, res) => {
     if (user.role === 'student') {
       gharApiService.syncStudentData(user.email).catch(err => console.error('Background Ghar sync error (login):', err.message));
     }
+    
+    // Auto-trigger daily bulk sync on first admin/coordinator/PoC login
+    if (['manager', 'coordinator', 'campus_poc'].includes(user.role)) {
+      (async () => {
+        try {
+          const Settings = require('../models/Settings');
+          let settings = await Settings.findOne();
+          if (!settings) settings = new Settings();
+          
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          const lastSync = settings.lastGharSyncDate;
+          let needsSync = true;
+          
+          if (lastSync) {
+            const lastSyncDay = new Date(lastSync);
+            lastSyncDay.setHours(0, 0, 0, 0);
+            needsSync = lastSyncDay.getTime() !== today.getTime();
+          }
+          
+          if (needsSync) {
+            console.log(`[AutoSync] ${user.role} ${user.email} logged in - triggering daily bulk sync`);
+            const User = require('../models/User');
+            const students = await User.find({ 
+              role: 'student',
+              email: { $exists: true, $ne: null, $ne: '' }
+            }).select('email').lean();
+            
+            if (students.length > 0) {
+              const studentEmails = students.map(s => s.email);
+              const CHUNK_SIZE = 50;
+              
+              for (let i = 0; i < studentEmails.length; i += CHUNK_SIZE) {
+                const chunk = studentEmails.slice(i, i + CHUNK_SIZE);
+                await gharApiService.batchSyncStudents(chunk);
+              }
+              
+              settings.lastGharSyncDate = new Date();
+              await settings.save();
+              console.log(`[AutoSync] Completed sync for ${students.length} students`);
+            }
+          } else {
+            console.log(`[AutoSync] Sync already done today, skipping`);
+          }
+        } catch (err) {
+          console.error('[AutoSync] Error:', err.message);
+        }
+      })();
+    }
 
     res.json({
       message: 'Login successful',

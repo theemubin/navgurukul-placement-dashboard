@@ -3,10 +3,12 @@ const router = express.Router();
 const User = require('../models/User');
 const Job = require('../models/Job');
 const Application = require('../models/Application');
+const InterestRequest = require('../models/InterestRequest');
 const Campus = require('../models/Campus');
 const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
+const fs = require('fs');
 
 // Helper to get all campus IDs a POC is authorized to manage
 const getPOCManagedCampusIds = (user) => {
@@ -373,6 +375,26 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
       }
     ]);
 
+    // Students by school (per campus) - shows where students are present
+    const studentsBySchool = await User.aggregate([
+      { $match: studentQuery },
+      { $group: { _id: { campus: '$campus', school: '$studentProfile.currentSchool' }, count: { $sum: 1 } } },
+      { $lookup: { from: 'campuses', localField: '_id.campus', foreignField: '_id', as: 'campusData' } },
+      { $unwind: { path: '$campusData', preserveNullAndEmptyArrays: true } },
+      { $project: { campusId: '$_id.campus', campusName: '$campusData.name', school: '$_id.school', count: 1, _id: 0 } }
+    ]);
+
+    // Placements by school (per campus)
+    const placementsBySchool = await Application.aggregate([
+      { $match: { ...applicationQuery, status: 'selected' } },
+      { $lookup: { from: 'users', localField: 'student', foreignField: '_id', as: 'studentData' } },
+      { $unwind: '$studentData' },
+      { $group: { _id: { campus: '$studentData.campus', school: '$studentData.studentProfile.currentSchool' }, count: { $sum: 1 } } },
+      { $lookup: { from: 'campuses', localField: '_id.campus', foreignField: '_id', as: 'campusData' } },
+      { $unwind: { path: '$campusData', preserveNullAndEmptyArrays: true } },
+      { $project: { campusId: '$_id.campus', campusName: '$campusData.name', school: '$_id.school', count: 1, _id: 0 } }
+    ]);
+
     // Placements by job type
     const placementsByJobType = await Application.aggregate([
       { $match: { ...applicationQuery, status: 'selected' } },
@@ -466,6 +488,8 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
         return acc;
       }, {}),
       placementsByCampus,
+      studentsBySchool,
+      placementsBySchool,
       placementsByJobType,
       recentPlacements,
       topCompanies,
@@ -848,7 +872,7 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
       isActive: true
     };
 
-    if (filterStatus) {
+    if (filterStatus && filterStatus !== 'all') {
       studentQuery['studentProfile.currentStatus'] = filterStatus;
     }
 
@@ -907,10 +931,14 @@ router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
       }
     });
 
-    // Interest count
-    const interestCount = await Application.countDocuments({
+    // Interest count (only for jobs that are currently open)
+    const openJobs = await Job.find({ status: { $in: ['active', 'application_stage'] } }).select('_id');
+    const openJobIds = openJobs.map(j => j._id);
+
+    const interestCount = await InterestRequest.countDocuments({
       student: { $in: studentIds },
-      applicationType: 'interest'
+      status: 'pending',
+      job: { $in: openJobIds }
     });
 
     res.json({
@@ -1758,31 +1786,61 @@ router.get('/historical-cycles', auth, authorize('manager', 'coordinator'), asyn
   try {
     const { campus: campusId } = req.query;
 
-    // Fetch all cycles sorted by date (newest first for the list, frontend reverses for charts)
+    // Build filter for placed students from Ghar data
+    let studentFilter = {
+      role: 'student',
+      'studentProfile.currentStatus': { $regex: /placed/i }, // Status contains "placed"
+      'studentProfile.dateOfPlacement': { $exists: true, $ne: null } // Has placement date from Ghar
+    };
+
+    if (campusId) {
+      studentFilter.campus = campusId;
+    }
+
+    // Fetch all placed students with their placement dates
+    const placedStudents = await User.find(studentFilter)
+      .select('studentProfile.dateOfPlacement placementCycle')
+      .lean();
+
+    // Group placements by month/year
+    const placementsByMonth = {};
+    placedStudents.forEach(student => {
+      const placementDate = new Date(student.studentProfile.dateOfPlacement);
+      const year = placementDate.getFullYear();
+      const month = placementDate.getMonth() + 1; // 1-12
+      const key = `${year}-${String(month).padStart(2, '0')}`;
+      
+      if (!placementsByMonth[key]) {
+        placementsByMonth[key] = {
+          year,
+          month,
+          placed: 0
+        };
+      }
+      placementsByMonth[key].placed++;
+    });
+
+    // Fetch placement cycles to get maxStudentsInCycle and names
     const cycles = await PlacementCycle.find({})
       .sort({ year: -1, month: -1 })
-      .limit(12);
+      .limit(12)
+      .lean();
 
+    // Merge cycle data with placement counts
     const historicalData = cycles.map(cycle => {
-      // If campus filter is applied, filter the snapshot
-      let students = cycle.snapshotStudents || [];
+      const key = `${cycle.year}-${String(cycle.month).padStart(2, '0')}`;
+      const placementData = placementsByMonth[key] || { placed: 0 };
 
-      // Note: In the current schema, snapshotStudents doesn't have campus info directly.
-      // We would need to populate or have it in the snapshot.
-      // For now, return global stats if campusId is provided but we can't filter precisely,
-      // or implement the filter if we assume all students in snapshot belong to cycles.
-
-      const total = students.length;
-      const placed = students.filter(s => s.status === 'placed').length;
-      const released = students.filter(s => s.status === 'released').length;
-      const successRate = total > 0 ? Math.round((placed / total) * 100) : 0;
+      // Use maxStudentsInCycle for historical reporting (captures peak enrollment)
+      const totalInCycle = cycle.maxStudentsInCycle || 0;
+      const placed = placementData.placed;
+      const successRate = totalInCycle > 0 ? Math.round((placed / totalInCycle) * 100) : 0;
 
       return {
         _id: cycle._id,
         name: cycle.name,
-        total,
-        placed,
-        released,
+        totalInCycle,  // Maximum students ever in this cycle
+        placed,        // Actual placements from Ghar data (by dateOfPlacement)
         successRate,
         targetPlacements: cycle.targetPlacements || 0
       };
@@ -1791,6 +1849,214 @@ router.get('/historical-cycles', auth, authorize('manager', 'coordinator'), asyn
     res.json({ success: true, data: historicalData });
   } catch (error) {
     console.error('Get historical cycles error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/stats/campus-placement-trends:
+ *   get:
+ *     summary: Get campus-wise placement trends over months (line chart data)
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Campus placement trends by month
+ */
+router.get('/campus-placement-trends', auth, authorize('manager', 'coordinator'), async (req, res) => {
+  try {
+    // Fetch all placed students with campus and placement date
+    const placedStudents = await User.find({
+      role: 'student',
+      'studentProfile.currentStatus': { $regex: /placed/i },
+      'studentProfile.dateOfPlacement': { $exists: true, $ne: null }
+    })
+      .select('campus studentProfile.dateOfPlacement')
+      .populate('campus', 'name')
+      .lean();
+
+    // Group by month/year and campus
+    const trendData = {};
+    const campusNames = new Set();
+
+    placedStudents.forEach(student => {
+      const campusName = student.campus?.name || 'Unknown Campus';
+      campusNames.add(campusName);
+
+      const placementDate = new Date(student.studentProfile.dateOfPlacement);
+      const year = placementDate.getFullYear();
+      const month = placementDate.getMonth() + 1;
+      const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+
+      if (!trendData[monthKey]) {
+        trendData[monthKey] = {
+          month: monthKey,
+          year,
+          monthNum: month,
+          campuses: {}
+        };
+      }
+
+      if (!trendData[monthKey].campuses[campusName]) {
+        trendData[monthKey].campuses[campusName] = 0;
+      }
+      trendData[monthKey].campuses[campusName]++;
+    });
+
+    // Convert to array and format for line chart
+    const months = Object.keys(trendData).sort();
+    const chartData = months.map(monthKey => {
+      const data = trendData[monthKey];
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const formattedMonth = `${monthNames[data.monthNum - 1]} ${data.year}`;
+      
+      const point = {
+        month: formattedMonth,
+        monthKey: monthKey
+      };
+
+      // Add each campus as a separate data point
+      Array.from(campusNames).forEach(campus => {
+        point[campus] = data.campuses[campus] || 0;
+      });
+
+      return point;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        chartData: chartData.slice(-12), // Last 12 months
+        campuses: Array.from(campusNames)
+      }
+    });
+  } catch (error) {
+    console.error('Get campus placement trends error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/stats/long-term-students-trend:
+ *   get:
+ *     summary: Get long-term students (>12 months, not placed) trend by campus
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Long-term students trend data
+ */
+router.get('/long-term-students-trend', auth, authorize('manager', 'coordinator'), async (req, res) => {
+  try {
+    const now = new Date();
+    const monthsToShow = 12;
+    
+    // Generate last 12 months
+    const months = [];
+    for (let i = monthsToShow - 1; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      months.push({ year, month, monthKey: `${year}-${String(month).padStart(2, '0')}` });
+    }
+    
+    const campusNames = new Set();
+    const trendData = {};
+    
+    // For each month, calculate students with >12 months tenure who weren't placed yet
+    for (const { year, month, monthKey } of months) {
+      // Reference date: end of that month
+      const referenceDate = new Date(year, month, 0, 23, 59, 59, 999); // Last day of month
+      
+      // 12 months before reference date
+      const twelveMonthsPrior = new Date(referenceDate);
+      twelveMonthsPrior.setFullYear(twelveMonthsPrior.getFullYear() - 1);
+      
+      // Find students who joined 12+ months before the reference date (using Ghar joiningDate)
+      // Behavior:
+      // - For the most recent month we only count students whose current status is exactly 'Active'.
+      // - For historical months we include all students joined before cutoff but exclude known non-actionable statuses
+      //   (dropouts, interns, inactive, opted-out, long leave) and those already placed as of reference date.
+      const isLatestMonth = monthKey === months[months.length - 1].monthKey;
+
+      const excludedStatuses = [
+        'Dropout', 'DropOut', 'InActive', 'Completed-Opted out for placement', 'Long Leave', 'Intern'
+      ];
+
+      const baseQuery = {
+        role: 'student',
+        'studentProfile.joiningDate': { $exists: true, $lte: twelveMonthsPrior },
+        $or: [
+          { 'studentProfile.dateOfPlacement': { $exists: false } },
+          { 'studentProfile.dateOfPlacement': null },
+          { 'studentProfile.dateOfPlacement': { $gt: referenceDate } }
+        ]
+      };
+
+      if (isLatestMonth) {
+        // Only Active students for current/latest month
+        baseQuery['studentProfile.currentStatus'] = 'Active';
+      } else {
+        // Historical months: include all but explicitly remove non-actionable statuses
+        baseQuery['studentProfile.currentStatus'] = { $nin: excludedStatuses };
+      }
+
+      const longTermStudents = await User.find(baseQuery)
+        .select('campus studentProfile.joiningDate studentProfile.currentStatus studentProfile.dateOfPlacement')
+        .populate('campus', 'name')
+        .lean();
+      
+      console.log(`[LongTerm] Month ${monthKey}: Found ${longTermStudents.length} students with >12mo tenure from Ghar joiningDate (cutoff: ${twelveMonthsPrior.toISOString()})`);
+      
+      // Group by campus
+      const campusCounts = {};
+      longTermStudents.forEach(student => {
+        const campusName = student.campus?.name || 'Unknown Campus';
+        campusNames.add(campusName);
+        campusCounts[campusName] = (campusCounts[campusName] || 0) + 1;
+      });
+      
+      trendData[monthKey] = {
+        month: monthKey,
+        year,
+        monthNum: month,
+        campuses: campusCounts
+      };
+    }
+    
+    // Convert to chart format
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const chartData = months.map(({ monthKey }) => {
+      const data = trendData[monthKey];
+      const formattedMonth = `${monthNames[data.monthNum - 1]} ${data.year}`;
+      
+      const point = {
+        month: formattedMonth,
+        monthKey: monthKey
+      };
+      
+      // Add each campus count
+      Array.from(campusNames).forEach(campus => {
+        point[campus] = data.campuses[campus] || 0;
+      });
+      
+      return point;
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        chartData,
+        campuses: Array.from(campusNames),
+        description: 'Students with >12 months tenure who are not yet placed'
+      }
+    });
+  } catch (error) {
+    console.error('Get long-term students trend error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -1838,7 +2104,7 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
 
     // 2. Fetch Students and their Readiness
     const students = await User.find(studentFilter)
-      .select('firstName lastName studentProfile.openForRoles studentProfile.currentSchool campus studentProfile.currentStatus')
+      .select('firstName lastName studentProfile.openForRoles studentProfile.currentSchool campus studentProfile.currentStatus studentProfile.joiningDate studentProfile.dateOfPlacement placementCycle studentProfile.englishProficiency studentProfile.externalData.ghar.englishSpeaking')
       .populate('campus', 'name');
 
     const readinessRecords = await StudentJobReadiness.find({
@@ -1876,16 +2142,16 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
 
     let totalPlaced = 0;
 
-    if (activeCycle) {
-      const startDate = new Date(activeCycle.year, activeCycle.month - 1, 1);
-      const endDate = new Date(activeCycle.year, activeCycle.month, 0, 23, 59, 59);
+    // Count placements for the current calendar month using Ghar-synced placement date.
+    // This ensures we show placements that occurred this month even if the active cycle is scheduled in a future month.
+    const monthStart = new Date(now_date.getFullYear(), now_date.getMonth(), 1);
+    const monthEnd = new Date(now_date.getFullYear(), now_date.getMonth() + 1, 0, 23, 59, 59);
 
-      totalPlaced = await User.countDocuments({
-        role: 'student',
-        'studentProfile.currentStatus': { $in: ['Placed', 'Intern (In Campus)', 'Intern (Out Campus)'] },
-        'studentProfile.dateOfPlacement': { $gte: startDate, $lte: endDate }
-      });
-    }
+    totalPlaced = await User.countDocuments({
+      role: 'student',
+      'studentProfile.currentStatus': { $in: ['Placed', 'Intern (In Campus)', 'Intern (Out Campus)'] },
+      'studentProfile.dateOfPlacement': { $gte: monthStart, $lte: monthEnd }
+    });
 
     // 5. Aggregate Data by Role
     const pipeline = {};
@@ -1903,20 +2169,108 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       }
     };
 
+    // Allowed statuses for pipeline
+    const allowedStatuses = ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'];
+
+    // 5b. Campus Breakdown — aggregate per-campus stats
+    const campusMap = {};
+    // Helper to parse communication level (B2+)
+    const isCommReady = (student) => {
+      const gharSpeak = student.studentProfile?.externalData?.ghar?.englishSpeaking?.value;
+      const gharWrite = student.studentProfile?.externalData?.ghar?.englishWriting?.value;
+      const localSpeak = student.studentProfile?.englishProficiency?.speaking;
+      const localWrite = student.studentProfile?.englishProficiency?.writing;
+      const speak = (gharSpeak || localSpeak || '').toUpperCase();
+      const write = (gharWrite || localWrite || '').toUpperCase();
+      const good = ['B2', 'C1', 'C2'];
+      return good.includes(speak) && good.includes(write);
+    };
+
     // Process Student Interests
     students.forEach(student => {
       const roles = student.studentProfile?.openForRoles || [];
       const isReady = readinessMap.get(student._id.toString()) || false;
       const studentSchool = student.studentProfile?.currentSchool;
-      const studentStatus = student.studentProfile?.currentStatus || 'Active';
+      // Prefer Ghar/resolved status where available
+      const studentStatus = (student.resolvedProfile && student.resolvedProfile.currentStatus)
+        || student.studentProfile?.currentStatus
+        || 'Active';
 
       // Filter by school if provided
       if (school && studentSchool !== school) return;
 
-      // Only include Active/Intern statuses as per user's earlier requirement for readiness dashboards
-      const allowedStatuses = ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'];
-      if (!allowedStatuses.includes(studentStatus)) return;
+      // --- Campus breakdown accumulation ---
+      const campusId = student.campus?._id?.toString() || 'unknown';
+      const campusName = student.campus?.name || 'Unknown Campus';
+      if (!campusMap[campusId]) {
+        campusMap[campusId] = {
+          campusId,
+          campusName,
+          totalStudents: 0,
+          activeCount: 0,
+          internsInCampus: 0,
+          internsOutCampus: 0,
+          openForPlacements: 0, // Active + interns
+          placedCount: 0, // from Ghar/resolved status
+          placementReady: 0,
+          readinessPending: 0,
+          cycleNotAllocated: 0,
+          communicationReady: 0
+        };
+      }
 
+      // We'll derive totalStudents from the status buckets (Active + Interns)
+
+      // Count status buckets (normalize to lowercase to handle variations)
+      const statusKey = (studentStatus || '').trim();
+      const statusKeyNorm = statusKey.toLowerCase();
+      if (statusKeyNorm === 'active') campusMap[campusId].activeCount++;
+      if (statusKeyNorm === 'intern (in campus)') campusMap[campusId].internsInCampus++;
+      if (statusKeyNorm === 'intern (out campus)') campusMap[campusId].internsOutCampus++;
+
+      // Open for placements: Active + both Intern statuses
+      if (['active', 'intern (in campus)', 'intern (out campus)'].includes(statusKeyNorm)) {
+        campusMap[campusId].openForPlacements++;
+      }
+
+      // Placed This Cycle: Count only if placed in current month (Ghar-synced dateOfPlacement)
+      if (statusKeyNorm.includes('placed')) {
+        const placementDate = student.studentProfile?.dateOfPlacement;
+        if (placementDate) {
+          const pDate = new Date(placementDate);
+          if (pDate >= monthStart && pDate <= monthEnd) {
+            campusMap[campusId].placedCount++;
+          }
+        }
+      }
+
+      // Placement readiness
+      if (isReady) campusMap[campusId].placementReady++;
+
+      // Placement readiness pending: Active (not interns) AND NOT job-ready
+      if (statusKeyNorm === 'active' && !isReady) {
+        campusMap[campusId].readinessPending++;
+      }
+
+      // Cycle Not Allocated: student has Active/Intern status, joined > 12 months ago and not in a cycle
+      const hasCycle = !!student.placementCycle;
+      if (!hasCycle) {
+        // check joining date > 12 months
+        const joining = student.studentProfile?.joiningDate ? new Date(student.studentProfile.joiningDate) : null;
+        if (joining) {
+          const months = (new Date().getFullYear() - joining.getFullYear()) * 12 + (new Date().getMonth() - joining.getMonth());
+          if (months >= 12 && ['active', 'intern (in campus)', 'intern (out campus)'].includes(statusKeyNorm)) {
+            campusMap[campusId].cycleNotAllocated++;
+          }
+        }
+      }
+
+      // Communication Ready: both speaking and writing B2+
+      if (isCommReady(student)) {
+        campusMap[campusId].communicationReady++;
+      }
+
+      // --- Role pipeline accumulation (existing logic) ---
       roles.forEach(role => {
         if (!role) return;
         initRole(role);
@@ -1951,8 +2305,162 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
     // Convert to array and sort by interest
     const rolesData = Object.values(pipeline).sort((a, b) => b.totalInterested - a.totalInterested);
 
+    // Build campus -> schools breakdown from fetched students with detailed metrics
+    const campusSchoolsMap = {};
+    const studentIds = students.map(s => s._id);
+    students.forEach(student => {
+      const campusId = student.campus?._id?.toString() || 'unknown';
+      const campusName = student.campus?.name || 'Unknown Campus';
+      const school = student.studentProfile?.currentSchool || 'Unknown School';
+      const isReady = readinessMap.get(student._id.toString()) || false;
+
+      // Determine resolved/current status for placement buckets
+      const studentStatus = (student.resolvedProfile && student.resolvedProfile.currentStatus)
+        || student.studentProfile?.currentStatus
+        || 'Active';
+
+      if (!campusSchoolsMap[campusId]) {
+        campusSchoolsMap[campusId] = { campusId, campusName, schools: {} };
+      }
+      if (!campusSchoolsMap[campusId].schools[school]) {
+        campusSchoolsMap[campusId].schools[school] = {
+          school,
+          students: 0,
+          activeCount: 0,
+          internsInCampus: 0,
+          internsOutCampus: 0,
+          openForPlacements: 0,
+          placedCount: 0,
+          placements: 0,
+          placementReady: 0,
+          readinessPending: 0,
+          cycleNotAllocated: 0,
+          communicationReady: 0
+        };
+      }
+
+      const s = campusSchoolsMap[campusId].schools[school];
+      const statusKey = (studentStatus || '').trim();
+      const statusKeyNorm = statusKey.toLowerCase();
+      if (statusKeyNorm === 'active') s.activeCount++;
+      if (statusKeyNorm === 'intern (in campus)') s.internsInCampus++;
+      if (statusKeyNorm === 'intern (out campus)') s.internsOutCampus++;
+      if (['active', 'intern (in campus)', 'intern (out campus)'].includes(statusKeyNorm)) {
+        s.openForPlacements++;
+      }
+      // Placed This Cycle: Count only if placed in current month (Ghar-synced dateOfPlacement)
+      if (statusKeyNorm.includes('placed')) {
+        const placementDate = student.studentProfile?.dateOfPlacement;
+        if (placementDate) {
+          const pDate = new Date(placementDate);
+          if (pDate >= monthStart && pDate <= monthEnd) {
+            s.placedCount++;
+          }
+        }
+      }
+      if (isReady) s.placementReady++;
+      if (statusKeyNorm === 'active' && !isReady) s.readinessPending++;
+      const hasCycle = !!student.placementCycle;
+      if (!hasCycle) {
+        const joining = student.studentProfile?.joiningDate ? new Date(student.studentProfile.joiningDate) : null;
+        if (joining) {
+          const months = (new Date().getFullYear() - joining.getFullYear()) * 12 + (new Date().getMonth() - joining.getMonth());
+          if (months >= 12 && ['active', 'intern (in campus)', 'intern (out campus)'].includes(statusKeyNorm)) {
+            s.cycleNotAllocated++;
+          }
+        }
+      }
+      const isComm = (() => {
+        const gharSpeak = student.studentProfile?.externalData?.ghar?.englishSpeaking?.value;
+        const gharWrite = student.studentProfile?.externalData?.ghar?.englishWriting?.value;
+        const localSpeak = student.studentProfile?.englishProficiency?.speaking;
+        const localWrite = student.studentProfile?.englishProficiency?.writing;
+        const speak = (gharSpeak || localSpeak || '').toUpperCase();
+        const write = (gharWrite || localWrite || '').toUpperCase();
+        const good = ['B2', 'C1', 'C2'];
+        return good.includes(speak) && good.includes(write);
+      })();
+      if (isComm) s.communicationReady++;
+    });
+
+    // Derive per-school totals similarly from their buckets
+    Object.values(campusSchoolsMap).forEach(c => {
+      Object.values(c.schools).forEach(s => {
+        s.students = (s.activeCount || 0) + (s.internsInCampus || 0) + (s.internsOutCampus || 0);
+      });
+    });
+
+    // Derive totalStudents for each campus by summing its schools when available,
+    // otherwise fall back to status buckets for compatibility.
+    Object.values(campusMap).forEach(c => {
+      const schoolEntry = campusSchoolsMap[c.campusId];
+      if (schoolEntry && Object.keys(schoolEntry.schools || {}).length > 0) {
+        const sumFromSchools = Object.values(schoolEntry.schools).reduce((sum, sch) => sum + (sch.students || 0), 0);
+        c.totalStudents = sumFromSchools;
+      } else {
+        c.totalStudents = (c.activeCount || 0) + (c.internsInCampus || 0) + (c.internsOutCampus || 0);
+      }
+    });
+
+    // Build campus breakdown with percentages, sorted by placementReady % desc
+    const campusBreakdown = Object.values(campusMap).map(c => {
+      const totalStudentsComputed = c.totalStudents || ((c.activeCount || 0) + (c.internsInCampus || 0) + (c.internsOutCampus || 0));
+      const denom = totalStudentsComputed || 1;
+      return {
+        totalActive: c.activeCount || totalStudentsComputed || 0,
+        totalStudents: totalStudentsComputed,
+        ...c,
+        placementReadyPct: denom > 0 ? parseFloat(((c.placementReady / denom) * 100).toFixed(1)) : 0,
+        readinessPendingPct: denom > 0 ? parseFloat(((c.readinessPending / denom) * 100).toFixed(1)) : 0,
+        cycleNotAllocatedPct: denom > 0 ? parseFloat(((c.cycleNotAllocated / denom) * 100).toFixed(1)) : 0,
+        communicationReadyPct: denom > 0 ? parseFloat(((c.communicationReady / denom) * 100).toFixed(1)) : 0
+      };
+    }).sort((a, b) => b.placementReadyPct - a.placementReadyPct);
+
+    // Fetch placements grouped by campus+school for the students we considered
+    const placementsBySchoolAgg = await Application.aggregate([
+      { $match: { student: { $in: studentIds }, status: 'selected' } },
+      { $lookup: { from: 'users', localField: 'student', foreignField: '_id', as: 'studentData' } },
+      { $unwind: '$studentData' },
+      { $group: { _id: { campus: '$studentData.campus', school: '$studentData.studentProfile.currentSchool' }, count: { $sum: 1 } } }
+    ]);
+
+    placementsBySchoolAgg.forEach(p => {
+      const campusId = (p._id.campus || '').toString() || 'unknown';
+      const school = p._id.school || 'Unknown School';
+      if (!campusSchoolsMap[campusId]) {
+        campusSchoolsMap[campusId] = { campusId, campusName: 'Unknown Campus', schools: {} };
+      }
+      if (!campusSchoolsMap[campusId].schools[school]) {
+        campusSchoolsMap[campusId].schools[school] = {
+          school,
+          students: 0,
+          activeCount: 0,
+          internsInCampus: 0,
+          internsOutCampus: 0,
+          openForPlacements: 0,
+          placedCount: 0,
+          placements: 0,
+          placementReady: 0,
+          readinessPending: 0,
+          cycleNotAllocated: 0,
+          communicationReady: 0
+        };
+      }
+      campusSchoolsMap[campusId].schools[school].placements = p.count;
+    });
+
+    // Convert campusSchoolsMap to array with schools as list
+    const campusSchools = Object.values(campusSchoolsMap).map(c => ({
+      campusId: c.campusId,
+      campusName: c.campusName,
+      schools: Object.values(c.schools).sort((a, b) => b.students - a.students)
+    }));
+
     res.json({
       roles: rolesData,
+      campusBreakdown,
+      campusSchools,
       cycle: activeCycle ? {
         name: activeCycle.name,
         target: activeCycle.targetPlacements,
@@ -1961,8 +2469,21 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       } : null
     });
   } catch (error) {
-    console.error('Talent pipeline stats error:', error);
-    res.status(500).json({ message: 'Server error' });
+    try {
+      const logDir = __dirname + '/../logs';
+      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+      const out = `--- ${new Date().toISOString()} ---\n${error && error.stack ? error.stack : String(error)}\n\n`;
+      fs.appendFileSync(logDir + '/talent-pipeline-error.log', out);
+    } catch (e) {
+      console.error('Failed to write talent-pipeline error log:', e);
+    }
+    console.error('Talent pipeline stats error:', error && error.stack ? error.stack : error);
+    const payload = { message: 'Server error' };
+    if (process.env.NODE_ENV !== 'production') {
+      payload.error = error?.message || String(error);
+      payload.stack = error?.stack;
+    }
+    res.status(500).json(payload);
   }
 });
 

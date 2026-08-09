@@ -119,7 +119,7 @@ const POCDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const [statsResponse, pendingResponse, cyclesResponse, jobsResponse] = await Promise.all([
-        statsAPI.getCampusPocStats(selectedStatus),
+        statsAPI.getCampusPocStats(selectedStatus === 'all' ? undefined : selectedStatus),
         userAPI.getPendingSkills(),
         statsAPI.getCycleStats(),
         statsAPI.getEligibleJobs()
@@ -343,7 +343,7 @@ const POCDashboard = () => {
                 ))}
               </div>
             ) : (
-              <span className="font-bold text-gray-700">Loading...</span>
+              <span className="font-bold text-gray-700">None Selected</span>
             )}
             <button onClick={() => setShowCampusModal(true)} className="text-primary-600 hover:underline flex items-center gap-1 font-bold ml-1">
               <Settings className="w-3 h-3" /> Change

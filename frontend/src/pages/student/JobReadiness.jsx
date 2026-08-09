@@ -262,6 +262,39 @@ function JobReadiness() {
         <p className="text-gray-600 text-lg">Level up your skills and become job-ready!</p>
       </div>
 
+      {/* Encouraging message for students */}
+      <Card className="mb-8">
+        <div className="prose max-w-none p-6">
+          <h3>Hello Partners, this is your captain speaking! 🚀</h3>
+          <p>
+            As we move ahead in our journey towards the job market, we will start getting more opportunities, exposure, interviews, and interactions outside Navgurukul. This is the perfect time to show that <strong>you are truly ready for placement assessments and jobs</strong>.
+          </p>
+          <p>
+            The tasks listed here are not just a checklist. Each one is designed to help you become more confident and better prepared for interviews, communication rounds, technical discussions, and workplace expectations. The more sincerely you complete them, the stronger your profile becomes.
+          </p>
+
+          <h4>What you need to do</h4>
+          <ul>
+            <li>Complete the tasks assigned in this tracker.</li>
+            <li>Keep your profile updated regularly.</li>
+            <li>Revisit the tracker from time to time and check if any task is still pending.</li>
+            <li>After completing a task, <strong>reach out to your mentor and request approval</strong>.</li>
+            <li>Once your mentor approves it, the record will be updated here.</li>
+          </ul>
+
+          <p>
+            Think of this as your <strong>placement readiness showcase</strong>. A complete showcase tells everyone — including recruiters — that you are serious, prepared, and ready to take the next step in your career.
+          </p>
+
+          <p>
+            Please try to complete the pending tasks as soon as possible and keep this record updated throughout your placement journey.
+          </p>
+
+          <p><strong>All the best! 🌟</strong></p>
+          <p>If you need any help, feel free to connect with your mentor. We are here to support you in becoming placement-ready and moving confidently towards your first job.</p>
+        </div>
+      </Card>
+
       {error && <Alert type="error" className="mb-6">{error}</Alert>}
 
       {/* Gamified Progress Card */}
@@ -429,15 +462,21 @@ function JobReadiness() {
                         )}
 
                         {!isVerified && (
-                          <Button
-                            variant={criterion.selfReportedValue ? "secondary" : "primary"}
-                            size="md"
-                            onClick={() => handleStartEditing(criterion)}
-                            className="mt-2 font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2"
-                          >
-                            {criterion.selfReportedValue ? <BriefcaseIcon className="w-4 h-4" /> : <RocketLaunchIcon className="w-4 h-4" />}
-                            {criterion.selfReportedValue ? 'Edit Response' : 'Start This Task'}
-                          </Button>
+                          (() => {
+                            const hasResponse = !!(criterion.selfReportedValue || criterion.completed);
+                            const Icon = hasResponse ? SparklesIcon : RocketLaunchIcon;
+                            return (
+                              <Button
+                                variant={hasResponse ? "secondary" : "primary"}
+                                size="md"
+                                onClick={() => handleStartEditing(criterion)}
+                                className={`mt-2 font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 ${hasResponse ? 'bg-white text-gray-800' : ''}`}
+                              >
+                                <Icon className="w-4 h-4" />
+                                {hasResponse ? 'Revisit' : 'Start This Task'}
+                              </Button>
+                            );
+                          })()
                         )}
                       </div>
                     )}
@@ -628,12 +667,20 @@ function JobReadiness() {
       {/* Encouragement Footer */}
       {progress.percentage < 100 && (
         <Card className="mt-8 bg-gradient-to-r from-indigo-100 to-purple-100 border-indigo-200 text-center">
-          <p className="text-lg font-bold text-indigo-900 mb-2">
-            Keep going! You're {100 - progress.percentage}% away from being Job Ready!
-          </p>
-          <p className="text-sm text-indigo-700">
-            Every criterion you complete brings you closer to your dream career!
-          </p>
+          {(() => {
+            const pending = Math.max(0, (progress.total || 0) - (progress.submitted || 0));
+            const stepWord = pending === 1 ? 'step' : 'steps';
+            return (
+              <>
+                <p className="text-lg font-bold text-indigo-900 mb-2">
+                  You are {pending} {stepWord} away from being job ready
+                </p>
+                <p className="text-sm text-indigo-700">
+                  Every pending submission brings you closer to your dream career!
+                </p>
+              </>
+            );
+          })()}
         </Card>
       )}
     </div>

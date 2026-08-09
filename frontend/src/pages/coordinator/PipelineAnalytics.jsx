@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { statsAPI, settingsAPI, campusAPI, jobReadinessAPI } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { statsAPI, settingsAPI, campusAPI, jobReadinessAPI, userAPI } from '../../services/api';
+import { useSchools } from '../../context/SchoolsContext';
 import { Card, LoadingSpinner, Badge } from '../../components/common/UIComponents';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -9,16 +11,22 @@ import {
 import { 
   Target, Briefcase, Users, ArrowUpRight, Search, 
   Layers, Zap, Info, ChevronRight, MapPin, Flag,
-  CheckCircle, ExternalLink, ChevronDown, ChevronUp
+  CheckCircle, ExternalLink, ChevronDown, ChevronUp,
+  Trophy, AlertTriangle, Building2, Calendar, MessageSquare
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const PipelineAnalytics = () => {
+  const { user } = useAuth();
+  const basePath = user?.role === 'campus_poc' ? '/campus-poc' : user?.role === 'manager' ? '/manager' : '/coordinator';
   const [data, setData] = useState([]);
+  const [campusBreakdown, setCampusBreakdown] = useState([]);
   const [cycle, setCycle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [campuses, setCampuses] = useState([]);
   const [schools, setSchools] = useState([]);
+  const [campusSchools, setCampusSchools] = useState([]);
+  const [expandedCampuses, setExpandedCampuses] = useState({});
   const [filters, setFilters] = useState({
     campus: '',
     school: ''
@@ -62,22 +70,43 @@ const PipelineAnalytics = () => {
 
   const fetchInitialData = async () => {
     try {
-      const [campusRes, settingsRes] = await Promise.all([
+      const requests = [
         campusAPI.getCampuses(),
         settingsAPI.getSettings()
-      ]);
-      setCampuses(campusRes.data || []);
-      setSchools(settingsRes.data?.data?.schools || []);
+      ];
+      // For PoC, also fetch managed campuses to filter the dropdown
+      if (user?.role === 'campus_poc') {
+        requests.push(userAPI.getManagedCampuses());
+      }
+      const results = await Promise.all(requests);
+      const allCampuses = results[0].data || [];
+      // Prefer provider value if available
+      setSchools(results[1].data?.data?.schools || []);
+
+      if (user?.role === 'campus_poc' && results[2]) {
+        const managedIds = (results[2].data || []).map(c => c._id);
+        setCampuses(allCampuses.filter(c => managedIds.includes(c._id)));
+      } else {
+        setCampuses(allCampuses);
+      }
     } catch (err) {
       console.error('Error fetching initial data:', err);
     }
   };
+
+    const { schools: globalSchools } = useSchools();
+
+    useEffect(() => {
+      if (globalSchools && globalSchools.length > 0) setSchools(globalSchools);
+    }, [globalSchools]);
 
   const fetchPipelineData = async () => {
     try {
       setLoading(true);
       const res = await statsAPI.getTalentPipeline(filters);
       setData(res.data?.roles || []);
+      setCampusBreakdown(res.data?.campusBreakdown || []);
+      setCampusSchools(res.data?.campusSchools || []);
       setCycle(res.data?.cycle || null);
       if (res.data?.roles?.length > 0 && !selectedRole) {
         setSelectedRole(res.data.roles[0]);
@@ -225,6 +254,270 @@ const PipelineAnalytics = () => {
           </div>
         </Card>
       </div>
+
+      {/* Campus Talent Pipeline Table */}
+      {campusBreakdown.length > 0 && (
+        <Card className="overflow-hidden border-gray-100 shadow-sm bg-white">
+          <div className="px-6 py-4 border-b border-gray-50 bg-gradient-to-r from-indigo-50/50 to-violet-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-600 rounded-lg text-white shadow-md">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Campus Talent Pipeline</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Per-campus placement readiness breakdown</p>
+              </div>
+            </div>
+            {campusBreakdown.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl">
+                <Trophy className="w-4 h-4 text-amber-500" />
+                <span className="text-xs font-bold text-amber-700">
+                  Leading: {campusBreakdown[0].campusName}
+                </span>
+                <span className="text-[10px] font-bold text-amber-500 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                  {campusBreakdown[0].placementReadyPct}% Ready
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-white text-left">
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">#</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Campus</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Total</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Active</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Interns (In)</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Interns (Out)</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Open for Placements</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Placed This Cycle</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Placement Ready</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-500" />
+                      Readiness Pending
+                    </span>
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-gray-400" />
+                      Cycle Not Allocated
+                    </span>
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    <span className="flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3 text-blue-500" />
+                      Comm. Ready
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {campusBreakdown.map((row, idx) => (
+                  <React.Fragment key={row.campusId}>
+                    <tr
+                      onClick={() => {
+                        const key = String(row.campusId);
+                        setExpandedCampuses(prev => ({ ...prev, [key]: !prev[key] }));
+                        // debug help: uncomment if needed
+                        // console.log('toggle campus', key);
+                      }}
+                      className={`hover:bg-indigo-50/30 transition-colors cursor-pointer ${
+                        idx === 0 ? 'bg-amber-50/20' : ''
+                      }`}
+                    >
+                    <td className="px-6 py-4">
+                      {idx === 0 ? (
+                        <div className="w-7 h-7 bg-amber-100 rounded-lg flex items-center justify-center">
+                          <Trophy className="w-4 h-4 text-amber-600" />
+                        </div>
+                      ) : (
+                        <span className="text-sm font-bold text-gray-400">{idx + 1}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 font-bold text-xs">
+                          {row.campusName[0]}
+                        </div>
+                        <span className="font-bold text-gray-900">{row.campusName}</span>
+                        {idx === 0 && (
+                          <span className="text-[9px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Leading</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-bold text-gray-900">{row.totalStudents}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-bold text-gray-900">{row.activeCount}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-bold text-gray-900">{row.internsInCampus}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-bold text-gray-900">{row.internsOutCampus}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-bold text-gray-900">{row.openForPlacements}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-bold text-gray-900">{row.placedCount}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-indigo-700">{row.placementReadyPct}%</span>
+                        <span className="text-xs text-gray-500">({row.placementReady})</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className={`text-sm font-bold ${row.readinessPending > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{row.readinessPendingPct}%</span>
+                        <span className="text-xs text-gray-500">({row.readinessPending})</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className={`text-sm font-bold ${row.cycleNotAllocated > 0 ? 'text-gray-900' : 'text-gray-400'}`}>{row.cycleNotAllocatedPct}%</span>
+                        <span className="text-xs text-gray-500">({row.cycleNotAllocated})</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-blue-600">{row.communicationReadyPct}%</span>
+                        <span className="text-xs text-gray-500">({row.communicationReady})</span>
+                      </div>
+                    </td>
+                    </tr>
+                    {expandedCampuses[row.campusId] && (
+                      (campusSchools.find(c => c.campusId === row.campusId)?.schools || []).map(sch => {
+                        const pct = sch.students ? Math.round((sch.placementReady || 0) / sch.students * 100) : 0;
+                        const readinessPendingPct = sch.students ? Math.round((sch.readinessPending || 0) / sch.students * 100) : 0;
+                        const cycleNotAllocatedPct = sch.students ? Math.round((sch.cycleNotAllocated || 0) / sch.students * 100) : 0;
+                        const commReadyPct = sch.students ? Math.round((sch.communicationReady || 0) / sch.students * 100) : 0;
+                        return (
+                          <tr
+                            key={`${row.campusId}-sch-${sch.school}`}
+                            className={`bg-white hover:bg-gray-50 transition-colors cursor-pointer ${filters.school === sch.school ? 'bg-indigo-50/60' : ''}`}
+                            onClick={() => setFilters({ ...filters, school: sch.school })}
+                          >
+                            <td className="px-6 py-2" />
+                            <td className="px-6 py-2">
+                              <div className="pl-6 text-sm text-gray-800">↳ {sch.school}</div>
+                            </td>
+                            <td className="px-6 py-2">
+                              <span className="text-sm font-medium text-gray-700">{sch.students}</span>
+                            </td>
+                            <td className="px-6 py-2">
+                              <span className="text-sm font-medium text-gray-700">{sch.activeCount || 0}</span>
+                            </td>
+                            <td className="px-6 py-2">
+                              <span className="text-sm font-medium text-gray-700">{sch.internsInCampus || 0}</span>
+                            </td>
+                            <td className="px-6 py-2">
+                              <span className="text-sm font-medium text-gray-700">{sch.internsOutCampus || 0}</span>
+                            </td>
+                            <td className="px-6 py-2">
+                              <span className="text-sm font-medium text-gray-700">{sch.openForPlacements || 0}</span>
+                            </td>
+                            <td className="px-6 py-2">
+                              <span className="text-sm font-medium text-gray-700">{sch.placements || sch.placedCount || 0}</span>
+                            </td>
+                            <td className="px-6 py-2">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold text-indigo-700">{pct}%</span>
+                                <span className="text-xs text-gray-500">({sch.placementReady || 0})</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-2">
+                              <div className="flex flex-col">
+                                <span className={`text-sm font-bold ${sch.readinessPending > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{readinessPendingPct}%</span>
+                                <span className="text-xs text-gray-500">({sch.readinessPending || 0})</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-2">
+                              <div className="flex flex-col">
+                                <span className={`text-sm font-bold ${sch.cycleNotAllocated > 0 ? 'text-gray-900' : 'text-gray-400'}`}>{cycleNotAllocatedPct}%</span>
+                                <span className="text-xs text-gray-500">({sch.cycleNotAllocated || 0})</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-2">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold text-blue-600">{commReadyPct}%</span>
+                                <span className="text-xs text-gray-500">({sch.communicationReady || 0})</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                    </React.Fragment>
+                ))}
+              </tbody>
+              {/* Totals row */}
+              <tfoot>
+                <tr className="bg-gray-50/80 border-t-2 border-gray-200">
+                  <td className="px-6 py-3" />
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-600 uppercase tracking-widest">Totals</span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-900">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.totalStudents || r.students || r.totalActive || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-900">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.activeCount || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-900">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.internsInCampus || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-900">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.internsOutCampus || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-900">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.openForPlacements || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-900">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.placedCount || r.placements || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-indigo-700">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.placementReady || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-amber-700">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.readinessPending || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-700">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.cycleNotAllocated || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-blue-700">
+                      {campusBreakdown.reduce((s, r) => s + Number(r.communicationReady || 0), 0)}
+                    </span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main Chart */}
@@ -441,6 +734,8 @@ const PipelineAnalytics = () => {
                       <div>
                         <p className="font-bold text-gray-900 text-sm">{student.name}</p>
                         <p className="text-xs text-gray-500">{student.campus}</p>
+
+                    
                       </div>
                     </div>
                     <button className="p-2 text-gray-400 hover:text-indigo-600 transition-colors">
@@ -625,7 +920,7 @@ const PipelineAnalytics = () => {
                               </td>
                               <td className="py-4 text-right">
                                 <Link
-                                  to="/coordinator/job-readiness"
+                                  to={`${basePath}/job-readiness`}
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                                 >
                                   View <ExternalLink className="w-3 h-3" />

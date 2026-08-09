@@ -65,6 +65,43 @@ class GharApiService {
     }
 
     /**
+     * Generic fetch helper to call the same endpoints on alternative base URLs (e.g., dashnrd)
+     * Preserves Authorization header behavior using the configured token.
+     * @param {string} baseURL - Full base URL (e.g., https://dashnrd.navgurukul.org)
+     * @param {string} path - Path under /gharZoho/... to call
+     * @param {Object} options - Axios request options (params, timeout, etc.)
+     */
+    async fetchFrom(baseURL, path, options = {}) {
+        try {
+            const instance = axios.create({
+                baseURL,
+                timeout: options.timeout || 15000,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+
+            // attach token if present; allow override via options.token
+            const tokenSource = options.token || this.token;
+            if (tokenSource && typeof tokenSource === 'string') {
+                const jwtMarker = 'eyJhbGci';
+                let tokenToUse = tokenSource.trim();
+                if (tokenToUse.includes(jwtMarker)) {
+                    tokenToUse = jwtMarker + tokenToUse.split(jwtMarker).pop();
+                }
+                instance.defaults.headers['Authorization'] = tokenToUse.startsWith('Bearer ') ? tokenToUse : `Bearer ${tokenToUse}`;
+            }
+
+            const resp = await instance.get(path, { params: options.params || {} });
+            return resp;
+        } catch (error) {
+            console.error('[GharAPI] fetchFrom error:', { baseURL, path, message: error.message });
+            throw error;
+        }
+    }
+
+    /**
      * Fetch filtered students from Ghar Zoho using the filter endpoint
      * @param {Object} filters - Filter parameters (campus, school, status, etc.)
      * @param {boolean} _isDev - (Deprecated) Now forced to true to match Zoho API behavior

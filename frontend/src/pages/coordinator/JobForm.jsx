@@ -98,7 +98,8 @@ const JobForm = () => {
     jobType: "full_time",
     duration: "", // for internship
     salary: { min: "", max: "", currency: "INR" },
-    applicationDeadline: "",
+    applicationDeadlineDate: "",
+    applicationDeadlineTime: "",
     maxPositions: "",
     description: "",
     requirements: [""], // List of strings
@@ -499,8 +500,19 @@ const JobForm = () => {
           max: job.salary?.max ?? "",
           currency: job.salary?.currency || "INR",
         },
-        applicationDeadline: job.applicationDeadline
-          ? new Date(job.applicationDeadline).toISOString().split("T")[0]
+        applicationDeadlineDate: job.applicationDeadline
+          ? (() => {
+              const d = new Date(job.applicationDeadline);
+              const pad = (n) => n.toString().padStart(2, '0');
+              return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            })()
+          : "",
+        applicationDeadlineTime: job.applicationDeadline
+          ? (() => {
+              const d = new Date(job.applicationDeadline);
+              const pad = (n) => n.toString().padStart(2, '0');
+              return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            })()
           : "",
         eligibility: {
           ...job.eligibility,
@@ -551,7 +563,7 @@ const JobForm = () => {
       !formData.title ||
       !formData.company.name ||
       !formData.location ||
-      !formData.applicationDeadline
+      !formData.applicationDeadlineDate
     ) {
       toast.error("Please fill in all required fields");
       setSaving(false);
@@ -560,6 +572,12 @@ const JobForm = () => {
 
     try {
       const payload = { ...formData };
+      
+      if (formData.applicationDeadlineDate) {
+        const time = formData.applicationDeadlineTime || "23:59:59";
+        // Create local datetime string which JS Date parses as local time
+        payload.applicationDeadline = new Date(`${formData.applicationDeadlineDate}T${time}`).toISOString();
+      }
 
       // Convert monthly salary to annual before saving to database
       if (salaryPeriod === "monthly") {
@@ -1768,17 +1786,31 @@ const JobForm = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Application Deadline *
               </label>
-              <input
-                type="date"
-                value={formData.applicationDeadline}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    applicationDeadline: e.target.value,
-                  })
-                }
-                required
-              />
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  className="w-full"
+                  value={formData.applicationDeadlineDate}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      applicationDeadlineDate: e.target.value,
+                    })
+                  }
+                  required
+                />
+                <input
+                  type="time"
+                  className="w-full"
+                  value={formData.applicationDeadlineTime}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      applicationDeadlineTime: e.target.value,
+                    })
+                  }
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

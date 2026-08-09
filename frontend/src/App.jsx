@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { SchoolsProvider } from './context/SchoolsContext';
 
 const SlashRedirect = () => {
   const location = useLocation();
@@ -147,6 +148,7 @@ const PublicRoute = ({ children }) => {
 
 function App() {
   return (
+    <SchoolsProvider>
     <Routes>
       {/* Universal ScamRadar routes (accessible to all authenticated users) */}
       <Route path="/scam-reports/:id" element={
@@ -171,6 +173,7 @@ function App() {
       } />
 
       {/* Public Routes */}
+      <Route path="/" element={<Navigate to="/portfolios" replace />} />
       <Route path="/portfolios" element={<Portfolios />} />
       <Route path="/jobs/:id" element={<JobDetails />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
@@ -215,6 +218,7 @@ function App() {
         <Route path="council-posts" element={<POCCouncilPosts />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="jobs/:id" element={<JobDetails />} />
+        <Route path="pipeline" element={<PipelineAnalytics />} />
       </Route>
 
       {/* Coordinator Routes */}
@@ -276,6 +280,7 @@ function App() {
   <Route path="/*" element={<SlashRedirect />} />
 
     </Routes>
+    </SchoolsProvider>
   );
 }
 

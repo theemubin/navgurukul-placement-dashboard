@@ -468,4 +468,142 @@ router.get('/student-preview/:email', isAuthenticated, isManager, async (req, re
     }
 });
 
+/**
+ * @route   POST /api/ghar/daily-bulk-sync
+ * @desc    Trigger daily bulk sync from Ghar (runs once per day, caches for 24h)
+ * @access  Manager, Coordinator, Campus POC
+ */
+router.post('/daily-bulk-sync', isAuthenticated, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+    try {
+        const Settings = require('../models/Settings');
+        const User = require('../models/User');
+        
+        // Get current settings
+        let settings = await Settings.findOne();
+        if (!settings) {
+            settings = new Settings();
+        }
+        
+        // Check if sync was already done today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const lastSync = settings.lastGharSyncDate;
+        if (lastSync) {
+            const lastSyncDay = new Date(lastSync);
+            lastSyncDay.setHours(0, 0, 0, 0);
+            
+            if (lastSyncDay.getTime() === today.getTime()) {
+                return res.json({
+                    success: true,
+                    alreadySynced: true,
+                    message: 'Data already synced today',
+                    lastSyncDate: lastSync,
+                    nextSyncAvailable: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+                });
+            }
+        }
+        
+        // Get all students with emails
+        const students = await User.find({ 
+            role: 'student',
+            email: { $exists: true, $ne: null, $ne: '' }
+        }).select('email').lean();
+        
+        if (students.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No students found in database to sync'
+            });
+        }
+        
+        console.log(`[DailyBulkSync] Starting sync for ${students.length} students`);
+        
+        // Trigger background sync (fire and forget to avoid timeout)
+        const studentEmails = students.map(s => s.email);
+        
+        // For better UX, process in chunks
+        const CHUNK_SIZE = 50;
+        let processedCount = 0;
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (let i = 0; i < studentEmails.length; i += CHUNK_SIZE) {
+            const chunk = studentEmails.slice(i, i + CHUNK_SIZE);
+            const results = await gharApiService.batchSyncStudents(chunk);
+            
+            processedCount += results.length;
+            successCount += results.filter(r => r.success).length;
+            failCount += results.filter(r => !r.success).length;
+            
+            console.log(`[DailyBulkSync] Progress: ${processedCount}/${studentEmails.length} (${successCount} success, ${failCount} failed)`);
+        }
+        
+        // Update last sync date
+        settings.lastGharSyncDate = new Date();
+        await settings.save();
+        
+        console.log(`[DailyBulkSync] Completed. Total: ${processedCount}, Success: ${successCount}, Failed: ${failCount}`);
+        
+        res.json({
+            success: true,
+            message: 'Daily bulk sync completed',
+            summary: {
+                total: processedCount,
+                successful: successCount,
+                failed: failCount
+            },
+            syncDate: settings.lastGharSyncDate,
+            nextSyncAvailable: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+        });
+        
+    } catch (error) {
+        console.error('[DailyBulkSync] Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Daily bulk sync failed',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * @route   GET /api/ghar/sync-status
+ * @desc    Check when last bulk sync was performed
+ * @access  Manager, Coordinator, Campus POC
+ */
+router.get('/sync-status', isAuthenticated, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+    try {
+        const Settings = require('../models/Settings');
+        const settings = await Settings.findOne();
+        
+        const lastSync = settings?.lastGharSyncDate;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        let syncedToday = false;
+        if (lastSync) {
+            const lastSyncDay = new Date(lastSync);
+            lastSyncDay.setHours(0, 0, 0, 0);
+            syncedToday = lastSyncDay.getTime() === today.getTime();
+        }
+        
+        res.json({
+            success: true,
+            lastSyncDate: lastSync,
+            syncedToday,
+            nextSyncAvailable: syncedToday 
+                ? new Date(today.getTime() + 24 * 60 * 60 * 1000)
+                : new Date()
+        });
+    } catch (error) {
+        console.error('[SyncStatus] Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to check sync status',
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;

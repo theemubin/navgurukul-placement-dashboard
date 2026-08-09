@@ -76,6 +76,27 @@ const settingsSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  // Raw schools data fetched from Ghar (campus -> [schools])
+  gharSchools: {
+    type: Map,
+    of: [String],
+    default: new Map()
+  },
+  // Merged schools list (Ghar-first + local overrides)
+  mergedSchools: {
+    type: [String],
+    default: []
+  },
+  // Timestamp when schools were last synced from Ghar
+  lastSchoolsSync: {
+    type: Date,
+    default: null
+  },
+  // Timestamp when student data was last bulk synced from Ghar
+  lastGharSyncDate: {
+    type: Date,
+    default: null
+  },
   // Job pipeline stages (customizable workflow)
   jobPipelineStages: {
     type: [pipelineStageSchema],
@@ -404,6 +425,17 @@ settingsSchema.statics.getSettings = async function () {
       schoolsChanged = true;
     }
 
+    // Ensure gharSchools and mergedSchools exist
+    if (!settings.gharSchools || typeof settings.gharSchools.has !== 'function') {
+      settings.gharSchools = new Map();
+      schoolsChanged = true;
+    }
+
+    if (!settings.mergedSchools || !Array.isArray(settings.mergedSchools)) {
+      settings.mergedSchools = [];
+      schoolsChanged = true;
+    }
+
     // Ensure masterCompanies is initialized
     if (!settings.masterCompanies) {
       settings.masterCompanies = new Map();
@@ -444,13 +476,14 @@ settingsSchema.statics.updateSettings = async function (updates, userId) {
       settings.schoolModules = updates.schoolModules;
     }
   }
-  if (updates.rolePreferences) settings.rolePreferences = updates.rolePreferences;
+  // MERGED: rolePreferences updates now sync to roleCategories (master list)
+  if (updates.rolePreferences) settings.roleCategories = updates.rolePreferences;
+  if (updates.roleCategories) settings.roleCategories = updates.roleCategories;
   if (updates.technicalSkills) settings.technicalSkills = updates.technicalSkills;
   if (updates.degreeOptions) settings.degreeOptions = updates.degreeOptions;
   if (updates.softSkills) settings.softSkills = updates.softSkills;
   if (updates.inactiveSchools) settings.inactiveSchools = updates.inactiveSchools;
   if (updates.jobPipelineStages) settings.jobPipelineStages = updates.jobPipelineStages;
-  if (updates.roleCategories) settings.roleCategories = updates.roleCategories;
   if (updates.discordConfig) settings.discordConfig = updates.discordConfig;
   if (updates.higherEducationOptions) {
     if (!(updates.higherEducationOptions instanceof Map)) {

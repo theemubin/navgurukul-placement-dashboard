@@ -14,6 +14,9 @@ import {
 import { DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 import HistoricalCycleCharts from '../../components/common/HistoricalCycleCharts';
+import CampusPlacementTrends from '../../components/common/CampusPlacementTrends';
+import LongTermStudentsTrend from '../../components/common/LongTermStudentsTrend';
+import GharSyncStatus from '../../components/common/GharSyncStatus';
 import CommunicationDashboard from '../../components/manager/CommunicationDashboard';
 
 const Dashboard = () => {
@@ -300,6 +303,9 @@ const Dashboard = () => {
         />
       </div>
 
+      {/* Ghar Sync Status */}
+      <GharSyncStatus />
+
       {/* Performance Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
@@ -342,6 +348,10 @@ const Dashboard = () => {
       </div>
 
       <HistoricalCycleCharts campusId={selectedCampus} />
+
+      <CampusPlacementTrends />
+
+      <LongTermStudentsTrend />
 
       {/* Detailed Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

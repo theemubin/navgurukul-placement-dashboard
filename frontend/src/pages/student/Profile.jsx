@@ -67,12 +67,14 @@ const defaultSettings = {
   ],
   businessModules: ['CRM', 'Digital Marketing', 'Data Analytics', 'Advanced Google Sheets'],
   secondChanceModules: ['Master Chef', 'Fashion Designing'],
+  // MERGED: availableRoles is now populated from roleCategories API response
   availableRoles: [
     'Frontend Developer', 'Backend Developer', 'Full Stack Developer',
     'Low Code-No Code Developer', 'Data Analysis', 'Social Media Associate',
     'Business Developer', 'CRM', 'Digital Marketing', 'General Marketing',
     'Intern - Full Stack', 'Intern - FE', 'Intern - BE'
   ],
+  roleCategories: [], // Will be populated from API
   technicalSkillOptions: [
     'Programming Foundations', 'Problem Solving & Flowcharts', 'Web Fundamentals',
     'JavaScript Fundamentals', 'Advanced JavaScript', 'DOM & Browser APIs',

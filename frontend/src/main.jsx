@@ -10,7 +10,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AuthProvider>
-        <App />
+        <React.Suspense fallback={null}>
+          <App />
+        </React.Suspense>
         <Toaster
           position="bottom-right"
           toastOptions={{

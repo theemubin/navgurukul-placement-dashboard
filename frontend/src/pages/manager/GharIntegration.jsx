@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { gharAPI, campusAPI } from '../../services/api';
+import { gharAPI, campusAPI, settingsAPI } from '../../services/api';
+import { useSchools } from '../../context/SchoolsContext';
 import toast from 'react-hot-toast';
 
 const GharIntegration = () => {
     const { user } = useAuth();
+    const { refresh: refreshSchools } = useSchools();
     const [connectionStatus, setConnectionStatus] = useState(null);
     const [loading, setLoading] = useState(false);
     const [syncType, setSyncType] = useState('single'); // 'single' or 'batch'
@@ -147,6 +149,62 @@ const GharIntegration = () => {
                 <div className="space-y-8 animate-fadeIn">
                     {/* Sync Type Selector */}
                     <div className="flex gap-2 p-1 bg-gray-100 rounded-xl w-fit">
+                                    <div className="flex items-center mr-4">
+                                        <button
+                                            onClick={async () => {
+                                                if (!confirm('Sync schools from Ghar? This will refresh the platform school list.')) return;
+                                                try {
+                                                    setLoading(true);
+                                                    await settingsAPI.syncSchools();
+                                                    // trigger refresh in SchoolsContext if available
+                                                    try { refreshSchools && refreshSchools(); } catch (e) { /* ignore */ }
+                                                    toast.success('Schools synced from Ghar');
+                                                } catch (err) {
+                                                    console.error('Failed to sync schools:', err);
+                                                    toast.error(err.response?.data?.message || 'Failed to sync schools');
+                                                } finally {
+                                                    setLoading(false);
+                                                }
+                                            }}
+                                            className="px-3 py-2 bg-white text-sm rounded-lg border border-gray-200 hover:shadow-sm"
+                                        >
+                                            Sync Schools
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center">
+                                        <button
+                                            onClick={async () => {
+                                                if (!confirm('Sync all students and schools from Ghar? This may take several minutes.')) return;
+                                                setLoading(true);
+                                                setSyncResult(null);
+                                                try {
+                                                    // First sync schools mapping
+                                                    await settingsAPI.syncSchools();
+                                                    try { refreshSchools && refreshSchools(); } catch (e) { }
+
+                                                    // Then import all students (server will handle batching)
+                                                    const resp = await gharAPI.importAll({ isDev: true });
+                                                    setSyncResult(resp.data);
+                                                    if (resp.data && resp.data.success) {
+                                                        toast.success('Import started/completed: ' + (resp.data.message || 'See summary below'));
+                                                    } else {
+                                                        toast('Import response received');
+                                                    }
+                                                } catch (err) {
+                                                    console.error('Sync all students failed:', err);
+                                                    toast.error(err.response?.data?.message || 'Failed to sync all students');
+                                                    setSyncResult({ success: false, message: err.response?.data?.message || String(err) });
+                                                } finally {
+                                                    setLoading(false);
+                                                }
+                                            }}
+                                            className="px-3 py-2 bg-white text-sm rounded-lg border border-gray-200 hover:shadow-sm ml-2"
+                                        >
+                                            Sync All Students
+                                        </button>
+                                    </div>
+                        { /* Tabs */ }
+                        { /* Sync type tabs */ }
                         {[
                             { id: 'single', label: 'Single Student' },
                             { id: 'batch', label: 'Batch Sync' },

@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Settings = require('../models/Settings');
+const gharApiService = require('../services/gharApiService');
+const { JobReadinessConfig, DEFAULT_CRITERIA } = require('../models/JobReadiness');
 const Notification = require('../models/Notification');
 const { auth, authorize } = require('../middleware/auth');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
@@ -118,10 +120,29 @@ router.get('/', auth, async (req, res) => {
     const settings = await Settings.getSettings();
 
     // Convert Map to plain object for JSON response
+    const inactive = Array.isArray(settings.inactiveSchools) ? settings.inactiveSchools : [];
+
+    // Filter merged schools and gharSchools to exclude admin-deactivated schools
+    const rawMerged = (settings.mergedSchools && settings.mergedSchools.length > 0)
+      ? settings.mergedSchools
+      : Object.keys(Object.fromEntries(settings.schoolModules || new Map()));
+
+    const visibleMerged = rawMerged.filter(s => !inactive.includes(s));
+
+    const rawGharSchools = Object.fromEntries(settings.gharSchools || new Map());
+    const visibleGharSchools = Object.fromEntries(
+      Object.entries(rawGharSchools).map(([campus, names]) => [campus, (Array.isArray(names) ? names.filter(n => !inactive.includes(n)) : [])])
+    );
+
     const response = {
       schoolModules: Object.fromEntries(settings.schoolModules || new Map()),
-      schools: Object.keys(Object.fromEntries(settings.schoolModules || new Map())),
-      rolePreferences: settings.rolePreferences || [],
+      // Prefer merged schools list (Ghar-first) when available
+      schools: visibleMerged,
+      gharSchools: visibleGharSchools,
+      lastSchoolsSync: settings.lastSchoolsSync || null,
+      // MERGED: rolePreferences now aliases to roleCategories for backward compatibility
+      rolePreferences: settings.roleCategories || [],
+      availableRoles: settings.roleCategories || [],
       technicalSkills: settings.technicalSkills || [],
       degreeOptions: settings.degreeOptions || [],
       softSkills: settings.softSkills || [],
@@ -145,6 +166,91 @@ router.get('/', auth, async (req, res) => {
   } catch (error) {
     console.error('Get settings error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Sync schools from Ghar and persist merged list into Settings
+router.post('/sync-schools', auth, authorize('manager', 'coordinator'), async (req, res) => {
+  try {
+    const settings = await Settings.getSettings();
+
+    // Fetch campuses from the canonical Ghar API only
+    const campusResp = await gharApiService.client.get('/gharZoho/campuses', { params: { isDev: true } });
+    const campuses = campusResp.data && Array.isArray(campusResp.data.data) ? campusResp.data.data : [];
+
+    const gharMap = new Map();
+    const allGharSchoolNames = new Set();
+
+    // Normalize school names coming from Ghar to remove trailing numeric suffixes like "25-28"
+    const normalizeSchoolName = (raw) => {
+      if (!raw || typeof raw !== 'string') return raw;
+      let s = raw.trim();
+      // collapse multiple spaces
+      s = s.replace(/\s+/g, ' ');
+      // remove trailing numeric ranges or single numbers e.g. " 25-28" or " - 25"
+      s = s.replace(/\s*[-–—:]?\s*\d+(\s*-\s*\d+)?\s*$/u, '').trim();
+      // remove trailing separators left behind
+      s = s.replace(/[\-–—:\s]+$/u, '').trim();
+      return s;
+    };
+
+    // For each campus fetch its schools
+    for (const c of campuses) {
+      const campusName = c.Campus_Name || c.Campuses?.Campus_Name || c.Campuses?.zc_display_value || c.Campus_Name;
+      if (!campusName) continue;
+      try {
+        const resp = await gharApiService.client.get('/gharZoho/basedOn/campus/schools', { params: { isDev: true, campus: campusName } });
+        const data = resp.data && resp.data.data ? resp.data.data : [];
+        // Extract school names from response objects
+        const names = data.map(item => {
+          // Support nested structure
+          if (item.Schools && item.Schools.School_Name) return item.Schools.School_Name;
+          if (item.School_Name) return item.School_Name;
+          // fallback to string values
+          return Object.values(item).find(v => typeof v === 'string' && v.trim().length > 0) || null;
+        }).filter(Boolean).map(normalizeSchoolName).filter(Boolean);
+
+        // Deduplicate while preserving order
+        const uniqNames = Array.from(new Set(names));
+
+        gharMap.set(campusName, uniqNames);
+        uniqNames.forEach(n => allGharSchoolNames.add(n));
+      } catch (err) {
+        console.warn(`Failed to fetch schools for campus ${campusName}:`, err.message);
+      }
+    }
+
+    // Merge with local schoolModules keys
+    const localSchools = Object.keys(Object.fromEntries(settings.schoolModules || new Map()));
+    localSchools.forEach(s => allGharSchoolNames.add(s));
+
+    settings.gharSchools = gharMap;
+    settings.mergedSchools = Array.from(allGharSchoolNames).sort((a, b) => a.localeCompare(b));
+    settings.lastSchoolsSync = new Date();
+    settings.lastUpdatedBy = req.userId;
+    await settings.save();
+
+    // Return filtered lists to the client (exclude inactive schools)
+    const inactiveAfter = Array.isArray(settings.inactiveSchools) ? settings.inactiveSchools : [];
+    const visibleAfter = (settings.mergedSchools || []).filter(s => !inactiveAfter.includes(s));
+    const visibleGharAfter = Object.fromEntries(
+      Object.entries(Object.fromEntries(settings.gharSchools || new Map())).map(([campus, names]) => [campus, (Array.isArray(names) ? names.filter(n => !inactiveAfter.includes(n)) : [])])
+    );
+
+    res.json({ success: true, message: 'Schools synced from Ghar', data: { mergedSchools: visibleAfter, gharSchools: visibleGharAfter, lastSchoolsSync: settings.lastSchoolsSync } });
+  } catch (error) {
+    // Detailed logging for debugging: include stack and any response payload
+    try {
+      console.error('Sync schools error:', {
+        message: error && error.message,
+        stack: error && error.stack,
+        responseData: error && error.response && error.response.data
+      });
+    } catch (logErr) {
+      console.error('Sync schools error (failed to serialize):', error);
+    }
+
+    res.status(500).json({ success: false, message: 'Failed to sync schools from Ghar', error: error?.message, details: (error && error.response && error.response.data) || null });
   }
 });
 
@@ -229,7 +335,8 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
     try {
       const snapshot = {
         schoolModules: settings.schoolModules ? Object.fromEntries(Object.entries(Object.fromEntries(settings.schoolModules)).map(([k, v]) => [k, `array(len=${(v || []).length})`])) : {},
-        rolePreferencesLen: settings.rolePreferences ? settings.rolePreferences.length : 0,
+        // MERGED: Log roleCategories length (master list)
+        roleCategoriesLen: settings.roleCategories ? settings.roleCategories.length : 0,
         technicalSkillsLen: settings.technicalSkills ? settings.technicalSkills.length : 0,
         degreeOptionsLen: settings.degreeOptions ? settings.degreeOptions.length : 0,
         softSkillsLen: settings.softSkills ? settings.softSkills.length : 0,
@@ -244,7 +351,9 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
     // Convert Map to plain object for JSON response
     const response = {
       schoolModules: Object.fromEntries(settings.schoolModules || new Map()),
-      rolePreferences: settings.rolePreferences || [],
+      // MERGED: rolePreferences now aliases to roleCategories
+      rolePreferences: settings.roleCategories || [],
+      availableRoles: settings.roleCategories || [],
       technicalSkills: settings.technicalSkills || [],
       degreeOptions: settings.degreeOptions || [],
       softSkills: settings.softSkills || [],
@@ -457,18 +566,23 @@ router.post('/roles', auth, authorize('manager', 'coordinator'), async (req, res
 
     const settings = await Settings.getSettings();
 
-    if (settings.rolePreferences.includes(role)) {
+    // MERGED: Use roleCategories (master list)
+    if (settings.roleCategories.includes(role)) {
       return res.status(400).json({ success: false, message: 'Role already exists' });
     }
 
-    settings.rolePreferences.push(role);
+    settings.roleCategories.push(role);
     settings.lastUpdatedBy = req.userId;
     await settings.save();
 
     res.json({
       success: true,
       message: 'Role added successfully',
-      data: { rolePreferences: settings.rolePreferences }
+      // Return as both for backward compatibility
+      data: { 
+        roleCategories: settings.roleCategories,
+        rolePreferences: settings.roleCategories 
+      }
     });
   } catch (error) {
     console.error('Add role error:', error);
@@ -500,20 +614,25 @@ router.delete('/roles/:role', auth, authorize('manager', 'coordinator'), async (
     const { role } = req.params;
 
     const settings = await Settings.getSettings();
-    const index = settings.rolePreferences.indexOf(decodeURIComponent(role));
+    // MERGED: Use roleCategories (master list)
+    const index = settings.roleCategories.indexOf(decodeURIComponent(role));
 
     if (index === -1) {
       return res.status(404).json({ success: false, message: 'Role not found' });
     }
 
-    settings.rolePreferences.splice(index, 1);
+    settings.roleCategories.splice(index, 1);
     settings.lastUpdatedBy = req.userId;
     await settings.save();
 
     res.json({
       success: true,
       message: 'Role removed successfully',
-      data: { rolePreferences: settings.rolePreferences }
+      // Return as both for backward compatibility
+      data: { 
+        roleCategories: settings.roleCategories,
+        rolePreferences: settings.roleCategories 
+      }
     });
   } catch (error) {
     console.error('Remove role error:', error);
@@ -652,6 +771,36 @@ router.post('/schools', auth, authorize('manager', 'coordinator', 'campus_poc'),
     settings.schoolModules = current;
     settings.lastUpdatedBy = req.userId;
     await settings.save();
+
+    // Ensure a global 'Common' JobReadinessConfig exists so new schools inherit common criteria by default.
+    try {
+      const existingCommon = await JobReadinessConfig.findOne({ school: 'Common', campus: null });
+      if (!existingCommon) {
+        // Transform DEFAULT_CRITERIA into config.criteria format
+        const criteria = DEFAULT_CRITERIA.map((c) => ({
+          criteriaId: (c.id || c.name).toLowerCase().replace(/\s+/g, '_') + '_' + Date.now() + Math.floor(Math.random() * 1000),
+          name: c.name || c.id,
+          description: c.description || '',
+          type: c.type || 'answer',
+          category: c.category || 'other',
+          isActive: true,
+          isMandatory: true,
+          weight: 1,
+          targetSchools: []
+        }));
+
+        const commonConfig = new JobReadinessConfig({
+          school: 'Common',
+          campus: null,
+          criteria,
+          createdBy: req.userId
+        });
+        await commonConfig.save();
+        console.log('Created default Common JobReadinessConfig for new school additions');
+      }
+    } catch (err) {
+      console.error('Failed to ensure Common JobReadinessConfig exists:', err && err.message);
+    }
     res.json({ success: true, message: 'School added successfully', data: { schools: Array.from(current.keys()) } });
   } catch (error) {
     console.error('Add school error:', error);
