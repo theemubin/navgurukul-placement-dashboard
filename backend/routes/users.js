@@ -632,7 +632,8 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
         });
 
         if (hasChanges) {
-          user.studentProfile.lastApprovedSnapshot = { ...user.studentProfile.toObject() };
+          // Do not overwrite lastApprovedSnapshot here. 
+          // We want to preserve the snapshot of the last time it was actually approved for diffing.
           user.studentProfile.profileStatus = 'draft';
         }
       }

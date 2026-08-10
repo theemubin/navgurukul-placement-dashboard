@@ -123,20 +123,21 @@ function calculateSkillMatch(student, job) {
 
   // Also check legacy skills (approved ones) - populate the maps
   const approvedSkills = (student.studentProfile?.skills || [])
-    .filter(s => s.status === 'approved')
-    .map(s => s.skill);
+    .filter(s => s.status === 'approved');
 
-  approvedSkills.forEach(skill => {
+  approvedSkills.forEach(s => {
+    const skill = s.skill;
     if (skill) {
       const skillId = skill._id?.toString() || skill.toString();
       const skillName = skill.name?.toLowerCase() || '';
+      const rating = s.selfRating || 1; // Default to 1 if no rating, otherwise use selfRating
 
-      // Only set to 1 if not already in map (self-rated skills take precedence)
-      if (skillId && !studentSkillById.has(skillId)) {
-        studentSkillById.set(skillId, 1); // Has the skill, assume beginner
+      // Set if not already in map or if this rating is higher than existing
+      if (skillId && (!studentSkillById.has(skillId) || studentSkillById.get(skillId) < rating)) {
+        studentSkillById.set(skillId, rating);
       }
-      if (skillName && !studentSkillByName.has(skillName)) {
-        studentSkillByName.set(skillName, 1);
+      if (skillName && (!studentSkillByName.has(skillName) || studentSkillByName.get(skillName) < rating)) {
+        studentSkillByName.set(skillName, rating);
       }
     }
   });

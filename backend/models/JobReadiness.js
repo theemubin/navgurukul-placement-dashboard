@@ -175,8 +175,8 @@ const studentJobReadinessSchema = new mongoose.Schema({
       enum: ['not_started', 'in_progress', 'completed', 'verified'],
       default: 'not_started'
     },
-    // Student's self-reported value (for numeric criteria)
-    selfReportedValue: Number,
+    // Student's self-reported value (can be numeric, string, or boolean)
+    selfReportedValue: mongoose.Schema.Types.Mixed,
     // Proof/evidence link if required
     proofUrl: String,
     // Student free-text notes / reflection for this criterion

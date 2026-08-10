@@ -256,6 +256,21 @@ const ProfileApprovals = () => {
     return fields.some(field => hasChanged(currentObj[field], snapshotObj[field]));
   };
 
+  const getChangedSections = (student) => {
+    if (!student) return [];
+    const profileData = getProfileData(student);
+    const changedSections = [];
+    if (JSON.stringify(profileData.technicalSkills.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify((profileData.lastApprovedSnapshot?.technicalSkills || []).map(s => ({ n: s.skillName, r: s.selfRating })))) changedSections.push('Technical Skills');
+    if (JSON.stringify(profileData.softSkillsArray.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify((profileData.lastApprovedSnapshot?.softSkills || profileData.lastApprovedSnapshot?.softSkillsArray || []).map(s => ({ n: s.skillName, r: s.selfRating })))) changedSections.push('Soft Skills');
+    if (hasChanged(profileData.englishProficiency.speaking, profileData.lastApprovedSnapshot?.englishProficiency?.speaking) || hasChanged(profileData.englishProficiency.writing, profileData.lastApprovedSnapshot?.englishProficiency?.writing)) changedSections.push('English');
+    if (JSON.stringify(profileData.higherEducation) !== JSON.stringify(profileData.lastApprovedSnapshot?.higherEducation || [])) changedSections.push('Higher Education');
+    if (JSON.stringify(profileData.languages) !== JSON.stringify(profileData.snapshotLanguages || [])) changedSections.push('Languages');
+    if (JSON.stringify(profileData.courses) !== JSON.stringify(profileData.lastApprovedSnapshot?.courses || [])) changedSections.push('Courses');
+    if (JSON.stringify(profileData.councilService) !== JSON.stringify(profileData.lastApprovedSnapshot?.councilService || [])) changedSections.push('Council Service');
+    if (JSON.stringify(profileData.openForRoles) !== JSON.stringify(profileData.lastApprovedSnapshot?.openForRoles || [])) changedSections.push('Open For Roles');
+    return changedSections;
+  };
+
   // Render a field with optional highlight
   const RenderField = ({ label, value, snapshotValue, className = '' }) => {
     const changed = hasChanged(value, snapshotValue);
@@ -390,18 +405,31 @@ const ProfileApprovals = () => {
                       <p className="text-sm text-gray-500">{student.email}</p>
                     </div>
                   </div>
-                  <Badge variant="warning">Pending</Badge>
+                  {(() => {
+                    const status = student.studentProfile?.profileStatus || 'pending_approval';
+                    const badgeProps = {
+                      'pending_approval': { variant: 'warning', text: 'Pending Approval' },
+                      'approved': { variant: 'success', text: 'Approved' },
+                      'needs_revision': { variant: 'danger', text: 'Needs Revision' },
+                      'draft': { variant: 'secondary', text: 'Draft' }
+                    }[status] || { variant: 'default', text: status.replace('_', ' ') };
+                    return (
+                      <Badge variant={badgeProps.variant} className="capitalize shadow-sm">
+                        {badgeProps.text}
+                      </Badge>
+                    );
+                  })()}
                 </div>
 
                 {/* Profile Completion Bar */}
                 <div className="mt-3">
                   <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-gray-500">Profile Completion</span>
-                    <span className={`font-semibold ${completion >= 80 ? 'text-green-600' : completion >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{completion}%</span>
+                    <span className="text-gray-500 font-medium">Profile Completion</span>
+                    <span className={`font-bold ${completion >= 80 ? 'text-green-600' : completion >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{completion}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div className="w-full bg-gray-100 rounded-full h-2 shadow-inner">
                     <div
-                      className={`h-1.5 rounded-full ${completion >= 80 ? 'bg-green-500' : completion >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                      className={`h-2 rounded-full transition-all duration-500 ${completion >= 80 ? 'bg-green-500' : completion >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
                       style={{ width: `${completion}%` }}
                     />
                   </div>
@@ -434,6 +462,18 @@ const ProfileApprovals = () => {
                   </div>
                 </div>
 
+                {(() => {
+                  const changes = getChangedSections(student);
+                  if (changes.length === 0) return null;
+                  return (
+                    <div className="mt-3 p-2 bg-yellow-50 rounded border border-yellow-200">
+                      <p className="text-xs font-semibold text-yellow-800">
+                        Changed: {changes.join(', ')}
+                      </p>
+                    </div>
+                  );
+                })()}
+
                 <div className="mt-4 flex gap-2">
                   <Button
                     variant="primary"
@@ -455,16 +495,7 @@ const ProfileApprovals = () => {
         const profileData = getProfileData(selectedStudent);
         const completionPercent = calculateCompletion(selectedStudent);
 
-        // Calculate changed sections for a short summary
-        const changedSections = [];
-        if (JSON.stringify(profileData.technicalSkills.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify((profileData.lastApprovedSnapshot?.technicalSkills || []).map(s => ({ n: s.skillName, r: s.selfRating })))) changedSections.push('Technical Skills');
-        if (JSON.stringify(profileData.softSkillsArray.map(s => ({ n: s.skillName, r: s.selfRating }))) !== JSON.stringify((profileData.lastApprovedSnapshot?.softSkills || profileData.lastApprovedSnapshot?.softSkillsArray || []).map(s => ({ n: s.skillName, r: s.selfRating })))) changedSections.push('Soft Skills');
-        if (hasChanged(profileData.englishProficiency.speaking, profileData.lastApprovedSnapshot?.englishProficiency?.speaking) || hasChanged(profileData.englishProficiency.writing, profileData.lastApprovedSnapshot?.englishProficiency?.writing)) changedSections.push('English');
-        if (JSON.stringify(profileData.higherEducation) !== JSON.stringify(profileData.lastApprovedSnapshot?.higherEducation || [])) changedSections.push('Higher Education');
-        if (JSON.stringify(profileData.languages) !== JSON.stringify(profileData.snapshotLanguages || [])) changedSections.push('Languages');
-        if (JSON.stringify(profileData.courses) !== JSON.stringify(profileData.lastApprovedSnapshot?.courses || [])) changedSections.push('Courses');
-        if (JSON.stringify(profileData.councilService) !== JSON.stringify(profileData.lastApprovedSnapshot?.councilService || [])) changedSections.push('Council Service');
-        if (JSON.stringify(profileData.openForRoles) !== JSON.stringify(profileData.lastApprovedSnapshot?.openForRoles || [])) changedSections.push('Open For Roles');
+        const changedSections = getChangedSections(selectedStudent);
 
         return (
           <Modal
@@ -992,8 +1023,16 @@ const ProfileApprovals = () => {
                 variant="primary"
                 onClick={() => handleApprove(selectedStudent._id)}
                 disabled={actionLoading}
+                className="flex items-center justify-center gap-2 min-w-[140px]"
               >
-                {actionLoading ? 'Processing...' : 'Approve Profile'}
+                {actionLoading ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  'Approve Profile'
+                )}
               </Button>
             </div>
           </Modal>
@@ -1036,8 +1075,16 @@ const ProfileApprovals = () => {
                 variant="danger"
                 onClick={handleReject}
                 disabled={actionLoading || !rejectComments.trim()}
+                className="flex items-center justify-center gap-2 min-w-[150px]"
               >
-                {actionLoading ? 'Submitting...' : 'Submit Feedback'}
+                {actionLoading ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  'Submit Feedback'
+                )}
               </Button>
             </div>
           </div>

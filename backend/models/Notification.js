@@ -37,6 +37,8 @@ const notificationSchema = new mongoose.Schema({
       'interest_request',
       'interest_approved',
       'interest_rejected',
+      'criterion_verified',
+      'criterion_rejected',
       'general'
     ],
     required: true
@@ -53,7 +55,7 @@ const notificationSchema = new mongoose.Schema({
   relatedEntity: {
     type: {
       type: String,
-      enum: ['job', 'application', 'user', 'skill', 'self_application', 'interest_request']
+      enum: ['job', 'application', 'user', 'skill', 'self_application', 'interest_request', 'job_readiness']
     },
     id: mongoose.Schema.Types.ObjectId
   },

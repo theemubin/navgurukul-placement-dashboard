@@ -863,12 +863,12 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), upload.single
     const raw = req.body || {};
     const completed = raw.completed === 'true' || raw.completed === true;
     const status = raw.status;
-    let selfReportedValue;
-    if (raw.selfReportedValue !== undefined) {
-      const parsed = Number(raw.selfReportedValue);
-      selfReportedValue = !isNaN(parsed) ? parsed : undefined;
-    } else {
-      selfReportedValue = undefined;
+    let selfReportedValue = raw.selfReportedValue;
+    if (selfReportedValue !== undefined && selfReportedValue !== null && selfReportedValue !== '') {
+      const parsed = Number(selfReportedValue);
+      if (!isNaN(parsed) && String(parsed) === String(selfReportedValue).trim()) {
+        selfReportedValue = parsed;
+      }
     }
     const notes = raw.notes;
 
@@ -1068,7 +1068,7 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
       return res.status(404).json({ message: 'Criterion not found' });
     }
 
-    readiness.criteriaStatus[criterionIndex].status = verified ? 'verified' : 'completed';
+    readiness.criteriaStatus[criterionIndex].status = verified ? 'verified' : 'not_started';
     readiness.criteriaStatus[criterionIndex].verifiedBy = req.userId;
     readiness.criteriaStatus[criterionIndex].verifiedAt = new Date();
     readiness.criteriaStatus[criterionIndex].verificationNotes = verificationNotes;
@@ -1081,7 +1081,7 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
     const student = await User.findById(studentId);
     const notification = new Notification({
       recipient: studentId,
-      type: 'criterion_verified',
+      type: verified ? 'criterion_verified' : 'criterion_rejected',
       title: verified ? 'Readiness Criterion Verified!' : 'Readiness Update',
       message: verified
         ? `Your "${criteriaId}" criterion has been verified.`

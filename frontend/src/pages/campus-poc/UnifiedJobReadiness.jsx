@@ -369,19 +369,22 @@ const ReadinessReviewSection = () => {
                                                                     </p>
                                                                 )}
                                                             </div>
-                                                            {crit.status !== 'verified' && (
+                                                            {crit.status === 'completed' ? (
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         setReviewModal({ open: true, student: record, criterion: crit });
                                                                     }}
-                                                                    className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition shadow-sm ${crit.status === 'completed'
-                                                                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                                                            : 'bg-white border border-gray-200 text-gray-600 hover:text-indigo-600 hover:border-indigo-200'
-                                                                        }`}
+                                                                    className="px-3 py-1.5 text-[10px] font-bold rounded-lg transition shadow-sm bg-indigo-600 text-white hover:bg-indigo-700"
                                                                 >
-                                                                    {crit.status === 'completed' ? 'Review' : 'Verify'}
+                                                                    Review
                                                                 </button>
+                                                            ) : crit.status === 'verified' ? (
+                                                                null
+                                                            ) : (
+                                                                <span className="text-xs text-gray-400 font-medium capitalize">
+                                                                    {crit.status?.replace('_', ' ')}
+                                                                </span>
                                                             )}
                                                             {crit.status === 'verified' && crit.rating && (
                                                                 <div className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded">

@@ -380,8 +380,16 @@ export const jobReadinessAPI = {
   updateStudentReadiness: (studentId, data) => api.put(`/job-readiness/student/${studentId}`, data),
   // Campus PoC review
   getCampusStudents: (params) => api.get('/job-readiness/campus-students', { params }),
+  verifyStudentCriterion: (studentId, criteriaId, data) =>
+    api.patch(`/job-readiness/student/${studentId}/verify/${criteriaId}`, {
+      verified: data.verified,
+      verificationNotes: data.verificationNotes
+    }),
   verifyCriterion: (studentId, criteriaId, status, notes) =>
-    api.patch(`/job-readiness/student/${studentId}/verify/${criteriaId}`, { status, verificationNotes: notes }),
+    api.patch(`/job-readiness/student/${studentId}/verify/${criteriaId}`, {
+      verified: status === 'verified',
+      verificationNotes: notes
+    }),
   addPocComment: (studentId, criteriaId, comment) =>
     api.post(`/job-readiness/student/${studentId}/comment/${criteriaId}`, { comment }),
   addPocRating: (studentId, criteriaId, rating) =>
