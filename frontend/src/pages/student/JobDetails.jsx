@@ -690,7 +690,25 @@ const JobDetails = () => {
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div className="text-center">
               <MatchCircle percentage={matchDetails.overallPercentage} />
-              <p className="text-sm text-gray-600 mt-2">Your Match Score</p>
+              <div className="flex justify-center items-center gap-1 mt-2">
+                <p className="text-sm text-gray-600">Your Match Score</p>
+                <div className="group relative flex items-center">
+                  <span className="cursor-help text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                  </span>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-800 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 shadow-xl pointer-events-none text-left">
+                    <p className="font-bold mb-1 border-b border-gray-600 pb-1">Score Calculation</p>
+                    <ul className="list-disc pl-3 space-y-1 mb-2">
+                      <li>Skills: 40%</li>
+                      <li>Eligibility: 40%</li>
+                      <li>Requirements: 20%</li>
+                    </ul>
+                    <p className="text-yellow-300 font-medium">⚠️ 59% Cap Rule:</p>
+                    <p className="text-gray-300 leading-tight">If any mandatory eligibility criterion is not met, the score is hard-capped at 59%.</p>
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex-1 space-y-4">

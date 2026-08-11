@@ -58,7 +58,7 @@ const StudentApplications = () => {
         applied: allApps.filter(a => a.status === 'applied').length,
         interested: allApps.filter(a => a.status === 'interested').length,
         shortlisted: allApps.filter(a => a.status === 'shortlisted' || a.status === 'hr_shortlisting').length,
-        in_progress: allApps.filter(a => a.status === 'in_progress' || a.status === 'interviewing').length,
+        in_progress: allApps.filter(a => a.status === 'in_progress' || a.status === 'interviewing' || a.status === 'application_stage').length,
         selected: allApps.filter(a => a.status === 'selected').length,
         rejected: allApps.filter(a => a.status === 'rejected').length,
         withdrawn: allApps.filter(a => a.status === 'withdrawn').length
@@ -77,7 +77,7 @@ const StudentApplications = () => {
       };
       if (activeFilter !== 'all') {
         if (activeFilter === 'in_progress') {
-          params.status = 'in_progress,interviewing';
+          params.status = 'in_progress,interviewing,application_stage';
         } else if (activeFilter === 'shortlisted') {
           // Include hr_shortlisting as it maps to the student-facing 'Shortlisted' stage
           params.status = 'shortlisted,hr_shortlisting';

@@ -500,14 +500,22 @@ router.get('/matching', auth, authorize('student'), async (req, res) => {
       .populate('eligibility.campuses', 'name')
       .sort({ createdAt: -1 });
 
-    // Calculate detailed match for each job
-    const jobsWithMatch = jobs.map(job => {
-      const matchDetails = calculateMatch(student, job);
-      return {
-        ...job.toObject(),
-        matchDetails
-      };
-    });
+    // Get existing applications to exclude jobs the student has already applied to
+    const Application = require('../models/Application');
+    const existingApps = await Application.find({ student: req.userId }).select('job');
+    const appliedJobIds = new Set(existingApps.map(a => a.job.toString()));
+
+    // Calculate detailed match for each job and filter
+    const jobsWithMatch = jobs
+      .filter(job => !appliedJobIds.has(job._id.toString()))
+      .map(job => {
+        const matchDetails = calculateMatch(student, job);
+        return {
+          ...job.toObject(),
+          matchDetails
+        };
+      })
+      .filter(job => job.matchDetails.overallPercentage >= 60);
 
     // Sort by match percentage (highest first)
     jobsWithMatch.sort((a, b) => b.matchDetails.overallPercentage - a.matchDetails.overallPercentage);
