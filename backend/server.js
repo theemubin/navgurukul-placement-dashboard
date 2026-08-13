@@ -7,6 +7,11 @@ const path = require('path');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const passport = require('./config/passport');
+const { initRedis, getRedisStats, getClient } = require('./config/redis');
+const { RedisStore } = require('connect-redis');
+
+// Initialize Redis Client
+initRedis();
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -74,7 +79,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(session({
+
+// Configure Session Store (using Redis when available)
+const sessionOptions = {
   secret: process.env.SESSION_SECRET || 'your_session_secret',
   resave: false,
   saveUninitialized: false,
@@ -83,7 +90,19 @@ app.use(session({
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
-}));
+};
+
+if (process.env.REDIS_ENABLED !== 'false') {
+  const redisClient = getClient();
+  if (redisClient) {
+    sessionOptions.store = new RedisStore({
+      client: redisClient,
+      prefix: 'session:'
+    });
+  }
+}
+
+app.use(session(sessionOptions));
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -149,6 +168,7 @@ app.get('/api/health', async (req, res) => {
   }
 
   const isProduction = process.env.MONGODB_URI && process.env.MONGODB_URI.includes('mongodb+srv');
+  const redisInfo = await getRedisStats();
 
   res.json({
     status: 'ok',
@@ -164,6 +184,7 @@ app.get('/api/health', async (req, res) => {
       type: isProduction ? 'cloud (MongoDB Atlas)' : 'local',
       latency: dbLatency ? dbLatency + ' ms' : null
     },
+    redis: redisInfo,
     responseTime: (Date.now() - startTime) + ' ms'
   });
 });
