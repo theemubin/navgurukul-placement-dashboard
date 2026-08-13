@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const Skill = require('../models/Skill');
 const User = require('../models/User');
 const { auth, authorize } = require('../middleware/auth');
+const { cacheMiddleware } = require('../middleware/cache');
 const Settings = require('../models/Settings');
 
 /**
@@ -39,7 +40,7 @@ const Settings = require('../models/Settings');
  *       200:
  *         description: List of skills
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, cacheMiddleware({ type: 'job_readiness', keyPrefix: 'skills' }), async (req, res) => {
   try {
     const { category, search, active = 'true', school, common } = req.query;
     const query = {};
@@ -94,7 +95,7 @@ router.get('/', auth, async (req, res) => {
  *       200:
  *         description: List of categories
  */
-router.get('/categories', auth, async (req, res) => {
+router.get('/categories', auth, cacheMiddleware({ type: 'job_readiness', keyPrefix: 'skills' }), async (req, res) => {
   try {
     const categories = [
       { value: 'technical', label: 'Technical Skills' },

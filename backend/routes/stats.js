@@ -8,6 +8,7 @@ const Campus = require('../models/Campus');
 const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
+const { cacheMiddleware } = require('../middleware/cache');
 const fs = require('fs');
 
 // Helper to get all campus IDs a POC is authorized to manage
@@ -42,7 +43,7 @@ const getPOCManagedCampusIds = (user) => {
  *       200:
  *         description: Analytical data
  */
-router.get('/reports', auth, authorize('manager'), async (req, res) => {
+router.get('/reports', auth, authorize('manager'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const { dateRange = 'year' } = req.query;
 
@@ -286,7 +287,7 @@ const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'inter
  *       200:
  *         description: Dashboard stats
  */
-router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, res) => {
+router.get('/dashboard', auth, authorize('coordinator', 'manager'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const { campus, range } = req.query;
 
@@ -519,7 +520,7 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), async (req, 
  *       200:
  *         description: Campus stats
  */
-router.get('/campus', auth, authorize('coordinator', 'manager'), async (req, res) => {
+router.get('/campus', auth, authorize('coordinator', 'manager'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const { range, campusId } = req.query;
 
@@ -745,7 +746,7 @@ router.get('/student', auth, authorize('student'), async (req, res) => {
  *       200:
  *         description: Performance data
  */
-router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) => {
+router.get('/coordinator-stats', auth, authorize('manager'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const { range, campus } = req.query;
 
@@ -861,7 +862,7 @@ router.get('/coordinator-stats', auth, authorize('manager'), async (req, res) =>
  *       200:
  *         description: POC dashboard stats
  */
-router.get('/campus-poc', auth, authorize('campus_poc'), async (req, res) => {
+router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const campusIds = getPOCManagedCampusIds(req.user);
     const { status: filterStatus } = req.query; // Filter by Active/Placed etc
@@ -1202,7 +1203,7 @@ router.post('/campus-poc/job/:jobId/notify-eligible', auth, authorize('campus_po
  *       200:
  *         description: List of eligible jobs
  */
-router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (req, res) => {
+router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMiddleware({ type: 'jobs', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const campusIds = getPOCManagedCampusIds(req.user);
     // Support both legacy 'active' and pipeline stages
@@ -1292,7 +1293,7 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), async (re
  *       200:
  *         description: Company tracking data
  */
-router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async (req, res) => {
+router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), cacheMiddleware({ type: 'applications', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const campusIds = getPOCManagedCampusIds(req.user);
     const { cycleId } = req.query;
@@ -1414,7 +1415,7 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), async 
  *       200:
  *         description: School tracking data
  */
-router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordinator'), async (req, res) => {
+router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordinator'), cacheMiddleware({ type: 'campus', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const campusIds = req.user.role === 'campus_poc'
       ? getPOCManagedCampusIds(req.user)
@@ -1555,7 +1556,7 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
  *       200:
  *         description: Student summary
  */
-router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (req, res) => {
+router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), cacheMiddleware({ type: 'student', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const campusIds = getPOCManagedCampusIds(req.user);
     const { cycleId, status, school } = req.query;
@@ -1642,6 +1643,23 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
       return b.activeApplications - a.activeApplications;
     });
 
+    const totalStudentsCount = filteredSummaries.length;
+    
+    // Pagination
+    let paginatedStudents = filteredSummaries;
+    let page = null;
+    let limit = null;
+    let totalPages = null;
+
+    if (req.query.page || req.query.limit) {
+      page = parseInt(req.query.page, 10) || 1;
+      limit = parseInt(req.query.limit, 10) || 15;
+      const startIndex = (page - 1) * limit;
+      const endIndex = page * limit;
+      paginatedStudents = filteredSummaries.slice(startIndex, endIndex);
+      totalPages = Math.ceil(totalStudentsCount / limit);
+    }
+
     res.json({
       summary: {
         total: studentSummaries.length,
@@ -1650,7 +1668,13 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
         notApplied: studentSummaries.filter(s => s.placementStatus === 'not_applied').length,
         rejected: studentSummaries.filter(s => s.placementStatus === 'rejected').length
       },
-      students: filteredSummaries
+      students: paginatedStudents,
+      pagination: page ? {
+        totalStudents: totalStudentsCount,
+        page,
+        limit,
+        totalPages
+      } : undefined
     });
   } catch (error) {
     console.error('Get student summary error:', error);
@@ -1671,7 +1695,7 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), async (
  *       200:
  *         description: Cycle stats
  */
-router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), async (req, res) => {
+router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const campusIds = getPOCManagedCampusIds(req.user);
     const PlacementCycle = require('../models/PlacementCycle');
@@ -1865,7 +1889,7 @@ router.get('/historical-cycles', auth, authorize('manager', 'coordinator'), asyn
  *       200:
  *         description: Campus placement trends by month
  */
-router.get('/campus-placement-trends', auth, authorize('manager', 'coordinator'), async (req, res) => {
+router.get('/campus-placement-trends', auth, authorize('manager', 'coordinator'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     // Fetch all placed students with campus and placement date
     const placedStudents = await User.find({
@@ -2083,7 +2107,7 @@ router.get('/long-term-students-trend', auth, authorize('manager', 'coordinator'
  *       200:
  *         description: Pipeline analytics data
  */
-router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus_poc'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const { campus, school } = req.query;
 

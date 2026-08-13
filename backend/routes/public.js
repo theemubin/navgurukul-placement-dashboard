@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require('../models/User');
 const Campus = require('../models/Campus');
 const Skill = require('../models/Skill');
+const { cacheMiddleware } = require('../middleware/cache');
 
 /**
  * @swagger
@@ -34,7 +35,7 @@ const Skill = require('../models/Skill');
  *       200:
  *         description: List of student portfolios
  */
-router.get('/portfolios', async (req, res) => {
+router.get('/portfolios', cacheMiddleware({ type: 'search', keyPrefix: 'public' }), async (req, res) => {
     try {
         const { campus, skills, role } = req.query;
 
@@ -154,7 +155,7 @@ router.get('/portfolios', async (req, res) => {
  *       200:
  *         description: Filter options
  */
-router.get('/filters', async (req, res) => {
+router.get('/filters', cacheMiddleware({ type: 'static', keyPrefix: 'public' }), async (req, res) => {
     try {
         // Get all campuses
         const campuses = await Campus.find({ isActive: true })
@@ -210,7 +211,7 @@ router.get('/filters', async (req, res) => {
  *       200:
  *         description: Carousel data
  */
-router.get('/placements', async (req, res) => {
+router.get('/placements', cacheMiddleware({ type: 'search', keyPrefix: 'public' }), async (req, res) => {
     try {
         const FeaturedPlacement = require('../models/FeaturedPlacement');
         const Application = require('../models/Application');
@@ -332,7 +333,7 @@ router.get('/placements', async (req, res) => {
  *       200:
  *         description: Partner data
  */
-router.get('/hiring-partners', async (req, res) => {
+router.get('/hiring-partners', cacheMiddleware({ type: 'static', keyPrefix: 'public' }), async (req, res) => {
     try {
         const Settings = require('../models/Settings');
         const settings = await Settings.getSettings();

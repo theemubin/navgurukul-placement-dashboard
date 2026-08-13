@@ -10,6 +10,7 @@ const InterestRequest = require('../models/InterestRequest');
 const Application = require('../models/Application');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
+const { cacheMiddleware, invalidateCache } = require('../middleware/cache');
 const AIService = require('../services/aiService');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 const { calculateMatch, getJobsWithMatch } = require('../services/matchService');
@@ -36,7 +37,7 @@ const multer = require('multer');
  *         description: List of company names
  */
 // Get unique companies for autocomplete
-router.get('/companies', auth, authorize('coordinator', 'manager'), async (req, res) => {
+router.get('/companies', auth, authorize('coordinator', 'manager'), cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), async (req, res) => {
   try {
     const companies = await Job.aggregate([
       {
@@ -69,7 +70,7 @@ router.get('/companies', auth, authorize('coordinator', 'manager'), async (req, 
  *       200:
  *         description: List of locations
  */
-router.get('/locations', auth, authorize('coordinator', 'manager'), async (req, res) => {
+router.get('/locations', auth, authorize('coordinator', 'manager'), cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), async (req, res) => {
   try {
     const locations = await Job.distinct('location');
     res.json(locations.filter(l => l).sort());
@@ -306,7 +307,7 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
  *         description: Unauthorized
  */
 // Get all jobs (filtered by role and eligibility)
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), async (req, res) => {
   try {
     const {
       status, company, jobType, campus, search,
@@ -469,7 +470,7 @@ router.get('/', auth, async (req, res) => {
  *       200:
  *         description: Matched jobs with scores
  */
-router.get('/matching', auth, authorize('student'), async (req, res) => {
+router.get('/matching', auth, authorize('student'), cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), async (req, res) => {
   try {
     const student = await User.findById(req.userId)
       .populate('studentProfile.skills.skill')
@@ -774,6 +775,7 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
       }
     }
 
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
     res.status(201).json({ message: 'Job created successfully', job });
   } catch (error) {
     console.error('Create job error:', error);
@@ -867,6 +869,7 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
       }
     }
 
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
     res.json({ message: 'Job updated successfully', job });
   } catch (error) {
     console.error('Update job error:', error);
@@ -1115,6 +1118,7 @@ router.delete('/:id', auth, authorize('coordinator', 'manager'), async (req, res
     }
 
     await job.deleteOne();
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
     res.json({ message: 'Job deleted successfully' });
   } catch (error) {
     console.error('Delete job error:', error);

@@ -23,11 +23,21 @@ const POCDashboard = () => {
   const [selectedCycle, setSelectedCycle] = useState('');
   const [studentSummary, setStudentSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [trackingLoading, setTrackingLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('jobs'); // Active jobs first as default
   const [expandedStudent, setExpandedStudent] = useState(null);
   const [expandedCompany, setExpandedCompany] = useState(null);
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showCycleModal, setShowCycleModal] = useState(false);
+  // Pagination states
+  const [jobsPage, setJobsPage] = useState(1);
+  const [summaryPage, setSummaryPage] = useState(1);
+  const [schoolPage, setSchoolPage] = useState(1);
+  const [eligibleStudentsPage, setEligibleStudentsPage] = useState(1);
+  const itemsPerPage = 15;
+
   // Campus selection state
   const [showCampusModal, setShowCampusModal] = useState(false);
   const [allCampuses, setAllCampuses] = useState([]);
@@ -42,13 +52,15 @@ const POCDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
     fetchCampusData();
-    fetchTrackingData();
   }, []);
 
   useEffect(() => {
     fetchDashboardData();
-    fetchTrackingData();
   }, [selectedStatus, selectedCycle]);
+
+  useEffect(() => {
+    fetchTrackingData(summaryPage);
+  }, [selectedStatus, selectedCycle, summaryPage]);
 
   const fetchCampusData = async () => {
     try {
@@ -117,41 +129,60 @@ const POCDashboard = () => {
     );
   };
   const fetchDashboardData = async () => {
-    try {
-      const [statsResponse, pendingResponse, cyclesResponse, jobsResponse] = await Promise.all([
-        statsAPI.getCampusPocStats(selectedStatus === 'all' ? undefined : selectedStatus),
-        userAPI.getPendingSkills(),
-        statsAPI.getCycleStats(),
-        statsAPI.getEligibleJobs()
-      ]);
-      setStats(statsResponse.data);
-      setPendingSkills(pendingResponse.data.slice(0, 5));
-      setPendingProfilesCount(statsResponse.data.pendingProfileApprovals || 0);
-      setCycles(cyclesResponse.data);
-      setEligibleJobs(jobsResponse.data.jobs || []);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
+    setStatsLoading(true);
+    setJobsLoading(true);
+    
+    statsAPI.getCampusPocStats(selectedStatus === 'all' ? undefined : selectedStatus)
+      .then(res => {
+        setStats(res.data);
+        setPendingProfilesCount(res.data.pendingProfileApprovals || 0);
+      })
+      .catch(err => console.error(err))
+      .finally(() => setStatsLoading(false));
+
+    userAPI.getPendingSkills()
+      .then(res => setPendingSkills(res.data.slice(0, 5)))
+      .catch(err => console.error(err));
+
+    statsAPI.getCycleStats()
+      .then(res => setCycles(res.data))
+      .catch(err => console.error(err));
+
+    statsAPI.getEligibleJobs()
+      .then(res => {
+        setEligibleJobs(res.data.jobs || []);
+      })
+      .catch(err => console.error(err))
+      .finally(() => {
+        setJobsLoading(false);
+        setLoading(false);
+      });
   };
 
-  const fetchTrackingData = async () => {
+  const fetchTrackingData = async (pageNum = 1) => {
+    setTrackingLoading(true);
     try {
       const [companyRes, schoolRes, summaryRes] = await Promise.all([
         statsAPI.getCompanyTracking(selectedCycle),
         statsAPI.getSchoolTracking(selectedCycle),
-        statsAPI.getStudentSummary({ cycleId: selectedCycle, status: selectedStatus === 'all' ? undefined : selectedStatus })
+        statsAPI.getStudentSummary({ 
+          cycleId: selectedCycle, 
+          status: selectedStatus === 'all' ? undefined : selectedStatus,
+          page: pageNum,
+          limit: itemsPerPage
+        })
       ]);
       setCompanyTracking(companyRes.data);
       setSchoolTracking(schoolRes.data);
       setStudentSummary(summaryRes.data);
     } catch (error) {
       console.error('Error fetching tracking data:', error);
+    } finally {
+      setTrackingLoading(false);
     }
   };
 
-  const getCategorizedCompanyTracking = () => {
+  const categorizedCompanyTracking = useMemo(() => {
     // Process companies and their jobs
     const processedCompanies = companyTracking.map(company => {
       const sortedJobs = [...company.jobs].sort((a, b) => {
@@ -204,7 +235,7 @@ const POCDashboard = () => {
     });
 
     return groups;
-  };
+  }, [companyTracking]);
 
   const fetchEligibleStudents = async (job) => {
     setEligibleStudentsModal(prev => ({ ...prev, isOpen: true, job, students: [], loading: true }));
@@ -229,7 +260,7 @@ const POCDashboard = () => {
 
   const fetchAllApprovedStudents = async () => {
     setEligibleStudentsModal({
-      open: true,
+      isOpen: true,
       job: { title: 'All Approved Students', company: { name: 'Campus Summary' } },
       students: [],
       loading: true
@@ -259,18 +290,18 @@ const POCDashboard = () => {
     } catch (error) {
       console.error('Error fetching student summary:', error);
       toast.error('Failed to load student list');
-      setEligibleStudentsModal(prev => ({ ...prev, loading: false }));
+      setEligibleStudentsModal(prev => ({ ...prev, isOpen: false, loading: false }));
     }
   };
 
-  const getFilteredEligibleStudents = () => {
+  const filteredEligibleStudents = useMemo(() => {
     if (studentFilter === 'applied') {
       return eligibleStudentsModal.students.filter(s => s.hasApplied);
     } else if (studentFilter === 'not-applied') {
       return eligibleStudentsModal.students.filter(s => !s.hasApplied);
     }
     return eligibleStudentsModal.students;
-  };
+  }, [eligibleStudentsModal.students, studentFilter]);
 
   const handleNotifyEligible = async () => {
     if (!eligibleStudentsModal.job?._id) return;
@@ -309,7 +340,18 @@ const POCDashboard = () => {
     </div>
   );
 
-  if (loading && !stats) return <LoadingSpinner size="lg" />;
+  const renderPagination = (currentPage, totalItems, onPageChange) => {
+    return (
+      <Pagination 
+        currentPage={currentPage} 
+        totalItems={totalItems} 
+        itemsPerPage={itemsPerPage}
+        onPageChange={onPageChange} 
+      />
+    );
+  };
+
+
 
   return (
     <div className="space-y-4 animate-fadeIn pb-12">
@@ -318,7 +360,7 @@ const POCDashboard = () => {
         onClose={() => setEligibleStudentsModal({ ...eligibleStudentsModal, isOpen: false })}
         studentFilter={studentFilter}
         setStudentFilter={setStudentFilter}
-        getFilteredStudents={getFilteredEligibleStudents}
+        filteredStudents={filteredEligibleStudents}
         onNotify={handleNotifyEligible}
         notifying={notifying}
       />
@@ -356,7 +398,7 @@ const POCDashboard = () => {
             <Filter className="w-3.5 h-3.5 text-gray-400" />
             <select
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => { setSelectedStatus(e.target.value); setSummaryPage(1); }}
               className="bg-transparent border-none text-xs font-bold text-gray-700 p-0 focus:ring-0 min-w-[120px]"
             >
               <option value="all">All Students</option>
@@ -452,83 +494,6 @@ const POCDashboard = () => {
         </div>
       )}
 
-      {/* Eligible Students Modal */}
-      <Modal
-        isOpen={eligibleStudentsModal.open}
-        onClose={() => {
-          setEligibleStudentsModal({ open: false, job: null, students: [], loading: false });
-          setStudentFilter('all');
-        }}
-        title={eligibleStudentsModal.job?.title || 'Eligible Students'}
-        description={eligibleStudentsModal.job?.company?.name}
-      >
-        <div className="mt-4">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-lg font-semibold text-gray-800">Students ({getFilteredEligibleStudents().length})</h3>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setStudentFilter('all')}
-                className={`px-3 py-1 rounded-full text-sm font-medium ${studentFilter === 'all' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-              >
-                All ({eligibleStudentsModal.total || 0})
-              </button>
-              <button
-                onClick={() => setStudentFilter('applied')}
-                className={`px-3 py-1 rounded-full text-sm font-medium ${studentFilter === 'applied' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-              >
-                Applied ({eligibleStudentsModal.applied || 0})
-              </button>
-              <button
-                onClick={() => setStudentFilter('not-applied')}
-                className={`px-3 py-1 rounded-full text-sm font-medium ${studentFilter === 'not-applied' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-              >
-                Not Applied ({eligibleStudentsModal.notApplied || 0})
-              </button>
-            </div>
-          </div>
-
-          {eligibleStudentsModal.loading ? (
-            <div className="flex justify-center py-8">
-              <LoadingSpinner />
-            </div>
-          ) : getFilteredEligibleStudents().length > 0 ? (
-            <div className="max-h-96 overflow-y-auto border rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                    <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {getFilteredEligibleStudents().map((student) => (
-                    <tr key={student._id}>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
-                        <Link to={`/campus-poc/students/${student._id}`} className="text-primary-600 hover:underline">
-                          {student.firstName} {student.lastName}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{student.email}</td>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                        {getStatusBadge(student.applicationStatus?.toLowerCase().replace(' ', '_') || 'not_applied')}
-                      </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                        {student.hasApplied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-red-500" />}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <p>No students found for this filter.</p>
-            </div>
-          )}
-        </div>
-      </Modal>
 
       {/* Tab Navigation */}
       <div className="border-b border-gray-100">
@@ -702,13 +667,13 @@ const POCDashboard = () => {
 
           {/* Job type tabs */}
           <div className="flex gap-3 mt-3">
-            <button onClick={() => setJobTypeFilter('all')} className={`px-3 py-1 rounded ${jobTypeFilter === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
+            <button onClick={() => { setJobTypeFilter('all'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
               All
             </button>
-            <button onClick={() => setJobTypeFilter('internship')} className={`px-3 py-1 rounded ${jobTypeFilter === 'internship' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
+            <button onClick={() => { setJobTypeFilter('internship'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'internship' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
               Internships
             </button>
-            <button onClick={() => setJobTypeFilter('paid_project')} className={`px-3 py-1 rounded ${jobTypeFilter === 'paid_project' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
+            <button onClick={() => { setJobTypeFilter('paid_project'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'paid_project' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
               Paid Projects
             </button>
           </div>
@@ -724,8 +689,15 @@ const POCDashboard = () => {
 
               return (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatsCard icon={Briefcase} label="Active Jobs" value={activeJobsCount} color="secondary" compact />
-            <StatsCard 
+                  <StatsCard 
+                    icon={Briefcase} 
+                    label="Active Jobs" 
+                    value={activeJobsCount} 
+                    color="secondary" 
+                    onClick={() => setActiveTab('jobs')}
+                    compact 
+                  />
+                  <StatsCard 
                     icon={Users} 
                     label="Eligible Students" 
                     value={eligibleStudentsCount} 
@@ -733,95 +705,124 @@ const POCDashboard = () => {
                     onClick={fetchAllApprovedStudents}
                     compact
                   />
-            <StatsCard icon={Clock} label="Applications" value={totalApplications} color="accent" compact />
-            <StatsCard icon={CheckCircle} label="Selected" value={selectedCount} color="success" compact />
-          </div>
+                  <StatsCard 
+                    icon={Clock} 
+                    label="Applications" 
+                    value={totalApplications} 
+                    color="accent" 
+                    onClick={() => setActiveTab('summary')}
+                    compact 
+                  />
+                  <StatsCard 
+                    icon={CheckCircle} 
+                    label="Selected" 
+                    value={selectedCount} 
+                    color="success" 
+                    onClick={() => {
+                      setActiveTab('summary');
+                      setSelectedStatus('placed');
+                    }}
+                    compact 
+                  />
+                </div>
               );
             })()
           )}
 
-          {eligibleJobs.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {eligibleJobs
-                .filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter))
-                .map((job) => (
-                  <div key={job._id} className="card hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-start gap-3">
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <Building2 className="w-6 h-6 text-gray-500" />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{job.title}</h4>
-                          <p className="text-sm text-gray-600">{job.company?.name}</p>
-                          <p className="text-xs text-gray-500 capitalize mt-1">{job.jobType?.replace('_', ' ')}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <Link 
-                          to={`/campus-poc/jobs/${job._id}`}
-                          className="text-xs bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg border border-primary-100 hover:bg-primary-100 transition-all font-bold flex items-center gap-1.5"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          View Details
-                        </Link>
-                        <div className="text-right">
-                          <p className="text-[10px] text-gray-500 uppercase tracking-tighter">Deadline</p>
-                          <p className="text-xs font-bold text-gray-700">
-                             {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stats Row */}
-                    <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3 px-1">
-                      <button
-                        className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
-                        onClick={() => fetchEligibleStudents(job)}
-                        title="Click to view eligible students"
-                      >
-                        <p className="text-lg font-bold text-indigo-600 hover:underline">{job.eligibleStudents}</p>
-                        <p className="text-xs text-gray-500">Eligible</p>
-                      </button>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-blue-600">{job.applicationCount}</p>
-                        <p className="text-xs text-gray-500">Applied</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-yellow-600">{job.statusCounts?.shortlisted + job.statusCounts?.in_progress || 0}</p>
-                        <p className="text-xs text-gray-500">In Progress</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-green-600">{job.statusCounts?.selected || 0}</p>
-                        <p className="text-xs text-gray-500">Selected</p>
-                      </div>
-                    </div>
-
-                    {/* Application Progress Bar */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>Application Rate</span>
-                        <span>{job.eligibleStudents > 0 ? Math.round((job.applicationCount / job.eligibleStudents) * 100) : 0}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="h-2 rounded-full bg-primary-500 transition-all"
-                          style={{ width: `${job.eligibleStudents > 0 ? (job.applicationCount / job.eligibleStudents) * 100 : 0}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Positions */}
-                    <div className="mt-3 flex items-center justify-between text-sm">
-                      <span className="text-gray-500">{job.maxPositions} position{job.maxPositions !== 1 ? 's' : ''} available</span>
-                      {job.applicationCount === 0 && (
-                        <span className="text-orange-600 text-xs font-medium">No applications yet</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+          {jobsLoading ? (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner size="lg" />
             </div>
+          ) : eligibleJobs.length > 0 ? (
+            (() => {
+              const filteredJobs = eligibleJobs.filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter));
+              const paginatedJobs = filteredJobs.slice((jobsPage - 1) * itemsPerPage, jobsPage * itemsPerPage);
+
+              return (
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {paginatedJobs.map((job) => (
+                      <div key={job._id} className="card hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-start gap-3">
+                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Building2 className="w-6 h-6 text-gray-500" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-gray-900">{job.title}</h4>
+                              <p className="text-sm text-gray-600">{job.company?.name}</p>
+                              <p className="text-xs text-gray-500 capitalize mt-1">{job.jobType?.replace('_', ' ')}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <Link 
+                              to={`/campus-poc/jobs/${job._id}`}
+                              className="text-xs bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg border border-primary-100 hover:bg-primary-100 transition-all font-bold flex items-center gap-1.5"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Details
+                            </Link>
+                            <div className="text-right">
+                              <p className="text-[10px] text-gray-500 uppercase tracking-tighter">Deadline</p>
+                              <p className="text-xs font-bold text-gray-700">
+                                 {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Stats Row */}
+                        <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3 px-1">
+                          <button
+                            className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
+                            onClick={() => fetchEligibleStudents(job)}
+                            title="Click to view eligible students"
+                          >
+                            <p className="text-lg font-bold text-indigo-600 hover:underline">{job.eligibleStudents}</p>
+                            <p className="text-xs text-gray-500">Eligible</p>
+                          </button>
+                          <div className="text-center">
+                            <p className="text-lg font-bold text-blue-600">{job.applicationCount}</p>
+                            <p className="text-xs text-gray-500">Applied</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-lg font-bold text-yellow-600">{job.statusCounts?.shortlisted + job.statusCounts?.in_progress || 0}</p>
+                            <p className="text-xs text-gray-500">In Progress</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-lg font-bold text-green-600">{job.statusCounts?.selected || 0}</p>
+                            <p className="text-xs text-gray-500">Selected</p>
+                          </div>
+                        </div>
+
+                        {/* Application Progress Bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Application Rate</span>
+                            <span>{job.eligibleStudents > 0 ? Math.round((job.applicationCount / job.eligibleStudents) * 100) : 0}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="h-2 rounded-full bg-primary-500 transition-all"
+                              style={{ width: `${job.eligibleStudents > 0 ? (job.applicationCount / job.eligibleStudents) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Positions */}
+                        <div className="mt-3 flex items-center justify-between text-sm">
+                          <span className="text-gray-500">{job.maxPositions} position{job.maxPositions !== 1 ? 's' : ''} available</span>
+                          {job.applicationCount === 0 && (
+                            <span className="text-orange-600 text-xs font-medium">No applications yet</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {renderPagination(jobsPage, filteredJobs.length, setJobsPage)}
+                </>
+              );
+            })()
           ) : (
             <div className="text-center py-12 text-gray-500">
               <Briefcase className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -843,9 +844,14 @@ const POCDashboard = () => {
             </div>
           </div>
 
-          <div className="space-y-8">
-            {(() => {
-              const groups = getCategorizedCompanyTracking();
+          {trackingLoading ? (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {(() => {
+                const groups = categorizedCompanyTracking;
               const sections = [
                 { id: 'open', label: 'Open for Application', companies: groups.open, color: 'text-green-700 bg-green-50' },
                 { id: 'active', label: 'Ongoing Process / Active', companies: groups.active, color: 'text-blue-700 bg-blue-50' },
@@ -1035,7 +1041,8 @@ const POCDashboard = () => {
                 </div>
               ));
             })()}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1043,83 +1050,95 @@ const POCDashboard = () => {
         <div className="space-y-4">
           <h3 className="font-semibold text-gray-900">School-wise Student Tracking</h3>
 
-          {schoolTracking.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {schoolTracking.map((school) => (
-                <div key={school.school} className="card">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <GraduationCap className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="font-semibold">{school.school}</p>
-                      <p className="text-sm text-gray-500">
-                        {school.totalStudents} students | 30% ready: {school.jobReady30Count || 0} | 100% ready: {school.jobReady100Count || 0}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    <div className="text-center p-2 bg-green-50 rounded">
-                      <p className="text-lg font-bold text-green-600">{school.placed}</p>
-                      <p className="text-xs text-gray-500">Placed</p>
-                    </div>
-                    <div className="text-center p-2 bg-yellow-50 rounded">
-                      <p className="text-lg font-bold text-yellow-600">{school.inProgress}</p>
-                      <p className="text-xs text-gray-500">In Progress</p>
-                    </div>
-                    <div className="text-center p-2 bg-gray-50 rounded">
-                      <p className="text-lg font-bold text-gray-600">{school.totalStudents - school.placed - school.inProgress}</p>
-                      <p className="text-xs text-gray-500">Pending</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 mb-4">
-                    <div className="text-center p-2 bg-blue-50 rounded border border-blue-100">
-                      <p className="text-lg font-bold text-blue-700">{school.jobReady30Count || 0}</p>
-                      <p className="text-xs text-gray-600">30% Job Ready</p>
-                    </div>
-                    <div className="text-center p-2 bg-emerald-50 rounded border border-emerald-100">
-                      <p className="text-lg font-bold text-emerald-700">{school.jobReady100Count || 0}</p>
-                      <p className="text-xs text-gray-600">100% Job Ready</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {school.students.slice(0, 5).map((student) => (
-                      <div key={student.studentId} className="p-2 bg-gray-50 rounded text-sm">
-                        <div className="flex items-center justify-between">
-                          <Link
-                            to={`/campus-poc/students/${student.studentId}`}
-                            className="text-primary-600 hover:underline truncate max-w-[150px]"
-                          >
-                            {student.name}
-                          </Link>
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-500">{student.applicationCount} apps</span>
-                            <span className="text-xs font-semibold text-blue-700">{student.readinessPercentage || 0}%</span>
-                            {getStatusBadge(student.status)}
+          {trackingLoading ? (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : schoolTracking.length > 0 ? (
+            (() => {
+              const paginatedSchools = schoolTracking.slice((schoolPage - 1) * itemsPerPage, schoolPage * itemsPerPage);
+              return (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {paginatedSchools.map((school) => (
+                      <div key={school.school} className="card">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <GraduationCap className="w-5 h-5 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="font-semibold">{school.school}</p>
+                            <p className="text-sm text-gray-500">
+                              {school.totalStudents} students | 30% ready: {school.jobReady30Count || 0} | 100% ready: {school.jobReady100Count || 0}
+                            </p>
                           </div>
                         </div>
-                        <div className="mt-1 text-[11px] text-gray-500 flex flex-wrap gap-3">
-                          <span>
-                            30% date: {student.jobReady30At ? format(new Date(student.jobReady30At), 'dd MMM yyyy') : '-'}
-                          </span>
-                          <span>
-                            100% date: {student.jobReady100At ? format(new Date(student.jobReady100At), 'dd MMM yyyy') : '-'}
-                          </span>
+
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                          <div className="text-center p-2 bg-green-50 rounded">
+                            <p className="text-lg font-bold text-green-600">{school.placed}</p>
+                            <p className="text-xs text-gray-500">Placed</p>
+                          </div>
+                          <div className="text-center p-2 bg-yellow-50 rounded">
+                            <p className="text-lg font-bold text-yellow-600">{school.inProgress}</p>
+                            <p className="text-xs text-gray-500">In Progress</p>
+                          </div>
+                          <div className="text-center p-2 bg-gray-50 rounded">
+                            <p className="text-lg font-bold text-gray-600">{school.totalStudents - school.placed - school.inProgress}</p>
+                            <p className="text-xs text-gray-500">Pending</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                          <div className="text-center p-2 bg-blue-50 rounded border border-blue-100">
+                            <p className="text-lg font-bold text-blue-700">{school.jobReady30Count || 0}</p>
+                            <p className="text-xs text-gray-600">30% Job Ready</p>
+                          </div>
+                          <div className="text-center p-2 bg-emerald-50 rounded border border-emerald-100">
+                            <p className="text-lg font-bold text-emerald-700">{school.jobReady100Count || 0}</p>
+                            <p className="text-xs text-gray-600">100% Job Ready</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {school.students.slice(0, 5).map((student) => (
+                            <div key={student.studentId} className="p-2 bg-gray-50 rounded text-sm">
+                              <div className="flex items-center justify-between">
+                                <Link
+                                  to={`/campus-poc/students/${student.studentId}`}
+                                  className="text-primary-600 hover:underline truncate max-w-[150px]"
+                                >
+                                  {student.name}
+                                </Link>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-gray-500">{student.applicationCount} apps</span>
+                                  <span className="text-xs font-semibold text-blue-700">{student.readinessPercentage || 0}%</span>
+                                  {getStatusBadge(student.status)}
+                                </div>
+                              </div>
+                              <div className="mt-1 text-[11px] text-gray-500 flex flex-wrap gap-3">
+                                <span>
+                                  30% date: {student.jobReady30At ? format(new Date(student.jobReady30At), 'dd MMM yyyy') : '-'}
+                                </span>
+                                <span>
+                                  100% date: {student.jobReady100At ? format(new Date(student.jobReady100At), 'dd MMM yyyy') : '-'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          {school.students.length > 5 && (
+                            <p className="text-xs text-center text-gray-500 pt-2">
+                              +{school.students.length - 5} more students
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}
-                    {school.students.length > 5 && (
-                      <p className="text-xs text-center text-gray-500 pt-2">
-                        +{school.students.length - 5} more students
-                      </p>
-                    )}
                   </div>
-                </div>
-              ))}
-            </div>
+                  {renderPagination(schoolPage, schoolTracking.length, setSchoolPage)}
+                </>
+              );
+            })()
           ) : (
             <div className="text-center py-12 text-gray-500">
               <GraduationCap className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -1138,167 +1157,174 @@ const POCDashboard = () => {
             </div>
           </div>
 
-          {!studentSummary || studentSummary.students.length === 0 ? (
+          {trackingLoading ? (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : !studentSummary || studentSummary.students.length === 0 ? (
             <div className="card text-center py-12">
               <Users className="w-12 h-12 mx-auto text-gray-300 mb-3" />
               <p className="text-gray-500">No students found matching current filters</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {studentSummary.students.map((student) => {
-                const isExpanded = expandedStudent === student.studentId;
-                return (
-                  <div 
-                    key={student.studentId} 
-                    className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'}`}
-                  >
-                    {/* Accordion Header */}
-                    <div 
-                      className="p-4 cursor-pointer flex items-center justify-between"
-                      onClick={() => setExpandedStudent(isExpanded ? null : student.studentId)}
-                    >
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center text-primary-600 font-bold">
-                          {student.name.charAt(0)}
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 flex-1">
-                          <div>
-                            <Link 
-                              to={`/campus-poc/students/${student.studentId}`}
-                              className="font-bold text-gray-900 hover:text-primary-600 truncate block"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {student.name}
-                            </Link>
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{student.email}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Placement Status</p>
-                            <div className="mt-0.5">{getStatusBadge(student.placementStatus)}</div>
-                          </div>
-                          <div className="hidden md:block">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Navgurukul School</p>
-                            <p className="text-xs font-semibold text-gray-700 mt-0.5">{student.school}</p>
-                          </div>
-                          <div className="text-right pr-4">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Applications</p>
-                            <p className="text-sm font-bold text-gray-900 mt-0.5">
-                              {student.totalApplications} <span className="text-xs font-medium text-gray-500">Total</span>
-                              {student.activeApplications > 0 && <span className="ml-1 text-green-600 text-xs">({student.activeApplications} Active)</span>}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleGharSync(student.email);
-                            }}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-primary-600 transition-colors"
-                            title="Sync status with Ghar"
+            <>
+              <div className="space-y-3">
+                {studentSummary.students.map((student) => {
+                      const isExpanded = expandedStudent === student.studentId;
+                      return (
+                        <div 
+                          key={student.studentId} 
+                          className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'}`}
+                        >
+                          {/* Accordion Header */}
+                          <div 
+                            className="p-4 cursor-pointer flex items-center justify-between"
+                            onClick={() => setExpandedStudent(isExpanded ? null : student.studentId)}
                           >
-                            <RefreshCw className="w-4 h-4" />
-                          </button>
-                        </div>
-                        {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-                      </div>
-                    </div>
-
-                    {/* Accordion Content */}
-                    {isExpanded && (
-                      <div className="p-4 border-t border-gray-50 bg-gray-50/30 rounded-b-xl animate-fadeIn">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                          <ClipboardList className="w-3.5 h-3.5" />
-                          Application History
-                        </h4>
-                        
-                        {student.applications.length === 0 ? (
-                          <div className="text-center py-6 bg-white rounded-lg border border-dashed border-gray-200">
-                            <p className="text-sm text-gray-500">No applications found for this student.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {student.applications.map((app) => (
-                              <div key={app.applicationId} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                                  <div className="flex items-start gap-3">
-                                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
-                                      <Building2 className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                      <h5 className="font-bold text-gray-900">{app.company}</h5>
-                                      <p className="text-sm text-gray-600">{app.job}</p>
-                                      <p className="text-[10px] text-gray-400 uppercase font-bold mt-1">Applied on {new Date(app.appliedAt).toLocaleDateString()}</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                    <div className="text-right">
-                                      <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Current Status</p>
-                                      {getStatusBadge(app.status)}
-                                    </div>
-                                    <Link 
-                                      to={`/campus-poc/jobs/${app.jobId || ''}`}
-                                      className="p-2 hover:bg-gray-100 rounded-lg text-primary-600 transition-colors"
-                                      title="View Job Details"
-                                    >
-                                      <ArrowRight className="w-4 h-4" />
-                                    </Link>
-                                  </div>
-                                </div>
-
-                                {/* Progress & Round Results */}
-                                {app.roundResults && app.roundResults.length > 0 && (
-                                  <div className="mt-4 pt-4 border-t border-gray-50">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Interview Progress</p>
-                                    <div className="flex flex-wrap gap-2">
-                                      {app.roundResults.map((round, idx) => (
-                                        <div key={idx} className={`px-3 py-2 rounded-lg border text-xs ${
-                                          round.status === 'passed' ? 'bg-green-50 border-green-100 text-green-700' :
-                                          round.status === 'failed' ? 'bg-red-50 border-red-100 text-red-700' :
-                                          'bg-blue-50 border-blue-100 text-blue-700'
-                                        }`}>
-                                          <div className="font-bold flex items-center gap-1">
-                                            <span>R{round.round}: {round.roundName}</span>
-                                            {round.status === 'passed' ? <CheckCircle className="w-3 h-3" /> : round.status === 'failed' ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                          </div>
-                                          {round.feedback && <p className="mt-1 text-[10px] opacity-80 italic italic">"{round.feedback}"</p>}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Recruiter Comments */}
-                                {app.feedback && (
-                                  <div className="mt-4 p-3 bg-indigo-50/50 rounded-lg flex items-start gap-3">
-                                    <MessageSquare className="w-4 h-4 text-indigo-500 mt-1" />
-                                    <div>
-                                      <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Overall Recruiter Feedback</p>
-                                      <p className="text-sm text-gray-700 italic">"{app.feedback}"</p>
-                                    </div>
-                                  </div>
-                                )}
+                            <div className="flex items-center gap-4 flex-1">
+                              <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center text-primary-600 font-bold">
+                                {student.name.charAt(0)}
                               </div>
-                            ))}
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 flex-1">
+                                <div>
+                                  <Link 
+                                    to={`/campus-poc/students/${student.studentId}`}
+                                    className="font-bold text-gray-900 hover:text-primary-600 truncate block"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {student.name}
+                                  </Link>
+                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{student.email}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Placement Status</p>
+                                  <div className="mt-0.5">{getStatusBadge(student.placementStatus)}</div>
+                                </div>
+                                <div className="hidden md:block">
+                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Navgurukul School</p>
+                                  <p className="text-xs font-semibold text-gray-700 mt-0.5">{student.school}</p>
+                                </div>
+                                <div className="text-right pr-4">
+                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Applications</p>
+                                  <p className="text-sm font-bold text-gray-900 mt-0.5">
+                                    {student.totalApplications} <span className="text-xs font-medium text-gray-500">Total</span>
+                                    {student.activeApplications > 0 && <span className="ml-1 text-green-600 text-xs">({student.activeApplications} Active)</span>}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGharSync(student.email);
+                                  }}
+                                  className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-primary-600 transition-colors"
+                                  title="Sync status with Ghar"
+                                >
+                                  <RefreshCw className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                            </div>
                           </div>
-                        )}
-                        <div className="mt-4 text-center">
-                          <Link 
-                            to={`/campus-poc/students/${student.studentId}`}
-                            className="text-xs font-bold text-primary-600 hover:underline flex items-center justify-center gap-1"
-                          >
-                            View Full Student Profile <ArrowRight className="w-3 h-3" />
-                          </Link>
+
+                          {/* Accordion Content */}
+                          {isExpanded && (
+                            <div className="p-4 border-t border-gray-50 bg-gray-50/30 rounded-b-xl animate-fadeIn">
+                              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <ClipboardList className="w-3.5 h-3.5" />
+                                Application History
+                              </h4>
+                              
+                              {student.applications.length === 0 ? (
+                                <div className="text-center py-6 bg-white rounded-lg border border-dashed border-gray-200">
+                                  <p className="text-sm text-gray-500">No applications found for this student.</p>
+                                </div>
+                              ) : (
+                                <div className="space-y-4">
+                                  {student.applications.map((app) => (
+                                    <div key={app.applicationId} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                                        <div className="flex items-start gap-3">
+                                          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
+                                            <Building2 className="w-5 h-5" />
+                                          </div>
+                                          <div>
+                                            <h5 className="font-bold text-gray-900">{app.company}</h5>
+                                            <p className="text-sm text-gray-600">{app.job}</p>
+                                            <p className="text-[10px] text-gray-400 uppercase font-bold mt-1">Applied on {new Date(app.appliedAt).toLocaleDateString()}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                          <div className="text-right">
+                                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Current Status</p>
+                                            {getStatusBadge(app.status)}
+                                          </div>
+                                          <Link 
+                                            to={`/campus-poc/jobs/${app.jobId || ''}`}
+                                            className="p-2 hover:bg-gray-100 rounded-lg text-primary-600 transition-colors"
+                                            title="View Job Details"
+                                          >
+                                            <ArrowRight className="w-4 h-4" />
+                                          </Link>
+                                        </div>
+                                      </div>
+
+                                      {/* Progress & Round Results */}
+                                      {app.roundResults && app.roundResults.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-gray-50">
+                                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Interview Progress</p>
+                                          <div className="flex flex-wrap gap-2">
+                                            {app.roundResults.map((round, idx) => (
+                                              <div key={idx} className={`px-3 py-2 rounded-lg border text-xs ${
+                                                round.status === 'passed' ? 'bg-green-50 border-green-100 text-green-700' :
+                                                round.status === 'failed' ? 'bg-red-50 border-red-100 text-red-700' :
+                                                'bg-blue-50 border-blue-100 text-blue-700'
+                                              }`}>
+                                                <div className="font-bold flex items-center gap-1">
+                                                  <span>R{round.round}: {round.roundName}</span>
+                                                  {round.status === 'passed' ? <CheckCircle className="w-3 h-3" /> : round.status === 'failed' ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                                </div>
+                                                {round.feedback && <p className="mt-1 text-[10px] opacity-80 italic">"{round.feedback}"</p>}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Recruiter Comments */}
+                                      {app.feedback && (
+                                        <div className="mt-4 p-3 bg-indigo-50/50 rounded-lg flex items-start gap-3">
+                                          <MessageSquare className="w-4 h-4 text-indigo-500 mt-1" />
+                                          <div>
+                                            <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Overall Recruiter Feedback</p>
+                                            <p className="text-sm text-gray-700 italic">"{app.feedback}"</p>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="mt-4 text-center">
+                                <Link 
+                                  to={`/campus-poc/students/${student.studentId}`}
+                                  className="text-xs font-bold text-primary-600 hover:underline flex items-center justify-center gap-1"
+                                >
+                                  View Full Student Profile <ArrowRight className="w-3 h-3" />
+                                </Link>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  {renderPagination(summaryPage, studentSummary.pagination ? studentSummary.pagination.totalStudents : studentSummary.students.length, setSummaryPage)}
+                </>
+              )}
         </div>
       )}
       {activeTab === 'cycles' && (
@@ -2009,22 +2035,30 @@ const EligibleStudentsModal = ({
   notApplied, 
   studentFilter, 
   setStudentFilter, 
-  getFilteredStudents,
+  filteredStudents,
   onNotify,
   notifying
 }) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [studentFilter, isOpen]);
+
   if (!isOpen) return null;
 
-  const filteredStudents = getFilteredStudents();
+  const paginatedStudents = filteredStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
+        className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
+        <div className="px-6 py-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50 flex-shrink-0">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-xl font-bold text-gray-900">Eligible Students</h2>
@@ -2073,7 +2107,7 @@ const EligibleStudentsModal = ({
         </div>
 
         {/* Filter */}
-        <div className="px-6 py-3 border-b bg-gray-50">
+        <div className="px-6 py-3 border-b bg-gray-50 flex-shrink-0">
           <div className="flex gap-2">
             <button
               onClick={() => setStudentFilter('all')}
@@ -2106,7 +2140,7 @@ const EligibleStudentsModal = ({
         </div>
 
         {/* Content */}
-        <div className="px-6 py-0 overflow-y-auto max-h-[60vh]">
+        <div className="px-6 py-0 overflow-y-auto flex-1">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner size="lg" />
@@ -2128,7 +2162,7 @@ const EligibleStudentsModal = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredStudents.map((student) => (
+                  {paginatedStudents.map((student) => (
                     <tr key={student._id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-3">
@@ -2186,15 +2220,156 @@ const EligibleStudentsModal = ({
           )}
         </div>
 
+        {/* Modal Pagination Component */}
+        <div className="px-6 py-2 border-t bg-gray-50 flex-shrink-0">
+          <Pagination 
+            currentPage={currentPage} 
+            totalItems={filteredStudents.length} 
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage} 
+          />
+        </div>
+
         {/* Footer */}
-        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
+        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3 flex-shrink-0">
           <p className="mr-auto text-xs text-gray-500 flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
-            Showing {filteredStudents.length} students
+            Total: {filteredStudents.length} students
           </p>
           <button onClick={onClose} className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all active:scale-95 shadow-sm">
             Close
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Standalone Reusable Pagination Component with Ellipsis Truncation
+const Pagination = ({ currentPage, totalItems, itemsPerPage = 15, onPageChange }) => {
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  if (totalPages <= 1) return null;
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPageButtons = 5;
+
+    if (totalPages <= maxPageButtons) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+
+      let start = Math.max(2, currentPage - 1);
+      let end = Math.min(totalPages - 1, currentPage + 1);
+
+      if (currentPage <= 3) {
+        end = 4;
+      } else if (currentPage >= totalPages - 2) {
+        start = totalPages - 3;
+      }
+
+      if (start > 2) {
+        pages.push('ellipsis1');
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      if (end < totalPages - 1) {
+        pages.push('ellipsis2');
+      }
+
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  const pages = getPageNumbers();
+
+  return (
+    <div className="flex items-center justify-between border-t border-gray-100 bg-white px-4 py-3 sm:px-6 mt-4 rounded-xl shadow-sm border border-gray-100">
+      {/* Mobile view */}
+      <div className="flex flex-1 justify-between sm:hidden">
+        <button
+          onClick={() => {
+            onPageChange(Math.max(currentPage - 1, 1));
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          disabled={currentPage === 1}
+          className={`relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          Previous
+        </button>
+        <button
+          onClick={() => {
+            onPageChange(Math.min(currentPage + 1, totalPages));
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          disabled={currentPage === totalPages}
+          className={`relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          Next
+        </button>
+      </div>
+
+      {/* Desktop view */}
+      <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm text-gray-700">
+            Showing <span className="font-semibold">{((currentPage - 1) * itemsPerPage) + 1}</span> to <span className="font-semibold">{Math.min(currentPage * itemsPerPage, totalItems)}</span> of <span className="font-semibold">{totalItems}</span> results
+          </p>
+        </div>
+        <div>
+          <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+            <button
+              onClick={() => {
+                onPageChange(Math.max(currentPage - 1, 1));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              disabled={currentPage === 1}
+              className={`relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <span className="sr-only">Previous</span>
+              &larr;
+            </button>
+            {pages.map((p, idx) => {
+              if (p === 'ellipsis1' || p === 'ellipsis2') {
+                return (
+                  <span
+                    key={`ellipsis-${idx}`}
+                    className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-500 ring-1 ring-inset ring-gray-200"
+                  >
+                    ...
+                  </span>
+                );
+              }
+              return (
+                <button
+                  key={p}
+                  onClick={() => {
+                    onPageChange(p);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  aria-current={currentPage === p ? 'page' : undefined}
+                  className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold focus:z-20 ${currentPage === p ? 'z-10 bg-primary-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600' : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:outline-offset-0'}`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => {
+                onPageChange(Math.min(currentPage + 1, totalPages));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              disabled={currentPage === totalPages}
+              className={`relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <span className="sr-only">Next</span>
+              &rarr;
+            </button>
+          </nav>
         </div>
       </div>
     </div>

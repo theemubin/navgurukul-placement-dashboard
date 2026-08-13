@@ -19,6 +19,7 @@
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.1.2",
     "cloudinary": "^1.41.3",
+    "connect-redis": "^10.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
@@ -35,6 +36,7 @@
     "passport-google-oauth20": "^2.0.0",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",
+    "redis": "^6.2.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0"
   },
