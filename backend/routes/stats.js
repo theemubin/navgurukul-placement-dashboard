@@ -1207,7 +1207,7 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
   try {
     const campusIds = getPOCManagedCampusIds(req.user);
     // Support both legacy 'active' and pipeline stages
-    const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing'];
+    const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing', 'closed'];
 
     const { cycleId } = req.query;
     const query = {
@@ -1222,10 +1222,10 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
       query.placementCycle = cycleId;
     }
 
-    // Get all active jobs that are eligible for this campus
+    // Get all active/closed jobs that are eligible for this campus
     const jobs = await Job.find(query)
       .populate('eligibility.campuses', 'name')
-      .select('title company jobType applicationDeadline maxPositions eligibility createdAt')
+      .select('title company jobType applicationDeadline maxPositions eligibility createdAt status')
       .sort({ createdAt: -1 });
 
     // Get approved students count for this campus (matches the detail view criteria)
@@ -1265,6 +1265,7 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
           selected: applications.filter(a => a.status === 'selected').length,
           rejected: applications.filter(a => a.status === 'rejected').length
         },
+        status: job.status,
         createdAt: job.createdAt
       };
     }));
