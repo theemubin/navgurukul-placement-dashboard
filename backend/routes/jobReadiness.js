@@ -8,6 +8,7 @@ const Notification = require('../models/Notification');
 const PlacementCycle = require('../models/PlacementCycle');
 const upload = require('../middleware/upload');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
+const cacheService = require('../services/redisCacheService');
 // ...existing code...
 /**
  * @swagger
@@ -541,6 +542,7 @@ async function recalculateStudentsForConfig(school, campus, jobId) {
         // Recalculate and save
         await doc.calculateReadiness();
         await doc.save();
+        await cacheService.invalidateJobReadinessCache(studentId.toString());
         processed++;
         // If a job was created for this operation, update it by jobId per student
         if (jobId) {
@@ -572,77 +574,88 @@ async function recalculateStudentsForConfig(school, campus, jobId) {
  *         description: Own status
  */
 router.get('/my-status', auth, authorize('student'), async (req, res) => {
+  const studentId = req.userId;
+  const cacheKey = `student:job-readiness:${studentId}`;
+
   try {
-    const student = await User.findById(req.userId);
-    const resolved = student.resolvedProfile || {};
-    const school = resolved.currentSchool;
+    const responseData = await cacheService.getOrCompute(
+      cacheKey,
+      async () => {
+        const student = await User.findById(studentId);
+        const resolved = student.resolvedProfile || {};
+        const school = resolved.currentSchool;
 
-    if (!school) {
-      return res.json({
-        readiness: { student: req.userId, criteriaStatus: [], readinessPercentage: 0 },
-        config: [],
-        defaults: DEFAULT_CRITERIA,
-        message: 'Please set your current school in your profile first'
-      });
-    }
-
-    // Find or create student readiness record
-    let readiness = await StudentJobReadiness.findOne({ student: req.userId });
-
-    // Fetch relevant configs (School and Common)
-    const configs = await JobReadinessConfig.find({
-      school: { $in: [school, 'Common'] },
-      $or: [{ campus: student.campus }, { campus: null }],
-      isActive: true
-    }).sort({ campus: 1 }); // Global first, then campus overrides
-
-    // Merge criteria for display
-    const criteriaMap = new Map();
-    configs.forEach(config => {
-      config.criteria.forEach(c => {
-        const appliesToSchool =
-          config.school === school ||
-          config.school === 'Common' ||
-          (c.targetSchools && c.targetSchools.includes(school));
-
-        if (c.isActive && appliesToSchool) {
-          criteriaMap.set(c.criteriaId, c);
+        if (!school) {
+          return {
+            readiness: { student: studentId, criteriaStatus: [], readinessPercentage: 0 },
+            config: [],
+            defaults: DEFAULT_CRITERIA,
+            message: 'Please set your current school in your profile first'
+          };
         }
-      });
-    });
-    const mergedCriteria = Array.from(criteriaMap.values());
 
-    if (!readiness) {
-      // Initialize with empty status for each criterion
-      const initialStatus = mergedCriteria.map(c => ({
-        criteriaId: c.criteriaId,
-        status: 'not_started'
-      }));
+        // Find or create student readiness record
+        let readiness = await StudentJobReadiness.findOne({ student: studentId });
 
-      readiness = new StudentJobReadiness({
-        student: req.userId,
-        school,
-        campus: student.campus,
-        criteriaStatus: initialStatus
-      });
-      // Ensure initial readiness is calculated and stored
-      await readiness.calculateReadiness();
-      await readiness.save();
-    } else {
-      // Recalculate readiness to ensure latest merged criteria count
-      try {
-        await readiness.calculateReadiness();
-        await readiness.save();
-      } catch (e) {
-        console.error('Failed to recalculate readiness on /my-status:', e);
-      }
-    }
+        // Fetch relevant configs (School and Common)
+        const configs = await JobReadinessConfig.find({
+          school: { $in: [school, 'Common'] },
+          $or: [{ campus: student.campus }, { campus: null }],
+          isActive: true
+        }).sort({ campus: 1 }); // Global first, then campus overrides
 
-    res.json({
-      readiness,
-      config: mergedCriteria,
-      defaults: DEFAULT_CRITERIA
-    });
+        // Merge criteria for display
+        const criteriaMap = new Map();
+        configs.forEach(config => {
+          config.criteria.forEach(c => {
+            const appliesToSchool =
+              config.school === school ||
+              config.school === 'Common' ||
+              (c.targetSchools && c.targetSchools.includes(school));
+
+            if (c.isActive && appliesToSchool) {
+              criteriaMap.set(c.criteriaId, c);
+            }
+          });
+        });
+        const mergedCriteria = Array.from(criteriaMap.values());
+
+        if (!readiness) {
+          // Initialize with empty status for each criterion
+          const initialStatus = mergedCriteria.map(c => ({
+            criteriaId: c.criteriaId,
+            status: 'not_started'
+          }));
+
+          readiness = new StudentJobReadiness({
+            student: studentId,
+            school,
+            campus: student.campus,
+            criteriaStatus: initialStatus
+          });
+          // Ensure initial readiness is calculated and stored
+          await readiness.calculateReadiness();
+          await readiness.save();
+        } else {
+          // Recalculate readiness to ensure latest merged criteria count
+          try {
+            await readiness.calculateReadiness();
+            await readiness.save();
+          } catch (e) {
+            console.error('Failed to recalculate readiness on /my-status:', e);
+          }
+        }
+
+        return {
+          readiness,
+          config: mergedCriteria,
+          defaults: DEFAULT_CRITERIA
+        };
+      },
+      300
+    );
+
+    res.json(responseData);
   } catch (error) {
     console.error('Get my readiness error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -805,6 +818,7 @@ router.put('/student/:studentId', auth, authorize('campus_poc', 'coordinator', '
     const before = JSON.parse(JSON.stringify(readiness));
     await readiness.calculateReadiness();
     await readiness.save();
+    await invalidateCache([`student:job-readiness:${studentId}`, `student:stats:${studentId}`]);
 
     // Log readiness changes
     try {
@@ -911,6 +925,7 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), upload.single
     // Recalculate readiness percentage
     await readiness.calculateReadiness();
     await readiness.save();
+    await invalidateCache([`student:job-readiness:${req.userId}`, `student:stats:${req.userId}`]);
 
     res.json(readiness);
   } catch (error) {
@@ -1076,6 +1091,7 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
     // Recalculate and save
     await readiness.calculateReadiness();
     await readiness.save();
+    await invalidateCache([`student:job-readiness:${studentId}`, `student:stats:${studentId}`]);
 
     // Notify student
     const student = await User.findById(studentId);
@@ -1129,6 +1145,7 @@ router.post('/student/:studentId/comment/:criteriaId', auth, authorize('campus_p
     criterionStatus.pocCommentedAt = new Date();
 
     await readiness.save();
+    await invalidateCache([`student:job-readiness:${studentId}`, `student:stats:${studentId}`]);
 
     // Create notification for student
     const notification = new Notification({
@@ -1179,6 +1196,7 @@ router.post('/student/:studentId/rate/:criteriaId', auth, authorize('campus_poc'
     criterionStatus.pocRatedAt = new Date();
 
     await readiness.save();
+    await invalidateCache([`student:job-readiness:${studentId}`, `student:stats:${studentId}`]);
 
     // Create notification for student
     const notification = new Notification({
@@ -1242,6 +1260,7 @@ router.patch('/student/:studentId/approve', auth, authorize('campus_poc', 'coord
     readiness.approvalNotes = approvalNotes;
 
     await readiness.save();
+    await invalidateCache([`student:job-readiness:${studentId}`, `student:stats:${studentId}`]);
 
     // Notify student
     const notification = new Notification({

@@ -9,6 +9,7 @@ const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
+const cacheService = require('../services/redisCacheService');
 
 /**
  * @swagger
@@ -349,6 +350,7 @@ router.post('/', auth, authorize('student'), [
     });
 
     await application.save();
+    await cacheService.invalidateApplicationCache(req.userId);
 
     // Notify coordinators
     const coordinators = await User.find({ role: 'coordinator', isActive: true });
@@ -466,6 +468,7 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
     }
 
     await application.save();
+    await cacheService.invalidateApplicationCache(application.student._id || application.student);
 
     // Notify student
     await Notification.create({
@@ -566,6 +569,7 @@ router.put('/:id/rounds', auth, authorize('coordinator', 'manager'), async (req,
     }
 
     await application.save();
+    await cacheService.invalidateApplicationCache(application.student);
 
     // Notify student
     await Notification.create({
@@ -639,6 +643,7 @@ router.put('/:id/recommend', auth, authorize('campus_poc'), async (req, res) => 
     };
 
     await application.save();
+    await cacheService.invalidateApplicationCache(application.student._id || application.student);
 
     // Notify coordinators
     const coordinators = await User.find({ role: 'coordinator', isActive: true });
@@ -700,6 +705,7 @@ router.put('/:id/withdraw', auth, authorize('student'), async (req, res) => {
 
     application.status = 'withdrawn';
     await application.save();
+    await cacheService.invalidateApplicationCache(req.userId);
 
     res.json({ message: 'Application withdrawn successfully' });
   } catch (error) {

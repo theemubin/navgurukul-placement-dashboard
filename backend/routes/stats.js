@@ -9,6 +9,7 @@ const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const { auth, authorize } = require('../middleware/auth');
 const { cacheMiddleware } = require('../middleware/cache');
+const cacheService = require('../services/redisCacheService');
 const fs = require('fs');
 
 // Helper to get all campus IDs a POC is authorized to manage
@@ -710,23 +711,34 @@ router.get('/export', auth, authorize('coordinator', 'manager'), async (req, res
  *         description: Student stats
  */
 router.get('/student', auth, authorize('student'), async (req, res) => {
+  const studentId = req.userId;
+  const cacheKey = `student:stats:${studentId}`;
+
   try {
-    const applications = await Application.find({ student: req.userId })
-      .populate('job', 'title company.name status');
+    const responseData = await cacheService.getOrCompute(
+      cacheKey,
+      async () => {
+        const applications = await Application.find({ student: studentId })
+          .populate('job', 'title company.name status');
 
-    const stats = {
-      totalApplications: applications.length,
-      inProgress: applications.filter(a => ['applied', 'shortlisted', 'in_progress', 'interviewing'].includes(a.status)).length,
-      selected: applications.filter(a => a.status === 'selected').length,
-      rejected: applications.filter(a => a.status === 'rejected').length,
-      interested: applications.filter(a => a.status === 'interested').length
-    };
+        const stats = {
+          totalApplications: applications.length,
+          inProgress: applications.filter(a => ['applied', 'shortlisted', 'in_progress', 'interviewing'].includes(a.status)).length,
+          selected: applications.filter(a => a.status === 'selected').length,
+          rejected: applications.filter(a => a.status === 'rejected').length,
+          interested: applications.filter(a => a.status === 'interested').length
+        };
 
-    const recentApplications = applications
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 5);
+        const recentApplications = applications
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, 5);
 
-    res.json({ stats, recentApplications });
+        return { stats, recentApplications };
+      },
+      60
+    );
+
+    res.json(responseData);
   } catch (error) {
     console.error('Get student stats error:', error);
     res.status(500).json({ message: 'Server error' });
