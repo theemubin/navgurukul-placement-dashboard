@@ -157,7 +157,9 @@ const StudentProfile = () => {
   const [atsResult, setAtsResult] = useState(null);
   const [atsPrompts, setAtsPrompts] = useState(null);
 
-  const schoolList = Object.keys(settings.schoolModules || {});
+  const schoolList = settings.schools && settings.schools.length > 0
+    ? settings.schools
+    : Object.keys(settings.schoolModules || {});
   const schools = (schoolList.length > 0 ? schoolList : fallbackSchools)
     .filter(s => !settings.inactiveSchools?.includes(s) || s === formData.currentSchool);
 
@@ -783,6 +785,19 @@ const StudentProfile = () => {
 
   const canEdit = true; // Students can always edit, but need re-approval
   const needsReapproval = formData.profileStatus === 'approved';
+
+  const filteredTechnicalSkills = allSkills.filter(skill => {
+    if (skill.category !== 'technical') return false;
+    if (skill.isCommon) return true;
+    if (!formData.currentSchool) return false;
+    if (skill.schools?.includes(formData.currentSchool)) return true;
+    
+    // Treat any "Eternal" school as matching "School of Programming" for skills selection
+    const isEternal = formData.currentSchool.toLowerCase().includes('eternal');
+    if (isEternal && skill.schools?.includes('School of Programming')) return true;
+    
+    return false;
+  });
 
   const SectionSaveButton = ({ className = "" }) => (
     canEdit ? (
@@ -1855,9 +1870,7 @@ const StudentProfile = () => {
                   <p className="text-sm text-gray-500 mb-4">Select your specialized skills and rate yourself (1 = Basic, 4 = Expert)</p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {allSkills
-                      .filter(skill => skill.category === 'technical' && (skill.isCommon || (formData.currentSchool && skill.schools?.includes(formData.currentSchool))))
-                      .map((skill) => {
+                    {filteredTechnicalSkills.map((skill) => {
                         const existingSkill = formData.technicalSkills.find(s => s.skillId === skill._id || s.skillName === skill.name);
                         const isSelected = !!existingSkill;
                         const rating = existingSkill?.selfRating || 0;
@@ -1901,7 +1914,7 @@ const StudentProfile = () => {
                         );
                       })}
                   </div>
-                  {allSkills.filter(skill => skill.category === 'technical' && (skill.isCommon || (formData.currentSchool && skill.schools?.includes(formData.currentSchool)))).length === 0 && (
+                  {filteredTechnicalSkills.length === 0 && (
                     <p className="text-sm text-gray-500 italic">No specific skills found for your school yet.</p>
                   )}
                 </div>
