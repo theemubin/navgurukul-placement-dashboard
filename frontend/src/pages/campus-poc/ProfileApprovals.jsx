@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { userAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert, Modal } from '../../components/common/UIComponents';
+import { FileText } from 'lucide-react';
 
 const ProfileApprovals = () => {
   const [pendingProfiles, setPendingProfiles] = useState([]);
@@ -965,13 +966,40 @@ const ProfileApprovals = () => {
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Resume</h3>
                 <div>
-                  {selectedStudent.studentProfile?.resume ? (
+                  {selectedStudent.studentProfile?.resumes && selectedStudent.studentProfile.resumes.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedStudent.studentProfile.resumes.map((resItem) => (
+                        <div key={resItem._id} className="p-3 bg-gray-50 rounded flex items-center justify-between">
+                          <a
+                            href={resItem.resume?.startsWith('http') ? resItem.resume : resItem.resumeLink?.startsWith('http') ? resItem.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${resItem.resume || resItem.resumeLink}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary-600 font-medium hover:underline flex items-center gap-1.5"
+                          >
+                            <FileText className="w-4 h-4 text-gray-400" />
+                            {resItem.fileName || 'View Resume'}
+                          </a>
+                          {resItem.isPrimary && (
+                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                              Primary
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : selectedStudent.studentProfile?.resume ? (
                     <div className="p-3 bg-gray-50 rounded">
-                      <a href={selectedStudent.studentProfile.resume.startsWith('http') ? selectedStudent.studentProfile.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resume}`} target="_blank" rel="noreferrer" className="text-primary-600">View Resume</a>
+                      <a href={selectedStudent.studentProfile.resume.startsWith('http') ? selectedStudent.studentProfile.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resume}`} target="_blank" rel="noreferrer" className="text-primary-600 flex items-center gap-1.5 font-medium hover:underline">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        View Resume
+                      </a>
                     </div>
                   ) : selectedStudent.studentProfile?.resumeLink ? (
                     <div className="p-3 bg-gray-50 rounded">
-                      <a href={selectedStudent.studentProfile.resumeLink.startsWith('http') ? selectedStudent.studentProfile.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resumeLink}`} target="_blank" rel="noreferrer" className="text-primary-600">Resume Link</a>
+                      <a href={selectedStudent.studentProfile.resumeLink.startsWith('http') ? selectedStudent.studentProfile.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resumeLink}`} target="_blank" rel="noreferrer" className="text-primary-600 flex items-center gap-1.5 font-medium hover:underline">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        Resume Link
+                      </a>
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500">No resume uploaded</p>
