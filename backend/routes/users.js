@@ -6,6 +6,7 @@ const Notification = require('../models/Notification');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const cacheService = require('../services/redisCacheService');
 
 /**
  * @swagger
@@ -640,6 +641,9 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
     }
 
     await user.save();
+    if (user.role === 'student') {
+      await cacheService.invalidateProfileCache(req.userId);
+    }
 
     const updatedUser = await User.findById(req.userId)
       .select('-password')
@@ -1285,6 +1289,7 @@ router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordi
     }
 
     await student.save();
+    await cacheService.invalidateProfileCache(studentId);
 
     const updatedStudent = await User.findById(studentId)
       .select('-password')
