@@ -583,7 +583,7 @@ function InterestRequestsReview() {
                 variant="success"
                 className="flex-1"
                 onClick={() => handleReview('approved')}
-                disabled={processing}
+                disabled={processing || !!reviewForm.rejectionReason.trim()}
               >
                 <CheckIcon className="w-5 h-5 mr-1" />
                 Approve
