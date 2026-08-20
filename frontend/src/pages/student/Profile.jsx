@@ -745,8 +745,81 @@ const StudentProfile = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
+      <div className="space-y-6 animate-pulse">
+        {/* Sticky Header Skeleton */}
+        <div className="py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
+            <div className="space-y-2">
+              <div className="h-8 w-48 bg-gray-200 rounded-lg" />
+              <div className="h-4 w-80 bg-gray-200 rounded-md" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-32 bg-gray-200 rounded-xl" />
+              <div className="h-6 w-24 bg-gray-200 rounded-full" />
+            </div>
+          </div>
+
+          {/* Tabs Skeleton */}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-9 w-24 bg-gray-200 rounded-t-lg flex-shrink-0" />
+            ))}
+          </div>
+        </div>
+
+        {/* Verified Banner Skeleton */}
+        <div className="bg-gray-100 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3 w-full">
+            <div className="w-12 h-12 bg-gray-200 rounded-full flex-shrink-0" />
+            <div className="space-y-2 flex-1">
+              <div className="h-5 w-1/3 bg-gray-200 rounded" />
+              <div className="h-4 w-2/3 bg-gray-200 rounded" />
+            </div>
+          </div>
+        </div>
+
+        {/* Main Grid Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="card space-y-6">
+              <div className="h-6 w-48 bg-gray-200 rounded" />
+              
+              {/* Avatar Section Skeleton */}
+              <div className="flex flex-col md:flex-row items-center gap-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="w-32 h-32 rounded-full bg-gray-200 flex-shrink-0" />
+                <div className="space-y-2 text-center md:text-left flex-1">
+                  <div className="h-5 w-32 bg-gray-200 rounded mx-auto md:mx-0" />
+                  <div className="h-4 w-64 bg-gray-200 rounded mx-auto md:mx-0" />
+                </div>
+              </div>
+
+              {/* Fields Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-4 w-24 bg-gray-200 rounded" />
+                    <div className="h-10 bg-gray-100 rounded-lg border border-gray-200" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar Skeleton */}
+          <div className="space-y-6">
+            <div className="card space-y-6">
+              <div className="h-6 w-36 bg-gray-250 rounded" />
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-4 w-20 bg-gray-200 rounded" />
+                    <div className="h-10 bg-gray-100 rounded-lg border border-gray-200" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

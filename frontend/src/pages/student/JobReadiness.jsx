@@ -193,8 +193,85 @@ function JobReadiness() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size="large" />
+      <div className="max-w-5xl mx-auto px-4 py-8 space-y-8 animate-pulse">
+        {/* Header Skeleton */}
+        <div className="text-center space-y-3">
+          <div className="h-10 w-2/3 bg-gray-200 rounded mx-auto" />
+          <div className="h-4.5 w-1/3 bg-gray-200 rounded mx-auto" />
+        </div>
+
+        {/* Message Card Skeleton */}
+        <div className="card p-6 space-y-4">
+          <div className="h-6 w-1/3 bg-gray-300 rounded" />
+          <div className="space-y-2">
+            <div className="h-4.5 w-full bg-gray-200 rounded" />
+            <div className="h-4.5 w-5/6 bg-gray-200 rounded" />
+            <div className="h-4.5 w-4/5 bg-gray-200 rounded" />
+          </div>
+        </div>
+
+        {/* Gamified Progress Card Skeleton */}
+        <div className="card p-6 bg-gradient-to-br from-indigo-400 via-purple-400 to-pink-400 border-0 text-white space-y-6">
+          <div className="flex justify-between items-center">
+            <div className="space-y-2">
+              <div className="h-8 w-24 bg-white/20 rounded" />
+              <div className="h-5 w-48 bg-white/20 rounded" />
+            </div>
+            <div className="text-right space-y-2">
+              <div className="h-12 w-20 bg-white/20 rounded ml-auto" />
+              <div className="flex gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="w-6 h-6 bg-white/20 rounded-full" />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <div className="h-4 w-24 bg-white/20 rounded" />
+              <div className="h-4 w-20 bg-white/20 rounded" />
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-6" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-white/10 rounded-lg p-3 space-y-2 text-center">
+                <div className="w-6 h-6 bg-white/20 rounded-full mx-auto" />
+                <div className="h-6 w-8 bg-white/20 rounded mx-auto" />
+                <div className="h-3 w-16 bg-white/25 rounded mx-auto" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Category & Criteria Skeleton */}
+        <div className="card p-6 space-y-6">
+          <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
+            <div className="p-3 bg-gray-100 rounded-xl w-14 h-14" />
+            <div className="flex-1 space-y-2">
+              <div className="h-6 w-32 bg-gray-300 rounded" />
+              <div className="flex items-center gap-3">
+                <div className="w-full bg-gray-200 h-2 max-w-xs rounded-full" />
+                <div className="h-4 w-10 bg-gray-200 rounded" />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="p-6 rounded-2xl border-2 border-gray-200 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-6 w-48 bg-gray-300 rounded" />
+                  <div className="h-5 w-20 bg-gray-250 rounded-full" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4.5 w-full bg-gray-200 rounded" />
+                  <div className="h-4.5 w-2/3 bg-gray-200 rounded" />
+                </div>
+                <div className="h-10 w-32 bg-gray-150 rounded-lg" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
