@@ -317,13 +317,7 @@ const ProfileApprovals = () => {
     return Math.round((completed / checks.length) * 100);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  // Removed early return to allow filter UI and skeleton loader to render in-place
 
   return (
     <div className="p-6">
@@ -376,7 +370,51 @@ const ProfileApprovals = () => {
         </div>
       </div>
 
-      {pendingProfiles.length === 0 ? (
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              {/* Header */}
+              <div className="flex items-start justify-between">
+                <div className="flex items-center">
+                  <div className="h-12 w-12 rounded-full bg-gray-200 shrink-0"></div>
+                  <div className="ml-3 space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-28"></div>
+                    <div className="h-3 bg-gray-200 rounded w-36"></div>
+                  </div>
+                </div>
+                <div className="h-6 bg-gray-200 rounded w-24"></div>
+              </div>
+
+              {/* Profile Completion Bar */}
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="h-3 bg-gray-200 rounded w-24"></div>
+                  <div className="h-3 bg-gray-200 rounded w-8"></div>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div className="bg-gray-200 h-2 rounded-full w-2/3"></div>
+                </div>
+              </div>
+
+              {/* Details List */}
+              <div className="mt-4 space-y-2.5">
+                {[...Array(4)].map((_, idx) => (
+                  <div key={idx} className="flex items-center">
+                    <div className="h-3.5 bg-gray-200 rounded w-16 mr-8"></div>
+                    <div className="h-3.5 bg-gray-200 rounded w-32"></div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-5 flex gap-2">
+                <div className="h-9 bg-gray-200 rounded w-full"></div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : pendingProfiles.length === 0 ? (
         <Card>
           <div className="text-center py-12">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

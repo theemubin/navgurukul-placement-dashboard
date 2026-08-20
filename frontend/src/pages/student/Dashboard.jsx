@@ -52,8 +52,113 @@ const StudentDashboard = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
+      <div className="max-w-[1200px] mx-auto space-y-8 pb-12 animate-pulse">
+        {/* Welcome Hero Skeleton */}
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-gray-200 h-48 md:h-56 w-full flex items-center p-8 md:p-12">
+          <div className="space-y-4 w-2/3">
+            <div className="h-6 w-32 bg-gray-300 rounded-full" />
+            <div className="h-10 w-64 bg-gray-300 rounded-lg" />
+            <div className="h-6 w-96 bg-gray-300 rounded-md" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column Skeleton */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Job Readiness Card Skeleton */}
+            <div className="bg-white rounded-[2rem] border border-gray-100 p-8 space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-200" />
+                  <div className="space-y-2">
+                    <div className="h-5 w-40 bg-gray-200 rounded-md" />
+                    <div className="h-4 w-24 bg-gray-200 rounded-md" />
+                  </div>
+                </div>
+                <div className="h-8 w-32 bg-gray-200 rounded-full" />
+              </div>
+              <div className="h-4 w-full bg-gray-200 rounded-full" />
+              <div className="h-3 w-48 bg-gray-200 rounded-md" />
+            </div>
+
+            {/* Core Stats Grid Skeleton */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="bg-white p-6 rounded-3xl border border-gray-100 space-y-3">
+                  <div className="w-10 h-10 rounded-xl bg-gray-200" />
+                  <div className="h-3 w-16 bg-gray-200 rounded-md" />
+                  <div className="h-8 w-12 bg-gray-200 rounded-lg" />
+                </div>
+              ))}
+            </div>
+
+            {/* Recent Applications Card Skeleton */}
+            <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden">
+              <div className="p-8 border-b border-gray-50 flex items-center justify-between">
+                <div className="space-y-2">
+                  <div className="h-6 w-48 bg-gray-200 rounded-md" />
+                  <div className="h-4 w-32 bg-gray-200 rounded-md" />
+                </div>
+                <div className="w-10 h-10 bg-gray-200 rounded-xl" />
+              </div>
+              <div className="p-4 space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-gray-50/50">
+                    <div className="flex items-center gap-4 w-2/3">
+                      <div className="w-12 h-12 rounded-xl bg-gray-200 shrink-0" />
+                      <div className="space-y-2 w-full">
+                        <div className="h-4 w-1/2 bg-gray-200 rounded-md" />
+                        <div className="h-3 w-1/4 bg-gray-200 rounded-md" />
+                      </div>
+                    </div>
+                    <div className="h-6 w-20 bg-gray-200 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column Skeleton */}
+          <div className="space-y-8">
+            {/* Refine Profile Skeleton */}
+            <div className="bg-gray-200 rounded-[2rem] p-8 h-64 flex flex-col justify-between">
+              <div className="w-14 h-14 rounded-2xl bg-gray-300" />
+              <div className="space-y-2">
+                <div className="h-6 w-40 bg-gray-300 rounded-md" />
+                <div className="h-4 w-full bg-gray-300 rounded-md" />
+              </div>
+              <div className="h-4 w-24 bg-gray-300 rounded-md" />
+            </div>
+
+            {/* Niche Opportunities Skeleton */}
+            <div className="bg-white rounded-[2rem] p-8 border border-gray-100 space-y-6">
+              <div className="w-12 h-12 rounded-2xl bg-gray-200" />
+              <div className="space-y-2">
+                <div className="h-5 w-40 bg-gray-200 rounded-md" />
+                <div className="h-4 w-full bg-gray-200 rounded-md" />
+              </div>
+              <div className="pt-6 border-t border-gray-50 flex items-center justify-between">
+                <div className="space-y-2">
+                  <div className="h-6 w-16 bg-gray-200 rounded-md" />
+                  <div className="h-3 w-20 bg-gray-200 rounded-md" />
+                </div>
+                <div className="w-10 h-10 bg-gray-200 rounded-xl" />
+              </div>
+            </div>
+
+            {/* Platform Tip Skeleton */}
+            <div className="bg-gray-100 rounded-[2rem] p-8 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gray-200" />
+                <div className="h-4 w-24 bg-gray-200 rounded-md" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 w-full bg-gray-200 rounded-md" />
+                <div className="h-3 w-5/6 bg-gray-200 rounded-md" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

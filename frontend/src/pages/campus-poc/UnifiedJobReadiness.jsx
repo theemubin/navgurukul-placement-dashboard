@@ -195,7 +195,66 @@ const ReadinessReviewSection = () => {
         pending: students.filter(s => getProgressStats(s).pending > 0).length
     };
 
-    if (loading && students.length === 0) return <LoadingSpinner size="lg" />;
+    if (loading && students.length === 0) return (
+        <div className="space-y-6 animate-pulse">
+            {/* Stats cards skeleton – 3 cols */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[...Array(3)].map((_, i) => (
+                    <div key={i} className="card p-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-gray-200 shrink-0" />
+                            <div className="space-y-2">
+                                <div className="h-3 w-24 bg-gray-200 rounded-md" />
+                                <div className="h-7 w-10 bg-gray-200 rounded-md" />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Filter tabs + search bar skeleton */}
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div className="flex gap-2 w-full md:w-auto">
+                    <div className="h-9 w-32 bg-gray-200 rounded-lg" />
+                    <div className="h-9 w-28 bg-gray-200 rounded-lg" />
+                    <div className="h-9 w-24 bg-gray-200 rounded-lg" />
+                </div>
+                <div className="h-10 w-full md:w-96 bg-gray-200 rounded-xl" />
+            </div>
+
+            {/* Student card rows skeleton */}
+            <div className="grid grid-cols-1 gap-4">
+                {[...Array(6)].map((_, i) => (
+                    <div key={i} className="card p-5">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            {/* Left – avatar + name + email */}
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-gray-200 shrink-0" />
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-4 w-36 bg-gray-200 rounded-md" />
+                                        <div className="h-5 w-20 bg-gray-200 rounded-full" />
+                                    </div>
+                                    <div className="h-3 w-48 bg-gray-200 rounded-md" />
+                                </div>
+                            </div>
+
+                            {/* Right – progress bar + pending badge + chevron */}
+                            <div className="flex items-center gap-6">
+                                <div className="text-right space-y-1.5">
+                                    <div className="h-3 w-20 bg-gray-200 rounded-md ml-auto" />
+                                    <div className="w-32 h-1.5 bg-gray-200 rounded-full" />
+                                </div>
+                                <div className="h-6 w-20 bg-gray-200 rounded-full" />
+                                <div className="w-5 h-5 bg-gray-200 rounded-md" />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+
 
     return (
         <div className="space-y-6 animate-fadeIn">

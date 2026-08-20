@@ -119,13 +119,7 @@ function InterestRequestsReview() {
     requests.filter(r => r.status === 'pending').length : 
     (filter === 'pending' ? pagination.total : 0);
 
-  if (loading && requests.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  // Removed early return to allow header, stats, filters, and skeleton loaders to render inline
 
   return (
     <div className="space-y-6">
@@ -157,11 +151,15 @@ function InterestRequestsReview() {
             <div className="p-2 bg-yellow-100 rounded-lg">
               <ClockIcon className="w-6 h-6 text-yellow-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {statusCounts.pending}
-              </p>
+              {loading && requests.length === 0 ? (
+                <div className="h-8 bg-gray-200 rounded w-12 animate-pulse mt-1" />
+              ) : (
+                <p className="text-2xl font-bold text-yellow-600">
+                  {statusCounts.pending}
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -170,11 +168,15 @@ function InterestRequestsReview() {
             <div className="p-2 bg-green-100 rounded-lg">
               <CheckCircleIcon className="w-6 h-6 text-green-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-gray-600">Approved</p>
-              <p className="text-2xl font-bold text-green-600">
-                {statusCounts.approved}
-              </p>
+              {loading && requests.length === 0 ? (
+                <div className="h-8 bg-gray-200 rounded w-12 animate-pulse mt-1" />
+              ) : (
+                <p className="text-2xl font-bold text-green-600">
+                  {statusCounts.approved}
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -183,11 +185,15 @@ function InterestRequestsReview() {
             <div className="p-2 bg-red-100 rounded-lg">
               <XCircleIcon className="w-6 h-6 text-red-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-gray-600">Rejected</p>
-              <p className="text-2xl font-bold text-red-600">
-                {statusCounts.rejected}
-              </p>
+              {loading && requests.length === 0 ? (
+                <div className="h-8 bg-gray-200 rounded w-12 animate-pulse mt-1" />
+              ) : (
+                <p className="text-2xl font-bold text-red-600">
+                  {statusCounts.rejected}
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -229,7 +235,55 @@ function InterestRequestsReview() {
       </Card>
 
       {/* Requests List */}
-      {filteredRequests.length === 0 ? (
+      {loading ? (
+        <div className="space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <Card key={i} className="p-4 border-l-4 border-l-gray-200 animate-pulse">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                {/* Student & Job Info */}
+                <div className="flex-1 space-y-3">
+                  {/* Student Info */}
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 bg-gray-200 rounded-full shrink-0"></div>
+                    <div className="space-y-2 min-w-0">
+                      <div className="h-4 bg-gray-200 rounded w-28"></div>
+                      <div className="h-3.5 bg-gray-200 rounded w-36"></div>
+                    </div>
+                  </div>
+
+                  {/* Job Info */}
+                  <div className="flex items-start gap-3 ml-2">
+                    <div className="w-5 h-5 bg-gray-200 rounded-full shrink-0"></div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-32"></div>
+                      <div className="h-3.5 bg-gray-200 rounded w-24"></div>
+                    </div>
+                  </div>
+
+                  {/* Match Score */}
+                  <div className="flex items-center gap-2 ml-2">
+                    <div className="w-5 h-5 bg-gray-200 rounded-full shrink-0"></div>
+                    <div className="h-4 bg-gray-200 rounded w-20"></div>
+                    <div className="h-3 bg-gray-200 rounded w-24"></div>
+                  </div>
+                </div>
+
+                {/* Status & Actions */}
+                <div className="flex flex-col items-end gap-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 bg-gray-200 rounded-full w-20"></div>
+                    <div className="h-3.5 bg-gray-200 rounded w-16"></div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="h-9 bg-gray-200 rounded w-20"></div>
+                    <div className="h-9 bg-gray-200 rounded w-20"></div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : filteredRequests.length === 0 ? (
         <Card className="p-8 text-center">
           <HeartIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500">No interest requests found</p>
