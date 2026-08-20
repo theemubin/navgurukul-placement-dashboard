@@ -254,8 +254,52 @@ const StudentApplications = () => {
 
       {/* Applications List */}
       {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <LoadingSpinner size="lg" />
+        <div className="space-y-4 animate-pulse">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="bg-white rounded-[1.5rem] border border-gray-100 p-5 md:p-6 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-start gap-4">
+                  {/* Logo Placeholder */}
+                  <div className="w-14 h-14 rounded-2xl bg-gray-200 shrink-0" />
+                  
+                  {/* Title / Company / Date Placeholders */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-48 bg-gray-300 rounded" />
+                      <div className="h-5 w-12 bg-gray-200 rounded" />
+                    </div>
+                    <div className="h-4.5 w-32 bg-gray-200 rounded" />
+                    <div className="flex items-center gap-3 mt-3">
+                      <div className="h-6 w-16 bg-gray-100 rounded border border-gray-100" />
+                      <div className="h-4 w-28 bg-gray-200 rounded" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Arrow Action Placeholder */}
+                <div className="flex justify-end pt-4 md:pt-0">
+                  <div className="w-10 h-10 bg-gray-100 rounded-xl border border-gray-100" />
+                </div>
+              </div>
+
+              {/* Progress Bar Placeholders */}
+              <div className="mt-4 pt-4 border-t space-y-3">
+                <div className="flex justify-between">
+                  <div className="h-4 w-32 bg-gray-200 rounded" />
+                  <div className="h-4 w-24 bg-gray-200 rounded" />
+                </div>
+                {/* Visual steps */}
+                <div className="flex items-center gap-1.5">
+                  {[...Array(4)].map((_, j) => (
+                    <div key={j} className="flex-1 flex flex-col items-center gap-1.5">
+                      <div className="w-full h-2 rounded-full bg-gray-200" />
+                      <div className="h-3 w-12 bg-gray-100 rounded" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : applications.length > 0 ? (
         <div className="space-y-4">
