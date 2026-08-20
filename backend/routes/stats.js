@@ -1770,7 +1770,7 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), cacheMiddle
  *       200:
  *         description: Detailed readiness statistics
  */
-router.get('/manager/students-readiness', auth, authorize('manager'), async (req, res) => {
+router.get('/manager/students-readiness', auth, authorize('manager'), cacheMiddleware({ type: 'job_readiness', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const students = await User.find({ role: 'student', isActive: true })
       .select('firstName lastName email campus studentProfile.currentSchool studentProfile.openForRoles')
@@ -1819,7 +1819,7 @@ router.get('/manager/students-readiness', auth, authorize('manager'), async (req
  *       200:
  *         description: Historical statistics
  */
-router.get('/historical-cycles', auth, authorize('manager', 'coordinator'), async (req, res) => {
+router.get('/historical-cycles', auth, authorize('manager', 'coordinator'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const { campus: campusId } = req.query;
 
@@ -1987,7 +1987,7 @@ router.get('/campus-placement-trends', auth, authorize('manager', 'coordinator')
  *       200:
  *         description: Long-term students trend data
  */
-router.get('/long-term-students-trend', auth, authorize('manager', 'coordinator'), async (req, res) => {
+router.get('/long-term-students-trend', auth, authorize('manager', 'coordinator'), cacheMiddleware({ type: 'dashboard', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const now = new Date();
     const monthsToShow = 12;

@@ -473,8 +473,25 @@ const CoordinatorForum = () => {
                 {/* Thread list */}
                 <div className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
                     {loading ? (
-                        <div className="flex items-center justify-center py-16">
-                            <div className="w-7 h-7 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+                        <div className="space-y-1 animate-pulse">
+                            {[...Array(8)].map((_, i) => (
+                                <div key={i} className="w-full flex items-center gap-3 p-3 rounded-xl border border-transparent">
+                                    {/* Avatar circle */}
+                                    <div className="w-10 h-10 rounded-2xl bg-gray-200 shrink-0" />
+                                    {/* Text block */}
+                                    <div className="flex-1 min-w-0 space-y-1.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="h-3 w-28 bg-gray-200 rounded-md" />
+                                            <div className="h-2.5 w-10 bg-gray-200 rounded-md shrink-0" />
+                                        </div>
+                                        <div className="h-2.5 w-40 bg-gray-200 rounded-md" />
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="h-4 w-16 bg-gray-200 rounded-full" />
+                                            <div className="h-3 w-10 bg-gray-200 rounded-md" />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     ) : threadList.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
