@@ -650,6 +650,13 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
     res.json({ message: 'Profile updated successfully', user: updatedUser });
   } catch (error) {
     console.error('Update profile error:', error);
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ message: `Validation Error: ${messages.join(', ')}` });
+    }
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: `Invalid data format for field: ${error.path}` });
+    }
     res.status(500).json({ message: 'Server error' });
   }
 });
