@@ -6,6 +6,8 @@ const Notification = require('../models/Notification');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const cacheService = require('../services/redisCacheService');
+const { cacheMiddleware, invalidateCache } = require('../middleware/cache');
 
 /**
  * @swagger
@@ -69,6 +71,7 @@ router.post('/sync-student', auth, authorize('campus_poc', 'coordinator', 'manag
       // Re-fetch student to get updated virtuals/resolved data
       const updatedStudent = await User.findById(student._id);
 
+      await invalidateCache('cache:students:*');
       res.json({
         success: true,
         message: 'Student data synced from Ghar successfully and updated in MongoDB',
@@ -120,7 +123,7 @@ router.post('/sync-student', auth, authorize('campus_poc', 'coordinator', 'manag
  *       200:
  *         description: List of students
  */
-router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
+router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'), cacheMiddleware({ type: 'student', keyPrefix: 'students' }), async (req, res) => {
   try {
     // Accept pagination, filters and sorting
     const {
@@ -208,6 +211,26 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
     if (req.query.summary === 'true') {
       const students = await User.find(query)
         .select('firstName lastName email campus studentProfile.currentStatus studentProfile.joiningDate')
+        .populate('campus', 'name')
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .sort(sortObj);
+
+      const total = await User.countDocuments(query);
+
+      return res.json({
+        students,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / limit),
+          total
+        }
+      });
+    }
+
+    if (req.query.summary === 'communication') {
+      const students = await User.find(query)
+        .select('firstName lastName email role campus gender phone studentProfile.currentStatus studentProfile.currentSchool studentProfile.joiningDate studentProfile.dateOfPlacement studentProfile.englishProficiency studentProfile.readTheoryLevel studentProfile.externalData.ghar')
         .populate('campus', 'name')
         .skip((page - 1) * limit)
         .limit(parseInt(limit))
@@ -345,6 +368,7 @@ router.put('/students/:studentId/status', auth, authorize('campus_poc', 'coordin
       relatedEntity: { type: 'user', id: studentId }
     });
 
+    await invalidateCache('cache:students:*');
     res.json({
       message: 'Student status updated successfully',
       status: student.studentProfile.currentStatus
@@ -390,6 +414,7 @@ router.put('/profile/avatar', auth, upload.single('avatar'), async (req, res) =>
     }
     await user.save();
 
+    await invalidateCache('cache:students:*');
     res.json({
       success: true,
       message: 'Profile picture updated successfully',
@@ -640,6 +665,10 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
     }
 
     await user.save();
+    if (user.role === 'student') {
+      await cacheService.invalidateProfileCache(req.userId);
+      await invalidateCache('cache:students:*');
+    }
 
     const updatedUser = await User.findById(req.userId)
       .select('-password')
@@ -754,6 +783,7 @@ router.post('/profile/resumes', auth, authorize('student'), upload.single('resum
 
     await user.save();
 
+    await invalidateCache('cache:students:*');
     res.json({
       success: true,
       message: 'Resume uploaded successfully',
@@ -925,6 +955,7 @@ router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
       });
     }
 
+    await invalidateCache('cache:students:*');
     res.json({ message: 'Profile submitted for approval' });
   } catch (error) {
     console.error('Submit profile error:', error);
@@ -978,6 +1009,7 @@ router.put('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'ma
       .select('-password')
       .populate('managedCampuses', 'name code');
 
+    await invalidateCache('cache:students:*');
     res.json({
       message: 'Managed campuses updated successfully',
       managedCampuses: updatedUser.managedCampuses
@@ -1099,6 +1131,7 @@ router.put('/students/:studentId/profile/approve', auth, authorize('campus_poc',
     // Send to Discord
     await discordService.sendProfileUpdate(student, status, req.user);
 
+    await invalidateCache('cache:students:*');
     res.json({ message: `Profile ${status === 'approved' ? 'approved' : 'sent for revision'} successfully` });
   } catch (error) {
     console.error('Approve profile error:', error);
@@ -1292,6 +1325,8 @@ router.put('/students/:studentId/profile', auth, authorize('campus_poc', 'coordi
     }
 
     await student.save();
+    await cacheService.invalidateProfileCache(studentId);
+    await invalidateCache('cache:students:*');
 
     const updatedStudent = await User.findById(studentId)
       .select('-password')
@@ -1368,6 +1403,7 @@ router.post('/profile/skills', auth, authorize('student'), async (req, res) => {
 
     const added = user.studentProfile.skills.find(s => s.skill.toString() === skillId);
 
+    await invalidateCache('cache:students:*');
     res.json({ message: 'Skill added, pending approval', skill: added });
   } catch (error) {
     console.error('Add skill error:', error);
@@ -1467,6 +1503,7 @@ router.put('/students/:studentId/skills/:skillId', auth, authorize('campus_poc',
       relatedEntity: { type: 'skill', id: skillId }
     });
 
+    await invalidateCache('cache:students:*');
     res.json({ message: `Skill ${status} successfully` });
   } catch (error) {
     console.error('Approve skill error:', error);
@@ -2090,6 +2127,7 @@ router.put('/:userId', auth, authorize('manager'), async (req, res) => {
       console.error('Failed to write change log:', logErr);
     }
 
+    await invalidateCache('cache:students:*');
     res.json({ message: 'User updated', user: updated });
   } catch (error) {
     console.error('Update user error:', error);

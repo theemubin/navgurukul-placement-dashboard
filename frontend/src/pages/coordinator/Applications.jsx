@@ -483,7 +483,105 @@ const Applications = () => {
   };
 
   const applicationsContent = loading ? (
-    <div className="flex items-center justify-center py-12"><LoadingSpinner size="lg" /></div>
+    <div className="animate-pulse space-y-4">
+      {/* Desktop table skeleton – hidden on mobile */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              {['', 'Student', 'Job', 'Applied On', 'Status', 'Current Round', 'Actions'].map((h, i) => (
+                <th key={i} className="px-4 py-3 text-left">
+                  <div className="h-3 w-16 bg-gray-200 rounded-md" />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {[...Array(8)].map((_, i) => (
+              <tr key={i} className="hover:bg-gray-50">
+                {/* Checkbox */}
+                <td className="px-4 py-3">
+                  <div className="w-4 h-4 bg-gray-200 rounded" />
+                </td>
+                {/* Student name + email */}
+                <td className="px-4 py-3">
+                  <div className="space-y-1.5">
+                    <div className="h-4 w-32 bg-gray-200 rounded-md" />
+                    <div className="h-3 w-44 bg-gray-200 rounded-md" />
+                  </div>
+                </td>
+                {/* Job title + company */}
+                <td className="px-4 py-3">
+                  <div className="space-y-1.5">
+                    <div className="h-4 w-36 bg-gray-200 rounded-md" />
+                    <div className="h-3 w-24 bg-gray-200 rounded-md" />
+                  </div>
+                </td>
+                {/* Applied on */}
+                <td className="px-4 py-3">
+                  <div className="h-4 w-20 bg-gray-200 rounded-md" />
+                </td>
+                {/* Status badge */}
+                <td className="px-4 py-3">
+                  <div className="h-6 w-20 bg-gray-200 rounded-full" />
+                </td>
+                {/* Round */}
+                <td className="px-4 py-3">
+                  <div className="h-4 w-16 bg-gray-200 rounded-md" />
+                </td>
+                {/* Actions */}
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-gray-200 rounded-lg" />
+                    <div className="w-8 h-8 bg-gray-200 rounded-lg" />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile card skeleton – shown only on mobile */}
+      <div className="md:hidden space-y-4">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="card p-4 space-y-4">
+            {/* Top: name + status badge */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 bg-gray-200 rounded mt-1" />
+                <div className="space-y-1.5">
+                  <div className="h-4 w-32 bg-gray-200 rounded-md" />
+                  <div className="h-3 w-44 bg-gray-200 rounded-md" />
+                </div>
+              </div>
+              <div className="h-6 w-20 bg-gray-200 rounded-full" />
+            </div>
+            {/* Grid: Job / Applied On / Round */}
+            <div className="grid grid-cols-2 gap-4 py-3 border-y border-gray-50">
+              <div className="space-y-1.5">
+                <div className="h-2 w-8 bg-gray-200 rounded-md" />
+                <div className="h-4 w-28 bg-gray-200 rounded-md" />
+                <div className="h-3 w-20 bg-gray-200 rounded-md" />
+              </div>
+              <div className="space-y-1.5">
+                <div className="h-2 w-14 bg-gray-200 rounded-md" />
+                <div className="h-4 w-20 bg-gray-200 rounded-md" />
+              </div>
+              <div className="space-y-1.5">
+                <div className="h-2 w-16 bg-gray-200 rounded-md" />
+                <div className="h-4 w-16 bg-gray-200 rounded-md" />
+              </div>
+            </div>
+            {/* Action buttons */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-9 bg-gray-200 rounded-lg" />
+              <div className="w-9 h-9 bg-gray-200 rounded-lg" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   ) : filteredApplications.length === 0 ? (
     <EmptyState icon={Users} title="No applications found" description="No applications match your current filters" />
   ) : groupByCompany ? (

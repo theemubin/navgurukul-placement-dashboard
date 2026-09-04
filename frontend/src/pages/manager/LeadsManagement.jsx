@@ -390,13 +390,7 @@ const LeadsManagement = () => {
         return acc;
     }, {});
 
-    if (loading && leads.length === 0) {
-        return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div>
-            </div>
-        );
-    }
+    // Removed early spinner return to let dashboard header render immediately
 
     return (
         <div className="max-w-full mx-auto p-4 md:p-8">
@@ -407,34 +401,100 @@ const LeadsManagement = () => {
                 </div>
                 <div className="hidden md:flex items-center gap-4 bg-gray-50 px-6 py-3 rounded-2xl border border-gray-100">
                     <div className="flex flex-col items-center">
-                        <span className="text-xl font-black text-gray-900">{leads.length}</span>
+                        {loading && leads.length === 0 ? (
+                            <div className="h-6 bg-gray-200 rounded w-8 animate-pulse mb-1" />
+                        ) : (
+                            <span className="text-xl font-black text-gray-900">{leads.length}</span>
+                        )}
                         <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Total Active</span>
                     </div>
                     <div className="w-[1px] h-8 bg-gray-200"></div>
                     <div className="flex flex-col items-center">
-                        <span className="text-xl font-black text-green-600">{leads.filter(l => l.status === 'placed from them').length}</span>
+                        {loading && leads.length === 0 ? (
+                            <div className="h-6 bg-gray-200 rounded w-8 animate-pulse mb-1" />
+                        ) : (
+                            <span className="text-xl font-black text-green-600">{leads.filter(l => l.status === 'placed from them').length}</span>
+                        )}
                         <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Successful</span>
                     </div>
                     <div className="w-[1px] h-8 bg-gray-200"></div>
                     <div className="flex flex-col items-center">
-                        <span className="text-xl font-black text-red-600">{leads.filter(l => l.status === 'unsuccessful').length}</span>
+                        {loading && leads.length === 0 ? (
+                            <div className="h-6 bg-gray-200 rounded w-8 animate-pulse mb-1" />
+                        ) : (
+                            <span className="text-xl font-black text-red-600">{leads.filter(l => l.status === 'unsuccessful').length}</span>
+                        )}
                         <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Unsuccessful</span>
                     </div>
                 </div>
             </div>
 
-            <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="flex gap-6 overflow-x-auto pb-8 no-scrollbar scroll-smooth">
-                    {STAGES.map((stage) => (
-                        <KanbanColumn
-                            key={stage.id}
-                            stage={stage}
-                            leads={leadsByStatus[stage.id] || []}
-                            onAction={handleAction}
-                        />
-                    ))}
+            {loading && leads.length === 0 ? (
+                <div className="flex gap-6 overflow-x-auto pb-8 no-scrollbar">
+                    {STAGES.map((stage) => {
+                        const config = STAGE_COLORS[stage.color];
+                        return (
+                            <div key={stage.id} className={`flex-shrink-0 w-80 rounded-2xl border ${config.border} ${config.bg} flex flex-col h-[calc(100vh-200px)] animate-pulse`}>
+                                {/* Header */}
+                                <div className={`p-4 rounded-t-2xl flex items-center justify-between border-b ${config.border} bg-white shadow-sm`}>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-2 h-2 rounded-full ${config.header}`}></div>
+                                        <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">{stage.label}</h3>
+                                    </div>
+                                    <div className="w-6 h-4 bg-gray-200 rounded-full"></div>
+                                </div>
+
+                                {/* Card List Skeleton */}
+                                <div className="p-4 flex-1 overflow-y-auto no-scrollbar space-y-4">
+                                    {[...Array(2)].map((_, i) => (
+                                        <div key={i} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 bg-gray-200 rounded"></div>
+                                                    <div className="space-y-1.5">
+                                                        <div className="h-3.5 bg-gray-200 rounded w-24"></div>
+                                                        <div className="h-2.5 bg-gray-200 rounded w-16"></div>
+                                                    </div>
+                                                </div>
+                                                <div className="w-4 h-4 bg-gray-200 rounded"></div>
+                                            </div>
+                                            <div className="space-y-2 mb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-3.5 h-3.5 bg-gray-200 rounded-full"></div>
+                                                    <div className="h-2.5 bg-gray-200 rounded w-36"></div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-3.5 h-3.5 bg-gray-200 rounded-full"></div>
+                                                    <div className="h-2.5 bg-gray-200 rounded w-24"></div>
+                                                </div>
+                                            </div>
+                                            <div className="pt-3 border-t border-gray-50 flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-3.5 h-3.5 bg-gray-200 rounded-full"></div>
+                                                    <div className="h-2.5 bg-gray-200 rounded w-16"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
-            </DragDropContext>
+            ) : (
+                <DragDropContext onDragEnd={handleDragEnd}>
+                    <div className="flex gap-6 overflow-x-auto pb-8 no-scrollbar scroll-smooth">
+                        {STAGES.map((stage) => (
+                            <KanbanColumn
+                                key={stage.id}
+                                stage={stage}
+                                leads={leadsByStatus[stage.id] || []}
+                                onAction={handleAction}
+                            />
+                        ))}
+                    </div>
+                </DragDropContext>
+            )}
 
             {/* Modals */}
             <CommentModal

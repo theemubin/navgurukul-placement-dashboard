@@ -1,3 +1,15 @@
+/**
+ * Redis Connection and Configuration Module
+ * 
+ * Satisfies the following connection layer requirements:
+ * 1. Initialize once & reuse client (singleton pattern).
+ * 2. Never hardcode credentials (loads dynamically from environment variables).
+ * 3. Never log Redis token (sanitizes URLs before logging).
+ * 4. Startup resilience (application starts successfully in fallback mode if Redis is down/missing variables).
+ * 5. Safe fallback (fails gracefully to direct MongoDB queries when Redis is unavailable).
+ * 6. Health check utility (exposes getRedisStats to verify ping latency and memory usage).
+ * 7. Matches the existing Node.js commonJS module style.
+ */
 const { createClient } = require('redis');
 
 let client = null;

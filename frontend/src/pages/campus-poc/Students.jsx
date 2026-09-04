@@ -218,7 +218,21 @@ const POCStudents = () => {
       </div>
 
       {/* Stats Dashboard */}
-      {stats && (
+      {!stats ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="card p-4 animate-pulse">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 space-y-2.5">
+                  <div className="h-3 bg-gray-200 rounded w-16"></div>
+                  <div className="h-7 bg-gray-200 rounded w-12"></div>
+                </div>
+                <div className="w-10 h-10 bg-gray-200 rounded-xl shrink-0"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
           <StatsCard
             icon={Users}
@@ -309,8 +323,53 @@ const POCStudents = () => {
 
       {/* Students List */}
       {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <LoadingSpinner size="lg" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="card p-3 md:p-6 animate-pulse">
+              {/* Header */}
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gray-200 shrink-0"></div>
+                  <div className="space-y-2 min-w-0">
+                    <div className="h-4 bg-gray-200 rounded w-28 md:w-36"></div>
+                    <div className="h-3 bg-gray-200 rounded w-36 md:w-48"></div>
+                  </div>
+                </div>
+                <div className="w-4 h-4 bg-gray-200 rounded shrink-0"></div>
+              </div>
+
+              {/* Divider & Details */}
+              <div className="mt-3 pt-3 border-t">
+                <div className="grid grid-cols-2 gap-x-2 gap-y-3 md:gap-4">
+                  {/* School */}
+                  <div>
+                    <div className="h-2.5 bg-gray-200 rounded w-10 mb-1.5"></div>
+                    <div className="h-3.5 bg-gray-200 rounded w-20"></div>
+                  </div>
+                  {/* Status */}
+                  <div>
+                    <div className="h-2.5 bg-gray-200 rounded w-10 mb-1.5"></div>
+                    <div className="h-6 bg-gray-200 rounded w-24"></div>
+                  </div>
+                  {/* Profile */}
+                  <div>
+                    <div className="h-2.5 bg-gray-200 rounded w-10 mb-1.5"></div>
+                    <div className="h-3.5 bg-gray-200 rounded w-16"></div>
+                  </div>
+                  {/* Skills */}
+                  <div>
+                    <div className="h-2.5 bg-gray-200 rounded w-10 mb-1.5"></div>
+                    <div className="h-5 bg-gray-200 rounded w-12"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action button */}
+              <div className="mt-3 border-t pt-3">
+                <div className="h-4 bg-gray-200 rounded w-24"></div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : students.length > 0 ? (
         <>

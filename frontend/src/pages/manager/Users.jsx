@@ -167,7 +167,40 @@ const UsersManager = () => {
 
         <div className="mt-4">
           {loading ? (
-            <div className="py-6 flex items-center justify-center"><LoadingSpinner /></div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-sm text-gray-500">
+                    <th className="py-2">Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Campus</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...Array(10)].map((_, i) => (
+                    <tr key={i} className="border-t">
+                      <td className="py-3">
+                        <div className="h-3.5 w-32 bg-gray-200 rounded animate-pulse" />
+                      </td>
+                      <td>
+                        <div className="h-3 w-44 bg-gray-200 rounded animate-pulse" />
+                      </td>
+                      <td>
+                        <div className="h-7 w-28 bg-gray-200 rounded animate-pulse" />
+                      </td>
+                      <td>
+                        <div className="h-3 w-24 bg-gray-100 rounded animate-pulse" />
+                      </td>
+                      <td>
+                        <div className="h-7 w-14 bg-gray-200 rounded animate-pulse" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -215,7 +248,35 @@ const UsersManager = () => {
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="User details" size="md">
         {loadingUserId && !selectedUser ? (
-          <div className="py-8 flex items-center justify-center"><LoadingSpinner size="lg" /></div>
+          <div className="space-y-4 py-2">
+            <div>
+              <div className="h-2.5 w-10 bg-gray-200 rounded animate-pulse mb-2" />
+              <div className="flex gap-2">
+                <div className="flex-1 h-9 bg-gray-200 rounded animate-pulse" />
+                <div className="flex-1 h-9 bg-gray-200 rounded animate-pulse" />
+              </div>
+            </div>
+            <div>
+              <div className="h-2.5 w-10 bg-gray-200 rounded animate-pulse mb-2" />
+              <div className="h-9 w-full bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div>
+              <div className="h-2.5 w-10 bg-gray-200 rounded animate-pulse mb-2" />
+              <div className="h-9 w-full bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div>
+              <div className="h-2.5 w-10 bg-gray-200 rounded animate-pulse mb-2" />
+              <div className="h-5 w-24 bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div>
+              <div className="h-2.5 w-36 bg-gray-200 rounded animate-pulse mb-2" />
+              <div className="h-20 w-full bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div className="flex items-center gap-2 justify-end pt-1">
+              <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
+              <div className="h-8 w-16 bg-gray-300 rounded animate-pulse" />
+            </div>
+          </div>
         ) : selectedUser ? (
           <div className="space-y-4">
             <div>

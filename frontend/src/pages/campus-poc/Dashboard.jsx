@@ -730,8 +730,36 @@ const POCDashboard = () => {
           )}
 
           {jobsLoading ? (
-            <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
+            <div className="animate-pulse space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="card space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className="w-12 h-12 bg-gray-200 rounded-lg shrink-0" />
+                        <div className="space-y-2 flex-1">
+                          <div className="h-4 w-3/4 bg-gray-200 rounded-md" />
+                          <div className="h-3 w-1/2 bg-gray-200 rounded-md" />
+                          <div className="h-3 w-1/3 bg-gray-200 rounded-md" />
+                        </div>
+                      </div>
+                      <div className="h-7 w-24 bg-gray-200 rounded-lg" />
+                    </div>
+                    <div className="flex items-center justify-between py-3 border-t border-b border-gray-100">
+                      {[...Array(4)].map((_, j) => (
+                        <div key={j} className="space-y-1 text-center">
+                          <div className="h-5 w-8 bg-gray-200 rounded-md mx-auto" />
+                          <div className="h-3 w-12 bg-gray-200 rounded-md" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="h-7 flex-1 bg-gray-200 rounded-lg" />
+                      <div className="h-7 flex-1 bg-gray-200 rounded-lg" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : eligibleJobs.length > 0 ? (
             (() => {
@@ -741,83 +769,102 @@ const POCDashboard = () => {
               return (
                 <>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {paginatedJobs.map((job) => (
-                      <div key={job._id} className="card hover:shadow-md transition-shadow">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <Building2 className="w-6 h-6 text-gray-500" />
+                    {paginatedJobs.map((job) => {
+                      const d = new Date(job.applicationDeadline);
+                      if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0) {
+                        d.setHours(23, 59, 59, 999);
+                      }
+                      const isClosed = job.status === 'closed' || d < new Date();
+
+                      return (
+                        <div key={job._id} className={`card hover:shadow-md transition-shadow ${isClosed ? 'bg-red-50/50 border-red-200' : ''}`}>
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-start gap-3">
+                              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <Building2 className="w-6 h-6 text-gray-500" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-semibold text-gray-900">{job.title}</h4>
+                                  {isClosed ? (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 uppercase tracking-wide">
+                                      Closed
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 uppercase tracking-wide">
+                                      Open
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-600">{job.company?.name}</p>
+                                <p className="text-xs text-gray-500 capitalize mt-1">{job.jobType?.replace('_', ' ')}</p>
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="font-semibold text-gray-900">{job.title}</h4>
-                              <p className="text-sm text-gray-600">{job.company?.name}</p>
-                              <p className="text-xs text-gray-500 capitalize mt-1">{job.jobType?.replace('_', ' ')}</p>
+                            <div className="flex flex-col items-end gap-2">
+                              <Link 
+                                to={`/campus-poc/jobs/${job._id}`}
+                                className="text-xs bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg border border-primary-100 hover:bg-primary-100 transition-all font-bold flex items-center gap-1.5"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                View Details
+                              </Link>
+                              <div className="text-right">
+                                <p className="text-[10px] text-gray-500 uppercase tracking-tighter">Deadline</p>
+                                <p className="text-xs font-bold text-gray-700">
+                                   {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <Link 
-                              to={`/campus-poc/jobs/${job._id}`}
-                              className="text-xs bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg border border-primary-100 hover:bg-primary-100 transition-all font-bold flex items-center gap-1.5"
+
+                          {/* Stats Row */}
+                          <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3 px-1">
+                            <button
+                              className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
+                              onClick={() => fetchEligibleStudents(job)}
+                              title="Click to view eligible students"
                             >
-                              <Eye className="w-3.5 h-3.5" />
-                              View Details
-                            </Link>
-                            <div className="text-right">
-                              <p className="text-[10px] text-gray-500 uppercase tracking-tighter">Deadline</p>
-                              <p className="text-xs font-bold text-gray-700">
-                                 {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
-                              </p>
+                              <p className="text-lg font-bold text-indigo-600 hover:underline">{job.eligibleStudents}</p>
+                              <p className="text-xs text-gray-500">Eligible</p>
+                            </button>
+                            <div className="text-center">
+                              <p className="text-lg font-bold text-blue-600">{job.applicationCount}</p>
+                              <p className="text-xs text-gray-500">Applied</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-bold text-yellow-600">{job.statusCounts?.shortlisted + job.statusCounts?.in_progress || 0}</p>
+                              <p className="text-xs text-gray-500">In Progress</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-bold text-green-600">{job.statusCounts?.selected || 0}</p>
+                              <p className="text-xs text-gray-500">Selected</p>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Stats Row */}
-                        <div className="flex items-center justify-between py-3 border-t border-b border-gray-100 mb-3 px-1">
-                          <button
-                            className="text-center hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors cursor-pointer"
-                            onClick={() => fetchEligibleStudents(job)}
-                            title="Click to view eligible students"
-                          >
-                            <p className="text-lg font-bold text-indigo-600 hover:underline">{job.eligibleStudents}</p>
-                            <p className="text-xs text-gray-500">Eligible</p>
-                          </button>
-                          <div className="text-center">
-                            <p className="text-lg font-bold text-blue-600">{job.applicationCount}</p>
-                            <p className="text-xs text-gray-500">Applied</p>
+                          {/* Application Progress Bar */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-gray-500">
+                              <span>Application Rate</span>
+                              <span>{job.eligibleStudents > 0 ? Math.round((job.applicationCount / job.eligibleStudents) * 100) : 0}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className="h-2 rounded-full bg-primary-500 transition-all"
+                                style={{ width: `${job.eligibleStudents > 0 ? (job.applicationCount / job.eligibleStudents) * 100 : 0}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="text-center">
-                            <p className="text-lg font-bold text-yellow-600">{job.statusCounts?.shortlisted + job.statusCounts?.in_progress || 0}</p>
-                            <p className="text-xs text-gray-500">In Progress</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-lg font-bold text-green-600">{job.statusCounts?.selected || 0}</p>
-                            <p className="text-xs text-gray-500">Selected</p>
-                          </div>
-                        </div>
 
-                        {/* Application Progress Bar */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-xs text-gray-500">
-                            <span>Application Rate</span>
-                            <span>{job.eligibleStudents > 0 ? Math.round((job.applicationCount / job.eligibleStudents) * 100) : 0}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="h-2 rounded-full bg-primary-500 transition-all"
-                              style={{ width: `${job.eligibleStudents > 0 ? (job.applicationCount / job.eligibleStudents) * 100 : 0}%` }}
-                            />
+                          {/* Positions */}
+                          <div className="mt-3 flex items-center justify-between text-sm">
+                            <span className="text-gray-500">{job.maxPositions} position{job.maxPositions !== 1 ? 's' : ''} available</span>
+                            {job.applicationCount === 0 && (
+                              <span className="text-orange-600 text-xs font-medium">No applications yet</span>
+                            )}
                           </div>
                         </div>
-
-                        {/* Positions */}
-                        <div className="mt-3 flex items-center justify-between text-sm">
-                          <span className="text-gray-500">{job.maxPositions} position{job.maxPositions !== 1 ? 's' : ''} available</span>
-                          {job.applicationCount === 0 && (
-                            <span className="text-orange-600 text-xs font-medium">No applications yet</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   {renderPagination(jobsPage, filteredJobs.length, setJobsPage)}
                 </>
@@ -845,8 +892,24 @@ const POCDashboard = () => {
           </div>
 
           {trackingLoading ? (
-            <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
+            <div className="animate-pulse space-y-6">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="card space-y-4">
+                  <div className="h-5 w-48 bg-gray-200 rounded-md" />
+                  {[...Array(4)].map((_, j) => (
+                    <div key={j} className="p-4 bg-gray-50 rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="h-4 w-40 bg-gray-200 rounded-md" />
+                        <div className="h-6 w-20 bg-gray-200 rounded-full" />
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="h-3 w-24 bg-gray-200 rounded-md" />
+                        <div className="h-3 w-24 bg-gray-200 rounded-md" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           ) : (
             <div className="space-y-8">
@@ -1051,8 +1114,26 @@ const POCDashboard = () => {
           <h3 className="font-semibold text-gray-900">School-wise Student Tracking</h3>
 
           {trackingLoading ? (
-            <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
+            <div className="animate-pulse grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="card space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-200 rounded-lg" />
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-36 bg-gray-200 rounded-md" />
+                      <div className="h-3 w-24 bg-gray-200 rounded-md" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[...Array(4)].map((_, j) => (
+                      <div key={j} className="h-16 bg-gray-100 rounded-lg" />
+                    ))}
+                  </div>
+                  {[...Array(3)].map((_, j) => (
+                    <div key={j} className="h-10 bg-gray-50 rounded-lg" />
+                  ))}
+                </div>
+              ))}
             </div>
           ) : schoolTracking.length > 0 ? (
             (() => {
@@ -1158,8 +1239,22 @@ const POCDashboard = () => {
           </div>
 
           {trackingLoading ? (
-            <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
+            <div className="animate-pulse space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="card flex items-center justify-between p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-gray-200" />
+                    <div className="space-y-2">
+                      <div className="h-4 w-36 bg-gray-200 rounded-md" />
+                      <div className="h-3 w-24 bg-gray-200 rounded-md" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="h-6 w-20 bg-gray-200 rounded-full" />
+                    <div className="h-6 w-16 bg-gray-200 rounded-full" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : !studentSummary || studentSummary.students.length === 0 ? (
             <div className="card text-center py-12">

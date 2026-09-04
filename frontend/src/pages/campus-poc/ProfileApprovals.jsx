@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { userAPI } from '../../services/api';
 import { Card, Button, Badge, LoadingSpinner, Alert, Modal } from '../../components/common/UIComponents';
+import { FileText } from 'lucide-react';
 
 const ProfileApprovals = () => {
   const [pendingProfiles, setPendingProfiles] = useState([]);
@@ -316,13 +317,7 @@ const ProfileApprovals = () => {
     return Math.round((completed / checks.length) * 100);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  // Removed early return to allow filter UI and skeleton loader to render in-place
 
   return (
     <div className="p-6">
@@ -375,7 +370,51 @@ const ProfileApprovals = () => {
         </div>
       </div>
 
-      {pendingProfiles.length === 0 ? (
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              {/* Header */}
+              <div className="flex items-start justify-between">
+                <div className="flex items-center">
+                  <div className="h-12 w-12 rounded-full bg-gray-200 shrink-0"></div>
+                  <div className="ml-3 space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-28"></div>
+                    <div className="h-3 bg-gray-200 rounded w-36"></div>
+                  </div>
+                </div>
+                <div className="h-6 bg-gray-200 rounded w-24"></div>
+              </div>
+
+              {/* Profile Completion Bar */}
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="h-3 bg-gray-200 rounded w-24"></div>
+                  <div className="h-3 bg-gray-200 rounded w-8"></div>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div className="bg-gray-200 h-2 rounded-full w-2/3"></div>
+                </div>
+              </div>
+
+              {/* Details List */}
+              <div className="mt-4 space-y-2.5">
+                {[...Array(4)].map((_, idx) => (
+                  <div key={idx} className="flex items-center">
+                    <div className="h-3.5 bg-gray-200 rounded w-16 mr-8"></div>
+                    <div className="h-3.5 bg-gray-200 rounded w-32"></div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-5 flex gap-2">
+                <div className="h-9 bg-gray-200 rounded w-full"></div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : pendingProfiles.length === 0 ? (
         <Card>
           <div className="text-center py-12">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -965,13 +1004,40 @@ const ProfileApprovals = () => {
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Resume</h3>
                 <div>
-                  {selectedStudent.studentProfile?.resume ? (
+                  {selectedStudent.studentProfile?.resumes && selectedStudent.studentProfile.resumes.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedStudent.studentProfile.resumes.map((resItem) => (
+                        <div key={resItem._id} className="p-3 bg-gray-50 rounded flex items-center justify-between">
+                          <a
+                            href={resItem.resume?.startsWith('http') ? resItem.resume : resItem.resumeLink?.startsWith('http') ? resItem.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${resItem.resume || resItem.resumeLink}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary-600 font-medium hover:underline flex items-center gap-1.5"
+                          >
+                            <FileText className="w-4 h-4 text-gray-400" />
+                            {resItem.fileName || 'View Resume'}
+                          </a>
+                          {resItem.isPrimary && (
+                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                              Primary
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : selectedStudent.studentProfile?.resume ? (
                     <div className="p-3 bg-gray-50 rounded">
-                      <a href={selectedStudent.studentProfile.resume.startsWith('http') ? selectedStudent.studentProfile.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resume}`} target="_blank" rel="noreferrer" className="text-primary-600">View Resume</a>
+                      <a href={selectedStudent.studentProfile.resume.startsWith('http') ? selectedStudent.studentProfile.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resume}`} target="_blank" rel="noreferrer" className="text-primary-600 flex items-center gap-1.5 font-medium hover:underline">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        View Resume
+                      </a>
                     </div>
                   ) : selectedStudent.studentProfile?.resumeLink ? (
                     <div className="p-3 bg-gray-50 rounded">
-                      <a href={selectedStudent.studentProfile.resumeLink.startsWith('http') ? selectedStudent.studentProfile.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resumeLink}`} target="_blank" rel="noreferrer" className="text-primary-600">Resume Link</a>
+                      <a href={selectedStudent.studentProfile.resumeLink.startsWith('http') ? selectedStudent.studentProfile.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${selectedStudent.studentProfile.resumeLink}`} target="_blank" rel="noreferrer" className="text-primary-600 flex items-center gap-1.5 font-medium hover:underline">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        Resume Link
+                      </a>
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500">No resume uploaded</p>
