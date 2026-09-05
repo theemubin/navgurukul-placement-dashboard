@@ -153,7 +153,7 @@ router.post('/', auth, authorize('manager'), async (req, res) => {
  */
 router.put('/:id', auth, authorize('manager'), async (req, res) => {
   try {
-    const { name, location, contactEmail, contactPhone, isActive, discordChannelId } = req.body;
+    const { name, location, contactEmail, contactPhone, isActive, discordChannelId, placementTarget } = req.body;
 
     const campus = await Campus.findById(req.params.id);
     if (!campus) {
@@ -166,6 +166,7 @@ router.put('/:id', auth, authorize('manager'), async (req, res) => {
     if (contactPhone) campus.contactPhone = contactPhone;
     if (isActive !== undefined) campus.isActive = isActive;
     if (discordChannelId !== undefined) campus.discordChannelId = discordChannelId;
+    if (placementTarget !== undefined) campus.placementTarget = Number(placementTarget);
 
     await campus.save();
     res.json(campus);

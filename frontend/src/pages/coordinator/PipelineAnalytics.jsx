@@ -12,7 +12,8 @@ import {
   Target, Briefcase, Users, ArrowUpRight, Search, 
   Layers, Zap, Info, ChevronRight, MapPin, Flag,
   CheckCircle, ExternalLink, ChevronDown, ChevronUp,
-  Trophy, AlertTriangle, Building2, Calendar, MessageSquare
+  Trophy, AlertTriangle, Building2, Calendar, MessageSquare,
+  Pencil, Check, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -22,6 +23,7 @@ const PipelineAnalytics = () => {
   const [data, setData] = useState([]);
   const [campusBreakdown, setCampusBreakdown] = useState([]);
   const [cycle, setCycle] = useState(null);
+  const [fyYear, setFyYear] = useState('');
   const [loading, setLoading] = useState(true);
   const [campuses, setCampuses] = useState([]);
   const [schools, setSchools] = useState([]);
@@ -40,6 +42,50 @@ const PipelineAnalytics = () => {
   const [rosterPage, setRosterPage] = useState(1);
   const [rosterTotal, setRosterTotal] = useState(0);
   const [rosterOpen, setRosterOpen] = useState(true);
+
+  // Target editing state (Manager only)
+  const isManager = user?.role === 'manager';
+  const [editingCampusId, setEditingCampusId] = useState(null);
+  const [targetInputValue, setTargetInputValue] = useState('');
+  const [savingTarget, setSavingTarget] = useState(false);
+
+  const handleStartEditTarget = (campusId, currentTarget) => {
+    setEditingCampusId(campusId);
+    setTargetInputValue(currentTarget ? String(currentTarget) : '');
+  };
+
+  const handleCancelEditTarget = () => {
+    setEditingCampusId(null);
+    setTargetInputValue('');
+  };
+
+  const handleSaveTarget = async (campusId) => {
+    const numVal = parseInt(targetInputValue, 10);
+    if (isNaN(numVal) || numVal < 0) {
+      toast.error('Please enter a valid target (0 or greater)');
+      return;
+    }
+    try {
+      setSavingTarget(true);
+      await campusAPI.updateCampus(campusId, { placementTarget: numVal });
+      toast.success('Placement target updated');
+      setEditingCampusId(null);
+      // Optimistically update local campusBreakdown
+      setCampusBreakdown(prev => prev.map(c => {
+        if (c.campusId === campusId) {
+          const fyTotal = (c.fyPlaced || 0) + (c.fyIntern || 0);
+          const achievementPct = numVal > 0 ? parseFloat((fyTotal / numVal * 100).toFixed(1)) : null;
+          return { ...c, placementTarget: numVal, achievementPct };
+        }
+        return c;
+      }));
+      await fetchPipelineData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update target');
+    } finally {
+      setSavingTarget(false);
+    }
+  };
 
   useEffect(() => {
     fetchInitialData();
@@ -108,6 +154,7 @@ const PipelineAnalytics = () => {
       setCampusBreakdown(res.data?.campusBreakdown || []);
       setCampusSchools(res.data?.campusSchools || []);
       setCycle(res.data?.cycle || null);
+      if (res.data?.fyYear) setFyYear(res.data.fyYear);
       if (res.data?.roles?.length > 0 && !selectedRole) {
         setSelectedRole(res.data.roles[0]);
       }
@@ -626,6 +673,207 @@ const PipelineAnalytics = () => {
                     <span className="text-sm font-black text-blue-700">
                       {campusBreakdown.reduce((s, r) => s + Number(r.communicationReady || 0), 0)}
                     </span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Placement Target Table */}
+      {campusBreakdown.length > 0 && (
+        <Card className="overflow-hidden border-gray-100 shadow-sm bg-white">
+          <div className="px-6 py-4 border-b border-gray-50 bg-gradient-to-r from-emerald-50/50 to-teal-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-600 rounded-lg text-white shadow-md">
+                <Target className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Placement Target Tracker</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  FY achievement per campus
+                  {fyYear && <span className="ml-1.5 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold uppercase tracking-wider">{fyYear}</span>}
+                </p>
+              </div>
+            </div>
+            <div className="text-xs text-gray-400 italic">
+              {isManager
+                ? 'Target editable by Manager (click pencil) · Placed & Intern calculated from placement data'
+                : 'Target set by Manager · Placed & Intern calculated from placement data'}
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-white text-left">
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">#</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Campus</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest text-center">Target</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest text-center">Placed (FY)</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest text-center">Intern (FY)</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest text-center">Total (FY)</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Achievement</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {campusBreakdown.map((row, idx) => {
+                  const fyTotal = (row.fyPlaced || 0) + (row.fyIntern || 0);
+                  const target = row.placementTarget || 0;
+                  const pct = row.achievementPct;
+                  const barColor = pct === null ? 'bg-gray-200' : pct >= 100 ? 'bg-emerald-500' : pct >= 60 ? 'bg-amber-400' : 'bg-rose-400';
+                  const textColor = pct === null ? 'text-gray-400' : pct >= 100 ? 'text-emerald-600' : pct >= 60 ? 'text-amber-600' : 'text-rose-600';
+                  return (
+                    <tr key={row.campusId} className="hover:bg-emerald-50/20 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-bold text-gray-400">{idx + 1}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-700 font-bold text-xs">
+                            {row.campusName[0]}
+                          </div>
+                          <span className="font-bold text-gray-900">{row.campusName}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {editingCampusId === row.campusId ? (
+                          <div className="inline-flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              min="0"
+                              autoFocus
+                              value={targetInputValue}
+                              onChange={(e) => setTargetInputValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveTarget(row.campusId);
+                                if (e.key === 'Escape') handleCancelEditTarget();
+                              }}
+                              className="w-20 px-2 py-1 text-sm font-bold text-center border-2 border-emerald-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white shadow-sm"
+                              placeholder="0"
+                              disabled={savingTarget}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveTarget(row.campusId)}
+                              disabled={savingTarget}
+                              title="Save target"
+                              className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-md transition-colors disabled:opacity-50"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelEditTarget}
+                              disabled={savingTarget}
+                              title="Cancel"
+                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center justify-center gap-1.5 group/target">
+                            {target > 0 ? (
+                              <span className="text-sm font-black text-gray-800">{target}</span>
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">Not set</span>
+                            )}
+                            {isManager && (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditTarget(row.campusId, target)}
+                                title="Edit target"
+                                className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-all opacity-40 group-hover/target:opacity-100"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="inline-flex items-center gap-1 text-sm font-bold text-indigo-700">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {row.fyPlaced || 0}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="text-sm font-bold text-violet-600">{row.fyIntern || 0}</span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="text-sm font-black text-gray-800">{fyTotal}</span>
+                      </td>
+                      <td className="px-6 py-4 min-w-[200px]">
+                        {target > 0 ? (
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                              <div
+                                className={`h-full ${barColor} rounded-full transition-all duration-700`}
+                                style={{ width: `${Math.min(pct || 0, 100)}%` }}
+                              />
+                            </div>
+                            <span className={`text-sm font-black ${textColor} min-w-[48px] text-right`}>
+                              {pct !== null ? `${pct}%` : '—'}
+                            </span>
+                            {pct >= 100 && (
+                              <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Set a target to track progress</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {/* Totals footer */}
+              <tfoot>
+                <tr className="bg-gray-50/80 border-t-2 border-gray-200">
+                  <td className="px-6 py-3" />
+                  <td className="px-6 py-3">
+                    <span className="text-sm font-black text-gray-600 uppercase tracking-widest">Totals</span>
+                  </td>
+                  <td className="px-6 py-3 text-center">
+                    <span className="text-sm font-black text-gray-900">
+                      {campusBreakdown.reduce((s, r) => s + (r.placementTarget || 0), 0) || <span className="text-gray-400">—</span>}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-center">
+                    <span className="text-sm font-black text-indigo-700">
+                      {campusBreakdown.reduce((s, r) => s + (r.fyPlaced || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-center">
+                    <span className="text-sm font-black text-violet-600">
+                      {campusBreakdown.reduce((s, r) => s + (r.fyIntern || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-center">
+                    <span className="text-sm font-black text-gray-900">
+                      {campusBreakdown.reduce((s, r) => s + (r.fyPlaced || 0) + (r.fyIntern || 0), 0)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    {(() => {
+                      const totalTarget = campusBreakdown.reduce((s, r) => s + (r.placementTarget || 0), 0);
+                      const totalAchieved = campusBreakdown.reduce((s, r) => s + (r.fyPlaced || 0) + (r.fyIntern || 0), 0);
+                      if (totalTarget > 0) {
+                        const overallPct = parseFloat((totalAchieved / totalTarget * 100).toFixed(1));
+                        const barColor = overallPct >= 100 ? 'bg-emerald-500' : overallPct >= 60 ? 'bg-amber-400' : 'bg-rose-400';
+                        const textColor = overallPct >= 100 ? 'text-emerald-600' : overallPct >= 60 ? 'text-amber-600' : 'text-rose-600';
+                        return (
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                              <div className={`h-full ${barColor} rounded-full`} style={{ width: `${Math.min(overallPct, 100)}%` }} />
+                            </div>
+                            <span className={`text-sm font-black ${textColor} min-w-[48px] text-right`}>{overallPct}%</span>
+                          </div>
+                        );
+                      }
+                      return <span className="text-xs text-gray-400 italic">—</span>;
+                    })()}
                   </td>
                 </tr>
               </tfoot>

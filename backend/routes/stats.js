@@ -2152,13 +2152,9 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
     readinessRecords.forEach(r => readinessMap.set(r.student.toString(), r.isJobReady));
 
     // 3. Fetch Active Jobs
-    // Jobs are active if they are not draft/closed/filled and deadline hasn't passed
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
+    // Jobs are considered active until they are marked closed or filled
     const activeJobs = await Job.find({
-      status: { $nin: ['draft', 'closed', 'filled'] },
-      applicationDeadline: { $gte: startOfToday }
+      status: { $nin: ['draft', 'closed', 'filled'] }
     }).select('roleCategory title status company.name');
 
     // 4. Fetch Active Placement Cycle for Goals
@@ -2179,8 +2175,14 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
 
     let totalPlaced = 0;
 
+    // Financial Year: April 1 → March 31
+    // Current date: 2026-09-04 → FY is April 1 2026 → March 31 2027
+    const now_fy = new Date();
+    const fyStartYear = now_fy.getMonth() >= 3 ? now_fy.getFullYear() : now_fy.getFullYear() - 1;
+    const fyStart = new Date(fyStartYear, 3, 1, 0, 0, 0); // April 1
+    const fyEnd = new Date(fyStartYear + 1, 2, 31, 23, 59, 59); // March 31
+
     // Count placements for the current calendar month using Ghar-synced placement date.
-    // This ensures we show placements that occurred this month even if the active cycle is scheduled in a future month.
     const monthStart = new Date(now_date.getFullYear(), now_date.getMonth(), 1);
     const monthEnd = new Date(now_date.getFullYear(), now_date.getMonth() + 1, 0, 23, 59, 59);
 
@@ -2189,6 +2191,9 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       'studentProfile.currentStatus': { $in: ['Placed', 'Intern (In Campus)', 'Intern (Out Campus)'] },
       'studentProfile.dateOfPlacement': { $gte: monthStart, $lte: monthEnd }
     });
+
+    // Fetch all campuses to get their placement targets
+    const allCampusDocs = await Campus.find({ isActive: true }).select('_id placementTarget');
 
     // 5. Aggregate Data by Role
     const pipeline = {};
@@ -2249,6 +2254,8 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
           internsOutCampus: 0,
           openForPlacements: 0, // Active + interns
           placedCount: 0, // from Ghar/resolved status
+          fyPlaced: 0, // Students with "Placed" status who had dateOfPlacement in current FY
+          fyIntern: 0, // Students with intern status who joined/placed in current FY
           placementReady: 0,
           readinessPending: 0,
           cycleNotAllocated: 0,
@@ -2277,6 +2284,21 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
           const pDate = new Date(placementDate);
           if (pDate >= monthStart && pDate <= monthEnd) {
             campusMap[campusId].placedCount++;
+          }
+          // FY Placed: Student has "Placed" status with dateOfPlacement in current financial year
+          if (pDate >= fyStart && pDate <= fyEnd) {
+            campusMap[campusId].fyPlaced++;
+          }
+        }
+      }
+
+      // FY Intern: Students who became Intern (In/Out Campus) with dateOfPlacement in current FY
+      if (statusKeyNorm === 'intern (in campus)' || statusKeyNorm === 'intern (out campus)') {
+        const placementDate = student.studentProfile?.dateOfPlacement;
+        if (placementDate) {
+          const pDate = new Date(placementDate);
+          if (pDate >= fyStart && pDate <= fyEnd) {
+            campusMap[campusId].fyIntern++;
           }
         }
       }
@@ -2327,7 +2349,8 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
 
     // Process Jobs
     activeJobs.forEach(job => {
-      const role = job.roleCategory || 'Other';
+      const trimmedCategory = (job.roleCategory || '').trim();
+      const role = trimmedCategory || 'Other';
       initRole(role);
       pipeline[role].activeJobs++;
       if (pipeline[role].openJobList.length < 3) {
@@ -2439,14 +2462,28 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       }
     });
 
+    // Build a map of campus._id -> placementTarget for quick lookup
+    const campusTargetMap = {};
+    allCampusDocs.forEach(doc => {
+      campusTargetMap[doc._id.toString()] = doc.placementTarget || 0;
+    });
+
     // Build campus breakdown with percentages, sorted by placementReady % desc
     const campusBreakdown = Object.values(campusMap).map(c => {
       const totalStudentsComputed = c.totalStudents || ((c.activeCount || 0) + (c.internsInCampus || 0) + (c.internsOutCampus || 0));
       const denom = totalStudentsComputed || 1;
+      const target = campusTargetMap[c.campusId] || 0;
+      const fyPlaced = c.fyPlaced || 0;
+      const fyIntern = c.fyIntern || 0;
+      const achievementPct = target > 0 ? parseFloat(((fyPlaced + fyIntern) / target * 100).toFixed(1)) : null;
       return {
         totalActive: c.activeCount || totalStudentsComputed || 0,
         totalStudents: totalStudentsComputed,
         ...c,
+        placementTarget: target,
+        fyPlaced,
+        fyIntern,
+        achievementPct,
         placementReadyPct: denom > 0 ? parseFloat(((c.placementReady / denom) * 100).toFixed(1)) : 0,
         readinessPendingPct: denom > 0 ? parseFloat(((c.readinessPending / denom) * 100).toFixed(1)) : 0,
         cycleNotAllocatedPct: denom > 0 ? parseFloat(((c.cycleNotAllocated / denom) * 100).toFixed(1)) : 0,
@@ -2498,6 +2535,7 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       roles: rolesData,
       campusBreakdown,
       campusSchools,
+      fyYear: `FY ${fyStartYear}-${String(fyStartYear + 1).slice(-2)}`,
       cycle: activeCycle ? {
         name: activeCycle.name,
         target: activeCycle.targetPlacements,

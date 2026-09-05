@@ -708,6 +708,7 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
   body('company.name').trim().notEmpty(),
   body('description').trim().notEmpty(),
   body('location').trim().notEmpty(),
+  body('roleCategory').trim().notEmpty().withMessage('Role category is required'),
   body('applicationDeadline').isISO8601()
 ], async (req, res) => {
   try {

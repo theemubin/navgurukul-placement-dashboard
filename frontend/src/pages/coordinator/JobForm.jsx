@@ -563,9 +563,10 @@ const JobForm = () => {
       !formData.title ||
       !formData.company.name ||
       !formData.location ||
+      !formData.roleCategory ||
       !formData.applicationDeadlineDate
     ) {
-      toast.error("Please fill in all required fields");
+      toast.error("Please fill in all required fields (including Role Category)");
       setSaving(false);
       return;
     }
@@ -1660,15 +1661,17 @@ const JobForm = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Role Category
+                Role Category <span className="text-red-500">*</span>
               </label>
               <select
                 value={formData.roleCategory}
                 onChange={(e) =>
                   setFormData({ ...formData, roleCategory: e.target.value })
                 }
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
               >
-                <option value="">Select Category (Optional)</option>
+                <option value="">Select Category *</option>
                 {roleCategories.map((category) => (
                   <option key={category} value={category}>
                     {category}
