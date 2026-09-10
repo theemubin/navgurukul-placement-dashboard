@@ -72,6 +72,18 @@ const applicationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  // Coordinator comment associated with current status (e.g., reason for closing)
+  statusComment: {
+    type: String,
+    default: ''
+  },
+  // History of status changes for audit / display to students
+  statusHistory: [{
+    status: String,
+    changedAt: Date,
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    comment: String
+  }],
   offerDetails: {
     salary: Number,
     joiningDate: Date,

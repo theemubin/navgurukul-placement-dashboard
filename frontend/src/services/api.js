@@ -210,11 +210,17 @@ export const jobAPI = {
 
 // Application APIs
 export const applicationAPI = {
-  getApplications: (params) => api.get('/applications', { params }),
+  // Add no-cache header to avoid conditional requests returning 304
+  getApplications: (params) => api.get('/applications', { params, headers: { 'Cache-Control': 'no-cache' } }),
   getApplication: (id) => api.get(`/applications/${id}`),
   apply: (jobId, coverLetter, customResponses, type = 'regular', resume = '') => api.post('/applications', { jobId, coverLetter, customResponses, type, resume }),
-  updateStatus: (id, status, feedback) =>
-    api.put(`/applications/${id}/status`, { status, feedback }),
+  updateStatus: (id, status, feedbackOrComment, comment) => {
+    // Backwards compatible: if only feedbackOrComment is provided, send it as both feedback and comment
+    const body = comment !== undefined
+      ? { status, feedback: feedbackOrComment, comment }
+      : { status, feedback: feedbackOrComment, comment: feedbackOrComment };
+    return api.put(`/applications/${id}/status`, body);
+  },
   updateRound: (id, roundData) => api.put(`/applications/${id}/rounds`, roundData),
   addRecommendation: (id, reason) => api.put(`/applications/${id}/recommend`, { reason }),
   withdraw: (id) => api.put(`/applications/${id}/withdraw`),

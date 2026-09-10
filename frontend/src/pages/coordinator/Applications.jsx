@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { applicationAPI, jobAPI, settingsAPI, resolveResumeUrl } from '../../services/api';
+import { applicationAPI, jobAPI, settingsAPI, statsAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Modal } from '../../components/common/UIComponents';
 import { Search, Filter, Eye, CheckCircle, XCircle, Clock, MessageSquare, Download, Users, ExternalLink, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -44,12 +44,34 @@ const Applications = () => {
   const [selectedRoundIndex, setSelectedRoundIndex] = useState(0);
   const [discordThreadId, setDiscordThreadId] = useState('');
   const [pipelineStages, setPipelineStages] = useState([]);
+  const [statusCounts, setStatusCounts] = useState({});
+  const [loadingStatusCounts, setLoadingStatusCounts] = useState(true);
 
   useEffect(() => {
     fetchJobs();
     fetchApplications();
     fetchPipelineStages();
+    fetchStatusCounts();
   }, [filters.status, filters.job, pagination.page]);
+
+  const fetchStatusCounts = async () => {
+    try {
+      setLoadingStatusCounts(true);
+      const res = await statsAPI.getDashboard();
+      const counts = (res.data && res.data.applicationsByStatus) || {};
+      // Provide an "All" key (empty string) for the UI. Prefer server summary if available.
+      const totalFromSummary = res.data?.summary?.totalApplications;
+      const sumCounts = Object.values(counts).reduce((s, v) => s + (v || 0), 0);
+      const allCount = typeof totalFromSummary === 'number' ? totalFromSummary : sumCounts;
+      const countsWithAll = { ...counts, '': allCount };
+      setStatusCounts(countsWithAll);
+    } catch (e) {
+      console.error('Error fetching status counts:', e);
+      setStatusCounts({});
+    } finally {
+      setLoadingStatusCounts(false);
+    }
+  };
 
   const fetchPipelineStages = async () => {
     try {
@@ -184,10 +206,12 @@ const Applications = () => {
       };
       const response = await applicationAPI.getApplications(params);
       setApplications(response.data.applications || []);
+      // Backend returns pagination under response.data.pagination: { current, pages, total }
+      const pag = response.data.pagination || {};
       setPagination({
-        page: response.data.page || 1,
-        totalPages: response.data.totalPages || 1,
-        total: response.data.total || 0
+        page: pag.current || 1,
+        totalPages: pag.pages || 1,
+        total: pag.total || 0
       });
     } catch (error) {
       toast.error('Error fetching applications');
@@ -637,6 +661,37 @@ const Applications = () => {
         </div>
       </div>
 
+      {/* Status counts card */}
+      <div className="card">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-gray-700">Applications by Status</h3>
+            <div className="flex items-center gap-2">
+              {loadingStatusCounts && <LoadingSpinner size="sm" />}
+              <button
+                className="text-xs text-gray-500 hover:underline"
+                onClick={() => { setFilters(prev => ({ ...prev, status: '' })); setPagination(prev => ({ ...prev, page: 1 })); fetchStatusCounts(); }}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          {(() => {
+            const display = ['', 'applied', 'pending', 'under_review', 'shortlisted', 'interviewing', 'in_progress', 'selected', 'rejected', 'withdrawn', 'interested', 'placed'];
+              return display.map(s => (
+              <button
+                key={s || 'all'}
+                onClick={() => { setFilters(prev => ({ ...prev, status: s })); setPagination(prev => ({ ...prev, page: 1 })); }}
+                className={`flex items-center justify-between gap-3 p-2 rounded-lg text-sm ${filters.status === s ? 'bg-primary-50 border border-primary-100' : 'bg-gray-50 border border-gray-100'}`}
+              >
+                <span className="capitalize">{s === '' ? 'All' : s.replace('_', ' ')}</span>
+                <span className="font-medium text-gray-700">{loadingStatusCounts ? '—' : (statusCounts[s] || 0)}</span>
+              </button>
+            ));
+          })()}
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="card border-none shadow-sm bg-gray-50/50">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -733,8 +788,8 @@ const Applications = () => {
 
       {pagination.totalPages > 1 && (
         <Pagination
-          currentPage={pagination.page}
-          totalPages={pagination.totalPages}
+          current={pagination.page}
+          total={pagination.totalPages}
           onPageChange={(page) => setPagination({ ...pagination, page })}
         />
       )}

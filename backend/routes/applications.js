@@ -66,6 +66,11 @@ router.get('/', auth, async (req, res) => {
     const { job, status, student, page = 1, limit = 20, myLeads } = req.query;
     let query = {};
 
+    // Debug: log incoming filter params in development to help troubleshoot 304/cache/status issues
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Debug] GET /api/applications filters:', { job, status, student, page, limit, myLeads, role: req.user?.role, userId: req.userId });
+    }
+
     // If requesting 'myLeads' and user is coordinator, filter to jobs that this coordinator leads
     if (myLeads === 'true' && req.user && req.user.role === 'coordinator') {
       const coordinatorJobs = await Job.find({ coordinator: req.userId }).select('_id');
@@ -409,7 +414,7 @@ router.post('/', auth, authorize('student'), [
 // Update application status (Coordinators only)
 router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
-    const { status, feedback } = req.body;
+    const { status, feedback, comment } = req.body;
 
     const application = await Application.findById(req.params.id)
       .populate('job', 'title company.name')
@@ -419,11 +424,19 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
       return res.status(404).json({ message: 'Application not found' });
     }
 
+    // Record previous status and push to history
+    const prevStatus = application.status;
     application.status = status;
+    if (comment) {
+      application.statusComment = comment;
+    }
     if (feedback) {
       application.feedback = feedback;
       application.feedbackBy = req.userId;
     }
+
+    application.statusHistory = application.statusHistory || [];
+    application.statusHistory.push({ status, changedAt: new Date(), changedBy: req.userId, comment: comment || '' });
 
     // Update placement count if selected or filled
     if (status === 'selected' || status === 'filled') {
@@ -560,12 +573,15 @@ router.put('/:id/rounds', auth, authorize('coordinator', 'manager'), async (req,
       });
     }
 
-    // Update current round
+    // Update current round and record status changes
+    application.statusHistory = application.statusHistory || [];
     if (status === 'passed') {
       application.currentRound = round + 1;
       application.status = 'in_progress';
+      application.statusHistory.push({ status: 'in_progress', changedAt: new Date(), changedBy: req.userId, comment: `Round ${round} passed` });
     } else if (status === 'failed') {
       application.status = 'rejected';
+      application.statusHistory.push({ status: 'rejected', changedAt: new Date(), changedBy: req.userId, comment: `Round ${round} failed` });
     }
 
     await application.save();

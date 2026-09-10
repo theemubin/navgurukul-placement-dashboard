@@ -345,9 +345,14 @@ const StudentApplications = () => {
                         {app.job?.company?.name}
                       </p>
                       <div className="flex items-center gap-3 mt-3">
-                        <span className="flex items-center gap-1.5 text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded border border-gray-100 uppercase tracking-tighter font-bold">
-                          {app.status}
-                        </span>
+                        <div>
+                          <span className="flex items-center gap-1.5 text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded border border-gray-100 uppercase tracking-tighter font-bold">
+                            {app.status}
+                          </span>
+                          {app.statusComment && (
+                            <p className="text-xs text-gray-500 mt-1 italic">{app.statusComment}</p>
+                          )}
+                        </div>
                         <span className="flex items-center gap-1.5 text-xs text-gray-400">
                           <Clock className="w-3 h-3" />
                           Applied {formatDate(app.createdAt, 'MMM dd')}
@@ -530,6 +535,13 @@ const StudentApplications = () => {
                 <h4 className="text-2xl font-black text-gray-900">Application Active</h4>
               )}
             </div>
+
+              {selectedApp?.statusComment && (
+                <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 mb-3">
+                  <h4 className="text-sm font-semibold text-gray-700">Coordinator Note</h4>
+                  <p className="text-sm text-gray-600 mt-1 italic">{selectedApp.statusComment}</p>
+                </div>
+              )}
 
             {/* Conversational Timeline */}
             <div className="space-y-6">

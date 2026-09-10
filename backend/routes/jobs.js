@@ -932,11 +932,24 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       if (!application) continue;
       if (application.job.toString() !== jobId.toString()) continue;
 
+      // Skip updating final-state applications unless force flag set
+      const finalStates = ['selected', 'withdrawn', 'rejected', 'closed'];
+      const force = !!req.body.force;
+      if (finalStates.includes(application.status) && !force) {
+        // Do not override final states; continue to next application
+        continue;
+      }
+
       // Apply action
       if (action === 'set_status') {
         // If status provided, update it; otherwise we may only be adding feedback without changing status
         if (status) {
+          application.statusHistory = application.statusHistory || [];
+          application.statusHistory.push({ status, changedAt: new Date(), changedBy: req.userId, comment: generalFeedback || '' });
           application.status = status;
+          if (generalFeedback) {
+            application.statusComment = generalFeedback;
+          }
 
           // If moving to in_progress/interviewing, handle round setting
           if ((status === 'in_progress' || status === 'interviewing') && req.body.targetRound !== undefined) {
@@ -966,7 +979,10 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       } else if (action === 'advance_round') {
         // Legacy: Advance currentRound by `advanceBy` steps
         application.currentRound = (application.currentRound || 0) + parseInt(advanceBy || 1);
-        application.status = 'in_progress';
+          application.statusHistory = application.statusHistory || [];
+          application.statusHistory.push({ status: 'in_progress', changedAt: new Date(), changedBy: req.userId, comment: generalFeedback || '' });
+          application.status = 'in_progress';
+          if (generalFeedback) application.statusComment = generalFeedback;
 
         const feedbackToApply = perApplicationFeedbacks && perApplicationFeedbacks[appId] ? perApplicationFeedbacks[appId] : generalFeedback;
         if (feedbackToApply) {
@@ -1225,6 +1241,36 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
 
       if (notifications.length > 0) {
         await Notification.insertMany(notifications);
+      }
+    }
+
+    // If job moved to 'closed', update pending applications to 'closed' and capture coordinator notes
+    if (newStatus === 'closed') {
+      try {
+        // Close applications that are not already in final states
+        const excluded = ['selected', 'withdrawn', 'closed'];
+        await Application.updateMany(
+          { job: job._id, status: { $nin: excluded } },
+          {
+            $set: { status: 'closed', statusComment: notes || '' },
+            $push: { statusHistory: { status: 'closed', changedAt: new Date(), changedBy: req.userId, comment: notes || '' } }
+          }
+        );
+
+        // Notify remaining applicants that the job is closed (optional)
+        const applicants = await Application.find({ job: job._id, status: 'closed' }).select('student');
+        const notifications = applicants.map(a => ({
+          recipient: a.student,
+          type: 'application_closed',
+          title: `Application closed for ${job.title}`,
+          message: notes ? `The job has been closed: ${notes}` : 'The job has been closed by the coordinator.',
+          link: `/applications/${a._id}`,
+          relatedEntity: { type: 'job', id: job._id }
+        }));
+
+        if (notifications.length > 0) await Notification.insertMany(notifications);
+      } catch (e) {
+        console.error('Error closing applications for job:', job._id, e);
       }
     }
 
