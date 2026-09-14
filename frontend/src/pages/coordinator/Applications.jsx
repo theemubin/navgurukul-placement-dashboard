@@ -3,13 +3,15 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { applicationAPI, jobAPI, settingsAPI, statsAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Modal } from '../../components/common/UIComponents';
-import { Search, Filter, Eye, CheckCircle, XCircle, Clock, MessageSquare, Download, Users, ExternalLink, Mail } from 'lucide-react';
+import { Search, Filter, Eye, CheckCircle, XCircle, Clock, MessageSquare, Download, Users, ExternalLink, Mail, ShieldAlert, Layers } from 'lucide-react';
+import PipelineBottleneckAnalyzer from '../../components/common/PipelineBottleneckAnalyzer';
 import toast from 'react-hot-toast';
 
 const Applications = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const [appSubTab, setAppSubTab] = useState('list'); // 'list' | 'bottlenecks'
 
   const canManageJob = (job) => {
     if (!user) return false;
@@ -46,6 +48,12 @@ const Applications = () => {
   const [pipelineStages, setPipelineStages] = useState([]);
   const [statusCounts, setStatusCounts] = useState({});
   const [loadingStatusCounts, setLoadingStatusCounts] = useState(true);
+
+  const getStudentDisplayName = (student) => {
+    if (!student) return '';
+    if (student.name) return student.name;
+    return [student.firstName, student.lastName].filter(Boolean).join(' ').trim();
+  };
 
   useEffect(() => {
     fetchJobs();
@@ -115,16 +123,7 @@ const Applications = () => {
     const params = new URLSearchParams(location.search);
     const appId = params.get('appId');
     if (appId) {
-      const fetchAndOpenDetails = async () => {
-        try {
-          const response = await applicationAPI.getApplication(appId);
-          setSelectedApplication(response.data);
-          setShowDetailModal(true);
-        } catch (error) {
-          console.error('Error fetching application for deep link:', error);
-        }
-      };
-      fetchAndOpenDetails();
+      openApplicationDetails(appId);
     }
   }, [location.search]);
 
@@ -180,7 +179,7 @@ const Applications = () => {
 
   const fetchJobs = async () => {
     try {
-      const response = await jobAPI.getJobs({ limit: 100 });
+      const response = await jobAPI.getJobs({ limit: 100, summary: 'lite' });
       const fetched = response.data.jobs || [];
       setJobs(fetched);
 
@@ -200,6 +199,7 @@ const Applications = () => {
       const params = {
         page: pagination.page,
         limit: 10,
+        summary: 'lite',
         ...(filters.status && { status: filters.status }),
         ...(filters.job && { job: filters.job }),
         ...(filters.myLeads && { myLeads: 'true' })
@@ -220,8 +220,25 @@ const Applications = () => {
     }
   };
 
+  const openApplicationDetails = async (appId) => {
+    try {
+      const response = await applicationAPI.getApplication(appId);
+      setSelectedApplication(response.data);
+      setShowDetailModal(true);
+    } catch (error) {
+      toast.error('Error loading application details');
+      console.error('Error fetching application for details:', error);
+    }
+  };
+
   const handleStatusUpdate = async (status, withFeedback = false) => {
     if (!selectedApplication) return;
+
+    const requiresFeedback = ['selected', 'rejected'].includes(status);
+    if (requiresFeedback && !feedback.trim()) {
+      toast.error('A coordinator note is required for selected and rejected decisions.');
+      return;
+    }
 
     try {
       await applicationAPI.updateStatus(selectedApplication._id, status, withFeedback ? feedback : undefined);
@@ -312,7 +329,7 @@ const Applications = () => {
     if (!filters.search) return true;
     const searchLower = filters.search.toLowerCase();
     return (
-      app.student?.name?.toLowerCase().includes(searchLower) ||
+      getStudentDisplayName(app.student).toLowerCase().includes(searchLower) ||
       app.student?.email?.toLowerCase().includes(searchLower) ||
       app.job?.title?.toLowerCase().includes(searchLower) ||
       app.job?.company?.name?.toLowerCase().includes(searchLower)
@@ -344,7 +361,7 @@ const Applications = () => {
                   className="mt-1 sticky top-0"
                 />
                 <div>
-                  <p className="font-bold text-gray-900">{app.student?.name}</p>
+                  <p className="font-bold text-gray-900">{getStudentDisplayName(app.student) || 'Student'}</p>
                   <p className="text-sm text-gray-500">{app.student?.email}</p>
                 </div>
               </div>
@@ -369,13 +386,13 @@ const Applications = () => {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => { setSelectedApplication(app); setShowDetailModal(true); }}
+                onClick={() => openApplicationDetails(app._id)}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition"
               >
                 <Eye className="w-4 h-4" />
                 Details
               </button>
-              {app.student?.profile?.resume && (
+                {app.student?.profile?.resume && (
                 <a
                   href={resolveResumeUrl(app.student.profile.resume)}
                   target="_blank"
@@ -461,8 +478,7 @@ const Applications = () => {
                   </td>
                   <td className="px-4 py-3">
                     <div>
-                      <p className="font-medium text-gray-900">{app.student?.name}</p>
-                      <p className="text-sm text-gray-500">{app.student?.email}</p>
+                      <p className="font-medium text-gray-900">{getStudentDisplayName(app.student) || 'Student'}</p>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -477,7 +493,7 @@ const Applications = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => { setSelectedApplication(app); setShowDetailModal(true); }}
+                        onClick={() => openApplicationDetails(app._id)}
                         className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
                         title="View Details"
                       >
@@ -652,14 +668,43 @@ const Applications = () => {
     <div className="space-y-6 animate-fadeIn">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Applications</h1>
-          <p className="text-gray-600">Manage and review student applications</p>
+          <h1 className="text-2xl font-bold text-gray-900">Applications Management</h1>
+          <p className="text-gray-600">Review student applications, manage hiring stages, and analyze bottlenecks</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Users className="w-4 h-4" />
-          <span>{pagination.total} total applications</span>
+        <div className="flex items-center gap-3">
+          <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+            <button
+              onClick={() => setAppSubTab('list')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                appSubTab === 'list'
+                  ? 'bg-white text-primary-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" /> All Applications
+            </button>
+            <button
+              onClick={() => setAppSubTab('bottlenecks')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                appSubTab === 'bottlenecks'
+                  ? 'bg-white text-primary-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-indigo-600" /> Bottleneck & Stagnation Analyzer
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Users className="w-4 h-4" />
+            <span>{pagination.total} total</span>
+          </div>
         </div>
       </div>
+
+      {appSubTab === 'bottlenecks' ? (
+        <PipelineBottleneckAnalyzer embedded={true} />
+      ) : (
+        <>
 
       {/* Status counts card */}
       <div className="card">
@@ -846,7 +891,7 @@ const Applications = () => {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-gray-500">Name</p>
-                  <p className="font-medium">{selectedApplication.student?.name}</p>
+                  <p className="font-medium">{getStudentDisplayName(selectedApplication.student) || 'Student'}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Email</p>
@@ -1019,7 +1064,7 @@ const Applications = () => {
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            Add feedback for the student regarding this decision (optional but recommended).
+            Add feedback for the student regarding this decision. This note is required before you can confirm selection or rejection.
           </p>
           <textarea
             rows={4}
@@ -1040,6 +1085,7 @@ const Applications = () => {
             </button>
             <button
               onClick={() => handleStatusUpdate(newStatus, true)}
+              disabled={['selected', 'rejected'].includes(newStatus) && !feedback.trim()}
               className={`btn ${newStatus === 'rejected' ? 'bg-red-600 hover:bg-red-700' : 'btn-primary'} text-white`}
             >
               Confirm {newStatus === 'rejected' ? 'Rejection' : newStatus}
@@ -1121,7 +1167,7 @@ const Applications = () => {
                 placeholder="A personalized note that will be sent to ALL selected students..."
               />
               <p className={`text-[10px] mt-1 font-medium ${bulkStatus === 'rejected' ? 'text-red-500' : 'text-gray-400'}`}>
-                {bulkStatus === 'rejected' ? '* Feedback is mandatory for rejections in triage.' : 'Note: This feedback will be visible in the candidate dashboard.'}
+                {['selected', 'rejected'].includes(bulkStatus) ? '* Feedback is mandatory for selection and rejection decisions.' : 'Note: This feedback will be visible in the candidate dashboard.'}
               </p>
             </div>
           </div>
@@ -1135,7 +1181,7 @@ const Applications = () => {
             </button>
             <button
               onClick={() => handleBulkUpdate('set_status')}
-              disabled={!bulkStatus || (bulkStatus === 'rejected' && !feedback.trim())}
+              disabled={!bulkStatus || (['selected', 'rejected'].includes(bulkStatus) && !feedback.trim())}
               className="flex-[2] btn btn-primary font-bold rounded-xl shadow-lg shadow-primary-200 disabled:opacity-50"
             >
               Confirm Bulk Decision
@@ -1143,7 +1189,9 @@ const Applications = () => {
           </div>
         </div>
       </Modal>
-    </div >
+        </>
+      )}
+    </div>
   );
 };
 

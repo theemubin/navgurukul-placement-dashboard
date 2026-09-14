@@ -58,6 +58,39 @@ api.interceptors.response.use(
   }
 );
 
+const createCachedGetter = (requestFn, { ttl = 5 * 60 * 1000 } = {}) => {
+  const cacheStore = new Map();
+  const inflightStore = new Map();
+
+  return async (options = {}) => {
+    const forceRefresh = options.forceRefresh === true;
+    const cacheTTL = options.cacheTTL ?? ttl;
+    const now = Date.now();
+    const cacheKey = JSON.stringify(options || {});
+    const cachedEntry = cacheStore.get(cacheKey);
+
+    if (!forceRefresh && cachedEntry && (now - cachedEntry.at) < cacheTTL) {
+      return cachedEntry.value;
+    }
+
+    if (!forceRefresh && inflightStore.has(cacheKey)) {
+      return inflightStore.get(cacheKey);
+    }
+
+    const inflight = requestFn(options)
+      .then((response) => {
+        cacheStore.set(cacheKey, { value: response, at: Date.now() });
+        return response;
+      })
+      .finally(() => {
+        inflightStore.delete(cacheKey);
+      });
+
+    inflightStore.set(cacheKey, inflight);
+    return inflight;
+  };
+};
+
 // Auth APIs
 export const authAPI = {
   login: (data) => api.post('/auth/login', data),
@@ -128,8 +161,12 @@ export const userAPI = {
 };
 
 // Settings APIs
+let pipelineStagesCache = null;
+let pipelineStagesCacheAt = 0;
+let pipelineStagesCachePromise = null;
+
 export const settingsAPI = {
-  getSettings: () => api.get('/settings'),
+  getSettings: createCachedGetter(() => api.get('/settings'), { ttl: 10 * 60 * 1000 }),
   getSetting: (key) => api.get(`/settings/${key}`),
   updateSetting: (key, value) => api.put(`/settings/${key}`, { value }),
   addItem: (key, item) => api.post(`/settings/${key}/add`, { item }),
@@ -139,7 +176,32 @@ export const settingsAPI = {
   addSchool: (school) => api.post('/settings/schools', { school }),
   syncSchools: () => api.post('/settings/sync-schools'),
   // Pipeline stages
-  getPipelineStages: () => api.get('/settings/pipeline-stages'),
+  getPipelineStages: async (options = {}) => {
+    const forceRefresh = options.forceRefresh === true;
+    const cacheTTL = options.cacheTTL ?? 5 * 60 * 1000;
+    const now = Date.now();
+
+    if (!forceRefresh && pipelineStagesCache && (now - pipelineStagesCacheAt) < cacheTTL) {
+      return { data: { data: pipelineStagesCache } };
+    }
+
+    if (!forceRefresh && pipelineStagesCachePromise) {
+      return pipelineStagesCachePromise;
+    }
+
+    pipelineStagesCachePromise = api.get('/settings/pipeline-stages')
+      .then((response) => {
+        const stages = response.data?.data || [];
+        pipelineStagesCache = stages;
+        pipelineStagesCacheAt = Date.now();
+        return response;
+      })
+      .finally(() => {
+        pipelineStagesCachePromise = null;
+      });
+
+    return pipelineStagesCachePromise;
+  },
   createPipelineStage: (stage) => api.post('/settings/pipeline-stages', stage),
   updatePipelineStage: (stageId, updates) => api.put(`/settings/pipeline-stages/${stageId}`, updates),
   deletePipelineStage: (stageId) => api.delete(`/settings/pipeline-stages/${stageId}`),
@@ -159,7 +221,7 @@ export const settingsAPI = {
   addCompanyOption: (companyData) => api.post('/settings/companies/add', companyData),
   updateProficiencyRubrics: (rubrics) => api.put('/settings/proficiency-rubrics', { rubrics }),
   getEducationAnalytics: () => api.get('/settings/analytics/education'),
-  getProfileOptionsAnalytics: () => api.get('/settings/analytics/profile-options'),
+  getProfileOptionsAnalytics: createCachedGetter(() => api.get('/settings/analytics/profile-options'), { ttl: 10 * 60 * 1000 }),
   getOptionStudents: (params) => api.get('/settings/analytics/option-students', { params }),
   renameEducationItem: (data) => api.post('/settings/education/rename', data)
 };
@@ -205,14 +267,34 @@ export const jobAPI = {
   assignCoordinator: (jobId, coordinatorId) => api.patch(`/jobs/${jobId}/coordinator`, { coordinatorId }),
   broadcastJob: (jobId) => api.post(`/jobs/${jobId}/broadcast`),
   bulkUpdate: (jobId, data) => api.post(`/jobs/${jobId}/bulk-update`, data),
-  getCoordinatorJobStats: () => api.get('/jobs/stats/coordinator-jobs')
+  getCoordinatorJobStats: (params) => api.get('/jobs/stats/summary', { params })
 };
 
 // Application APIs
+const cachedGetApplication = createCachedGetter(
+  (id) => api.get(`/applications/${id}`),
+  { ttl: 2 * 60 * 1000 }
+);
+
+const cachedGetPipelineBottlenecks = createCachedGetter(
+  (params) => api.get('/applications/analytics/bottlenecks', { params }),
+  { ttl: 3 * 60 * 1000 }
+);
+
+const cachedGetStagnantStudents = createCachedGetter(
+  (params) => api.get('/applications/analytics/stagnant-students', { params }),
+  { ttl: 3 * 60 * 1000 }
+);
+
+const cachedGetStudent360Report = createCachedGetter(
+  ({ studentId, params }) => api.get(`/applications/analytics/student-360/${studentId}`, { params }),
+  { ttl: 3 * 60 * 1000 }
+);
+
 export const applicationAPI = {
   // Add no-cache header to avoid conditional requests returning 304
   getApplications: (params) => api.get('/applications', { params, headers: { 'Cache-Control': 'no-cache' } }),
-  getApplication: (id) => api.get(`/applications/${id}`),
+  getApplication: (id) => cachedGetApplication(id),
   apply: (jobId, coverLetter, customResponses, type = 'regular', resume = '') => api.post('/applications', { jobId, coverLetter, customResponses, type, resume }),
   updateStatus: (id, status, feedbackOrComment, comment) => {
     // Backwards compatible: if only feedbackOrComment is provided, send it as both feedback and comment
@@ -227,7 +309,12 @@ export const applicationAPI = {
   exportCSV: (params) => api.get('/applications/export/csv', { params, responseType: 'blob' }),
   // Enhanced export with field selection
   getExportFields: () => api.get('/applications/export/fields'),
-  exportXLS: (data) => api.post('/applications/export/xls', data, { responseType: 'blob' })
+  exportXLS: (data) => api.post('/applications/export/xls', data, { responseType: 'blob' }),
+  // Bottlenecks & Stagnation 360 Analytics
+  getPipelineBottlenecks: (params) => cachedGetPipelineBottlenecks(params),
+  getStagnantStudents: (params) => cachedGetStagnantStudents(params),
+  getStudent360Report: (studentId, params) => cachedGetStudent360Report({ studentId, params }),
+  logIntervention: (id, data) => api.post(`/applications/${id}/interventions`, data)
 };
 
 // Skill APIs
@@ -278,7 +365,7 @@ export const statsAPI = {
   getCampusPlacementTrends: () => api.get('/stats/campus-placement-trends'),
   getLongTermStudentsTrend: () => api.get('/stats/long-term-students-trend'),
   getNeverLoggedInList: (params) => api.get('/stats/never-logged-in-list', { params }),
-  getTalentPipeline: (params) => api.get('/stats/talent-pipeline', { params }),
+  getTalentPipeline: createCachedGetter((params) => api.get('/stats/talent-pipeline', { params }), { ttl: 10 * 60 * 1000 }),
   exportStats: (params) => api.get('/stats/export', { params, responseType: 'blob' })
 };
 

@@ -51,17 +51,17 @@ const StudentApplications = () => {
 
   const fetchCounts = async () => {
     try {
-      const response = await applicationAPI.getApplications({ limit: 1000 });
-      const allApps = response.data.applications || [];
+      const response = await applicationAPI.getApplications({ summary: 'counts' });
+      const allApps = response.data.counts || {};
       setCounts({
-        total: allApps.length,
-        applied: allApps.filter(a => a.status === 'applied').length,
-        interested: allApps.filter(a => a.status === 'interested').length,
-        shortlisted: allApps.filter(a => a.status === 'shortlisted' || a.status === 'hr_shortlisting').length,
-        in_progress: allApps.filter(a => a.status === 'in_progress' || a.status === 'interviewing' || a.status === 'application_stage').length,
-        selected: allApps.filter(a => a.status === 'selected').length,
-        rejected: allApps.filter(a => a.status === 'rejected').length,
-        withdrawn: allApps.filter(a => a.status === 'withdrawn').length
+        total: allApps.total || 0,
+        applied: allApps.applied || 0,
+        interested: allApps.interested || 0,
+        shortlisted: allApps.shortlisted || 0,
+        in_progress: allApps.in_progress || 0,
+        selected: allApps.selected || 0,
+        rejected: allApps.rejected || 0,
+        withdrawn: allApps.withdrawn || 0
       });
     } catch (error) {
       console.error('Error fetching application counts:', error);
@@ -73,7 +73,8 @@ const StudentApplications = () => {
     try {
       const params = {
         page: pagination.current,
-        limit: 10
+        limit: 10,
+        summary: 'lite'
       };
       if (activeFilter !== 'all') {
         if (activeFilter === 'in_progress') {
@@ -560,7 +561,7 @@ const StudentApplications = () => {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[10px] font-bold text-primary-700 uppercase">Latest Note from Team</span>
                       </div>
-                      <p className="text-sm text-gray-800 leading-relaxed italic italic font-medium">"{selectedApp.feedback}"</p>
+                      <p className="text-sm text-gray-800 leading-relaxed italic font-medium">"{selectedApp.feedback}"</p>
                     </div>
                   </div>
                 )}

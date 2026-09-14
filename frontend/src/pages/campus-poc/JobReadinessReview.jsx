@@ -38,7 +38,7 @@ function JobReadinessReview() {
       if (filter === 'pending') params.status = 'pending';
       if (filter === 'job-ready') params.isJobReady = true;
       
-      const res = await jobReadinessAPI.getCampusStudents(params);
+      const res = await jobReadinessAPI.getCampusStudents({ ...params, summary: 'true' });
       // API returns { records: [...], pagination: {...} }
       setStudents(res.data?.records || []);
       setError(null);

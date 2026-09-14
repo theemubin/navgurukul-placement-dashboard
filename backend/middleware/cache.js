@@ -45,6 +45,8 @@ const cacheMiddleware = (options = {}) => {
       return next();
     }
 
+    const shouldBypassCache = req.query?.refresh === 'true' || req.headers['cache-control'] === 'no-cache';
+
     // Determine cache key
     let cacheKey;
     if (typeof buildKey === 'function') {
@@ -52,10 +54,29 @@ const cacheMiddleware = (options = {}) => {
     } else {
       const prefix = keyPrefix ? `cache:${keyPrefix}` : 'cache';
       const userScope = req.user ? `:user:${req.user._id || req.user.id}` : ':public';
-      cacheKey = `${prefix}:${req.originalUrl || req.url}${userScope}`;
+      const rawUrl = req.originalUrl || req.url || '';
+      const parsedUrl = new URL(rawUrl, 'http://localhost');
+      parsedUrl.searchParams.delete('refresh');
+      const cleanUrl = `${parsedUrl.pathname}${parsedUrl.search}`;
+      cacheKey = `${prefix}:${cleanUrl}${userScope}`;
     }
 
     try {
+      if (shouldBypassCache) {
+        res.setHeader('X-Cache', 'BYPASS');
+        const originalJson = res.json.bind(res);
+        res.json = (body) => {
+          res.json = originalJson;
+          if (res.statusCode >= 200 && res.statusCode < 300 && body !== undefined && body !== null) {
+            cacheService.set(cacheKey, body, ttl).catch(err => {
+              console.warn(`[CacheMiddleware] Failed to cache key "${cacheKey}":`, err.message);
+            });
+          }
+          return originalJson(body);
+        };
+        return next();
+      }
+
       const cachedResponse = await cacheService.get(cacheKey);
 
       if (cachedResponse) {

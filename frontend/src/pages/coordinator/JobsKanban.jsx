@@ -529,7 +529,7 @@ const JobsKanban = ({ onExportJob }) => {
   // Fetch jobs
   const fetchJobs = async () => {
     try {
-      const response = await jobAPI.getJobs({ limit: 100 });
+      const response = await jobAPI.getJobs({ limit: 100, summary: 'lite' });
       setJobs(response.data.jobs || []);
     } catch (err) {
       console.error('Error fetching jobs:', err);
@@ -558,7 +558,12 @@ const JobsKanban = ({ onExportJob }) => {
 
   const fetchApplicantsForJob = async (jobId) => {
     try {
-      const res = await applicationAPI.getApplications({ job: jobId, limit: 1000 });
+      const res = await applicationAPI.getApplications({
+        job: jobId,
+        status: 'applied,application_stage,hr_shortlisting,interviewing,in_progress,shortlisted',
+        summary: 'triage',
+        limit: 100
+      });
       // Only show applicants who are still 'in process' (not rejected/withdrawn/placed/selected/filled)
       const apps = (res.data.applications || []).filter(a => !['rejected', 'withdrawn', 'selected', 'placed', 'filled'].includes(a.status));
       setModalApplicants(apps.map(a => ({ ...a, _target: a._target || undefined, _comment: a._comment || '' })));

@@ -84,6 +84,30 @@ const applicationSchema = new mongoose.Schema({
     changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     comment: String
   }],
+  // Intervention history logged by PoC, Coordinator, or Manager
+  interventions: [{
+    actionType: {
+      type: String,
+      enum: ['mock_interview_scheduled', 'hr_followup', 'resume_review', 'poc_counseling', 'other'],
+      default: 'other'
+    },
+    note: {
+      type: String,
+      required: true
+    },
+    remedialTag: {
+      type: String,
+      default: ''
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   offerDetails: {
     salary: Number,
     joiningDate: Date,

@@ -237,7 +237,7 @@ const JobDetails = () => {
 
   const checkIfApplied = async () => {
     try {
-      const response = await applicationAPI.getApplications({ job: id });
+      const response = await applicationAPI.getApplications({ job: id, limit: 1 });
       setHasApplied(response.data.applications.length > 0);
     } catch (error) {
       console.error('Error checking application status:', error);
@@ -363,7 +363,12 @@ const JobDetails = () => {
     try {
       const [eligibleRes, appsRes] = await Promise.all([
         statsAPI.getJobEligibleStudents(id),
-        applicationAPI.getApplications({ job: id, limit: 1000 })
+        applicationAPI.getApplications({
+          job: id,
+          status: 'applied,application_stage,hr_shortlisting,interviewing,in_progress,shortlisted,selected,rejected,withdrawn,filled,placed',
+          summary: 'triage',
+          limit: 1000
+        })
       ]);
       setEligibleStudentsModal({ 
         open: true, 

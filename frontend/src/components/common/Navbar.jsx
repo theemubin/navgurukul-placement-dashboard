@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { notificationAPI, questionAPI } from '../../services/api';
+import { notificationAPI } from '../../services/api';
 import { Menu, Bell, LogOut, ChevronDown, User, MessageCircle, Heart, ShieldCheck } from 'lucide-react';
 import { getNotificationUrl } from '../../utils/notificationUtils';
 import RoleRequestModal from './RoleRequestModal';
 
-const Navbar = ({ onMenuClick }) => {
+const Navbar = ({ onMenuClick, forumUnreadCount = 0 }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
@@ -14,35 +14,15 @@ const Navbar = ({ onMenuClick }) => {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [forumUnreadCount, setForumUnreadCount] = useState(0);
   const dropdownRef = useRef(null);
   const notifRef = useRef(null);
 
   useEffect(() => {
     const initNavbar = async () => {
       await fetchNotifications();
-      if (user?.role === 'coordinator') {
-        await fetchForumCount();
-      }
     };
     initNavbar();
-
-    const interval = setInterval(() => {
-      fetchUnreadCount();
-      if (user?.role === 'coordinator') fetchForumCount();
-    }, 30000);
-    return () => clearInterval(interval);
   }, [user]);
-
-  const fetchForumCount = async () => {
-    try {
-      const response = await questionAPI.getQuestions();
-      const count = response.data.filter(q => !q.answer).length;
-      setForumUnreadCount(count);
-    } catch (error) {
-      console.error('Error fetching forum unread count:', error);
-    }
-  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -65,15 +45,6 @@ const Navbar = ({ onMenuClick }) => {
       setUnreadCount(response.data.unreadCount);
     } catch (error) {
       console.error('Error fetching notifications:', error);
-    }
-  };
-
-  const fetchUnreadCount = async () => {
-    try {
-      const response = await notificationAPI.getUnreadCount();
-      setUnreadCount(response.data.count);
-    } catch (error) {
-      console.error('Error fetching unread count:', error);
     }
   };
 

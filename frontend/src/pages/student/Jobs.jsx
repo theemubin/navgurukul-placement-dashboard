@@ -98,6 +98,7 @@ const StudentJobs = () => {
     try {
       const response = await jobAPI.getJobs({
         page: jobPagination.current, limit: 10,
+        summary: 'lite',
         search: filters.search || undefined,
         roleCategory: filters.roleCategory || undefined,
         jobType: 'full_time,part_time,contract',
@@ -114,6 +115,7 @@ const StudentJobs = () => {
     try {
       const response = await jobAPI.getJobs({
         page: internshipPagination.current, limit: 10,
+        summary: 'lite',
         search: filters.search || undefined,
         roleCategory: filters.roleCategory || undefined,
         jobType: 'internship',
@@ -130,6 +132,7 @@ const StudentJobs = () => {
     try {
       const response = await jobAPI.getJobs({
         page: internshipPagination.current, limit: 10,
+        summary: 'lite',
         search: filters.search || undefined,
         roleCategory: filters.roleCategory || undefined,
         jobType: 'paid_project',
@@ -452,7 +455,7 @@ const StudentJobs = () => {
                                 if (e.target.nextSibling) e.target.nextSibling.style.display = "flex";
                               }}
                             />
-                            <div className="hidden w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                            <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ display: 'none' }}>
                               <Briefcase className="w-6 h-6 text-gray-400" />
                             </div>
                           </>

@@ -325,7 +325,7 @@ const CoordinatorForum = () => {
             setLoading(true);
             const [qRes, jRes] = await Promise.all([
                 questionAPI.getQuestions(),
-                jobAPI.getJobs({ limit: 200 }),
+                jobAPI.getJobs({ limit: 200, summary: 'lite' }),
             ]);
             setQuestions(qRes.data || []);
             setJobs(jRes.data?.jobs || jRes.data || []);

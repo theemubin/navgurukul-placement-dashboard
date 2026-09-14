@@ -952,7 +952,8 @@ router.patch('/my-status/:criteriaId', auth, authorize('student'), upload.single
  */
 router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
-    const { school, isJobReady, status, campus, page = 1, limit = 20 } = req.query;
+    const { school, isJobReady, status, campus, page = 1, limit = 20, summary } = req.query;
+    const summaryMode = summary === 'true' || summary === 'light';
 
     let query = {};
 
@@ -977,38 +978,50 @@ router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'man
       query.criteriaStatus = { $elemMatch: { status: 'completed' } };
     }
 
-    const readinessRecords = await StudentJobReadiness.find(query)
+    const readinessQuery = StudentJobReadiness.find(query)
       .populate({
         path: 'student',
-        select: 'firstName lastName email campus studentProfile.currentSchool studentProfile.currentModule studentProfile.openForRoles',
-        populate: { path: 'campus', select: 'name' }
+        select: summaryMode
+          ? 'firstName lastName email campus studentProfile.currentSchool studentProfile.currentModule'
+          : 'firstName lastName email campus studentProfile.currentSchool studentProfile.currentModule studentProfile.openForRoles studentProfile.skills studentProfile.academicRecords'
       })
-      .populate('approvedBy', 'firstName lastName')
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .sort({ readinessPercentage: -1 });
 
+    if (!summaryMode) {
+      readinessQuery.populate('approvedBy', 'firstName lastName');
+    }
+
+    const readinessRecords = await readinessQuery;
+
     const total = await StudentJobReadiness.countDocuments(query);
 
-    // Build a map of studentId -> cycle name by checking snapshotStudents
-    const studentIds = readinessRecords.map(r => r.student?._id).filter(Boolean);
-    const cycles = await PlacementCycle.find({
-      'snapshotStudents.student': { $in: studentIds }
-    }).select('name month year snapshotStudents');
+    let cycleMap = new Map();
+    if (!summaryMode) {
+      // Build a map of studentId -> cycle name by checking snapshotStudents
+      const studentIds = readinessRecords.map(r => r.student?._id).filter(Boolean);
+      const cycles = await PlacementCycle.find({
+        'snapshotStudents.student': { $in: studentIds }
+      }).select('name month year snapshotStudents');
 
-    const cycleMap = new Map();
-    cycles.forEach(cycle => {
-      cycle.snapshotStudents.forEach(ss => {
-        const sid = ss.student?.toString();
-        if (sid && !cycleMap.has(sid)) {
-          cycleMap.set(sid, cycle.name);
-        }
+      cycleMap = new Map();
+      cycles.forEach(cycle => {
+        cycle.snapshotStudents.forEach(ss => {
+          const sid = ss.student?.toString();
+          if (sid && !cycleMap.has(sid)) {
+            cycleMap.set(sid, cycle.name);
+          }
+        });
       });
-    });
+    }
 
     const recordsWithCycle = readinessRecords.map(r => {
       const obj = r.toObject ? r.toObject() : r;
       obj.placementCycle = cycleMap.get(r.student?._id?.toString()) || null;
+      if (summaryMode) {
+        obj.approvedBy = undefined;
+      }
       return obj;
     });
 

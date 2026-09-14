@@ -300,6 +300,12 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
  *         schema:
  *           type: integer
  *           default: 20
+ *       - in: query
+ *         name: summary
+ *         schema:
+ *           type: string
+ *           enum: [lite]
+ *         description: Return a reduced job payload for list views
  *     responses:
  *       200:
  *         description: Paginated job list
@@ -311,9 +317,11 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
   try {
     const {
       status, company, jobType, campus, search,
-      roleCategory, sortBy,
+      roleCategory, sortBy, summaryFilter,
       page = 1, limit = 20
     } = req.query;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 20;
 
     let query = {};
 
@@ -397,13 +405,24 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
     else if (sortBy === 'deadline_desc') sortOptions = { applicationDeadline: -1 };
     else if (sortBy === 'placements') sortOptions = { placementsCount: -1 };
 
-    const jobs = await Job.find(query)
-      .populate('requiredSkills.skill')
-      .populate('eligibility.campuses', 'name')
-      .populate('createdBy', 'firstName lastName')
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
-      .sort(sortOptions);
+    const useSummaryFilter = summaryFilter && summaryFilter !== 'all';
+    const liteSummary = req.query.summary === 'lite';
+
+    const jobsQuery = liteSummary
+      ? Job.find(query)
+        .select('title company location status jobType applicationDeadline salary roleCategory createdAt updatedAt placementsCount maxPositions minPositions')
+        .sort(sortOptions)
+      : Job.find(query)
+        .populate('requiredSkills.skill')
+        .populate('eligibility.campuses', 'name')
+        .populate('createdBy', 'firstName lastName')
+        .sort(sortOptions);
+
+    if (!useSummaryFilter) {
+      jobsQuery.skip((pageNum - 1) * limitNum).limit(limitNum);
+    }
+
+    const jobs = await jobsQuery;
 
     const total = await Job.countDocuments(query);
 
@@ -427,9 +446,13 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
       const jobObj = j.toObject ? j.toObject() : j;
       jobObj.statusCounts = Object.assign({
         applied: 0,
+        application_stage: 0,
+        hr_shortlisting: 0,
         shortlisted: 0,
         in_progress: 0,
+        interviewing: 0,
         selected: 0,
+        filled: 0,
         rejected: 0,
         withdrawn: 0,
         interested: 0
@@ -443,12 +466,55 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
       return jobObj;
     });
 
+    const now = new Date();
+    const stale7Cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const stale14Cutoff = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const filteredJobs = useSummaryFilter
+      ? jobsWithCounts.filter(job => {
+          const statusCounts = job.statusCounts || {};
+          const isActiveJob = !['draft', 'closed', 'filled'].includes(job.status);
+          const hasPipeline = (statusCounts.applied || 0)
+            + (statusCounts.application_stage || 0)
+            + (statusCounts.hr_shortlisting || 0)
+            + (statusCounts.interviewing || 0)
+            + (statusCounts.in_progress || 0)
+            + (statusCounts.shortlisted || 0) > 0;
+          const selectedPlaced = (statusCounts.selected || 0) > 0 || job.status === 'filled';
+          const deadlinePassed = job.applicationDeadline && new Date(job.applicationDeadline) < now;
+          const hrPending = deadlinePassed && isActiveJob && (statusCounts.hr_shortlisting || 0) === 0;
+          const noUpdate7 = isActiveJob && new Date(job.updatedAt || 0) <= stale7Cutoff;
+          const noUpdate14 = isActiveJob && new Date(job.updatedAt || 0) <= stale14Cutoff;
+
+          switch (summaryFilter) {
+            case 'active':
+            case 'totalPositions':
+              return isActiveJob;
+            case 'pipeline':
+              return hasPipeline;
+            case 'deadlineClosedHrPending':
+              return hrPending;
+            case 'noUpdate7Days':
+              return noUpdate7;
+            case 'noUpdate14Days':
+              return noUpdate14;
+            case 'selectedPlaced':
+              return selectedPlaced;
+            default:
+              return true;
+          }
+        })
+      : jobsWithCounts;
+
+    const paginatedJobs = useSummaryFilter
+      ? filteredJobs.slice((pageNum - 1) * limitNum, pageNum * limitNum)
+      : jobsWithCounts;
+
     res.json({
-      jobs: jobsWithCounts,
+      jobs: paginatedJobs,
       pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(total / limit),
-        total
+        current: pageNum,
+        pages: useSummaryFilter ? Math.ceil(filteredJobs.length / limitNum) : Math.ceil(total / limitNum),
+        total: useSummaryFilter ? filteredJobs.length : total
       }
     });
   } catch (error) {
@@ -924,6 +990,8 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       return res.status(400).json({ message: 'No applicationIds provided' });
     }
 
+    const statusRequiresNote = ['selected', 'rejected'];
+
     let updated = 0;
     const affectedStudents = [];
 
@@ -944,11 +1012,16 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       if (action === 'set_status') {
         // If status provided, update it; otherwise we may only be adding feedback without changing status
         if (status) {
+          const feedbackToApply = perApplicationFeedbacks && perApplicationFeedbacks[appId] ? perApplicationFeedbacks[appId] : generalFeedback;
+          if (statusRequiresNote.includes(status) && !(feedbackToApply || '').toString().trim()) {
+            return res.status(400).json({ message: `A coordinator note is required when marking an application as ${status}.` });
+          }
+
           application.statusHistory = application.statusHistory || [];
-          application.statusHistory.push({ status, changedAt: new Date(), changedBy: req.userId, comment: generalFeedback || '' });
+          application.statusHistory.push({ status, changedAt: new Date(), changedBy: req.userId, comment: (feedbackToApply || '').toString().trim() });
           application.status = status;
-          if (generalFeedback) {
-            application.statusComment = generalFeedback;
+          if (feedbackToApply) {
+            application.statusComment = feedbackToApply;
           }
 
           // If moving to in_progress/interviewing, handle round setting
@@ -2129,6 +2202,174 @@ router.patch('/:id/coordinator', auth, authorize('manager'), [
     res.json({ message: 'Coordinator assigned successfully', job });
   } catch (error) {
     console.error('Assign coordinator error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Coordinator/manager summary stats for the job management page
+/**
+ * @swagger
+ * /api/jobs/stats/summary:
+ *   get:
+ *     summary: Get job summary stats for the job management page
+ *     tags: [Jobs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by job status
+ *       - in: query
+ *         name: company
+ *         schema:
+ *           type: string
+ *         description: Filter by company name
+ *       - in: query
+ *         name: jobType
+ *         schema:
+ *           type: string
+ *         description: Filter by one or more job types (comma-separated)
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *         description: Filter by campus id
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by title, company, location, role, or description
+ *       - in: query
+ *         name: roleCategory
+ *         schema:
+ *           type: string
+ *         description: Filter by role category
+ *       - in: query
+ *         name: coordinator
+ *         schema:
+ *           type: string
+ *         description: Filter by coordinator id
+ *       - in: query
+ *         name: myLeads
+ *         schema:
+ *           type: boolean
+ *         description: Limit results to the current coordinator's leads
+ *       - in: query
+ *         name: refresh
+ *         schema:
+ *           type: boolean
+ *         description: Bypass Redis cache and recompute the summary once, then cache the refreshed result
+ *     responses:
+ *       200:
+ *         description: Job summary statistics
+ */
+router.get('/stats/summary', auth, authorize('coordinator', 'manager'), cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), async (req, res) => {
+  try {
+    const {
+      status, company, jobType, campus, search,
+      roleCategory, coordinator, myLeads
+    } = req.query;
+
+    let query = {};
+
+    if (status) query.status = status;
+    if (company) query['company.name'] = { $regex: company, $options: 'i' };
+
+    if (jobType) {
+      const jobTypes = jobType.split(',').map(t => t.trim());
+      query.jobType = jobTypes.length > 1 ? { $in: jobTypes } : jobType;
+    }
+
+    if (campus) query['eligibility.campuses'] = campus;
+    if (myLeads === 'true' && req.user) query.coordinator = req.userId;
+    if (coordinator) query.coordinator = coordinator;
+    if (roleCategory) query.roleCategory = roleCategory;
+
+    if (search) {
+      const searchOr = [
+        { title: { $regex: search, $options: 'i' } },
+        { 'company.name': { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } },
+        { roleCategory: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+
+      if (query.$and || query.$or) {
+        if (!query.$and) {
+          const existingOr = query.$or;
+          delete query.$or;
+          query.$and = [{ $or: existingOr }];
+        }
+        query.$and.push({ $or: searchOr });
+      } else {
+        query.$or = searchOr;
+      }
+    }
+
+    const stale7Cutoff = new Date();
+    stale7Cutoff.setDate(stale7Cutoff.getDate() - 7);
+    const stale14Cutoff = new Date();
+    stale14Cutoff.setDate(stale14Cutoff.getDate() - 14);
+
+    const jobs = await Job.find(query)
+      .select('_id status applicationDeadline updatedAt maxPositions')
+      .lean();
+
+    const jobIds = jobs.map(job => job._id);
+    const applicationStatusCounts = {};
+    if (jobIds.length > 0) {
+      const appAgg = await Application.aggregate([
+        { $match: { job: { $in: jobIds } } },
+        { $group: { _id: { job: '$job', status: '$status' }, count: { $sum: 1 } } }
+      ]);
+
+      appAgg.forEach(row => {
+        const jobId = row._id.job.toString();
+        applicationStatusCounts[jobId] = applicationStatusCounts[jobId] || {};
+        applicationStatusCounts[jobId][row._id.status] = row.count;
+      });
+    }
+
+    const applicationPipelineStatuses = new Set(['applied', 'application_stage', 'hr_shortlisting', 'interviewing', 'in_progress', 'shortlisted']);
+    const placementStatuses = new Set(['selected', 'filled']);
+
+    const pipelineApplications = Object.values(applicationStatusCounts)
+      .reduce((sum, statusCounts) => sum + Object.entries(statusCounts)
+        .filter(([statusKey]) => applicationPipelineStatuses.has(statusKey))
+        .reduce((innerSum, [, count]) => innerSum + count, 0), 0);
+
+    const selectedPlaced = Object.values(applicationStatusCounts)
+      .reduce((sum, statusCounts) => sum + Object.entries(statusCounts)
+        .filter(([statusKey]) => placementStatuses.has(statusKey))
+        .reduce((innerSum, [, count]) => innerSum + count, 0), 0);
+
+    const deadlineClosedHrPending = jobs.filter(job => {
+      const deadlinePassed = job.applicationDeadline && new Date(job.applicationDeadline) < new Date();
+      const isOpenPipeline = !['closed', 'filled'].includes(job.status);
+      const hrShortlistingCount = applicationStatusCounts[job._id.toString()]?.hr_shortlisting || 0;
+      return deadlinePassed && isOpenPipeline && hrShortlistingCount === 0;
+    }).length;
+
+    const totalJobs = jobs.length;
+    const activeJobs = jobs.filter(job => !['draft', 'closed', 'filled'].includes(job.status)).length;
+    const totalPositions = jobs.filter(job => !['draft', 'closed', 'filled'].includes(job.status)).reduce((sum, job) => sum + (job.maxPositions || 0), 0);
+    const noUpdate7Days = jobs.filter(job => !['draft', 'closed', 'filled'].includes(job.status) && new Date(job.updatedAt || 0) <= stale7Cutoff).length;
+    const noUpdate14Days = jobs.filter(job => !['draft', 'closed', 'filled'].includes(job.status) && new Date(job.updatedAt || 0) <= stale14Cutoff).length;
+
+    res.json({
+      totalJobs,
+      activeJobs,
+      totalPositions,
+      noUpdate7Days,
+      noUpdate14Days,
+      pipelineApplications,
+      selectedPlaced,
+      deadlineClosedHrPending
+    });
+  } catch (error) {
+    console.error('Get job summary stats error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

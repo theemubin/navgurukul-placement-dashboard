@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { userAPI, campusAPI } from '../../services/api';
-import { LoadingSpinner, Modal } from '../common/UIComponents';
+import { LoadingSpinner, Modal, Pagination } from '../common/UIComponents';
 import { UserCog, Building2, Mail, Shield, ShieldCheck, MapPin, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -11,15 +11,18 @@ const ManagerStaff = () => {
     const [selectedStaff, setSelectedStaff] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
 
     const fetchStaff = async () => {
         try {
             setLoading(true);
-            // Fetch all users and filter non-students
-            const res = await userAPI.getUsers({ limit: 1000 });
-            const allUsers = res.data.users || [];
-            const staffMembers = allUsers.filter(u => u.role !== 'student');
-            setStaff(staffMembers);
+            const res = await userAPI.getUsers({
+                page: pagination.page,
+                limit: 20,
+                excludeRole: 'student'
+            });
+            setStaff(res.data.users || []);
+            setPagination(res.data.pagination || { page: 1, pages: 1, total: 0 });
         } catch (err) {
             console.error('Error fetching staff:', err);
             toast.error('Failed to load team members');
@@ -39,6 +42,9 @@ const ManagerStaff = () => {
 
     useEffect(() => {
         fetchStaff();
+    }, [pagination.page]);
+
+    useEffect(() => {
         fetchCampuses();
     }, []);
 
@@ -157,6 +163,12 @@ const ManagerStaff = () => {
                     </tbody>
                 </table>
             </div>
+
+            <Pagination
+                current={pagination.page}
+                total={pagination.pages}
+                onPageChange={(page) => setPagination(prev => ({ ...prev, page }))}
+            />
 
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Manage Staff Member" size="md">
                 {selectedStaff && (

@@ -103,7 +103,7 @@ const PipelineAnalytics = () => {
       const params = { isJobReady: 'true', limit: 20, page };
       if (filters.campus) params.campus = filters.campus;
       if (filters.school) params.school = filters.school;
-      const res = await jobReadinessAPI.getCampusStudents(params);
+      const res = await jobReadinessAPI.getCampusStudents({ ...params, summary: 'true' });
       setRoster(res.data.records || []);
       setRosterTotal(res.data.pagination?.total || 0);
       setRosterPage(page);

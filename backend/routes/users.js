@@ -1918,10 +1918,11 @@ router.get('/coordinators', auth, authorize('coordinator', 'manager'), async (re
  */
 router.get('/', auth, authorize('manager'), async (req, res) => {
   try {
-    const { page = 1, limit = 50, search, role } = req.query;
+    const { page = 1, limit = 50, search, role, excludeRole } = req.query;
     let query = {};
 
     if (role) query.role = role;
+    if (excludeRole) query.role = { $ne: excludeRole };
     if (search) {
       query.$or = [
         { firstName: { $regex: search, $options: 'i' } },

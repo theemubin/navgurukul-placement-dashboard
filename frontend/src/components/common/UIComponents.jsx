@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = 'primary', trend, onClick, compact = false }) => {
+export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = 'primary', trend, onClick, compact = false, helpText = '', active = false }) => {
   const colorClasses = {
     primary: 'bg-blue-100 text-blue-600',
     secondary: 'bg-purple-100 text-purple-600',
@@ -20,7 +20,7 @@ export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = '
 
   return (
     <div 
-      className={`card transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-1 border-transparent hover:border-primary-300' : 'hover:shadow-md'} ${compact ? '!p-2.5' : ''}`}
+      className={`card group relative overflow-visible transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-1 border-transparent hover:border-primary-300' : 'hover:shadow-md'} ${active ? 'ring-2 ring-primary-300 border-primary-200 shadow-md' : ''} ${compact ? '!p-2.5' : ''}`}
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
@@ -42,6 +42,11 @@ export const StatsCard = ({ icon: Icon, title, label, value, subValue, color = '
           </div>
         )}
       </div>
+      {helpText && (
+        <div className="pointer-events-none absolute left-0 right-0 top-full mt-2 px-1 text-[10px] leading-tight text-gray-500 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          {helpText}
+        </div>
+      )}
     </div>
   );
 };
