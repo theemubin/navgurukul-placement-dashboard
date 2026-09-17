@@ -1025,14 +1025,14 @@ const StudentProfile = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       First Name
                       {profile?.resolvedProfile?.isNameVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <input
                       type="text"
                       value={formData.firstName}
@@ -1043,14 +1043,14 @@ const StudentProfile = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Last Name
                       {profile?.resolvedProfile?.isNameVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <input
                       type="text"
                       value={formData.lastName}
@@ -1061,20 +1061,20 @@ const StudentProfile = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Email
-                    </label>
+                    </div>
                     <input type="email" value={profile?.email || ''} disabled className="bg-gray-100" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Phone
                       {profile?.resolvedProfile?.isPhoneVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <input
                       type="tel"
                       value={formData.phone}
@@ -1084,14 +1084,14 @@ const StudentProfile = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Gender
                       {profile?.resolvedProfile?.isGenderVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <select
                       value={formData.gender || ''}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
@@ -1214,14 +1214,14 @@ const StudentProfile = () => {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Campus *
                       {profile?.resolvedProfile?.isCampusVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-tighter">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <div className="flex items-center gap-2">
                       <select
                         value={selectedCampus || ''}
@@ -1237,14 +1237,14 @@ const StudentProfile = () => {
                     <p className="text-xs text-gray-500 mt-1">Select your Navgurukul campus</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Placement Cycle & Status
                       {profile?.resolvedProfile?.isStatusVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-tighter">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     {/* Display only the active cycle (read-only) */}
                     <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
                       <div className="flex flex-col gap-2">
@@ -1342,14 +1342,14 @@ const StudentProfile = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                         School
                         {profile?.resolvedProfile?.isSchoolVerified && (
                           <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                             <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                           </span>
                         )}
-                      </label>
+                      </div>
                       <select
                         value={formData.currentSchool || ''}
                         onChange={(e) => setFormData({ ...formData, currentSchool: e.target.value, currentModule: '', customModuleDescription: '' })}
@@ -1378,7 +1378,7 @@ const StudentProfile = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1 font-bold text-primary-700">House Name (Navgurukul)</label>
+                      <div className="text-sm font-bold text-primary-700 mb-1">House Name (Navgurukul)</div>
                       <select value={formData.houseName || ''} onChange={(e) => setFormData({ ...formData, houseName: e.target.value })} disabled={!canEdit} className="border-primary-200 focus:ring-primary-500">
                         <option value="">Select House</option>
                         {['Bageshree House', 'Bhairav House', 'Malhar House'].map(h => <option key={h} value={h}>{h}</option>)}
@@ -1389,14 +1389,14 @@ const StudentProfile = () => {
                     {formData.currentSchool && (
                       hasModulesForSchool ? (
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                          <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                             Current Module/Phase
                             {profile?.resolvedProfile?.isModuleVerified && (
                               <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                                 <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                               </span>
                             )}
-                          </label>
+                          </div>
                           <select
                             value={formData.currentModule}
                             onChange={(e) => setFormData({ ...formData, currentModule: e.target.value })}

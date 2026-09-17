@@ -1,5 +1,27 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ChannelType } = require('discord.js');
 const Settings = require('../models/Settings');
+const InterestRequest = require('../models/InterestRequest');
+
+const DIGEST_TIMEZONE = process.env.INTEREST_REQUEST_REMINDER_TIMEZONE || 'Asia/Kolkata';
+
+function getZonedParts(date, timeZone = DIGEST_TIMEZONE) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).formatToParts(date);
+
+    const pick = (type) => parts.find((part) => part.type === type)?.value || '';
+    return {
+        dateKey: `${pick('year')}-${pick('month')}-${pick('day')}`,
+        hour: parseInt(pick('hour') || '0', 10),
+        minute: parseInt(pick('minute') || '0', 10)
+    };
+}
 
 class DiscordService {
     constructor() {
@@ -303,6 +325,159 @@ class DiscordService {
             };
         } catch (error) {
             console.error('Error sending application update to Discord:', error);
+            return { error: error.message };
+        }
+    }
+
+    async sendInterestRequestNotification(interestRequest, student, job) {
+        try {
+            const ready = await this.ensureReady();
+            if (!ready) return null;
+
+            const settings = await Settings.getSettings();
+            const campusChannelId = student.campus?.discordChannelId;
+            const fallbackChannelId = settings.discordConfig?.channels?.general || settings.discordConfig?.channels?.applicationUpdates || '';
+            const channelId = campusChannelId || fallbackChannelId;
+
+            if (!channelId) {
+                console.log('Interest request created but no Discord channel is configured for the student campus');
+                return null;
+            }
+
+            const channel = await this.client.channels.fetch(channelId);
+            if (!channel) throw new Error('Interest request channel not found');
+
+            const applyLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/campus-poc/interest-requests/${interestRequest._id}`;
+            const reasons = (interestRequest.reason || '').trim();
+            const gapText = Array.isArray(interestRequest.acknowledgedGaps) && interestRequest.acknowledgedGaps.length > 0
+                ? interestRequest.acknowledgedGaps.slice(0, 5).join(', ')
+                : 'Not provided';
+
+            const embed = new EmbedBuilder()
+                .setColor('#f59e0b')
+                .setTitle('🧭 New Interest Request')
+                .setURL(applyLink)
+                .setDescription(`**${student.firstName} ${student.lastName}** wants to apply for **${job.title}** at **${job.company?.name || 'Unknown Company'}**.`)
+                .addFields(
+                    { name: '🎓 Campus', value: student.campus?.name || 'N/A', inline: true },
+                    { name: '📊 Match', value: `${interestRequest.matchDetails?.overallPercentage || 0}%`, inline: true },
+                    { name: '📝 Gaps', value: gapText.substring(0, 1024), inline: false },
+                    { name: '💬 Reason', value: reasons ? reasons.substring(0, 1024) : 'No reason provided', inline: false },
+                    { name: '🔗 Review', value: `[Open request](${applyLink})`, inline: false }
+                )
+                .setTimestamp();
+
+            const content = settings.discordConfig?.mentionUsers && student.discord?.userId
+                ? `<@${student.discord.userId}>`
+                : '';
+
+            const message = await channel.send({ content, embeds: [embed] });
+            return { messageId: message.id, channelId: channel.id };
+        } catch (error) {
+            console.error('Error sending interest request Discord notification:', error);
+            return { error: error.message };
+        }
+    }
+
+    async sendPendingInterestRequestDigest(slot = 'morning') {
+        try {
+            const ready = await this.ensureReady();
+            if (!ready) return { skipped: true, reason: 'discord-not-ready' };
+
+            const settings = await Settings.getSettings();
+            const fallbackChannelId = settings.discordConfig?.channels?.general || settings.discordConfig?.channels?.applicationUpdates || '';
+            const currentParts = getZonedParts(new Date());
+            const slotState = settings.interestRequestDigest?.[slot] || {};
+            const lastSentAt = slotState.lastSentAt ? getZonedParts(new Date(slotState.lastSentAt)) : null;
+
+            if (lastSentAt && lastSentAt.dateKey === currentParts.dateKey) {
+                return { skipped: true, reason: 'already-sent' };
+            }
+
+            const pendingRequests = await InterestRequest.find({ status: 'pending' })
+                .populate({
+                    path: 'student',
+                    select: 'firstName lastName email campus discord',
+                    populate: { path: 'campus', select: 'name discordChannelId' }
+                })
+                .populate('job', 'title company.name')
+                .sort({ createdAt: -1 })
+                .lean();
+
+            const requestsByCampus = new Map();
+            for (const request of pendingRequests) {
+                const campus = request.student?.campus;
+                if (!campus?._id) continue;
+
+                const campusId = String(campus._id);
+                if (!requestsByCampus.has(campusId)) {
+                    requestsByCampus.set(campusId, { campus, requests: [] });
+                }
+                requestsByCampus.get(campusId).requests.push(request);
+            }
+
+            if (requestsByCampus.size === 0) {
+                settings.interestRequestDigest = settings.interestRequestDigest || {};
+                settings.interestRequestDigest[slot] = {
+                    lastSentAt: new Date(),
+                    lastCount: 0
+                };
+                await settings.save();
+                return { sent: 0, campuses: 0 };
+            }
+
+            let sentCount = 0;
+            for (const { campus, requests } of requestsByCampus.values()) {
+                const channelId = campus.discordChannelId || fallbackChannelId;
+                if (!channelId) continue;
+
+                const channel = await this.client.channels.fetch(channelId);
+                if (!channel) continue;
+
+                const total = requests.length;
+                const title = slot === 'evening'
+                    ? '🌙 Evening Pending Interest Requests'
+                    : '🌅 Morning Pending Interest Requests';
+                const topRequests = requests.slice(0, 5).map((request, index) => {
+                    const studentName = [request.student?.firstName, request.student?.lastName].filter(Boolean).join(' ') || 'Student';
+                    const companyName = request.job?.company?.name || 'Unknown Company';
+                    return `${index + 1}. ${studentName} - ${request.job?.title || 'Unknown Job'} (${companyName})`;
+                });
+
+                const embed = new EmbedBuilder()
+                    .setColor('#3b82f6')
+                    .setTitle(title)
+                    .setDescription(`There are **${total} pending interest request${total === 1 ? '' : 's'}** for **${campus.name}**.`)
+                    .addFields(
+                        { name: '🏫 Campus', value: campus.name, inline: true },
+                        { name: '📊 Pending Count', value: String(total), inline: true },
+                        {
+                            name: '🕒 Recent Pending Requests',
+                            value: topRequests.length > 0 ? topRequests.join('\n').substring(0, 1024) : 'No pending requests',
+                            inline: false
+                        },
+                        {
+                            name: '🔗 Review Queue',
+                            value: `[Open campus queue](${process.env.FRONTEND_URL || 'http://localhost:3000'}/campus-poc/interest-requests)`,
+                            inline: false
+                        }
+                    )
+                    .setTimestamp();
+
+                await channel.send({ embeds: [embed] });
+                sentCount += 1;
+            }
+
+            settings.interestRequestDigest = settings.interestRequestDigest || {};
+            settings.interestRequestDigest[slot] = {
+                lastSentAt: new Date(),
+                lastCount: pendingRequests.length
+            };
+            await settings.save();
+
+            return { sent: sentCount, campuses: requestsByCampus.size, pending: pendingRequests.length };
+        } catch (error) {
+            console.error('Error sending pending interest request digest:', error);
             return { error: error.message };
         }
     }

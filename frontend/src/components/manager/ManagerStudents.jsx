@@ -45,10 +45,13 @@ const ManagerStudents = () => {
     }
   };
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (forceRefresh = false) => {
     setLoading(true);
     try {
-      const res = await userAPI.getStudents({ page: pagination.current, limit: PAGE_SIZE, search: search || undefined, sortField: 'studentProfile.joiningDate', sortOrder: 'asc' });
+      const res = await userAPI.getStudents(
+        { page: pagination.current, limit: PAGE_SIZE, search: search || undefined, sortField: 'studentProfile.joiningDate', sortOrder: 'asc' },
+        { forceRefresh }
+      );
       setStudents(res.data.students || []);
       setPagination(res.data.pagination || { current: 1, pages: 1, total: 0 });
     } catch (err) {
@@ -158,7 +161,7 @@ const ManagerStudents = () => {
       await userAPI.updateUser(selectedStudent._id, payload);
       toast.success('Student updated');
       setShowModal(false);
-      fetchStudents();
+      fetchStudents(true);
     } catch (err) {
       toast.error('Failed to save student');
       console.error('Save error:', err);
@@ -304,7 +307,7 @@ const ManagerStudents = () => {
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Placement Lifecycle</label>
                     <select
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium py-2.5"
+                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium"
                       value={selectedStudent.studentProfile?.currentStatus || ''}
                       onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), currentStatus: e.target.value } }))}
                     >
@@ -385,7 +388,7 @@ const ManagerStudents = () => {
                       <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
                       <input
                         type="date"
-                        className="w-full pl-10 pr-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium py-2.5"
+                              className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium"
                         value={selectedStudent.studentProfile?.joiningDate ? new Date(selectedStudent.studentProfile.joiningDate).toISOString().slice(0, 10) : ''}
                         onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), joiningDate: e.target.value } }))}
                       />
@@ -394,7 +397,7 @@ const ManagerStudents = () => {
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Current School</label>
                     <select
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium py-2.5"
+                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium"
                       value={selectedStudent.studentProfile?.currentSchool || ''}
                       onChange={(e) => {
                         const school = e.target.value;
@@ -420,7 +423,7 @@ const ManagerStudents = () => {
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Current Module</label>
                     <select
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium py-2.5"
+                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium"
                       value={selectedStudent.studentProfile?.currentModule || ''}
                       onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), currentModule: e.target.value } }))}
                       disabled={!selectedStudent.studentProfile?.currentSchool}
@@ -438,7 +441,7 @@ const ManagerStudents = () => {
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">House Name</label>
                     <select
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium py-2.5"
+                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 transition-all font-medium"
                       value={selectedStudent.studentProfile?.houseName || ''}
                       onChange={(e) => setSelectedStudent(prev => ({ ...prev, studentProfile: { ...(prev.studentProfile || {}), houseName: e.target.value } }))}
                     >

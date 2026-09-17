@@ -38,7 +38,7 @@ const POCStudentDetails = () => {
     try {
       const [studentRes, appsRes, readinessRes, configRes] = await Promise.all([
         userAPI.getStudent(id),
-        applicationAPI.getApplications({ student: id }),
+        applicationAPI.getApplications({ student: id, summary: 'lite' }),
         jobReadinessAPI.getStudentReadiness(id),
         jobReadinessAPI.getConfig()
       ]);

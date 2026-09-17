@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { applicationAPI, jobAPI, settingsAPI, statsAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Modal } from '../../components/common/UIComponents';
@@ -34,6 +34,8 @@ const Applications = () => {
     search: '',
     myLeads: false
   });
+  const [daysFilter, setDaysFilter] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [selectedJobTitle, setSelectedJobTitle] = useState('');
   const [groupByCompany, setGroupByCompany] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
@@ -60,7 +62,11 @@ const Applications = () => {
     fetchApplications();
     fetchPipelineStages();
     fetchStatusCounts();
-  }, [filters.status, filters.job, pagination.page]);
+  }, [filters.status, filters.job, filters.search, filters.myLeads, daysFilter, pagination.page]);
+
+  useEffect(() => {
+    setSearchInput(filters.search);
+  }, [filters.search]);
 
   const fetchStatusCounts = async () => {
     try {
@@ -168,6 +174,32 @@ const Applications = () => {
     navigate({ search: params.toString() ? `?${params.toString()}` : '' }, { replace: true });
   };
 
+  const applySearch = (event) => {
+    event.preventDefault();
+    setFilters(prev => ({ ...prev, search: searchInput.trim() }));
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const getDaysPassed = (createdAt) => {
+    if (!createdAt) return 0;
+    const diffMs = Date.now() - new Date(createdAt).getTime();
+    if (Number.isNaN(diffMs)) return 0;
+    return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  };
+
+  const getDaysBucket = (days) => {
+    if (days <= 10) return 'green';
+    if (days < 20) return 'yellow';
+    return 'red';
+  };
+
+  const getDaysBadgeClasses = (days) => {
+    const bucket = getDaysBucket(days);
+    if (bucket === 'green') return 'bg-green-100 text-green-700 border-green-200';
+    if (bucket === 'yellow') return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+    return 'bg-red-100 text-red-700 border-red-200';
+  };
+
   const handleJobSelect = (jobId) => {
     setFilters(prev => ({ ...prev, job: jobId }));
     setPagination(prev => ({ ...prev, page: 1 }));
@@ -200,8 +232,10 @@ const Applications = () => {
         page: pagination.page,
         limit: 10,
         summary: 'lite',
+        ...(filters.search && { search: filters.search }),
         ...(filters.status && { status: filters.status }),
         ...(filters.job && { job: filters.job }),
+        ...(daysFilter && { daysBucket: daysFilter }),
         ...(filters.myLeads && { myLeads: 'true' })
       };
       const response = await applicationAPI.getApplications(params);
@@ -325,6 +359,7 @@ const Applications = () => {
     // Enforce server-side filters client-side as a safety net
     if (filters.job && String(app.job?._id || app.job) !== String(filters.job)) return false;
     if (filters.status && app.status !== filters.status) return false;
+    if (daysFilter && getDaysBucket(getDaysPassed(app.createdAt)) !== daysFilter) return false;
 
     if (!filters.search) return true;
     const searchLower = filters.search.toLowerCase();
@@ -379,12 +414,29 @@ const Applications = () => {
                 <p className="text-sm text-gray-600">{new Date(app.createdAt).toLocaleDateString()}</p>
               </div>
               <div className="col-span-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Days Passed</p>
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${getDaysBadgeClasses(getDaysPassed(app.createdAt))}`}>
+                  {getDaysPassed(app.createdAt)}d
+                </span>
+              </div>
+              <div className="col-span-1">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Current Round</p>
                 <p className="text-sm text-gray-600">{app.currentRound !== undefined ? `Round ${app.currentRound + 1}` : '-'}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              {app.job?._id && (
+                <Link
+                  to={`/jobs/${app.job._id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Job Page
+                </Link>
+              )}
               <button
                 onClick={() => openApplicationDetails(app._id)}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition"
@@ -458,6 +510,7 @@ const Applications = () => {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Student</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Job</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Applied On</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Days Passed</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Status</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Current Round</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Actions</th>
@@ -488,10 +541,26 @@ const Applications = () => {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{new Date(app.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${getDaysBadgeClasses(getDaysPassed(app.createdAt))}`}>
+                      {getDaysPassed(app.createdAt)}d
+                    </span>
+                  </td>
                   <td className="px-4 py-3"><StatusBadge status={app.status} /></td>
                   <td className="px-4 py-3 text-sm text-gray-600">{app.currentRound !== undefined ? `Round ${app.currentRound + 1}` : '-'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
+                      {app.job?._id && (
+                        <Link
+                          to={`/jobs/${app.job._id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                          title="View Job Page"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Link>
+                      )}
                       <button
                         onClick={() => openApplicationDetails(app._id)}
                         className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
@@ -529,7 +598,7 @@ const Applications = () => {
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
-              {['', 'Student', 'Job', 'Applied On', 'Status', 'Current Round', 'Actions'].map((h, i) => (
+              {['', 'Student', 'Job', 'Applied On', 'Days Passed', 'Status', 'Current Round', 'Actions'].map((h, i) => (
                 <th key={i} className="px-4 py-3 text-left">
                   <div className="h-3 w-16 bg-gray-200 rounded-md" />
                 </th>
@@ -740,16 +809,24 @@ const Applications = () => {
       {/* Filters */}
       <div className="card border-none shadow-sm bg-gray-50/50">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-          <div className="md:col-span-5 relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-600 transition-colors" />
+          <form className="md:col-span-5 flex items-stretch gap-2" onSubmit={applySearch}>
+            <div className="flex items-center justify-center w-11 shrink-0 bg-white border border-gray-200 rounded-xl text-gray-400">
+              <Search className="w-4 h-4" />
+            </div>
             <input
               type="text"
               placeholder="Search student, email, or job..."
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="pl-10 w-full bg-white border-gray-200 focus:border-primary-500 transition-all rounded-xl"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="min-w-0 flex-1 bg-white border-gray-200 focus:border-primary-500 transition-all rounded-xl px-4"
             />
-          </div>
+            <button
+              type="submit"
+              className="shrink-0 px-4 py-2 text-xs font-semibold text-white bg-primary-600 rounded-xl hover:bg-primary-700 transition"
+            >
+              Search
+            </button>
+          </form>
 
           <div className="md:col-span-3">
             <select
@@ -806,12 +883,31 @@ const Applications = () => {
             <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-600 transition-colors">Group by Company</span>
           </label>
 
+          <div className="flex items-center gap-2 flex-wrap">
+            {[
+              { value: '', label: 'All Ages', className: 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100' },
+              { value: 'green', label: '0-10d', className: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' },
+              { value: 'yellow', label: '11-19d', className: 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' },
+              { value: 'red', label: '20+d', className: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' }
+            ].map((bucket) => (
+              <button
+                key={bucket.value || 'all-days'}
+                type="button"
+                onClick={() => { setDaysFilter(bucket.value); setPagination(prev => ({ ...prev, page: 1 })); }}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${daysFilter === bucket.value ? 'bg-gray-900 text-white border-gray-900' : bucket.className}`}
+              >
+                {bucket.label}
+              </button>
+            ))}
+          </div>
+
           {/* New Active Filters Count */}
-          {(filters.status !== '' || filters.job !== '' || filters.myLeads) && (
+          {(filters.status !== '' || filters.job !== '' || filters.myLeads || daysFilter) && (
             <button
               onClick={() => {
                 setFilters({ search: '', status: '', job: '', myLeads: false });
                 setGroupByCompany(false);
+                setDaysFilter('');
               }}
               className="text-xs font-bold text-red-500 hover:text-red-700 uppercase tracking-wider ml-auto"
             >
@@ -835,7 +931,7 @@ const Applications = () => {
         <Pagination
           current={pagination.page}
           total={pagination.totalPages}
-          onPageChange={(page) => setPagination({ ...pagination, page })}
+          onPageChange={(page) => setPagination(prev => ({ ...prev, page }))}
         />
       )}
 

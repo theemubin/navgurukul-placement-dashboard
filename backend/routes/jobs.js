@@ -1554,6 +1554,9 @@ router.post('/:id/interest', auth, authorize('student'), [
       await Notification.insertMany(notifications);
     }
 
+    discordService.sendInterestRequestNotification(interestRequest, student, job)
+      .catch((err) => console.error('Interest request Discord notification error:', err));
+
     res.status(201).json({
       message: 'Interest request submitted successfully. Your Campus PoC will review it.',
       interestRequest

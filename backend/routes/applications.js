@@ -71,7 +71,7 @@ const cacheService = require('../services/redisCacheService');
 // Get applications (filtered by role)
 router.get('/', auth, async (req, res) => {
   try {
-    const { job, status, student, page = 1, limit = 20, myLeads, summary } = req.query;
+    const { job, status, student, page = 1, limit = 20, myLeads, summary, search, daysBucket } = req.query;
     let query = {};
 
     // Debug: log incoming filter params in development to help troubleshoot 304/cache/status issues
@@ -104,6 +104,61 @@ router.get('/', auth, async (req, res) => {
       // By default, exclude 'interested' status applications for coordinators and managers (unless a specific job is queried)
       if ((req.user.role === 'coordinator' || req.user.role === 'manager') && !job) {
         query.status = { $ne: 'interested' };
+      }
+    }
+
+    if (search && search.trim()) {
+      const searchTerm = search.trim();
+      const searchRegex = new RegExp(searchTerm, 'i');
+
+      const [matchedStudents, matchedJobs] = await Promise.all([
+        User.find({
+          role: 'student',
+          $or: [
+            { firstName: searchRegex },
+            { lastName: searchRegex },
+            { email: searchRegex },
+            { 'studentProfile.enrollmentNumber': searchRegex }
+          ]
+        }).select('_id'),
+        Job.find({
+          $or: [
+            { title: searchRegex },
+            { 'company.name': searchRegex }
+          ]
+        }).select('_id')
+      ]);
+
+      const studentIds = matchedStudents.map(student => student._id);
+      const jobIds = matchedJobs.map(jobDoc => jobDoc._id);
+
+      if (studentIds.length === 0 && jobIds.length === 0) {
+        return res.json({
+          applications: [],
+          pagination: {
+            current: parseInt(page),
+            pages: 0,
+            total: 0
+          }
+        });
+      }
+
+      query.$or = [];
+      if (studentIds.length > 0) query.$or.push({ student: { $in: studentIds } });
+      if (jobIds.length > 0) query.$or.push({ job: { $in: jobIds } });
+    }
+
+    if (daysBucket) {
+      const now = Date.now();
+      const tenDaysAgo = new Date(now - 10 * 24 * 60 * 60 * 1000);
+      const twentyDaysAgo = new Date(now - 20 * 24 * 60 * 60 * 1000);
+
+      if (daysBucket === 'green') {
+        query.createdAt = { ...(query.createdAt || {}), $gte: tenDaysAgo };
+      } else if (daysBucket === 'yellow') {
+        query.createdAt = { ...(query.createdAt || {}), $lt: tenDaysAgo, $gte: twentyDaysAgo };
+      } else if (daysBucket === 'red') {
+        query.createdAt = { ...(query.createdAt || {}), $lt: twentyDaysAgo };
       }
     }
 

@@ -266,7 +266,8 @@ export const Modal = ({ isOpen, onClose, title, children, size = 'md', headerAct
     sm: 'max-w-sm',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
-    xl: 'max-w-4xl'
+    xl: 'max-w-4xl',
+    '2xl': 'max-w-6xl'
   };
 
   return (
