@@ -212,18 +212,19 @@ router.get('/', auth, async (req, res) => {
     }
 
     if (summary === 'triage') {
-      const applications = await Application.find(query)
-        .select('student job status currentRound roundResults specialRecommendation feedback createdAt updatedAt')
-        .populate('student', 'firstName lastName email studentProfile.currentModule studentProfile.enrollmentNumber campus')
-        .populate({
-          path: 'student',
-          populate: { path: 'campus', select: 'name' }
-        })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit))
-        .sort({ createdAt: -1 });
-
-      const total = await Application.countDocuments(query);
+      const [applications, total] = await Promise.all([
+        Application.find(query)
+          .select('student job status currentRound roundResults specialRecommendation feedback createdAt updatedAt')
+          .populate('student', 'firstName lastName email studentProfile.currentModule studentProfile.enrollmentNumber campus')
+          .populate({
+            path: 'student',
+            populate: { path: 'campus', select: 'name' }
+          })
+          .skip((page - 1) * limit)
+          .limit(parseInt(limit))
+          .sort({ createdAt: -1 }),
+        Application.countDocuments(query)
+      ]);
 
       return res.json({
         applications,
@@ -236,15 +237,16 @@ router.get('/', auth, async (req, res) => {
     }
 
     if (summary === 'lite') {
-      const applications = await Application.find(query)
+      const [applications, total] = await Promise.all([
+        Application.find(query)
           .select('student job status statusComment currentRound roundResults createdAt updatedAt')
           .populate('student', 'firstName lastName email studentProfile.currentSchool studentProfile.currentModule studentProfile.resume')
-        .populate('job', 'title company.name jobType status interviewRounds')
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit))
-        .sort({ createdAt: -1 });
-
-      const total = await Application.countDocuments(query);
+          .populate('job', 'title company.name jobType status interviewRounds')
+          .skip((page - 1) * limit)
+          .limit(parseInt(limit))
+          .sort({ createdAt: -1 }),
+        Application.countDocuments(query)
+      ]);
 
       return res.json({
         applications,
@@ -256,20 +258,21 @@ router.get('/', auth, async (req, res) => {
       });
     }
 
-    const applications = await Application.find(query)
-      .populate('student', 'firstName lastName email studentProfile.enrollmentNumber campus')
-      .populate({
-        path: 'student',
-        populate: { path: 'campus', select: 'name' }
-      })
-      .populate('job', 'title company.name status')
-      .populate('specialRecommendation.recommendedBy', 'firstName lastName')
-      .populate('feedbackBy', 'firstName lastName')
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
-      .sort({ createdAt: -1 });
-
-    const total = await Application.countDocuments(query);
+    const [applications, total] = await Promise.all([
+      Application.find(query)
+        .populate('student', 'firstName lastName email studentProfile.enrollmentNumber campus')
+        .populate({
+          path: 'student',
+          populate: { path: 'campus', select: 'name' }
+        })
+        .populate('job', 'title company.name status')
+        .populate('specialRecommendation.recommendedBy', 'firstName lastName')
+        .populate('feedbackBy', 'firstName lastName')
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .sort({ createdAt: -1 }),
+      Application.countDocuments(query)
+    ]);
 
     res.json({
       applications,

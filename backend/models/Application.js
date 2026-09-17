@@ -120,5 +120,6 @@ const applicationSchema = new mongoose.Schema({
 
 // Compound index for unique applications
 applicationSchema.index({ student: 1, job: 1 }, { unique: true });
+applicationSchema.index({ job: 1, student: 1, status: 1 });
 
 module.exports = mongoose.model('Application', applicationSchema);

@@ -158,8 +158,10 @@ const PipelineAnalytics = () => {
       setSchools(results[1].data?.data?.schools || []);
 
       if (user?.role === 'campus_poc' && results[2]) {
-        const managedIds = (results[2].data || []).map(c => c._id);
-        setCampuses(allCampuses.filter(c => managedIds.includes(c._id)));
+        const managedIds = new Set(
+          (results[2].data?.managedCampuses || []).map(campus => campus._id)
+        );
+        setCampuses(allCampuses.filter(c => managedIds.has(c._id)));
       } else {
         setCampuses(allCampuses);
       }

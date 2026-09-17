@@ -1247,7 +1247,8 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
     // Support both legacy 'active' and pipeline stages
     const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing', 'closed'];
 
-    const { cycleId } = req.query;
+    const { cycleId, summary } = req.query;
+    const liteSummary = summary === 'lite';
     const query = {
       status: { $in: activeStatuses },
       $or: [
@@ -1275,17 +1276,28 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
       'studentProfile.currentStatus': { $in: ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'] }
     });
 
-    // Get application counts for each job (including placed/inactive students)
+    // Get application counts for all jobs in one query (including placed/inactive students)
     const allCampusStudents = await User.find({
       role: 'student',
       campus: { $in: campusIds }
     }).select('_id');
+    const studentIds = allCampusStudents.map(student => student._id);
+    const jobIds = jobs.map(job => job._id);
+    const applications = await Application.find({
+      job: { $in: jobIds },
+      student: { $in: studentIds }
+    }).select('job status').lean();
+    const applicationsByJob = new Map();
 
-    const jobsWithStats = await Promise.all(jobs.map(async (job) => {
-      const applications = await Application.find({
-        job: job._id,
-        student: { $in: allCampusStudents.map(s => s._id) }
-      }).select('status');
+    applications.forEach((application) => {
+      const jobId = String(application.job);
+      const jobApplications = applicationsByJob.get(jobId) || [];
+      jobApplications.push(application);
+      applicationsByJob.set(jobId, jobApplications);
+    });
+
+    const jobsWithStats = jobs.map((job) => {
+      const jobApplications = applicationsByJob.get(String(job._id)) || [];
 
       return {
         _id: job._id,
@@ -1295,18 +1307,18 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
         applicationDeadline: job.applicationDeadline,
         maxPositions: job.maxPositions,
         eligibleStudents: studentCount,
-        applicationCount: applications.length,
+        applicationCount: jobApplications.length,
         statusCounts: {
-          applied: applications.filter(a => a.status === 'applied').length,
-          shortlisted: applications.filter(a => a.status === 'shortlisted').length,
-          in_progress: applications.filter(a => a.status === 'in_progress').length,
-          selected: applications.filter(a => a.status === 'selected').length,
-          rejected: applications.filter(a => a.status === 'rejected').length
+          applied: jobApplications.filter(a => a.status === 'applied').length,
+          shortlisted: jobApplications.filter(a => a.status === 'shortlisted').length,
+          in_progress: jobApplications.filter(a => a.status === 'in_progress').length,
+          selected: jobApplications.filter(a => a.status === 'selected').length,
+          rejected: jobApplications.filter(a => a.status === 'rejected').length
         },
         status: job.status,
         createdAt: job.createdAt
       };
-    }));
+    });
 
     res.json({
       jobs: jobsWithStats,
@@ -1476,13 +1488,14 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
 
     const students = await User.find(studentQuery)
       .select('firstName lastName email studentProfile.currentSchool placementCycle')
-      .populate('placementCycle', 'name');
+      .populate('placementCycle', 'name')
+      .lean();
 
     const studentIds = students.map(s => s._id);
 
     const readinessRecords = await StudentJobReadiness.find({
       student: { $in: studentIds }
-    }).select('student readinessPercentage isJobReady jobReady30At jobReady100At updatedAt');
+    }).select('student readinessPercentage isJobReady jobReady30At jobReady100At updatedAt').lean();
 
     const readinessByStudentId = new Map(
       readinessRecords.map((record) => [String(record.student), record])
@@ -1491,7 +1504,14 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
     // Get all applications
     const applications = await Application.find({
       student: { $in: studentIds }
-    }).populate('job', 'title company.name');
+    }).select('student job status').populate('job', 'title company.name').lean();
+    const applicationsByStudentId = new Map();
+    applications.forEach((application) => {
+      const studentId = String(application.student);
+      const studentApplications = applicationsByStudentId.get(studentId) || [];
+      studentApplications.push(application);
+      applicationsByStudentId.set(studentId, studentApplications);
+    });
 
     // Create student map for quick lookup
     const studentMap = {};
@@ -1533,7 +1553,7 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
           jobReady100Count: 0
         };
       }
-      const studentApps = applications.filter(a => a.student.toString() === student._id.toString());
+      const studentApps = applicationsByStudentId.get(String(student._id)) || [];
       const readiness = readinessByStudentId.get(String(student._id));
       const readinessPercentage = readiness?.readinessPercentage || 0;
       const reached30 = readinessPercentage >= 30;
@@ -1544,10 +1564,9 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
       const placed = studentApps.some(a => a.status === 'selected');
       const inProgress = studentApps.some(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status));
 
-      schoolMap[school].students.push({
+      const studentSummary = {
         studentId: student._id,
         name: `${student.firstName} ${student.lastName}`,
-        email: student.email,
         cycle: student.placementCycle?.name,
         applicationCount: studentApps.length,
         readinessPercentage,
@@ -1555,13 +1574,18 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
         reached100,
         jobReady30At,
         jobReady100At,
-        status: placed ? 'placed' : (inProgress ? 'in_progress' : (studentApps.length > 0 ? 'rejected' : 'not_applied')),
-        applications: studentApps.map(a => ({
+        status: placed ? 'placed' : (inProgress ? 'in_progress' : (studentApps.length > 0 ? 'rejected' : 'not_applied'))
+      };
+
+      if (!liteSummary) {
+        studentSummary.applications = studentApps.map(a => ({
           company: a.job?.company?.name,
           job: a.job?.title,
           status: a.status
-        }))
-      });
+        }));
+      }
+
+      schoolMap[school].students.push(studentSummary);
 
       schoolMap[school].totalStudents++;
       schoolMap[school].totalApplications += studentApps.length;
@@ -1638,10 +1662,17 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), cacheMi
     })
       .populate('job', 'title company.name jobType applicationDeadline')
       .sort({ updatedAt: -1 });
+    const applicationsByStudentId = new Map();
+    applications.forEach((application) => {
+      const studentId = String(application.student);
+      const studentApplications = applicationsByStudentId.get(studentId) || [];
+      studentApplications.push(application);
+      applicationsByStudentId.set(studentId, studentApplications);
+    });
 
     // Build summary for each student
     const studentSummaries = students.map(student => {
-      const studentApps = applications.filter(a => a.student.toString() === student._id.toString());
+      const studentApps = applicationsByStudentId.get(String(student._id)) || [];
       const selectedApp = studentApps.find(a => a.status === 'selected');
       const inProgressApps = studentApps.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status));
 
@@ -1755,22 +1786,37 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), cacheMiddle
     const cycles = await PlacementCycle.find({ isActive: true })
       .sort({ year: -1, month: -1 });
 
-    const cycleStats = await Promise.all(cycles.map(async (cycle) => {
-      // Get students from this POC's managed campuses assigned to this cycle
-      const students = await User.find({
-        role: 'student',
-        campus: { $in: campusIds },
-        placementCycle: cycle._id
-      }).select('_id');
+    const students = await User.find({
+      role: 'student',
+      campus: { $in: campusIds },
+      placementCycle: { $in: cycles.map(cycle => cycle._id) }
+    }).select('_id placementCycle');
+    const studentIds = students.map(student => student._id);
+    const applications = await Application.find({
+      student: { $in: studentIds }
+    }).select('student status').lean();
+    const studentsByCycle = new Map();
+    const applicationsByStudentId = new Map();
 
-      const studentIds = students.map(s => s._id);
+    students.forEach((student) => {
+      const cycleId = String(student.placementCycle);
+      const cycleStudents = studentsByCycle.get(cycleId) || [];
+      cycleStudents.push(student);
+      studentsByCycle.set(cycleId, cycleStudents);
+    });
+    applications.forEach((application) => {
+      const studentApplications = applicationsByStudentId.get(String(application.student)) || [];
+      studentApplications.push(application);
+      applicationsByStudentId.set(String(application.student), studentApplications);
+    });
 
-      const applications = await Application.find({
-        student: { $in: studentIds }
-      });
-
-      const placed = applications.filter(a => a.status === 'selected').length;
-      const inProgress = applications.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status)).length;
+    const cycleStats = cycles.map((cycle) => {
+      const cycleStudents = studentsByCycle.get(String(cycle._id)) || [];
+      const cycleApplications = cycleStudents.flatMap(student =>
+        applicationsByStudentId.get(String(student._id)) || []
+      );
+      const placed = cycleApplications.filter(a => a.status === 'selected').length;
+      const inProgress = cycleApplications.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status)).length;
 
       return {
         cycleId: cycle._id,
@@ -1779,15 +1825,15 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), cacheMiddle
         year: cycle.year,
         status: cycle.status,
         targetPlacements: cycle.targetPlacements,
-        students: students.length,
-        applications: applications.length,
+        students: cycleStudents.length,
+        applications: cycleApplications.length,
         placed,
         inProgress,
         progress: cycle.targetPlacements > 0
-          ? Math.round((placed / cycle.targetPlacements) * 100)
-          : (students.length > 0 ? Math.round((placed / students.length) * 100) : 0)
+              ? Math.round((placed / cycle.targetPlacements) * 100)
+              : (cycleStudents.length > 0 ? Math.round((placed / cycleStudents.length) * 100) : 0)
       };
-    }));
+            });
 
     res.json(cycleStats);
   } catch (error) {

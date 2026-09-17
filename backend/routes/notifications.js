@@ -45,16 +45,17 @@ router.get('/', auth, async (req, res) => {
       query.isRead = false;
     }
 
-    const notifications = await Notification.find(query)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
-
-    const total = await Notification.countDocuments(query);
-    const unreadCount = await Notification.countDocuments({ 
-      recipient: req.userId, 
-      isRead: false 
-    });
+    const [notifications, total, unreadCount] = await Promise.all([
+      Notification.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit)),
+      Notification.countDocuments(query),
+      Notification.countDocuments({
+        recipient: req.userId,
+        isRead: false
+      })
+    ]);
 
     res.json({
       notifications,

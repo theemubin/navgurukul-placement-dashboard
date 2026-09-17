@@ -575,6 +575,40 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
         };
       }
 
+      if (updates.languages !== undefined) {
+        if (!Array.isArray(updates.languages)) {
+          return res.status(400).json({ message: 'Languages must be an array' });
+        }
+
+        const cefrLevels = new Set(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
+        const normalizedLanguages = updates.languages.map((language, index) => {
+          const normalized = {
+            language: typeof language?.language === 'string' ? language.language.trim() : '',
+            speaking: typeof language?.speaking === 'string' ? language.speaking.trim().toUpperCase() : '',
+            writing: typeof language?.writing === 'string' ? language.writing.trim().toUpperCase() : '',
+            isNative: Boolean(language?.isNative)
+          };
+
+          if (!normalized.language || !cefrLevels.has(normalized.speaking) || !cefrLevels.has(normalized.writing)) {
+            throw new Error(`Invalid language entry at position ${index + 1}. Choose a language and valid speaking and writing levels.`);
+          }
+
+          ['reading', 'listening'].forEach((field) => {
+            const value = typeof language?.[field] === 'string' ? language[field].trim().toUpperCase() : '';
+            if (value) {
+              if (!cefrLevels.has(value)) {
+                throw new Error(`Invalid ${field} level at language entry ${index + 1}.`);
+              }
+              normalized[field] = value;
+            }
+          });
+
+          return normalized;
+        });
+
+        user.studentProfile.languages = normalizedLanguages;
+      }
+
       if (updates.softSkills !== undefined) {
         user.studentProfile.softSkills = Array.isArray(updates.softSkills) ? updates.softSkills : [];
       }
@@ -679,6 +713,9 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
     res.json({ message: 'Profile updated successfully', user: updatedUser });
   } catch (error) {
     console.error('Update profile error:', error);
+    if (error.message?.startsWith('Invalid language entry') || error.message?.startsWith('Invalid reading level') || error.message?.startsWith('Invalid listening level')) {
+      return res.status(400).json({ message: error.message });
+    }
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({ message: `Validation Error: ${messages.join(', ')}` });

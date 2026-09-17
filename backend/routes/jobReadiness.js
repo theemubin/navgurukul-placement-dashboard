@@ -8,8 +8,8 @@ const Notification = require('../models/Notification');
 const PlacementCycle = require('../models/PlacementCycle');
 const upload = require('../middleware/upload');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
+const { invalidateCache } = require('../middleware/cache');
 const cacheService = require('../services/redisCacheService');
-// ...existing code...
 /**
  * @swagger
  * tags:
@@ -636,14 +636,6 @@ router.get('/my-status', auth, authorize('student'), async (req, res) => {
           // Ensure initial readiness is calculated and stored
           await readiness.calculateReadiness();
           await readiness.save();
-        } else {
-          // Recalculate readiness to ensure latest merged criteria count
-          try {
-            await readiness.calculateReadiness();
-            await readiness.save();
-          } catch (e) {
-            console.error('Failed to recalculate readiness on /my-status:', e);
-          }
         }
 
         return {

@@ -58,11 +58,14 @@ const Applications = () => {
   };
 
   useEffect(() => {
-    fetchJobs();
     fetchApplications();
+  }, [filters.status, filters.job, filters.search, filters.myLeads, daysFilter, pagination.page]);
+
+  useEffect(() => {
+    fetchJobs();
     fetchPipelineStages();
     fetchStatusCounts();
-  }, [filters.status, filters.job, filters.search, filters.myLeads, daysFilter, pagination.page]);
+  }, []);
 
   useEffect(() => {
     setSearchInput(filters.search);

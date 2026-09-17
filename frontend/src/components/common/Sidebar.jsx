@@ -33,10 +33,7 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
 
   const fetchStudentCounts = async () => {
     try {
-      const [readinessRes, matchingRes] = await Promise.all([
-        jobReadinessAPI.getMyStatus().catch(() => ({ data: null })),
-        jobAPI.getMatchingJobs().catch(() => ({ data: [] }))
-      ]);
+      const readinessRes = await jobReadinessAPI.getMyStatus().catch(() => ({ data: null }));
 
       const config = readinessRes?.data?.config || [];
       const criteriaStatus = readinessRes?.data?.readiness?.criteriaStatus || [];
@@ -45,8 +42,6 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
       const pending = Math.max(0, total - submitted);
       setPendingReadinessCount(pending);
 
-      const matching = Array.isArray(matchingRes?.data) ? matchingRes.data.length : (matchingRes?.data?.length || 0);
-      setEligibleJobsCount(matching || 0);
     } catch (error) {
       console.error('Error fetching student counts:', error);
     }

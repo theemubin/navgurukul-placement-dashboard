@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { jobAPI, authAPI, settingsAPI, jobReadinessAPI } from '../../services/api';
+import { jobAPI, settingsAPI, jobReadinessAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, Badge, LiveTimer } from '../../components/common/UIComponents';
 import {
   Briefcase, MapPin, IndianRupee, Calendar, Search, Star,
@@ -9,6 +9,7 @@ import {
   Settings2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAuth } from '../../context/AuthContext';
 
 // Color variant mapping for stage colors
 const COLOR_VARIANTS = {
@@ -27,6 +28,7 @@ const JobStatusBadge = ({ status, stages }) => {
 };
 
 const StudentJobs = () => {
+  const { user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [internships, setInternships] = useState([]);
   const [matchingJobs, setMatchingJobs] = useState([]);
@@ -49,19 +51,16 @@ const StudentJobs = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        const [profileRes, stagesRes, readinessRes, settingsRes] = await Promise.all([
-          authAPI.getMe(),
+        const [stagesRes, readinessRes, roleCategoriesRes] = await Promise.all([
           settingsAPI.getPipelineStages(),
           jobReadinessAPI.getMyStatus().catch(() => ({ data: null })),
-          settingsAPI.getSettings().catch(() => ({ data: { data: {} } })),
+          settingsAPI.getRoleCategories().catch(() => ({ data: { data: [] } })),
         ]);
-        const profile = profileRes.data;
-        setProfileStatus(profile?.studentProfile?.profileStatus || 'draft');
+        setProfileStatus(user?.studentProfile?.profileStatus || 'draft');
         setPipelineStages(stagesRes.data.data || []);
         setReadiness(readinessRes.data);
 
-        // Get universal role categories from settings (same list used everywhere)
-        const categories = settingsRes.data?.data?.roleCategories || [];
+        const categories = roleCategoriesRes.data?.data || [];
         setRoleCategories(categories);
       } catch (e) {
         console.error('Init error:', e);
@@ -78,7 +77,7 @@ const StudentJobs = () => {
         console.error('Error fetching eligible jobs count:', e);
       }
     })();
-  }, []);
+  }, [user]);
 
   // Fetch jobs when filters/category/tab/page change
   useEffect(() => {

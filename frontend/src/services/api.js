@@ -95,12 +95,20 @@ const createCachedGetter = (requestFn, { ttl = 5 * 60 * 1000 } = {}) => {
   };
 };
 
+const cachedMatchingJobsGetter = createCachedGetter(() => api.get('/jobs/matching'), { ttl: 2 * 60 * 1000 });
+const cachedMyStatusGetter = createCachedGetter(() => api.get('/job-readiness/my-status'), { ttl: 2 * 60 * 1000 });
+const cachedCheckUrlGetter = createCachedGetter(({ url }) => api.post('/utils/check-url', { url }), { ttl: 60 * 1000 });
+const cachedSkillsGetter = createCachedGetter(({ params }) => api.get('/skills', { params }), { ttl: 10 * 60 * 1000 });
+const cachedCyclesGetter = createCachedGetter(({ params }) => api.get('/placement-cycles', { params }), { ttl: 5 * 60 * 1000 });
+const cachedCampusesGetter = createCachedGetter(() => api.get('/campuses'), { ttl: 10 * 60 * 1000 });
+const cachedMeGetter = createCachedGetter(() => api.get('/auth/me', { withCredentials: true }), { ttl: 30 * 1000 });
+
 // Auth APIs
 export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   register: (data) => api.post('/auth/register', data),
   // getMe supports cookie-based auth: include credentials when requesting
-  getMe: () => api.get('/auth/me', { withCredentials: true }),
+  getMe: (options = {}) => cachedMeGetter(options),
   changePassword: (data) => api.put('/auth/change-password', data),
   // Exchange short-lived code (cookie will be set by server)
   exchange: (code) => api.post('/auth/google/exchange', { code }, { withCredentials: true }),
@@ -173,6 +181,7 @@ let pipelineStagesCachePromise = null;
 
 export const settingsAPI = {
   getSettings: createCachedGetter(() => api.get('/settings'), { ttl: 10 * 60 * 1000 }),
+  getRoleCategories: createCachedGetter(() => api.get('/settings/role-categories'), { ttl: 10 * 60 * 1000 }),
   getSetting: (key) => api.get(`/settings/${key}`),
   updateSetting: (key, value) => api.put(`/settings/${key}`, { value }),
   addItem: (key, item) => api.post(`/settings/${key}/add`, { item }),
@@ -233,9 +242,14 @@ export const settingsAPI = {
 };
 
 // Job APIs
+const dedupedGetJobs = createCachedGetter(
+  (params) => api.get('/jobs', { params }),
+  { ttl: 0 }
+);
+
 export const jobAPI = {
-  getJobs: (params) => api.get('/jobs', { params }),
-  getMatchingJobs: () => api.get('/jobs/matching'),
+  getJobs: (params) => dedupedGetJobs(params),
+  getMatchingJobs: (options = {}) => cachedMatchingJobsGetter(options),
   getJob: (id) => api.get(`/jobs/${id}`),
   getJobWithMatch: (id) => api.get(`/jobs/${id}/match`),
   getCompanies: () => api.get('/jobs/companies'),
@@ -285,6 +299,11 @@ const cachedGetApplication = createCachedGetter(
   { ttl: 2 * 60 * 1000 }
 );
 
+const dedupedGetApplications = createCachedGetter(
+  (params) => api.get('/applications', { params, headers: { 'Cache-Control': 'no-cache' } }),
+  { ttl: 0 }
+);
+
 const cachedGetPipelineBottlenecks = createCachedGetter(
   (params) => api.get('/applications/analytics/bottlenecks', { params }),
   { ttl: 3 * 60 * 1000 }
@@ -302,7 +321,7 @@ const cachedGetStudent360Report = createCachedGetter(
 
 export const applicationAPI = {
   // Add no-cache header to avoid conditional requests returning 304
-  getApplications: (params) => api.get('/applications', { params, headers: { 'Cache-Control': 'no-cache' } }),
+  getApplications: (params) => dedupedGetApplications(params),
   getApplication: (id) => cachedGetApplication(id),
   apply: (jobId, coverLetter, customResponses, type = 'regular', resume = '') => api.post('/applications', { jobId, coverLetter, customResponses, type, resume }),
   updateStatus: (id, status, feedbackOrComment, comment) => {
@@ -328,7 +347,7 @@ export const applicationAPI = {
 
 // Skill APIs
 export const skillAPI = {
-  getSkills: (params) => api.get('/skills', { params }),
+  getSkills: (params, options = {}) => cachedSkillsGetter({ params, ...options }),
   getCategories: () => api.get('/skills/categories'),
   getSkill: (id) => api.get(`/skills/${id}`),
   createSkill: (data) => api.post('/skills', data),
@@ -359,7 +378,7 @@ const cachedDashboardGetter = createCachedGetter((options = {}) => api.get('/sta
 const cachedCampusPocStatsGetter = createCachedGetter(({ status } = {}) => api.get('/stats/campus-poc', { params: { status } }), { ttl: 2 * 60 * 1000 });
 const cachedEligibleJobsGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/eligible-jobs', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
 const cachedCompanyTrackingGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
-const cachedSchoolTrackingGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/school-tracking', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
+const cachedSchoolTrackingGetter = createCachedGetter(({ cycleId, summary } = {}) => api.get('/stats/campus-poc/school-tracking', { params: { cycleId, summary } }), { ttl: 2 * 60 * 1000 });
 const cachedStudentSummaryGetter = createCachedGetter(({ params } = {}) => api.get('/stats/campus-poc/student-summary', { params }), { ttl: 2 * 60 * 1000 });
 const cachedCycleStatsGetter = createCachedGetter(() => api.get('/stats/campus-poc/cycle-stats'), { ttl: 2 * 60 * 1000 });
 
@@ -389,7 +408,7 @@ export const statsAPI = {
 
 // Placement Cycle APIs
 export const placementCycleAPI = {
-  getCycles: (params) => api.get('/placement-cycles', { params }),
+  getCycles: (params, options = {}) => cachedCyclesGetter({ params, ...options }),
   createCycle: (data) => api.post('/placement-cycles', data),
   updateCycle: (id, data) => api.put(`/placement-cycles/${id}`, data),
   deleteCycle: (id) => api.delete(`/placement-cycles/${id}`),
@@ -404,7 +423,7 @@ export const placementCycleAPI = {
 
 // Campus APIs
 export const campusAPI = {
-  getCampuses: () => api.get('/campuses'),
+  getCampuses: (options = {}) => cachedCampusesGetter(options),
   getCampus: (id) => api.get(`/campuses/${id}`),
   createCampus: (data) => api.post('/campuses', data),
   updateCampus: (id, data) => api.put(`/campuses/${id}`, data),
@@ -413,7 +432,7 @@ export const campusAPI = {
 
 // Utilities
 export const utilsAPI = {
-  checkUrl: (url) => api.post('/utils/check-url', { url }),
+  checkUrl: (url, options = {}) => cachedCheckUrlGetter({ url, ...options }),
   checkResumeAts: (resumeId = '') => api.post('/utils/resume-ats/check', { resumeId }),
   analyzeScam: (data) => api.post('/utils/analyze-scam', data),
   testAIKey: () => api.post('/utils/test-ai-key'),
@@ -469,7 +488,7 @@ export const jobReadinessAPI = {
   editCriterion: (configId, criteriaId, data) => api.put(`/job-readiness/config/${configId}/criteria/${criteriaId}`, data),
   deleteCriterion: (configId, criteriaId) => api.delete(`/job-readiness/config/${configId}/criteria/${criteriaId}`),
   // Student self-tracking
-  getMyStatus: () => api.get('/job-readiness/my-status'),
+  getMyStatus: (options = {}) => cachedMyStatusGetter(options),
   updateMyCriterion: (criteriaId, data) => {
     // If there's a file, use FormData
     if (data.proofFile) {

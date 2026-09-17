@@ -169,6 +169,16 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+router.get('/role-categories', auth, async (req, res) => {
+  try {
+    const settings = await Settings.findOne({}, 'roleCategories').lean();
+    res.json({ success: true, data: settings?.roleCategories || [] });
+  } catch (error) {
+    console.error('Get role categories error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Sync schools from Ghar and persist merged list into Settings
 router.post('/sync-schools', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {

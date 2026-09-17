@@ -422,9 +422,10 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
       jobsQuery.skip((pageNum - 1) * limitNum).limit(limitNum);
     }
 
-    const jobs = await jobsQuery;
-
-    const total = await Job.countDocuments(query);
+    const [jobs, total] = await Promise.all([
+      jobsQuery,
+      Job.countDocuments(query)
+    ]);
 
     // Aggregate application status counts for the returned jobs (shortlisted, applied, etc.)
     const jobIds = jobs.map(j => j._id);

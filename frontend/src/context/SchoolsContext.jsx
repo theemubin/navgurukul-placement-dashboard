@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { settingsAPI } from '../services/api';
+import { useAuth } from './AuthContext';
 
 const SchoolsContext = createContext(null);
 
 export const SchoolsProvider = ({ children }) => {
+  const { user, loading: authLoading } = useAuth();
   const [schools, setSchools] = useState([]);
   const [gharSchools, setGharSchools] = useState({});
   const [loading, setLoading] = useState(true);
@@ -25,8 +27,12 @@ export const SchoolsProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    if (authLoading || !user) {
+      setLoading(false);
+      return;
+    }
     fetch();
-  }, [fetch]);
+  }, [authLoading, fetch, user]);
 
   const refresh = async () => fetch();
 
