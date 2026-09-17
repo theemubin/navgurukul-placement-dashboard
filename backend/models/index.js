@@ -11,6 +11,7 @@ module.exports = {
   Settings: require('./Settings'),
   SelfApplication: require('./SelfApplication'),
   InterestRequest: require('./InterestRequest'),
+  ATSAnalysis: require('./ATSAnalysis'),
   JobReadinessConfig,
   StudentJobReadiness,
   DEFAULT_CRITERIA

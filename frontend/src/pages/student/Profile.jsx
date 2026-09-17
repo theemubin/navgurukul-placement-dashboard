@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { authAPI, userAPI, settingsAPI, campusAPI, placementCycleAPI, skillAPI, utilsAPI, resolveResumeUrl } from '../../services/api';
 import { LoadingSpinner } from '../../components/common/UIComponents';
@@ -94,6 +95,7 @@ const defaultSettings = {
 };
 
 const StudentProfile = () => {
+  const navigate = useNavigate();
   const { user, updateUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [settings, setSettings] = useState(defaultSettings);
@@ -337,74 +339,11 @@ const StudentProfile = () => {
     }
   };
 
-  const handleCheckAtsScore = async (resumeId = '') => {
-    let targetLink = '';
+  const handleCheckAtsScore = (resumeId = '') => {
     if (resumeId) {
-      const found = (profile?.studentProfile?.resumes || []).find(r => r._id === resumeId);
-      targetLink = found ? found.resumeLink : '';
+      navigate(`/student/ats-checker?resume=${encodeURIComponent(resumeId)}`);
     } else {
-      targetLink = (formData.resumeLink || '').trim();
-      const savedLink = (profile?.studentProfile?.resumeLink || '').trim();
-      if (targetLink !== savedLink) {
-        toast.error('Resume link changed. Please Save Profile first, then run ATS check.');
-        return;
-      }
-    }
-
-    if (!targetLink) {
-      toast.error('Please add or upload a resume first');
-      return;
-    }
-
-    setAtsLoading(true);
-    setAtsCheckingId(resumeId);
-    try {
-      const res = await utilsAPI.checkResumeAts(resumeId);
-      const data = res?.data?.data;
-      if (!data) {
-        toast.error('ATS response is empty');
-        return;
-      }
-
-      const isPrimary = !resumeId || (profile?.studentProfile?.resumes || []).find(r => r._id === resumeId)?.isPrimary;
-      if (isPrimary) {
-        setAtsResult(data);
-        setAtsPrompts(data.prompts || null);
-      }
-
-      setProfile((prev) => {
-        if (!prev) return prev;
-        let updatedResumes = prev.studentProfile?.resumes || [];
-        if (resumeId) {
-          updatedResumes = updatedResumes.map(r => {
-            if (r._id === resumeId) {
-              return { ...r, resumeAts: data };
-            }
-            return r;
-          });
-        }
-        return {
-          ...prev,
-          studentProfile: {
-            ...prev.studentProfile,
-            resumes: updatedResumes,
-            resumeAts: isPrimary ? data : prev.studentProfile.resumeAts
-          }
-        };
-      });
-      toast.success('ATS score generated');
-    } catch (error) {
-      const payload = error?.response?.data;
-      if (error?.response?.status === 422 && payload?.nameMatch) {
-        const reason = payload?.nameMatch?.reason || payload?.message || 'Resume name does not match your profile.';
-        const docHint = payload?.documentType ? ` (Detected: ${payload.documentType.replace('_', ' ')})` : '';
-        toast.error(`ATS blocked${docHint}: ${reason}`);
-      } else {
-        toast.error(payload?.message || 'Failed to generate ATS score');
-      }
-    } finally {
-      setAtsLoading(false);
-      setAtsCheckingId(null);
+      navigate('/student/ats-checker');
     }
   };
 

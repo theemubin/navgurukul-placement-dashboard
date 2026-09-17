@@ -18,21 +18,40 @@ function extractGoogleDriveFileId(url = '') {
   return match && match[1] ? match[1] : null;
 }
 
+function isLocalUploadPath(url = '') {
+  if (!url) return false;
+  const str = String(url).trim();
+  return str.startsWith('/uploads/') || str.startsWith('uploads/') || str.includes('/uploads/');
+}
+
 async function downloadResumeBuffer(url) {
-  if (url.startsWith('/uploads/')) {
+  const str = String(url || '').trim();
+
+  // Handle local disk uploaded files
+  if (isLocalUploadPath(str)) {
     const fs = require('fs');
     const path = require('path');
-    const absolutePath = path.join(__dirname, '..', url);
-    if (!fs.existsSync(absolutePath)) {
-      throw new Error('Local resume file not found');
+
+    let localSubPath = '';
+    if (str.includes('/uploads/')) {
+      localSubPath = str.substring(str.indexOf('/uploads/'));
+    } else if (str.startsWith('uploads/')) {
+      localSubPath = `/${str}`;
     }
-    const buffer = fs.readFileSync(absolutePath);
-    let contentType = 'application/pdf';
-    if (url.endsWith('.doc')) contentType = 'application/msword';
-    if (url.endsWith('.docx')) contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    return { buffer, contentType, status: 200 };
+
+    if (localSubPath) {
+      const absolutePath = path.join(__dirname, '..', localSubPath);
+      if (fs.existsSync(absolutePath)) {
+        const buffer = fs.readFileSync(absolutePath);
+        let contentType = 'application/pdf';
+        if (str.toLowerCase().endsWith('.doc')) contentType = 'application/msword';
+        if (str.toLowerCase().endsWith('.docx')) contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        return { buffer, contentType, status: 200 };
+      }
+    }
   }
 
+  // Remote URL download via axios
   const response = await axios.get(url, {
     responseType: 'arraybuffer',
     timeout: 20000,
@@ -850,3 +869,7 @@ router.get('/pincode/:pincode', auth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.downloadResumeBuffer = downloadResumeBuffer;
+module.exports.extractPdfText = extractPdfText;
+module.exports.extractGoogleDriveFileId = extractGoogleDriveFileId;
+module.exports.resolveAIKeysForUser = resolveAIKeysForUser;

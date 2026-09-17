@@ -5,7 +5,7 @@ import { questionAPI, userAPI, jobAPI, jobReadinessAPI } from '../../services/ap
 import {
   Home, User, Briefcase, FileText, Users, CheckSquare, BarChart3, Settings,
   X, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle,
-  Image as ImageIcon, Globe, Search, ShieldCheck, Database
+  Image as ImageIcon, Globe, Search, ShieldCheck, Database, Sparkles
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -96,6 +96,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             { path: '/student/applications', icon: FileText, label: 'My Applications' },
             { path: '/student/job-readiness', icon: Target, label: 'Job Readiness', badge: pendingReadinessCount },
             { path: '/student/self-applications', icon: ExternalLink, label: 'Self Applications' },
+            { path: '/student/ats-checker', icon: Sparkles, label: 'ATS Resume Checker' },
             { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
             { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
           ];

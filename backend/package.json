@@ -9,6 +9,7 @@
     "dev:mock": "nodemon mock-server.js",
     "dev:memory": "nodemon start-mongo-dev.js",
     "seed": "node seed.js",
+    "test": "node tests/run_ats_tests.js",
     "migrate:skill-ids": "node scripts/migrate_skill_ids.js",
     "migrate:skill-ids:dry": "node scripts/migrate_skill_ids.js --dry-run",
     "migrate:skills:normalized": "node scripts/backfill_normalized_skill_name.js"

@@ -36,6 +36,7 @@ const leadRoutes = require('./routes/leads');
 const scamReportsRoutes = require('./routes/scamReports');
 const gharIntegrationRoutes = require('./routes/gharIntegration');
 const loginBackgroundRoutes = require('./routes/loginBackgrounds');
+const atsRoutes = require('./routes/ats');
 
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
@@ -138,6 +139,7 @@ app.use('/api/leads', leadRoutes);
 app.use('/api/scam-reports', scamReportsRoutes);
 app.use('/api/ghar', gharIntegrationRoutes);
 app.use('/api/login-backgrounds', loginBackgroundRoutes);
+app.use('/api/ats', atsRoutes);
 
 // Redirect root to frontend
 app.get('/', (req, res) => {

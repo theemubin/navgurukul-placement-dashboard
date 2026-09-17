@@ -34,6 +34,7 @@ import StudentApplications from './pages/student/Applications';
 import JobDetails from './pages/student/JobDetails';
 import StudentJobReadiness from './pages/student/JobReadiness';
 import StudentSelfApplications from './pages/student/SelfApplications';
+import AtsResumeChecker from './pages/student/AtsResumeChecker';
 import StudentScamDetector from './pages/student/Scamdetector';
 import ScamReportsRepository from './pages/student/ScamReportsRepository';
 import ScamReportDetails from './pages/student/ScamReportDetails';
@@ -196,6 +197,7 @@ function App() {
         <Route path="applications" element={<StudentApplications />} />
         <Route path="job-readiness" element={<StudentJobReadiness />} />
         <Route path="self-applications" element={<StudentSelfApplications />} />
+        <Route path="ats-checker" element={<AtsResumeChecker />} />
         <Route path="notifications" element={<Notifications />} />
 
       </Route>
