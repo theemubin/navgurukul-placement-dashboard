@@ -22,6 +22,8 @@ const POCDashboard = () => {
   const [cycles, setCycles] = useState([]);
   const [selectedCycle, setSelectedCycle] = useState('');
   const [studentSummary, setStudentSummary] = useState(null);
+  const [summarySearch, setSummarySearch] = useState('');
+  const [summarySearchInput, setSummarySearchInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [jobsLoading, setJobsLoading] = useState(true);
@@ -50,7 +52,6 @@ const POCDashboard = () => {
   const [notifying, setNotifying] = useState(false);
 
   useEffect(() => {
-    fetchDashboardData();
     fetchCampusData();
   }, []);
 
@@ -60,7 +61,7 @@ const POCDashboard = () => {
 
   useEffect(() => {
     fetchTrackingData(summaryPage);
-  }, [selectedStatus, selectedCycle, summaryPage]);
+  }, [selectedStatus, selectedCycle, summaryPage, summarySearch]);
 
   const fetchCampusData = async () => {
     try {
@@ -84,7 +85,7 @@ const POCDashboard = () => {
       toast.success('Managed campuses updated');
       setShowCampusModal(false); // Changed from setShowCampusSelector to setShowCampusModal
       fetchCampusData();
-      fetchDashboardData();
+      fetchDashboardData(true);
     } catch (error) {
       console.error('Error updating managed campuses:', error);
       toast.error(error.response?.data?.message || 'Failed to update managed campuses');
@@ -113,8 +114,9 @@ const POCDashboard = () => {
         };
       });
 
-      // Also refresh the overall stats in the background
-      fetchDashboardData();
+      // Also refresh the overall stats and tracking in the background
+      fetchDashboardData(true);
+      fetchTrackingData(summaryPage, true);
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
       toast.error(error.response?.data?.message || 'Failed to sync with Ghar', { id: 'ghar-sync' });
@@ -128,11 +130,11 @@ const POCDashboard = () => {
         : [...prev, campusId]
     );
   };
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (forceRefresh = false) => {
     setStatsLoading(true);
     setJobsLoading(true);
     
-    statsAPI.getCampusPocStats(selectedStatus === 'all' ? undefined : selectedStatus)
+    statsAPI.getCampusPocStats(selectedStatus === 'all' ? undefined : selectedStatus, { forceRefresh })
       .then(res => {
         setStats(res.data);
         setPendingProfilesCount(res.data.pendingProfileApprovals || 0);
@@ -144,11 +146,11 @@ const POCDashboard = () => {
       .then(res => setPendingSkills(res.data.slice(0, 5)))
       .catch(err => console.error(err));
 
-    statsAPI.getCycleStats()
+    statsAPI.getCycleStats({ forceRefresh })
       .then(res => setCycles(res.data))
       .catch(err => console.error(err));
 
-    statsAPI.getEligibleJobs()
+    statsAPI.getEligibleJobs(undefined, { forceRefresh })
       .then(res => {
         setEligibleJobs(res.data.jobs || []);
       })
@@ -159,18 +161,19 @@ const POCDashboard = () => {
       });
   };
 
-  const fetchTrackingData = async (pageNum = 1) => {
+  const fetchTrackingData = async (pageNum = 1, forceRefresh = false) => {
     setTrackingLoading(true);
     try {
       const [companyRes, schoolRes, summaryRes] = await Promise.all([
-        statsAPI.getCompanyTracking(selectedCycle),
-        statsAPI.getSchoolTracking(selectedCycle),
+        statsAPI.getCompanyTracking(selectedCycle, { forceRefresh }),
+        statsAPI.getSchoolTracking(selectedCycle, { forceRefresh }),
         statsAPI.getStudentSummary({ 
           cycleId: selectedCycle, 
           status: selectedStatus === 'all' ? undefined : selectedStatus,
+          search: summarySearch.trim() || undefined,
           page: pageNum,
           limit: itemsPerPage
-        })
+        }, { forceRefresh })
       ]);
       setCompanyTracking(companyRes.data);
       setSchoolTracking(schoolRes.data);
@@ -292,6 +295,18 @@ const POCDashboard = () => {
       toast.error('Failed to load student list');
       setEligibleStudentsModal(prev => ({ ...prev, isOpen: false, loading: false }));
     }
+  };
+
+  const handleSummarySearchSubmit = (event) => {
+    event?.preventDefault();
+    setSummarySearch(summarySearchInput.trim());
+    setSummaryPage(1);
+  };
+
+  const handleSummarySearchClear = () => {
+    setSummarySearchInput('');
+    setSummarySearch('');
+    setSummaryPage(1);
   };
 
   const filteredEligibleStudents = useMemo(() => {
@@ -1231,10 +1246,41 @@ const POCDashboard = () => {
 
       {activeTab === 'summary' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center mb-2">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-2">
             <div>
               <h3 className="text-lg font-bold text-gray-900">Student Placement Summary</h3>
               <p className="text-xs text-gray-500">Comprehensive overview of all student applications and progress</p>
+            </div>
+            <div className="w-full md:w-[360px]">
+              <label className="sr-only" htmlFor="summary-student-search">Search students</label>
+              <form className="relative" onSubmit={handleSummarySearchSubmit}>
+                <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="summary-student-search"
+                  type="search"
+                  value={summarySearchInput}
+                  onChange={(e) => setSummarySearchInput(e.target.value)}
+                  placeholder="Search student name, email, or school"
+                  className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-28 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                />
+                <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+                  {summarySearchInput && (
+                    <button
+                      type="button"
+                      onClick={handleSummarySearchClear}
+                      className="rounded-lg px-2 py-1 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-primary-700"
+                  >
+                    Search
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
 
@@ -1425,7 +1471,7 @@ const POCDashboard = () => {
       {activeTab === 'cycles' && (
         <CycleManagement
           cycles={cycles}
-          onUpdate={fetchDashboardData}
+          onUpdate={() => fetchDashboardData(true)}
           showModal={showCycleModal}
           setShowModal={setShowCycleModal}
         />
@@ -1437,7 +1483,7 @@ const POCDashboard = () => {
           onClose={() => setShowCycleModal(false)}
           onSuccess={() => {
             setShowCycleModal(false);
-            fetchDashboardData();
+            fetchDashboardData(true);
           }}
         />
       )}
@@ -2383,7 +2429,7 @@ const Pagination = ({ currentPage, totalItems, itemsPerPage = 15, onPageChange }
   const pages = getPageNumbers();
 
   return (
-    <div className="flex items-center justify-between border-t border-gray-100 bg-white px-4 py-3 sm:px-6 mt-4 rounded-xl shadow-sm border border-gray-100">
+    <div className="flex items-center justify-between border-t border-gray-100 bg-white px-4 py-3 sm:px-6 mt-4 rounded-xl shadow-sm">
       {/* Mobile view */}
       <div className="flex flex-1 justify-between sm:hidden">
         <button

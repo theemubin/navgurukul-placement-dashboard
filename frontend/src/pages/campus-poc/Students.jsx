@@ -31,35 +31,50 @@ const POCStudents = () => {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ current: 1, pages: 1, total: 0 });
   const [filters, setFilters] = useState({ search: '', school: '', batch: '', status: '' });
+  const [searchInput, setSearchInput] = useState('');
   const [bulkUploadModal, setBulkUploadModal] = useState(false);
   const [stats, setStats] = useState(null);
   const [expandedStudents, setExpandedStudents] = useState({});
 
   useEffect(() => {
     fetchStudents();
-    fetchStats();
   }, [pagination.current, filters]);
 
-  const fetchStats = async () => {
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setFilters((prev) => (prev.search === searchInput ? prev : { ...prev, search: searchInput }));
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchInput]);
+
+  const fetchStats = async (forceRefresh = false) => {
     try {
-      const response = await statsAPI.getCampusPocStats();
+      const response = await statsAPI.getCampusPocStats(undefined, { forceRefresh });
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
   };
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (forceRefresh = false) => {
     setLoading(true);
     try {
-      const response = await userAPI.getStudents({
-        page: pagination.current,
-        limit: 15,
-        search: filters.search || undefined,
-        school: filters.school || undefined,
-        batch: filters.batch || undefined,
-        status: filters.status || undefined
-      });
+      const response = await userAPI.getStudents(
+        {
+          page: pagination.current,
+          limit: 15,
+          search: filters.search || undefined,
+          school: filters.school || undefined,
+          batch: filters.batch || undefined,
+          status: filters.status || undefined
+        },
+        { forceRefresh }
+      );
       setStudents(response.data.students);
       setPagination(response.data.pagination);
     } catch (error) {
@@ -75,8 +90,8 @@ const POCStudents = () => {
     try {
       await userAPI.updateStudentStatus(studentId, newStatus);
       toast.success(`Status updated to ${newStatus}`);
-      fetchStudents();
-      fetchStats();
+      fetchStudents(true);
+      fetchStats(true);
     } catch (error) {
       console.error('Error updating status:', error);
       toast.error('Failed to update status');
@@ -104,8 +119,8 @@ const POCStudents = () => {
       } : s));
       
       // Still refresh stats and full list as they depend on overall counts
-      fetchStats();
-      fetchStudents();
+      fetchStats(true);
+      fetchStudents(true);
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
       toast.error(error.response?.data?.message || 'Failed to sync with Ghar');
@@ -140,8 +155,8 @@ const POCStudents = () => {
 
     setSyncAllLoading(false);
     toast.success(`Batch sync completed! ${successCount} successful, ${failCount} failed.`, { id: 'batch-sync' });
-    fetchStudents();
-    fetchStats();
+    fetchStudents(true);
+    fetchStats(true);
   };
 
   const getApprovedSkillsCount = (skills) => {
@@ -281,8 +296,8 @@ const POCStudents = () => {
             <input
               type="text"
               placeholder="Search students..."
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="pl-9 text-sm"
             />
           </div>
@@ -550,7 +565,7 @@ const POCStudents = () => {
         onClose={() => setBulkUploadModal(false)}
         type="students"
         onSuccess={() => {
-          fetchStudents();
+          fetchStudents(true);
           setBulkUploadModal(false);
         }}
       />

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 const passport = require('../config/passport');
@@ -723,6 +724,12 @@ router.post('/login', loginValidation, async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        message: 'Database is not ready. Please try again in a moment.'
+      });
     }
 
     const { email, password } = req.body;

@@ -1,9 +1,9 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 // Restart trigger for nodemon - port change
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const path = require('path');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const passport = require('./config/passport');
@@ -160,11 +160,15 @@ app.get('/api/health', async (req, res) => {
   let dbName = null;
 
   try {
-    const dbStart = Date.now();
-    await mongoose.connection.db.admin().ping();
-    dbLatency = Date.now() - dbStart;
-    dbStatus = 'connected';
-    dbName = mongoose.connection.name;
+    if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
+      const dbStart = Date.now();
+      await mongoose.connection.db.admin().ping();
+      dbLatency = Date.now() - dbStart;
+      dbStatus = 'connected';
+      dbName = mongoose.connection.name;
+    } else {
+      dbStatus = `error: MongoDB connection is not ready (state ${mongoose.connection.readyState})`;
+    }
   } catch (err) {
     dbStatus = 'error: ' + err.message;
   }
@@ -245,7 +249,9 @@ mongoose.connect(process.env.MONGODB_URI)
     console.log('MongoDB Connected');
     // Initialize Discord Bot
     const discordService = require('./services/discordService');
+    const { startInterestRequestScheduler } = require('./services/interestRequestScheduler');
     discordService.initialize();
+    startInterestRequestScheduler();
   })
   .catch(err => {
     console.error('MongoDB Connection Error:', err);

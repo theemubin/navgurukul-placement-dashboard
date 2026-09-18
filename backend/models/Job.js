@@ -30,7 +30,8 @@ const jobSchema = new mongoose.Schema({
   },
   roleCategory: {
     type: String,
-    trim: true
+    trim: true,
+    required: [true, 'Role category is required']
   },
   jobType: {
     type: String,

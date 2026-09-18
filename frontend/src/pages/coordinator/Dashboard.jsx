@@ -120,7 +120,7 @@ const CoordinatorDashboard = () => {
 
   const fetchSchool = async () => {
     try {
-      const res = await statsAPI.getSchoolTracking();
+      const res = await statsAPI.getSchoolTracking(undefined, { summary: 'lite' });
       setSchoolTracking(res.data || []);
     } catch (error) {
       console.error('Error fetching school tracking:', error);

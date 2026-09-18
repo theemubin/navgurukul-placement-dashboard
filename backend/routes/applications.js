@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const mongoose = require('mongoose');
 const Application = require('../models/Application');
 const Job = require('../models/Job');
 const User = require('../models/User');
@@ -9,6 +10,7 @@ const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
+const { cacheMiddleware } = require('../middleware/cache');
 const cacheService = require('../services/redisCacheService');
 
 /**
@@ -54,6 +56,12 @@ const cacheService = require('../services/redisCacheService');
  *         name: myLeads
  *         schema:
  *           type: boolean
+ *       - in: query
+ *         name: summary
+ *         schema:
+ *           type: string
+ *           enum: [counts, triage, lite]
+ *         description: Return a reduced payload for counts, triage view, or the student list
  *     responses:
  *       200:
  *         description: Paginated application list
@@ -63,8 +71,13 @@ const cacheService = require('../services/redisCacheService');
 // Get applications (filtered by role)
 router.get('/', auth, async (req, res) => {
   try {
-    const { job, status, student, page = 1, limit = 20, myLeads } = req.query;
+    const { job, status, student, page = 1, limit = 20, myLeads, summary, search, daysBucket } = req.query;
     let query = {};
+
+    // Debug: log incoming filter params in development to help troubleshoot 304/cache/status issues
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Debug] GET /api/applications filters:', { job, status, student, page, limit, myLeads, role: req.user?.role, userId: req.userId });
+    }
 
     // If requesting 'myLeads' and user is coordinator, filter to jobs that this coordinator leads
     if (myLeads === 'true' && req.user && req.user.role === 'coordinator') {
@@ -94,6 +107,61 @@ router.get('/', auth, async (req, res) => {
       }
     }
 
+    if (search && search.trim()) {
+      const searchTerm = search.trim();
+      const searchRegex = new RegExp(searchTerm, 'i');
+
+      const [matchedStudents, matchedJobs] = await Promise.all([
+        User.find({
+          role: 'student',
+          $or: [
+            { firstName: searchRegex },
+            { lastName: searchRegex },
+            { email: searchRegex },
+            { 'studentProfile.enrollmentNumber': searchRegex }
+          ]
+        }).select('_id'),
+        Job.find({
+          $or: [
+            { title: searchRegex },
+            { 'company.name': searchRegex }
+          ]
+        }).select('_id')
+      ]);
+
+      const studentIds = matchedStudents.map(student => student._id);
+      const jobIds = matchedJobs.map(jobDoc => jobDoc._id);
+
+      if (studentIds.length === 0 && jobIds.length === 0) {
+        return res.json({
+          applications: [],
+          pagination: {
+            current: parseInt(page),
+            pages: 0,
+            total: 0
+          }
+        });
+      }
+
+      query.$or = [];
+      if (studentIds.length > 0) query.$or.push({ student: { $in: studentIds } });
+      if (jobIds.length > 0) query.$or.push({ job: { $in: jobIds } });
+    }
+
+    if (daysBucket) {
+      const now = Date.now();
+      const tenDaysAgo = new Date(now - 10 * 24 * 60 * 60 * 1000);
+      const twentyDaysAgo = new Date(now - 20 * 24 * 60 * 60 * 1000);
+
+      if (daysBucket === 'green') {
+        query.createdAt = { ...(query.createdAt || {}), $gte: tenDaysAgo };
+      } else if (daysBucket === 'yellow') {
+        query.createdAt = { ...(query.createdAt || {}), $lt: tenDaysAgo, $gte: twentyDaysAgo };
+      } else if (daysBucket === 'red') {
+        query.createdAt = { ...(query.createdAt || {}), $lt: twentyDaysAgo };
+      }
+    }
+
     // Campus POC can only see applications from their allowed campus students (primary and managed)
     if (req.user.role === 'campus_poc') {
       const allowedCampuses = [];
@@ -111,20 +179,100 @@ router.get('/', auth, async (req, res) => {
       query.student = { $in: campusStudents.map(s => s._id) };
     }
 
-    const applications = await Application.find(query)
-      .populate('student', 'firstName lastName email studentProfile.enrollmentNumber campus')
-      .populate({
-        path: 'student',
-        populate: { path: 'campus', select: 'name' }
-      })
-      .populate('job', 'title company.name status')
-      .populate('specialRecommendation.recommendedBy', 'firstName lastName')
-      .populate('feedbackBy', 'firstName lastName')
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
-      .sort({ createdAt: -1 });
+    if (summary === 'counts') {
+      const countsByStatus = await Application.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
 
-    const total = await Application.countDocuments(query);
+      const statusMap = countsByStatus.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {});
+
+      const total = Object.values(statusMap).reduce((sum, value) => sum + value, 0);
+
+      return res.json({
+        counts: {
+          total,
+          applied: statusMap.applied || 0,
+          interested: statusMap.interested || 0,
+          shortlisted: (statusMap.shortlisted || 0) + (statusMap.hr_shortlisting || 0),
+          in_progress: (statusMap.in_progress || 0) + (statusMap.interviewing || 0) + (statusMap.application_stage || 0),
+          selected: statusMap.selected || 0,
+          rejected: statusMap.rejected || 0,
+          withdrawn: statusMap.withdrawn || 0
+        }
+      });
+    }
+
+    if (summary === 'triage') {
+      const [applications, total] = await Promise.all([
+        Application.find(query)
+          .select('student job status currentRound roundResults specialRecommendation feedback createdAt updatedAt')
+          .populate('student', 'firstName lastName email studentProfile.currentModule studentProfile.enrollmentNumber campus')
+          .populate({
+            path: 'student',
+            populate: { path: 'campus', select: 'name' }
+          })
+          .skip((page - 1) * limit)
+          .limit(parseInt(limit))
+          .sort({ createdAt: -1 }),
+        Application.countDocuments(query)
+      ]);
+
+      return res.json({
+        applications,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / limit),
+          total
+        }
+      });
+    }
+
+    if (summary === 'lite') {
+      const [applications, total] = await Promise.all([
+        Application.find(query)
+          .select('student job status statusComment currentRound roundResults createdAt updatedAt')
+          .populate('student', 'firstName lastName email studentProfile.currentSchool studentProfile.currentModule studentProfile.resume')
+          .populate('job', 'title company.name jobType status interviewRounds')
+          .skip((page - 1) * limit)
+          .limit(parseInt(limit))
+          .sort({ createdAt: -1 }),
+        Application.countDocuments(query)
+      ]);
+
+      return res.json({
+        applications,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / limit),
+          total
+        }
+      });
+    }
+
+    const [applications, total] = await Promise.all([
+      Application.find(query)
+        .populate('student', 'firstName lastName email studentProfile.enrollmentNumber campus')
+        .populate({
+          path: 'student',
+          populate: { path: 'campus', select: 'name' }
+        })
+        .populate('job', 'title company.name status')
+        .populate('specialRecommendation.recommendedBy', 'firstName lastName')
+        .populate('feedbackBy', 'firstName lastName')
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .sort({ createdAt: -1 }),
+      Application.countDocuments(query)
+    ]);
 
     res.json({
       applications,
@@ -409,7 +557,13 @@ router.post('/', auth, authorize('student'), [
 // Update application status (Coordinators only)
 router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req, res) => {
   try {
-    const { status, feedback } = req.body;
+    const { status, feedback, comment } = req.body;
+    const note = (comment ?? feedback ?? '').toString().trim();
+    const requiresNote = ['selected', 'rejected'].includes(status);
+
+    if (requiresNote && !note) {
+      return res.status(400).json({ message: 'Coordinator note is required for selected and rejected status changes.' });
+    }
 
     const application = await Application.findById(req.params.id)
       .populate('job', 'title company.name')
@@ -419,11 +573,19 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
       return res.status(404).json({ message: 'Application not found' });
     }
 
+    // Record previous status and push to history
+    const prevStatus = application.status;
     application.status = status;
+    if (note) {
+      application.statusComment = note;
+    }
     if (feedback) {
       application.feedback = feedback;
       application.feedbackBy = req.userId;
     }
+
+    application.statusHistory = application.statusHistory || [];
+    application.statusHistory.push({ status, changedAt: new Date(), changedBy: req.userId, comment: note });
 
     // Update placement count if selected or filled
     if (status === 'selected' || status === 'filled') {
@@ -560,12 +722,15 @@ router.put('/:id/rounds', auth, authorize('coordinator', 'manager'), async (req,
       });
     }
 
-    // Update current round
+    // Update current round and record status changes
+    application.statusHistory = application.statusHistory || [];
     if (status === 'passed') {
       application.currentRound = round + 1;
       application.status = 'in_progress';
+      application.statusHistory.push({ status: 'in_progress', changedAt: new Date(), changedBy: req.userId, comment: `Round ${round} passed` });
     } else if (status === 'failed') {
       application.status = 'rejected';
+      application.statusHistory.push({ status: 'rejected', changedAt: new Date(), changedBy: req.userId, comment: `Round ${round} failed` });
     }
 
     await application.save();
@@ -989,6 +1154,697 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
     res.send(bom + tsv);
   } catch (error) {
     console.error('Export XLS error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/applications/analytics/bottlenecks:
+ *   get:
+ *     summary: Macro funnel analytics and pipeline dwell times
+ *     tags: [Applications]
+ *     parameters:
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: minDays
+ *         schema:
+ *           type: integer
+ *           default: 7
+ *       - in: query
+ *         name: roleCategory
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: cycleId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: refresh
+ *         schema:
+ *           type: boolean
+ *         description: Bypass Redis cache and recompute the analytics once
+ */
+router.get('/analytics/bottlenecks', auth, authorize('coordinator', 'campus_poc', 'manager'), cacheMiddleware({ type: 'analytics', keyPrefix: 'applications' }), async (req, res) => {
+  try {
+    const { campus, minDays = 7, roleCategory, cycleId } = req.query;
+
+    let studentFilter = {};
+    if (req.user.role === 'campus_poc') {
+      studentFilter.campus = req.user.campus;
+    } else if (campus) {
+      studentFilter.campus = mongoose.Types.ObjectId.isValid(campus) ? new mongoose.Types.ObjectId(campus) : campus;
+    }
+
+    const studentIds = (await User.find({ role: 'student', ...studentFilter }).select('_id')).map(s => s._id);
+
+    let appMatch = {
+      student: { $in: studentIds }
+    };
+
+    if (roleCategory || cycleId) {
+      let jobMatch = {};
+      if (roleCategory) jobMatch.roleCategory = roleCategory;
+      if (cycleId) jobMatch.placementCycle = mongoose.Types.ObjectId.isValid(cycleId) ? new mongoose.Types.ObjectId(cycleId) : cycleId;
+      const matchingJobIds = (await Job.find(jobMatch).select('_id')).map(j => j._id);
+      appMatch.job = { $in: matchingJobIds };
+    }
+
+    const allApps = await Application.find(appMatch)
+      .select('status createdAt updatedAt job student')
+      .populate('job', 'title company.name roleCategory createdAt')
+      .populate('student', 'firstName lastName campus');
+
+    const now = new Date();
+    const thresholdMs = Number(minDays) * 24 * 60 * 60 * 1000;
+
+    const stageMap = {};
+    let totalApplications = allApps.length;
+    let totalStagnant = 0;
+    let totalOffered = 0;
+    let totalRejected = 0;
+
+    allApps.forEach(app => {
+      const status = app.status || 'applied';
+      if (!stageMap[status]) {
+        stageMap[status] = { count: 0, totalDays: 0, stagnantCount: 0 };
+      }
+      stageMap[status].count += 1;
+
+      const lastUpdated = new Date(app.updatedAt || app.createdAt);
+      const daysInStage = Math.max(1, Math.round((now - lastUpdated) / (1000 * 60 * 60 * 24)));
+      stageMap[status].totalDays += daysInStage;
+
+      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status.toLowerCase());
+      if (!isTerminal && (now - lastUpdated) > thresholdMs) {
+        stageMap[status].stagnantCount += 1;
+        totalStagnant += 1;
+      }
+
+      if (['selected', 'offered'].includes(status.toLowerCase())) totalOffered += 1;
+      if (status.toLowerCase() === 'rejected') totalRejected += 1;
+    });
+
+    const desiredStageOrder = [
+      'applied',
+      'interested',
+      'application_stage',
+      'withdrawn',
+      'hr_shortlisting',
+      'interviewing',
+      'rejected',
+      'filled'
+    ];
+
+    const getStageOrderIndex = (stage) => {
+      const lower = (stage || '').toLowerCase().trim();
+      let idx = desiredStageOrder.indexOf(lower);
+      if (idx !== -1) return idx;
+
+      if (lower.includes('reject')) return desiredStageOrder.indexOf('rejected');
+      if (lower.includes('hr') || lower.includes('shortlist')) return desiredStageOrder.indexOf('hr_shortlisting');
+      if (lower.includes('interest')) return desiredStageOrder.indexOf('interested');
+      if (lower === 'applied') return desiredStageOrder.indexOf('applied');
+      if (lower.includes('stage') || lower.includes('pending') || lower.includes('review')) return desiredStageOrder.indexOf('application_stage');
+      if (lower.includes('withdraw')) return desiredStageOrder.indexOf('withdrawn');
+      if (lower.includes('fill') || lower.includes('select') || lower.includes('offer') || lower.includes('place')) return desiredStageOrder.indexOf('filled');
+      if (lower.includes('interview')) return desiredStageOrder.indexOf('interviewing');
+
+      return 999;
+    };
+
+    const stageBreakdown = Object.keys(stageMap).map(st => ({
+      stage: st,
+      count: stageMap[st].count,
+      avgDaysInStage: parseFloat((stageMap[st].totalDays / stageMap[st].count).toFixed(1)),
+      stagnantCount: stageMap[st].stagnantCount
+    })).sort((a, b) => getStageOrderIndex(a.stage) - getStageOrderIndex(b.stage));
+
+    const companyStagnantMap = {};
+    allApps.forEach(app => {
+      const status = (app.status || '').toLowerCase();
+      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status);
+      const lastUpdated = new Date(app.updatedAt || app.createdAt);
+      if (!isTerminal && (now - lastUpdated) > thresholdMs && app.job?.company?.name) {
+        const compName = app.job.company.name;
+        const daysStuck = Math.max(1, Math.round((now - lastUpdated) / (1000 * 60 * 60 * 24)));
+        const jobTitle = app.job?.title || 'Unknown Role';
+        const candidateName = app.student ? `${app.student.firstName} ${app.student.lastName}` : 'Candidate';
+        const studentId = app.student?._id;
+        const postingDate = app.job?.createdAt ? new Date(app.job.createdAt).toISOString().split('T')[0] : null;
+
+        if (!companyStagnantMap[compName]) {
+          companyStagnantMap[compName] = {
+            company: compName,
+            stagnantCount: 0,
+            totalDays: 0,
+            rolesMap: {}
+          };
+        }
+        companyStagnantMap[compName].stagnantCount += 1;
+        companyStagnantMap[compName].totalDays += daysStuck;
+
+        if (!companyStagnantMap[compName].rolesMap[jobTitle]) {
+          companyStagnantMap[compName].rolesMap[jobTitle] = {
+            jobTitle,
+            postingDate,
+            stagnantCount: 0,
+            totalDays: 0,
+            stagesMap: {},
+            candidates: []
+          };
+        }
+
+        const roleObj = companyStagnantMap[compName].rolesMap[jobTitle];
+        roleObj.stagnantCount += 1;
+        roleObj.totalDays += daysStuck;
+        roleObj.stagesMap[app.status] = (roleObj.stagesMap[app.status] || 0) + 1;
+        roleObj.candidates.push({
+          studentId,
+          name: candidateName,
+          stage: app.status,
+          daysStuck
+        });
+      }
+    });
+
+    const companyBottlenecks = Object.values(companyStagnantMap)
+      .map(c => {
+        const roles = Object.values(c.rolesMap).map(r => ({
+          jobTitle: r.jobTitle,
+          postingDate: r.postingDate,
+          stagnantCount: r.stagnantCount,
+          avgDaysStagnant: parseFloat((r.totalDays / r.stagnantCount).toFixed(1)),
+          stages: Object.entries(r.stagesMap).map(([stage, count]) => ({ stage, count })),
+          candidates: r.candidates
+        })).sort((a, b) => b.stagnantCount - a.stagnantCount);
+
+        const postingDates = Array.from(new Set(roles.map(r => r.postingDate).filter(Boolean))).sort();
+
+        return {
+          company: c.company,
+          stagnantCount: c.stagnantCount,
+          avgDaysStagnant: parseFloat((c.totalDays / c.stagnantCount).toFixed(1)),
+          jobTitles: roles.map(r => r.jobTitle),
+          postingDates,
+          roles
+        };
+      })
+      .sort((a, b) => b.stagnantCount - a.stagnantCount)
+      .slice(0, 10);
+
+    res.json({
+      totalApplications,
+      totalStagnant,
+      totalOffered,
+      totalRejected,
+      stageBreakdown,
+      companyBottlenecks
+    });
+  } catch (error) {
+    console.error('Bottlenecks analytics error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/applications/analytics/stagnant-students:
+ *   get:
+ *     summary: List students with stagnant applications
+ *     tags: [Applications]
+ *     parameters:
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: minDays
+ *         schema:
+ *           type: integer
+ *           default: 7
+ *       - in: query
+ *         name: stage
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: school
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *       - in: query
+ *         name: refresh
+ *         schema:
+ *           type: boolean
+ *         description: Bypass Redis cache and recompute the list once
+ */
+router.get('/analytics/stagnant-students', auth, authorize('coordinator', 'campus_poc', 'manager'), cacheMiddleware({ type: 'analytics', keyPrefix: 'applications' }), async (req, res) => {
+  try {
+    const { campus, minDays = 7, stage, status, search, school, page = 1, limit = 20 } = req.query;
+    const thresholdDate = new Date(Date.now() - Number(minDays) * 24 * 60 * 60 * 1000);
+    const terminalStatuses = ['selected', 'rejected', 'withdrawn', 'offered'];
+    const stageFilter = stage || status;
+
+    const activeStatuses = stageFilter
+      ? String(stageFilter).split(',').map(s => s.trim()).filter(Boolean)
+      : terminalStatuses;
+
+    const buildStudentRow = (student, stagnant, totals) => ({
+      student: {
+        _id: student._id,
+        name: `${student.firstName} ${student.lastName}`,
+        email: student.email,
+        campus: student.campus?.name || 'N/A',
+        joiningDate: student.studentProfile?.joiningDate || null,
+        monthsSpent: (() => {
+          const sourceDate = student.studentProfile?.joiningDate || student.createdAt;
+          if (!sourceDate) return null;
+          const startDate = new Date(sourceDate);
+          if (isNaN(startDate.getTime())) return null;
+          return Math.max(0, Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+        })(),
+        enrollmentNumber: student.studentProfile?.enrollmentNumber || '',
+        department: student.studentProfile?.department || '',
+        currentSchool: student.studentProfile?.currentSchool || ''
+      },
+      stagnantCount: stagnant.stagnantCount || 0,
+      maxDaysStuck: stagnant.maxDaysStuck || 0,
+      totalApplications: totals.totalApplications || 0,
+      rejectionCount: totals.rejectionCount || 0,
+      stagnantApplications: []
+    });
+
+    const hasStudentScope = req.user.role === 'campus_poc' || campus || school || search;
+
+    const totalsByStudent = new Map();
+    const stagnantByStudent = new Map();
+    let rows = [];
+    let totalRows = 0;
+
+    if (hasStudentScope) {
+      let studentFilter = { role: 'student' };
+      if (req.user.role === 'campus_poc') {
+        studentFilter.campus = req.user.campus;
+      } else if (campus) {
+        studentFilter.campus = mongoose.Types.ObjectId.isValid(campus) ? new mongoose.Types.ObjectId(campus) : campus;
+      }
+
+      if (school) {
+        studentFilter['studentProfile.currentSchool'] = new RegExp(school, 'i');
+      }
+
+      if (search) {
+        const regex = new RegExp(search, 'i');
+        studentFilter.$or = [
+          { firstName: regex },
+          { lastName: regex },
+          { email: regex },
+          { 'studentProfile.enrollmentNumber': regex }
+        ];
+      }
+
+      const students = await User.find(studentFilter)
+        .select('_id firstName lastName email campus studentProfile createdAt')
+        .populate('campus', 'name');
+
+      const studentIds = students.map(s => s._id);
+      if (studentIds.length === 0) {
+        return res.json({ students: [], total: 0, page: Number(page), totalPages: 0 });
+      }
+
+      const totalCounts = await Application.aggregate([
+        { $match: { student: { $in: studentIds } } },
+        {
+          $group: {
+            _id: '$student',
+            totalApplications: { $sum: 1 },
+            rejectionCount: {
+              $sum: {
+                $cond: [{ $eq: [{ $toLower: '$status' }, 'rejected'] }, 1, 0]
+              }
+            }
+          }
+        }
+      ]);
+
+      const stagnantAggregates = await Application.aggregate([
+        {
+          $match: {
+            student: { $in: studentIds },
+            status: stageFilter ? { $in: activeStatuses } : { $nin: terminalStatuses },
+            updatedAt: { $lte: thresholdDate }
+          }
+        },
+        {
+          $addFields: {
+            daysStuck: {
+              $dateDiff: {
+                startDate: { $ifNull: ['$updatedAt', '$createdAt'] },
+                endDate: '$$NOW',
+                unit: 'day'
+              }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: '$student',
+            stagnantCount: { $sum: 1 },
+            maxDaysStuck: { $max: '$daysStuck' },
+            totalDaysStuck: { $sum: '$daysStuck' }
+          }
+        }
+      ]);
+
+      totalCounts.forEach(item => totalsByStudent.set(String(item._id), item));
+      stagnantAggregates.forEach(item => stagnantByStudent.set(String(item._id), item));
+
+      rows = students
+        .map(student => {
+          const stagnant = stagnantByStudent.get(String(student._id));
+          if (!stagnant) return null;
+          const totals = totalsByStudent.get(String(student._id)) || { totalApplications: 0, rejectionCount: 0 };
+          return buildStudentRow(student, stagnant, totals);
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.maxDaysStuck - a.maxDaysStuck);
+
+      totalRows = rows.length;
+    } else {
+      const stagnantGroups = await Application.aggregate([
+        {
+          $match: {
+            status: stage ? { $in: activeStatuses } : { $nin: terminalStatuses },
+            updatedAt: { $lte: thresholdDate }
+          }
+        },
+        {
+          $group: {
+            _id: '$student',
+            stagnantCount: { $sum: 1 },
+            maxDaysStuck: { $max: { $dateDiff: { startDate: { $ifNull: ['$updatedAt', '$createdAt'] }, endDate: '$$NOW', unit: 'day' } } },
+            totalDaysStuck: { $sum: { $dateDiff: { startDate: { $ifNull: ['$updatedAt', '$createdAt'] }, endDate: '$$NOW', unit: 'day' } } }
+          }
+        },
+        { $sort: { maxDaysStuck: -1 } }
+      ]);
+
+      totalRows = stagnantGroups.length;
+      const startIndex = (Number(page) - 1) * Number(limit);
+      const paginatedGroups = stagnantGroups.slice(startIndex, startIndex + Number(limit));
+      const topStudentIds = paginatedGroups.map(item => item._id);
+
+      if (topStudentIds.length === 0) {
+        return res.json({ students: [], total: totalRows, page: Number(page), totalPages: Math.ceil(totalRows / Number(limit)) });
+      }
+
+      const studentDocs = await User.find({ role: 'student', _id: { $in: topStudentIds } })
+        .select('_id firstName lastName email campus studentProfile createdAt')
+        .populate('campus', 'name');
+
+      const totals = await Application.aggregate([
+        { $match: { student: { $in: topStudentIds } } },
+        {
+          $group: {
+            _id: '$student',
+            totalApplications: { $sum: 1 },
+            rejectionCount: {
+              $sum: {
+                $cond: [{ $eq: [{ $toLower: '$status' }, 'rejected'] }, 1, 0]
+              }
+            }
+          }
+        }
+      ]);
+
+      totals.forEach(item => totalsByStudent.set(String(item._id), item));
+      paginatedGroups.forEach(item => stagnantByStudent.set(String(item._id), item));
+
+      rows = studentDocs
+        .map(student => {
+          const stagnant = stagnantByStudent.get(String(student._id));
+          if (!stagnant) return null;
+          const totalsForStudent = totalsByStudent.get(String(student._id)) || { totalApplications: 0, rejectionCount: 0 };
+          return buildStudentRow(student, stagnant, totalsForStudent);
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.maxDaysStuck - a.maxDaysStuck);
+    }
+
+    res.json({
+      students: rows,
+      total: totalRows,
+      page: Number(page),
+      totalPages: Math.ceil(totalRows / Number(limit))
+    });
+  } catch (error) {
+    console.error('Stagnant students query error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/applications/analytics/student-360/:studentId:
+ *   get:
+ *     summary: Get complete 360 degree placement report for a student
+ *     tags: [Applications]
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: detailLevel
+ *         schema:
+ *           type: string
+ *           enum: [summary, full]
+ *           default: summary
+ *         description: Return a lightweight report summary or the full application timeline
+ *       - in: query
+ *         name: refresh
+ *         schema:
+ *           type: boolean
+ *         description: Bypass Redis cache and recompute the report once
+ */
+router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', 'campus_poc', 'manager'), cacheMiddleware({ type: 'analytics', keyPrefix: 'applications' }), async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const detailLevel = (req.query.detailLevel || 'summary').toString().toLowerCase();
+    const summaryMode = detailLevel !== 'full';
+
+    const getMonthsSpent = (joiningDate, createdAt) => {
+      const sourceDate = joiningDate || createdAt;
+      if (!sourceDate) return null;
+      const startDate = new Date(sourceDate);
+      if (isNaN(startDate.getTime())) return null;
+      const months = Math.max(0, Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+      return months;
+    };
+
+    const student = await User.findById(studentId)
+      .populate('campus', 'name code')
+      .select('firstName lastName email phone campus studentProfile role createdAt');
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    if (req.user.role === 'campus_poc' && student.campus?._id?.toString() !== req.user.campus?.toString()) {
+      return res.status(403).json({ message: 'Not authorized to view student from another campus' });
+    }
+
+    let jobReadiness = await StudentJobReadiness.findOne({ student: studentId });
+
+    const applicationQuery = Application.find({ student: studentId })
+      .populate('job', 'title company location roleCategory salary jobType')
+      .sort({ createdAt: -1 });
+
+    const applications = summaryMode
+      ? await applicationQuery.select('status applicationType currentRound statusComment createdAt updatedAt job')
+      : await applicationQuery
+        .populate('feedbackBy', 'firstName LastName'.replace('LastName', 'lastName'))
+        .populate('interventions.createdBy', 'firstName lastName role');
+
+    const now = new Date();
+    const thresholdMs = 7 * 24 * 60 * 60 * 1000;
+
+    let activeCount = 0;
+    let stagnantCount = 0;
+    let offeredCount = 0;
+    let rejectedCount = 0;
+    let totalDaysInPipeline = 0;
+
+    const roundStats = {
+      screeningPassed: 0,
+      screeningFailed: 0,
+      techPassed: 0,
+      techFailed: 0,
+      hrPassed: 0,
+      hrFailed: 0
+    };
+
+    const formattedApplications = applications.map(app => {
+      const status = (app.status || 'applied').toLowerCase();
+      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status);
+      const lastUpdated = new Date(app.updatedAt || app.createdAt);
+      const daysInStage = Math.max(1, Math.round((now - lastUpdated) / (1000 * 60 * 60 * 24)));
+      totalDaysInPipeline += daysInStage;
+
+      const isStagnant = !isTerminal && (now - lastUpdated) > thresholdMs;
+
+      if (!isTerminal) activeCount += 1;
+      if (isStagnant) stagnantCount += 1;
+      if (['selected', 'offered'].includes(status)) offeredCount += 1;
+      if (status === 'rejected') rejectedCount += 1;
+
+      if (!summaryMode && app.roundResults && app.roundResults.length > 0) {
+        app.roundResults.forEach(r => {
+          const name = (r.roundName || '').toLowerCase();
+          if (name.includes('aptitude') || name.includes('screening') || name.includes('test')) {
+            if (r.status === 'passed') roundStats.screeningPassed += 1;
+            if (r.status === 'failed') roundStats.screeningFailed += 1;
+          } else if (name.includes('tech') || name.includes('coding') || name.includes('technical')) {
+            if (r.status === 'passed') roundStats.techPassed += 1;
+            if (r.status === 'failed') roundStats.techFailed += 1;
+          } else if (name.includes('hr') || name.includes('cultural') || name.includes('managerial')) {
+            if (r.status === 'passed') roundStats.hrPassed += 1;
+            if (r.status === 'failed') roundStats.hrFailed += 1;
+          }
+        });
+      }
+
+      return {
+        _id: app._id,
+        job: app.job,
+        status: app.status,
+        applicationType: app.applicationType,
+        currentRound: app.currentRound,
+        roundResults: summaryMode ? [] : (app.roundResults || []),
+        feedback: summaryMode ? null : app.feedback,
+        feedbackBy: summaryMode ? null : (app.feedbackBy ? `${app.feedbackBy.firstName} ${app.feedbackBy.lastName}` : null),
+        statusComment: app.statusComment,
+        statusHistory: summaryMode ? [] : (app.statusHistory || []),
+        interventions: summaryMode ? [] : (app.interventions || []),
+        resume: summaryMode ? null : app.resume,
+        daysInStage,
+        isStagnant,
+        createdAt: app.createdAt,
+        updatedAt: app.updatedAt
+      };
+    });
+
+    const diagnosticAlert = stagnantCount >= 1
+      ? {
+        riskLevel: 'warning',
+        bottleneckStage: 'Pending Stage Response',
+        message: `Student has ${stagnantCount} active application(s) awaiting movement for over 7 days.`
+      }
+      : {
+        riskLevel: 'low',
+        bottleneckStage: 'Normal Progression',
+        message: 'Student pipeline metrics are progression-steady with no severe bottlenecks detected.'
+      };
+
+    const summaryStats = {
+      totalApplications: applications.length,
+      activeApplications: activeCount,
+      stagnantApplications: stagnantCount,
+      totalOffered: offeredCount,
+      totalRejected: rejectedCount,
+      avgDaysInPipeline: applications.length > 0 ? parseFloat((totalDaysInPipeline / applications.length).toFixed(1)) : 0,
+      roundStats
+    };
+
+    res.json({
+      student: {
+        _id: student._id,
+        name: `${student.firstName} ${student.lastName}`,
+        email: student.email,
+        phone: student.phone,
+        campus: student.campus?.name || 'Unassigned',
+        joiningDate: student.studentProfile?.joiningDate || null,
+        monthsSpent: getMonthsSpent(student.studentProfile?.joiningDate, student.createdAt),
+        enrollmentNumber: student.studentProfile?.enrollmentNumber || '',
+        department: student.studentProfile?.department || '',
+        currentSchool: student.studentProfile?.currentSchool || '',
+        skills: student.studentProfile?.technicalSkills || [],
+        jobReadiness: jobReadiness ? {
+          overallStatus: jobReadiness.overallStatus,
+          score: jobReadiness.readinessScore || null
+        } : null
+      },
+      summaryStats,
+      diagnosticAlert,
+      applications: formattedApplications
+    });
+  } catch (error) {
+    console.error('Student 360 error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/applications/:id/interventions:
+ *   post:
+ *     summary: Log PoC/Coordinator intervention for an application
+ *     tags: [Applications]
+ */
+router.post('/:id/interventions', auth, authorize('coordinator', 'campus_poc', 'manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { actionType, note, remedialTag } = req.body;
+
+    if (!note || !note.trim()) {
+      return res.status(400).json({ message: 'Intervention note is required' });
+    }
+
+    const application = await Application.findById(id).populate('student', 'firstName lastName campus email');
+    if (!application) {
+      return res.status(404).json({ message: 'Application not found' });
+    }
+
+    if (req.user.role === 'campus_poc' && application.student?.campus?.toString() !== req.user.campus?.toString()) {
+      return res.status(403).json({ message: 'Not authorized to log intervention for student of another campus' });
+    }
+
+    const newIntervention = {
+      actionType: actionType || 'other',
+      note: note.trim(),
+      remedialTag: remedialTag || '',
+      createdBy: req.userId,
+      createdAt: new Date()
+    };
+
+    application.interventions.push(newIntervention);
+    await application.save();
+
+    await application.populate('interventions.createdBy', 'firstName lastName role');
+
+    res.json({
+      message: 'Intervention logged successfully',
+      interventions: application.interventions
+    });
+  } catch (error) {
+    console.error('Log intervention error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -72,6 +72,42 @@ const applicationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  // Coordinator comment associated with current status (e.g., reason for closing)
+  statusComment: {
+    type: String,
+    default: ''
+  },
+  // History of status changes for audit / display to students
+  statusHistory: [{
+    status: String,
+    changedAt: Date,
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    comment: String
+  }],
+  // Intervention history logged by PoC, Coordinator, or Manager
+  interventions: [{
+    actionType: {
+      type: String,
+      enum: ['mock_interview_scheduled', 'hr_followup', 'resume_review', 'poc_counseling', 'other'],
+      default: 'other'
+    },
+    note: {
+      type: String,
+      required: true
+    },
+    remedialTag: {
+      type: String,
+      default: ''
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   offerDetails: {
     salary: Number,
     joiningDate: Date,
@@ -84,5 +120,6 @@ const applicationSchema = new mongoose.Schema({
 
 // Compound index for unique applications
 applicationSchema.index({ student: 1, job: 1 }, { unique: true });
+applicationSchema.index({ job: 1, student: 1, status: 1 });
 
 module.exports = mongoose.model('Application', applicationSchema);

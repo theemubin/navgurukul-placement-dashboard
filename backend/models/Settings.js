@@ -165,6 +165,16 @@ const settingsSchema = new mongoose.Schema({
     testMode: { type: Boolean, default: false },    // Test mode (don't send actual notifications)
     pingRoles: { type: [String], default: [] }      // Discord Role IDs to ping in job thread (e.g. ['123456789'])
   },
+  interestRequestDigest: {
+    morning: {
+      lastSentAt: { type: Date, default: null },
+      lastCount: { type: Number, default: 0 }
+    },
+    evening: {
+      lastSentAt: { type: Date, default: null },
+      lastCount: { type: Number, default: 0 }
+    }
+  },
   // Hiring Partners logos for public showcase
   hiringPartners: [{
     name: { type: String, required: true },

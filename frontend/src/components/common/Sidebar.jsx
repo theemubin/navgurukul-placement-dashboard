@@ -8,7 +8,7 @@ import {
   Image as ImageIcon, Globe, Search, ShieldCheck, Database, Sparkles
 } from 'lucide-react';
 
-const Sidebar = ({ isOpen, onClose }) => {
+const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
   const { user } = useAuth();
   const location = useLocation();
   const [forumUnreadCount, setForumUnreadCount] = useState(0);
@@ -21,27 +21,19 @@ const Sidebar = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (user?.role === 'coordinator') {
       fetchUnreadCount();
-      const interval = setInterval(fetchUnreadCount, 30000);
-      return () => clearInterval(interval);
     }
+    onForumCountChange?.(0);
     if (user?.role === 'campus_poc') {
       fetchPoCCounts();
-      const interval = setInterval(fetchPoCCounts, 30000);
-      return () => clearInterval(interval);
     }
     if (user?.role === 'student') {
       fetchStudentCounts();
-      const interval = setInterval(fetchStudentCounts, 60000);
-      return () => clearInterval(interval);
     }
   }, [user]);
 
   const fetchStudentCounts = async () => {
     try {
-      const [readinessRes, matchingRes] = await Promise.all([
-        jobReadinessAPI.getMyStatus().catch(() => ({ data: null })),
-        jobAPI.getMatchingJobs().catch(() => ({ data: [] }))
-      ]);
+      const readinessRes = await jobReadinessAPI.getMyStatus().catch(() => ({ data: null }));
 
       const config = readinessRes?.data?.config || [];
       const criteriaStatus = readinessRes?.data?.readiness?.criteriaStatus || [];
@@ -50,8 +42,6 @@ const Sidebar = ({ isOpen, onClose }) => {
       const pending = Math.max(0, total - submitted);
       setPendingReadinessCount(pending);
 
-      const matching = Array.isArray(matchingRes?.data) ? matchingRes.data.length : (matchingRes?.data?.length || 0);
-      setEligibleJobsCount(matching || 0);
     } catch (error) {
       console.error('Error fetching student counts:', error);
     }
@@ -65,6 +55,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       ]);
       const count = questionRes.data.filter(q => !q.answer).length;
       setForumUnreadCount(count);
+      onForumCountChange?.(count);
       setPendingInterestCount(interestRes.data?.total || interestRes.data?.counts?.pending || 0);
     } catch (error) {
       console.error('Error fetching forum unread count:', error);
@@ -111,6 +102,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/campus-poc/self-applications', icon: ExternalLink, label: 'Self Applications' },
           { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests', badge: pendingInterestCount },
           { path: '/campus-poc/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
+          { path: '/campus-poc/stagnation', icon: ShieldAlert, label: 'Stagnation & Bottlenecks' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
         ];
@@ -125,6 +117,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/coordinator/profile-options', icon: Settings, label: 'Profile Options' },
           { path: '/coordinator/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/coordinator/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
+          { path: '/coordinator/stagnation', icon: ShieldAlert, label: 'Stagnation & Bottlenecks' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' },
           { path: '/coordinator/settings', icon: Key, label: 'Settings' }
@@ -140,6 +133,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: '/manager/profile-options', icon: Settings, label: 'Profile Options' },
           { path: '/manager/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/manager/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
+          { path: '/manager/stagnation', icon: ShieldAlert, label: 'Stagnation & Bottlenecks' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' },
           {path: '/manager/communication', icon: MessageCircle, label: 'Communication'},

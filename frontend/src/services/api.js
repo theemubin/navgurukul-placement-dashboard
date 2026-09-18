@@ -58,12 +58,57 @@ api.interceptors.response.use(
   }
 );
 
+const createCachedGetter = (requestFn, { ttl = 5 * 60 * 1000 } = {}) => {
+  const cacheStore = new Map();
+  const inflightStore = new Map();
+
+  return async (options = {}) => {
+    const forceRefresh = options.forceRefresh === true;
+    const cacheTTL = options.cacheTTL ?? ttl;
+    const now = Date.now();
+    const requestOptions = { ...options };
+    delete requestOptions.forceRefresh;
+    delete requestOptions.cacheTTL;
+
+    const cacheKey = JSON.stringify(requestOptions || {});
+    const cachedEntry = cacheStore.get(cacheKey);
+
+    if (!forceRefresh && cachedEntry && (now - cachedEntry.at) < cacheTTL) {
+      return cachedEntry.value;
+    }
+
+    if (!forceRefresh && inflightStore.has(cacheKey)) {
+      return inflightStore.get(cacheKey);
+    }
+
+    const inflight = requestFn(requestOptions)
+      .then((response) => {
+        cacheStore.set(cacheKey, { value: response, at: Date.now() });
+        return response;
+      })
+      .finally(() => {
+        inflightStore.delete(cacheKey);
+      });
+
+    inflightStore.set(cacheKey, inflight);
+    return inflight;
+  };
+};
+
+const cachedMatchingJobsGetter = createCachedGetter(() => api.get('/jobs/matching'), { ttl: 2 * 60 * 1000 });
+const cachedMyStatusGetter = createCachedGetter(() => api.get('/job-readiness/my-status'), { ttl: 2 * 60 * 1000 });
+const cachedCheckUrlGetter = createCachedGetter(({ url }) => api.post('/utils/check-url', { url }), { ttl: 60 * 1000 });
+const cachedSkillsGetter = createCachedGetter(({ params }) => api.get('/skills', { params }), { ttl: 10 * 60 * 1000 });
+const cachedCyclesGetter = createCachedGetter(({ params }) => api.get('/placement-cycles', { params }), { ttl: 5 * 60 * 1000 });
+const cachedCampusesGetter = createCachedGetter(() => api.get('/campuses'), { ttl: 10 * 60 * 1000 });
+const cachedMeGetter = createCachedGetter(() => api.get('/auth/me', { withCredentials: true }), { ttl: 30 * 1000 });
+
 // Auth APIs
 export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   register: (data) => api.post('/auth/register', data),
   // getMe supports cookie-based auth: include credentials when requesting
-  getMe: () => api.get('/auth/me', { withCredentials: true }),
+  getMe: (options = {}) => cachedMeGetter(options),
   changePassword: (data) => api.put('/auth/change-password', data),
   // Exchange short-lived code (cookie will be set by server)
   exchange: (code) => api.post('/auth/google/exchange', { code }, { withCredentials: true }),
@@ -72,8 +117,10 @@ export const authAPI = {
 };
 
 // User APIs
+const cachedGetStudents = createCachedGetter(({ params }) => api.get('/users/students', { params }), { ttl: 30 * 1000 });
+
 export const userAPI = {
-  getStudents: (params) => api.get('/users/students', { params }),
+  getStudents: (params, options = {}) => cachedGetStudents({ params, ...options }),
   getStudent: (id) => api.get(`/users/students/${id}`),
   updateProfile: (data) => api.put('/users/profile', data),
   submitProfile: () => api.post('/users/profile/submit'),
@@ -128,8 +175,13 @@ export const userAPI = {
 };
 
 // Settings APIs
+let pipelineStagesCache = null;
+let pipelineStagesCacheAt = 0;
+let pipelineStagesCachePromise = null;
+
 export const settingsAPI = {
-  getSettings: () => api.get('/settings'),
+  getSettings: createCachedGetter(() => api.get('/settings'), { ttl: 10 * 60 * 1000 }),
+  getRoleCategories: createCachedGetter(() => api.get('/settings/role-categories'), { ttl: 10 * 60 * 1000 }),
   getSetting: (key) => api.get(`/settings/${key}`),
   updateSetting: (key, value) => api.put(`/settings/${key}`, { value }),
   addItem: (key, item) => api.post(`/settings/${key}/add`, { item }),
@@ -139,7 +191,32 @@ export const settingsAPI = {
   addSchool: (school) => api.post('/settings/schools', { school }),
   syncSchools: () => api.post('/settings/sync-schools'),
   // Pipeline stages
-  getPipelineStages: () => api.get('/settings/pipeline-stages'),
+  getPipelineStages: async (options = {}) => {
+    const forceRefresh = options.forceRefresh === true;
+    const cacheTTL = options.cacheTTL ?? 5 * 60 * 1000;
+    const now = Date.now();
+
+    if (!forceRefresh && pipelineStagesCache && (now - pipelineStagesCacheAt) < cacheTTL) {
+      return { data: { data: pipelineStagesCache } };
+    }
+
+    if (!forceRefresh && pipelineStagesCachePromise) {
+      return pipelineStagesCachePromise;
+    }
+
+    pipelineStagesCachePromise = api.get('/settings/pipeline-stages')
+      .then((response) => {
+        const stages = response.data?.data || [];
+        pipelineStagesCache = stages;
+        pipelineStagesCacheAt = Date.now();
+        return response;
+      })
+      .finally(() => {
+        pipelineStagesCachePromise = null;
+      });
+
+    return pipelineStagesCachePromise;
+  },
   createPipelineStage: (stage) => api.post('/settings/pipeline-stages', stage),
   updatePipelineStage: (stageId, updates) => api.put(`/settings/pipeline-stages/${stageId}`, updates),
   deletePipelineStage: (stageId) => api.delete(`/settings/pipeline-stages/${stageId}`),
@@ -159,15 +236,20 @@ export const settingsAPI = {
   addCompanyOption: (companyData) => api.post('/settings/companies/add', companyData),
   updateProficiencyRubrics: (rubrics) => api.put('/settings/proficiency-rubrics', { rubrics }),
   getEducationAnalytics: () => api.get('/settings/analytics/education'),
-  getProfileOptionsAnalytics: () => api.get('/settings/analytics/profile-options'),
+  getProfileOptionsAnalytics: createCachedGetter(() => api.get('/settings/analytics/profile-options'), { ttl: 10 * 60 * 1000 }),
   getOptionStudents: (params) => api.get('/settings/analytics/option-students', { params }),
   renameEducationItem: (data) => api.post('/settings/education/rename', data)
 };
 
 // Job APIs
+const dedupedGetJobs = createCachedGetter(
+  (params) => api.get('/jobs', { params }),
+  { ttl: 0 }
+);
+
 export const jobAPI = {
-  getJobs: (params) => api.get('/jobs', { params }),
-  getMatchingJobs: () => api.get('/jobs/matching'),
+  getJobs: (params) => dedupedGetJobs(params),
+  getMatchingJobs: (options = {}) => cachedMatchingJobsGetter(options),
   getJob: (id) => api.get(`/jobs/${id}`),
   getJobWithMatch: (id) => api.get(`/jobs/${id}/match`),
   getCompanies: () => api.get('/jobs/companies'),
@@ -205,28 +287,67 @@ export const jobAPI = {
   assignCoordinator: (jobId, coordinatorId) => api.patch(`/jobs/${jobId}/coordinator`, { coordinatorId }),
   broadcastJob: (jobId) => api.post(`/jobs/${jobId}/broadcast`),
   bulkUpdate: (jobId, data) => api.post(`/jobs/${jobId}/bulk-update`, data),
-  getCoordinatorJobStats: () => api.get('/jobs/stats/coordinator-jobs')
+  getCoordinatorJobStats: (params) => api.get('/jobs/stats/summary', { params })
 };
 
 // Application APIs
+const cachedGetApplication = createCachedGetter(
+  (id) => {
+    const resolvedId = id && typeof id === 'object' ? (id._id || id.id || id.value || '') : id;
+    return api.get(`/applications/${resolvedId}`);
+  },
+  { ttl: 2 * 60 * 1000 }
+);
+
+const dedupedGetApplications = createCachedGetter(
+  (params) => api.get('/applications', { params, headers: { 'Cache-Control': 'no-cache' } }),
+  { ttl: 0 }
+);
+
+const cachedGetPipelineBottlenecks = createCachedGetter(
+  (params) => api.get('/applications/analytics/bottlenecks', { params }),
+  { ttl: 3 * 60 * 1000 }
+);
+
+const cachedGetStagnantStudents = createCachedGetter(
+  (params) => api.get('/applications/analytics/stagnant-students', { params }),
+  { ttl: 3 * 60 * 1000 }
+);
+
+const cachedGetStudent360Report = createCachedGetter(
+  ({ studentId, params }) => api.get(`/applications/analytics/student-360/${studentId}`, { params }),
+  { ttl: 3 * 60 * 1000 }
+);
+
 export const applicationAPI = {
-  getApplications: (params) => api.get('/applications', { params }),
-  getApplication: (id) => api.get(`/applications/${id}`),
+  // Add no-cache header to avoid conditional requests returning 304
+  getApplications: (params) => dedupedGetApplications(params),
+  getApplication: (id) => cachedGetApplication(id),
   apply: (jobId, coverLetter, customResponses, type = 'regular', resume = '') => api.post('/applications', { jobId, coverLetter, customResponses, type, resume }),
-  updateStatus: (id, status, feedback) =>
-    api.put(`/applications/${id}/status`, { status, feedback }),
+  updateStatus: (id, status, feedbackOrComment, comment) => {
+    // Backwards compatible: if only feedbackOrComment is provided, send it as both feedback and comment
+    const body = comment !== undefined
+      ? { status, feedback: feedbackOrComment, comment }
+      : { status, feedback: feedbackOrComment, comment: feedbackOrComment };
+    return api.put(`/applications/${id}/status`, body);
+  },
   updateRound: (id, roundData) => api.put(`/applications/${id}/rounds`, roundData),
   addRecommendation: (id, reason) => api.put(`/applications/${id}/recommend`, { reason }),
   withdraw: (id) => api.put(`/applications/${id}/withdraw`),
   exportCSV: (params) => api.get('/applications/export/csv', { params, responseType: 'blob' }),
   // Enhanced export with field selection
   getExportFields: () => api.get('/applications/export/fields'),
-  exportXLS: (data) => api.post('/applications/export/xls', data, { responseType: 'blob' })
+  exportXLS: (data) => api.post('/applications/export/xls', data, { responseType: 'blob' }),
+  // Bottlenecks & Stagnation 360 Analytics
+  getPipelineBottlenecks: (params) => cachedGetPipelineBottlenecks(params),
+  getStagnantStudents: (params) => cachedGetStagnantStudents(params),
+  getStudent360Report: (studentId, params) => cachedGetStudent360Report({ studentId, params }),
+  logIntervention: (id, data) => api.post(`/applications/${id}/interventions`, data)
 };
 
 // Skill APIs
 export const skillAPI = {
-  getSkills: (params) => api.get('/skills', { params }),
+  getSkills: (params, options = {}) => cachedSkillsGetter({ params, ...options }),
   getCategories: () => api.get('/skills/categories'),
   getSkill: (id) => api.get(`/skills/${id}`),
   createSkill: (data) => api.post('/skills', data),
@@ -236,7 +357,7 @@ export const skillAPI = {
 
 // Questions APIs (Company Forum)
 export const questionAPI = {
-  getQuestions: (params) => api.get('/questions', { params }),
+  getQuestions: createCachedGetter((params) => api.get('/questions', { params }), { ttl: 60 * 1000 }),
   askQuestion: (data) => api.post('/questions', data),
   answerQuestion: (id, answer) => api.patch(`/questions/${id}/answer`, { answer }),
   deleteQuestion: (id) => api.delete(`/questions/${id}`)
@@ -244,7 +365,7 @@ export const questionAPI = {
 
 // Notification APIs
 export const notificationAPI = {
-  getNotifications: (params) => api.get('/notifications', { params }),
+  getNotifications: createCachedGetter((params) => api.get('/notifications', { params }), { ttl: 30 * 1000 }),
   getUnreadCount: () => api.get('/notifications/unread-count'),
   markAsRead: (id) => api.put(`/notifications/${id}/read`),
   markAllAsRead: () => api.put('/notifications/read-all'),
@@ -253,32 +374,41 @@ export const notificationAPI = {
 };
 
 // Stats APIs
+const cachedDashboardGetter = createCachedGetter((options = {}) => api.get('/stats/dashboard', { params: options.params }), { ttl: 2 * 60 * 1000 });
+const cachedCampusPocStatsGetter = createCachedGetter(({ status } = {}) => api.get('/stats/campus-poc', { params: { status } }), { ttl: 2 * 60 * 1000 });
+const cachedEligibleJobsGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/eligible-jobs', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
+const cachedCompanyTrackingGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
+const cachedSchoolTrackingGetter = createCachedGetter(({ cycleId, summary } = {}) => api.get('/stats/campus-poc/school-tracking', { params: { cycleId, summary } }), { ttl: 2 * 60 * 1000 });
+const cachedStudentSummaryGetter = createCachedGetter(({ params } = {}) => api.get('/stats/campus-poc/student-summary', { params }), { ttl: 2 * 60 * 1000 });
+const cachedCycleStatsGetter = createCachedGetter(() => api.get('/stats/campus-poc/cycle-stats'), { ttl: 2 * 60 * 1000 });
+
 export const statsAPI = {
-  getDashboard: (params) => api.get('/stats/dashboard', { params }),
-  getDashboardStats: (params) => api.get('/stats/dashboard', { params }), // Alias for Manager Dashboard
+  getDashboard: (params, options = {}) => cachedDashboardGetter({ params, ...options }),
+  getDashboardStats: (params, options = {}) => cachedDashboardGetter({ params, ...options }), // Alias for Manager Dashboard
   getReports: (params) => api.get('/stats/reports', { params }),
   getCampusStats: () => api.get('/stats/campus'),
   getStudentStats: () => api.get('/stats/student'),
-  getCampusPocStats: (status) => api.get('/stats/campus-poc', { params: { status } }),
-  getEligibleJobs: (cycleId) => api.get('/stats/campus-poc/eligible-jobs', { params: { cycleId } }),
+  getCampusPocStats: (status, options = {}) => cachedCampusPocStatsGetter({ status, ...options }),
+  getEligibleJobs: (cycleId, options = {}) => cachedEligibleJobsGetter({ cycleId, ...options }),
   getJobEligibleStudents: (jobId) => api.get(`/stats/campus-poc/job/${jobId}/eligible-students`),
   notifyEligibleStudents: (jobId) => api.post(`/stats/campus-poc/job/${jobId}/notify-eligible`),
-  getCompanyTracking: (cycleId) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }),
-  getSchoolTracking: (cycleId) => api.get('/stats/campus-poc/school-tracking', { params: { cycleId } }),
-  getStudentSummary: (params) => api.get('/stats/campus-poc/student-summary', { params }),
-  getCycleStats: () => api.get('/stats/campus-poc/cycle-stats'),
+  getCompanyTracking: (cycleId, options = {}) => cachedCompanyTrackingGetter({ cycleId, ...options }),
+  getSchoolTracking: (cycleId, options = {}) => cachedSchoolTrackingGetter({ cycleId, ...options }),
+  getStudentSummary: (params, options = {}) => cachedStudentSummaryGetter({ params, ...options }),
+  getCycleStats: (options = {}) => cachedCycleStatsGetter(options),
   getCoordinatorStats: (params) => api.get('/stats/coordinator-stats', { params }),
   getHistoricalCycles: (campusId) => api.get('/stats/historical-cycles', { params: { campus: campusId } }),
   getCampusPlacementTrends: () => api.get('/stats/campus-placement-trends'),
   getLongTermStudentsTrend: () => api.get('/stats/long-term-students-trend'),
   getNeverLoggedInList: (params) => api.get('/stats/never-logged-in-list', { params }),
-  getTalentPipeline: (params) => api.get('/stats/talent-pipeline', { params }),
+  getTalentPipeline: createCachedGetter((params) => api.get('/stats/talent-pipeline', { params }), { ttl: 10 * 60 * 1000 }),
+  exportTalentPipeline: (params) => api.get('/stats/talent-pipeline/export', { params, responseType: 'blob' }),
   exportStats: (params) => api.get('/stats/export', { params, responseType: 'blob' })
 };
 
 // Placement Cycle APIs
 export const placementCycleAPI = {
-  getCycles: (params) => api.get('/placement-cycles', { params }),
+  getCycles: (params, options = {}) => cachedCyclesGetter({ params, ...options }),
   createCycle: (data) => api.post('/placement-cycles', data),
   updateCycle: (id, data) => api.put(`/placement-cycles/${id}`, data),
   deleteCycle: (id) => api.delete(`/placement-cycles/${id}`),
@@ -293,7 +423,7 @@ export const placementCycleAPI = {
 
 // Campus APIs
 export const campusAPI = {
-  getCampuses: () => api.get('/campuses'),
+  getCampuses: (options = {}) => cachedCampusesGetter(options),
   getCampus: (id) => api.get(`/campuses/${id}`),
   createCampus: (data) => api.post('/campuses', data),
   updateCampus: (id, data) => api.put(`/campuses/${id}`, data),
@@ -310,7 +440,7 @@ export const atsAPI = {
 
 // Utilities
 export const utilsAPI = {
-  checkUrl: (url) => api.post('/utils/check-url', { url }),
+  checkUrl: (url, options = {}) => cachedCheckUrlGetter({ url, ...options }),
   checkResumeAts: (resumeId = '') => api.post('/utils/resume-ats/check', { resumeId }),
   analyzeScam: (data) => api.post('/utils/analyze-scam', data),
   testAIKey: () => api.post('/utils/test-ai-key'),
@@ -366,7 +496,7 @@ export const jobReadinessAPI = {
   editCriterion: (configId, criteriaId, data) => api.put(`/job-readiness/config/${configId}/criteria/${criteriaId}`, data),
   deleteCriterion: (configId, criteriaId) => api.delete(`/job-readiness/config/${configId}/criteria/${criteriaId}`),
   // Student self-tracking
-  getMyStatus: () => api.get('/job-readiness/my-status'),
+  getMyStatus: (options = {}) => cachedMyStatusGetter(options),
   updateMyCriterion: (criteriaId, data) => {
     // If there's a file, use FormData
     if (data.proofFile) {

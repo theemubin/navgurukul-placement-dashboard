@@ -51,6 +51,7 @@ import POCSelfApplicationsReview from './pages/campus-poc/SelfApplicationsReview
 import POCInterestRequestsReview from './pages/campus-poc/InterestRequestsReview';
 import POCSkills from './pages/campus-poc/Skills';
 import POCCouncilPosts from './pages/campus-poc/CouncilPosts';
+import BottlenecksPage from './pages/common/BottlenecksPage';
 
 // Coordinator Pages
 import CoordinatorDashboard from './pages/coordinator/Dashboard';
@@ -221,6 +222,7 @@ function App() {
         <Route path="notifications" element={<Notifications />} />
         <Route path="jobs/:id" element={<JobDetails />} />
         <Route path="pipeline" element={<PipelineAnalytics />} />
+        <Route path="stagnation" element={<BottlenecksPage />} />
       </Route>
 
       {/* Coordinator Routes */}
@@ -249,6 +251,7 @@ function App() {
         </Route>
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="pipeline" element={<PipelineAnalytics />} />
+        <Route path="stagnation" element={<BottlenecksPage />} />
         <Route path="students/:id" element={<POCStudentDetails />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
@@ -270,6 +273,7 @@ function App() {
         <Route path="profile-options" element={<POCCouncilPosts />} />
         <Route path="job-readiness" element={<UnifiedJobReadiness />} />
         <Route path="pipeline" element={<PipelineAnalytics />} />
+        <Route path="stagnation" element={<BottlenecksPage />} />
         <Route path="communication" element={<ManagerCommunication />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />

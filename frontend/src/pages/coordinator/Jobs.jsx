@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { jobReadinessAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { jobAPI, settingsAPI, applicationAPI, userAPI } from '../../services/api';
-import { LoadingSpinner, StatusBadge, Pagination, EmptyState, ConfirmModal } from '../../components/common/UIComponents';
-import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles, Link as LinkIcon } from 'lucide-react';
+import { LoadingSpinner, StatusBadge, Pagination, EmptyState, ConfirmModal, StatsCard } from '../../components/common/UIComponents';
+import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles, Link as LinkIcon, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import JobsKanban from './JobsKanban';
@@ -13,6 +13,13 @@ import ApplicantTriageModal from './ApplicantTriageModal';
 const CoordinatorJobs = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
+  const [summaryFilter, setSummaryFilter] = useState('all');
+  const [jobSummary, setJobSummary] = useState({ totalJobs: 0, activeJobs: 0, totalPositions: 0, noUpdate7Days: 0, noUpdate14Days: 0, pipelineApplications: 0, selectedPlaced: 0, deadlineClosedHrPending: 0 });
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryRefreshing, setSummaryRefreshing] = useState(false);
+  const [summaryLastUpdated, setSummaryLastUpdated] = useState(null);
+  const fetchSeqRef = useRef(0);
   const location = useLocation();
 
   // Handle jobId from URL for deep linking (open triage)
@@ -63,7 +70,12 @@ const CoordinatorJobs = () => {
 
   const fetchApplicantsForJob = async (jobId) => {
     try {
-      const res = await applicationAPI.getApplications({ job: jobId, limit: 1000 });
+      const res = await applicationAPI.getApplications({
+        job: jobId,
+        status: 'applied,application_stage,hr_shortlisting,interviewing,in_progress,shortlisted',
+        summary: 'triage',
+        limit: 100
+      });
       setModalApplicants(res.data.applications || []);
     } catch (err) {
       console.error('Error fetching applicants', err);
@@ -233,14 +245,40 @@ const CoordinatorJobs = () => {
         hold: triageApplicants.filter(a => a.bucket === 'hold' && a.comment.trim()) // Only process hold if there's feedback
       };
 
+      const requiresNote = (status) => ['selected', 'rejected'].includes(status);
+      const getResolvedNote = (app, fallback) => (app.comment || fallback || '').trim();
+
+      if (grouped.promote.length > 0) {
+        const targetStatus = modalNewStatus || modalJob.status;
+        if (requiresNote(targetStatus)) {
+          const missingNote = grouped.promote.find(a => !getResolvedNote(a, metadata?.promoteComment || ''));
+          if (missingNote) {
+            toast.error('A coordinator note is required for every selected application.');
+            setApplyingModalChanges(false);
+            return;
+          }
+        }
+      }
+
+      if (grouped.exit.length > 0) {
+        const missingNote = grouped.exit.find(a => !getResolvedNote(a, metadata?.exitComment || ''));
+        if (missingNote) {
+          toast.error('A coordinator note is required for every rejected application.');
+          setApplyingModalChanges(false);
+          return;
+        }
+      }
+
       // 1. Handle Promoted (Advance to target status or update current round)
       if (grouped.promote.length > 0) {
+        const promoteComment = metadata?.promoteComment || '';
         const payload = {
           applicationIds: grouped.promote.map(a => a._id),
           action: 'set_status',
           status: modalNewStatus || modalJob.status, // Use job's current status if not advancing
           perApplicationFeedbacks: grouped.promote.reduce((acc, a) => {
-            if (a.comment) acc[a._id] = a.comment;
+            const note = getResolvedNote(a, promoteComment);
+            if (note) acc[a._id] = note;
             return acc;
           }, {})
         };
@@ -256,12 +294,14 @@ const CoordinatorJobs = () => {
 
       // 2. Handle Exited (Reject)
       if (grouped.exit.length > 0) {
+        const exitComment = metadata?.exitComment || '';
         const payload = {
           applicationIds: grouped.exit.map(a => a._id),
           action: 'set_status',
           status: 'rejected',
           perApplicationFeedbacks: grouped.exit.reduce((acc, a) => {
-            acc[a._id] = a.comment; // Mandatory in triage
+            const note = getResolvedNote(a, exitComment);
+            acc[a._id] = note;
             return acc;
           }, {})
         };
@@ -347,12 +387,25 @@ const CoordinatorJobs = () => {
     if (viewMode === 'list') {
       fetchJobs();
     }
-  }, [pagination.current, filters, viewMode]);
+  }, [pagination.current, filters, viewMode, summaryFilter]);
+
+
+  useEffect(() => {
+    fetchJobSummary();
+  }, []);
 
   // Save view mode preference
   useEffect(() => {
     localStorage.setItem('jobsViewMode', viewMode);
   }, [viewMode]);
+
+  useEffect(() => {
+    setSearchInput(filters.search);
+  }, [filters.search]);
+
+  useEffect(() => {
+    setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
+  }, [summaryFilter]);
 
   const fetchPipelineStages = async () => {
     try {
@@ -364,22 +417,62 @@ const CoordinatorJobs = () => {
   };
 
   const fetchJobs = async () => {
+    const requestId = ++fetchSeqRef.current;
     setLoading(true);
     try {
       const response = await jobAPI.getJobs({
         page: pagination.current,
         limit: 10,
+        summary: 'lite',
         search: filters.search || undefined,
         status: filters.status || undefined,
         jobType: filters.jobType || undefined,
-        sortBy: filters.sortBy || undefined
+        sortBy: filters.sortBy || undefined,
+        summaryFilter: summaryFilter !== 'all' ? summaryFilter : undefined
       });
+
+      if (requestId !== fetchSeqRef.current) return;
       setJobs(response.data.jobs);
       setPagination(response.data.pagination);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {
-      setLoading(false);
+      if (requestId === fetchSeqRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const fetchJobSummary = async (refresh = false) => {
+    if (refresh) {
+      setSummaryRefreshing(true);
+    } else {
+      setSummaryLoading(true);
+    }
+    try {
+      const response = await jobAPI.getCoordinatorJobStats({
+        refresh: refresh ? 'true' : undefined
+      });
+      setJobSummary(response.data || { totalJobs: 0, activeJobs: 0, totalPositions: 0, noUpdate7Days: 0, noUpdate14Days: 0, pipelineApplications: 0, selectedPlaced: 0, deadlineClosedHrPending: 0 });
+      setSummaryLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error fetching job summary:', error);
+    } finally {
+      setSummaryLoading(false);
+      setSummaryRefreshing(false);
+    }
+  };
+
+  const applySearch = () => {
+    const nextSearch = searchInput.trim();
+    setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
+    setFilters(prev => (prev.search === nextSearch ? prev : { ...prev, search: nextSearch }));
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applySearch();
     }
   };
 
@@ -606,78 +699,229 @@ const CoordinatorJobs = () => {
         </div>
       </div>
 
-      {/* Kanban View */}
+      {/* Summary Stats */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Summary Stats</h2>
+          <p className="text-xs text-gray-500">
+            {summaryLastUpdated ? `Last refreshed ${summaryLastUpdated.toLocaleTimeString()}` : 'Loaded once on page open'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => fetchJobSummary(true)}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+          disabled={summaryRefreshing}
+        >
+          <RefreshCw className={`w-4 h-4 ${summaryRefreshing ? 'animate-spin' : ''}`} />
+          {summaryRefreshing ? 'Refreshing' : 'Refresh'}
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-8 gap-3">
+            <StatsCard
+              title="Total Jobs"
+              value={summaryLoading ? '...' : jobSummary.totalJobs}
+              icon={Briefcase}
+              color="blue"
+              helpText="All jobs visible to coordinators."
+              active={summaryFilter === 'all'}
+              onClick={() => {
+                setSummaryFilter('all');
+                setViewMode('list');
+              }}
+              compact
+            />
+            <StatsCard
+              title="Active Jobs"
+              value={summaryLoading ? '...' : jobSummary.activeJobs}
+              icon={CheckCircle}
+              color="green"
+              helpText="Jobs that are still open and in progress."
+              active={summaryFilter === 'active'}
+              onClick={() => {
+                setSummaryFilter('active');
+                setViewMode('list');
+              }}
+              compact
+            />
+            <StatsCard
+              title="Total Positions"
+              value={summaryLoading ? '...' : jobSummary.totalPositions}
+              icon={Users}
+              color="indigo"
+              helpText="Sum of positions across all active jobs."
+              active={summaryFilter === 'totalPositions'}
+              onClick={() => {
+                setSummaryFilter('totalPositions');
+                setViewMode('list');
+              }}
+              compact
+            />
+            <StatsCard
+              title="In Pipeline"
+              value={summaryLoading ? '...' : jobSummary.pipelineApplications}
+              icon={Users}
+              color="indigo"
+              helpText="Students from applied to interview stages."
+              active={summaryFilter === 'pipeline'}
+              onClick={() => {
+                setSummaryFilter('pipeline');
+                setViewMode('list');
+              }}
+              compact
+            />
+            <StatsCard
+              title="Deadline Closed, HR Pending"
+              value={summaryLoading ? '...' : jobSummary.deadlineClosedHrPending}
+              icon={Pause}
+              color="red"
+              helpText="Deadline passed and HR shortlisting has not started."
+              active={summaryFilter === 'deadlineClosedHrPending'}
+              onClick={() => {
+                setSummaryFilter('deadlineClosedHrPending');
+                setViewMode('list');
+              }}
+              compact
+            />
+            <StatsCard
+              title="No Update > 7 Days"
+              value={summaryLoading ? '...' : jobSummary.noUpdate7Days}
+              icon={Clock}
+              color="amber"
+              helpText="Jobs that have not changed for more than 7 days."
+              active={summaryFilter === 'noUpdate7Days'}
+              onClick={() => {
+                setSummaryFilter('noUpdate7Days');
+                setViewMode('list');
+              }}
+              compact
+            />
+            <StatsCard
+              title="No Update > 14 Days"
+              value={summaryLoading ? '...' : jobSummary.noUpdate14Days}
+              icon={AlertCircle}
+              color="red"
+              helpText="Jobs that have not changed for more than 14 days."
+              active={summaryFilter === 'noUpdate14Days'}
+              onClick={() => {
+                setSummaryFilter('noUpdate14Days');
+                setViewMode('list');
+              }}
+              compact
+            />
+            <StatsCard
+              title="Selected / Placed"
+              value={summaryLoading ? '...' : jobSummary.selectedPlaced}
+              icon={GraduationCap}
+              color="purple"
+              helpText="Jobs where at least one student has been selected or placed."
+              active={summaryFilter === 'selectedPlaced'}
+              onClick={() => {
+                setSummaryFilter('selectedPlaced');
+                setViewMode('list');
+              }}
+              compact
+            />
+      </div>
+
       {viewMode === 'kanban' ? (
         <JobsKanban onExportJob={openExportModal} />
       ) : (
         <>
-          {/* Filters */}
-          <div className="card border-none shadow-sm bg-gray-50/50">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-              <div className="md:col-span-4 relative group">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-600 transition-colors" />
+      {/* Filters */}
+      <div className="card border-none shadow-sm bg-gray-50/50">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-4">
+            <div className="flex gap-2">
+              <div className="flex flex-1 min-w-0 items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm focus-within:border-primary-500 group">
+                <span className="pointer-events-none flex items-center pl-4 pr-2 text-gray-400 group-focus-within:text-primary-600 transition-colors">
+                  <Search className="w-4 h-4" />
+                </span>
                 <input
                   type="text"
                   placeholder="Search jobs..."
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  className="pl-10 w-full bg-white border-gray-200 focus:border-primary-500 transition-all rounded-xl shadow-sm"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  className="w-full min-w-0 border-0 bg-transparent py-3 pr-4 pl-0 focus:outline-none focus:ring-0"
                 />
               </div>
-
-              <div className="md:col-span-2">
-                <select
-                  value={filters.jobType}
-                  onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
-                  className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
-                >
-                  <option value="">All Types</option>
-                  <option value="full_time">Full Time</option>
-                  <option value="part_time">Part Time</option>
-                  <option value="internship">Internship</option>
-                  <option value="contract">Contract</option>
-                </select>
-              </div>
-
-              <div className="md:col-span-3">
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                  className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
-                >
-                  <option value="">All Status</option>
-                  {pipelineStages.map(stage => (
-                    <option key={stage.id} value={stage.id}>{stage.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="md:col-span-3">
-                <select
-                  value={filters.sortBy}
-                  onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
-                  className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
-                >
-                  <option value="newest">Newest First</option>
-                  <option value="deadline_asc">Deadline (Soonest)</option>
-                  <option value="deadline_desc">Deadline (Latest)</option>
-                  <option value="placements">Most Placements</option>
-                </select>
-              </div>
+              <button
+                type="button"
+                onClick={applySearch}
+                className="shrink-0 px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors"
+              >
+                Search
+              </button>
             </div>
-
-            {(filters.search || filters.jobType || filters.status || filters.sortBy !== 'newest') && (
-              <div className="flex justify-end mt-3">
-                <button
-                  onClick={() => setFilters({ search: '', status: '', jobType: '', sortBy: 'newest' })}
-                  className="text-[10px] font-black text-red-500 hover:text-red-700 uppercase tracking-widest flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-red-50 shadow-sm transition-all"
-                >
-                  <X className="w-3 h-3" />
-                  Reset Filters
-                </button>
-              </div>
-            )}
           </div>
+
+          <div className="md:col-span-2">
+            <select
+              value={filters.jobType}
+              onChange={(e) => {
+                setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
+                setFilters({ ...filters, jobType: e.target.value });
+              }}
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+            >
+              <option value="">All Types</option>
+              <option value="full_time">Full Time</option>
+              <option value="part_time">Part Time</option>
+              <option value="internship">Internship</option>
+              <option value="contract">Contract</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-3">
+            <select
+              value={filters.status}
+              onChange={(e) => {
+                setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
+                setFilters({ ...filters, status: e.target.value });
+              }}
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+            >
+              <option value="">All Status</option>
+              {pipelineStages.map(stage => (
+                <option key={stage.id} value={stage.id}>{stage.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="md:col-span-3">
+            <select
+              value={filters.sortBy}
+              onChange={(e) => {
+                setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
+                setFilters({ ...filters, sortBy: e.target.value });
+              }}
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+            >
+              <option value="newest">Newest First</option>
+              <option value="deadline_asc">Deadline (Soonest)</option>
+              <option value="deadline_desc">Deadline (Latest)</option>
+              <option value="placements">Most Placements</option>
+            </select>
+          </div>
+        </div>
+
+        {(filters.search || filters.jobType || filters.status || filters.sortBy !== 'newest') && (
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={() => {
+                setSearchInput('');
+                setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
+                setFilters({ search: '', status: '', jobType: '', sortBy: 'newest' });
+              }}
+              className="text-[10px] font-black text-red-500 hover:text-red-700 uppercase tracking-widest flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-red-50 shadow-sm transition-all"
+            >
+              <X className="w-3 h-3" />
+              Reset Filters
+            </button>
+          </div>
+        )}
+      </div>
 
           {/* Jobs List */}
           {loading ? (
@@ -732,7 +976,7 @@ const CoordinatorJobs = () => {
               ))}
             </div>
           ) : jobs.length > 0 ? (
-            <>
+            <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4">
                 {jobs.map((job) => (
                   <div key={job._id} className="job-card group">
@@ -904,7 +1148,7 @@ const CoordinatorJobs = () => {
                 total={pagination.pages}
                 onPageChange={(page) => setPagination({ ...pagination, current: page })}
               />
-            </>
+            </div>
           ) : (
             <EmptyState
               icon={Briefcase}

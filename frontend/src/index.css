@@ -64,7 +64,7 @@ textarea {
 
 /* Cards */
 .card {
-  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6;
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7;
 }
 
 /* Status badges */

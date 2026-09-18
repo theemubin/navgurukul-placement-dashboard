@@ -237,7 +237,7 @@ const JobDetails = () => {
 
   const checkIfApplied = async () => {
     try {
-      const response = await applicationAPI.getApplications({ job: id });
+      const response = await applicationAPI.getApplications({ job: id, limit: 1 });
       setHasApplied(response.data.applications.length > 0);
     } catch (error) {
       console.error('Error checking application status:', error);
@@ -363,7 +363,12 @@ const JobDetails = () => {
     try {
       const [eligibleRes, appsRes] = await Promise.all([
         statsAPI.getJobEligibleStudents(id),
-        applicationAPI.getApplications({ job: id, limit: 1000 })
+        applicationAPI.getApplications({
+          job: id,
+          status: 'applied,application_stage,hr_shortlisting,interviewing,in_progress,shortlisted,selected,rejected,withdrawn,filled,placed',
+          summary: 'triage',
+          limit: 1000
+        })
       ]);
       setEligibleStudentsModal({ 
         open: true, 
@@ -1562,7 +1567,7 @@ const JobDetails = () => {
         isOpen={eligibleStudentsModal.open}
         onClose={() => setEligibleStudentsModal(prev => ({ ...prev, open: false }))}
         title={`Job Candidates for ${job.title}`}
-        size="xl"
+        size="2xl"
         headerActions={
           eligibleStudentsModal.activeTab === 'eligible' && (
             <button
@@ -1654,40 +1659,40 @@ const JobDetails = () => {
               {eligibleStudentsModal.activeTab === 'eligible' && (
                 <>
                   {eligibleStudentsModal.students.filter(s => !s.hasApplied).length > 0 ? (
-                    <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-                      <table className="w-full text-left">
+                    <div className="overflow-hidden rounded-xl border border-gray-100 shadow-sm bg-white">
+                      <table className="w-full table-fixed text-left">
                         <thead className="bg-gray-50 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b">
                           <tr>
-                            <th className="px-4 py-3">Student</th>
-                            <th className="px-4 py-3">Skills</th>
-                            <th className="px-4 py-3 text-center">Eligibility</th>
-                            <th className="px-4 py-3 text-right">Action</th>
+                            <th className="px-3 py-3 w-[40%]">Student</th>
+                            <th className="px-3 py-3 w-[34%]">Skills</th>
+                            <th className="px-3 py-3 text-center w-[16%]">Eligibility</th>
+                            <th className="px-3 py-3 text-right w-[10%]">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {eligibleStudentsModal.students.filter(s => !s.hasApplied).map((student) => (
                             <tr key={student._id} className="hover:bg-gray-50 transition-colors group">
-                              <td className="px-4 py-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-primary-50 text-primary-700 flex items-center justify-center font-bold text-xs">
+                              <td className="px-3 py-3 align-top">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-full bg-primary-50 text-primary-700 flex items-center justify-center font-bold text-[10px] shrink-0">
                                     {student.firstName?.[0]}{student.lastName?.[0]}
                                   </div>
-                                  <div>
-                                    <p className="font-bold text-gray-900 text-sm">{student.firstName} {student.lastName}</p>
-                                    <p className="text-[10px] text-gray-500 font-medium">{student.email}</p>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-gray-900 text-xs leading-tight truncate">{student.firstName} {student.lastName}</p>
+                                    <p className="text-[10px] text-gray-500 font-medium truncate">{student.email}</p>
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-4">
-                                <div className="flex flex-wrap gap-1">
+                              <td className="px-3 py-3 align-top">
+                                <div className="flex flex-wrap gap-1 max-w-full">
                                   {student.studentProfile?.technicalSkills?.slice(0, 2).map((s, i) => (
-                                     <span key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-600">{s.skillName}</span>
+                                     <span key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[9px] font-bold text-gray-600 truncate max-w-full">{s.skillName}</span>
                                   ))}
                                   {student.studentProfile?.technicalSkills?.length > 2 && <span className="text-[10px] text-gray-400">+{student.studentProfile.technicalSkills.length - 2}</span>}
                                 </div>
                               </td>
-                              <td className="px-4 py-4 text-center">
-                                <div className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[10px] font-black ${
+                              <td className="px-3 py-3 text-center align-top">
+                                <div className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[9px] font-black whitespace-nowrap ${
                                   student.skillMatch === 100 ? 'bg-green-50 text-green-700' :
                                   student.skillMatch >= 50 ? 'bg-yellow-50 text-yellow-700' :
                                   'bg-orange-50 text-orange-700'
@@ -1695,12 +1700,12 @@ const JobDetails = () => {
                                   {student.skillMatch ?? 100}% MATCH
                                 </div>
                               </td>
-                              <td className="px-4 py-4 text-right">
+                              <td className="px-3 py-3 text-right align-top">
                                 <Link 
                                   to={`/campus-poc/students/${student._id}`}
-                                  className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                                  className="p-1 text-gray-400 hover:text-primary-600 transition-colors inline-block"
                                 >
-                                  <Eye className="w-4 h-4" />
+                                  <Eye className="w-3.5 h-3.5" />
                                 </Link>
                               </td>
                             </tr>
@@ -1721,15 +1726,15 @@ const JobDetails = () => {
               {eligibleStudentsModal.activeTab === 'applied' && (
                 <>
                   {eligibleStudentsModal.appliedStudents.length > 0 ? (
-                    <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-                      <table className="w-full text-left">
+                    <div className="overflow-hidden rounded-xl border border-gray-100 shadow-sm bg-white">
+                      <table className="w-full table-fixed text-left">
                         <thead className="bg-gray-50 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b">
                           <tr>
-                            <th className="px-4 py-3">Student</th>
-                            <th className="px-4 py-3">Applied Date</th>
-                            <th className="px-4 py-3 text-center">Status</th>
-                            <th className="px-4 py-3 text-right">Resume</th>
-                            <th className="px-4 py-3 text-right">Action</th>
+                            <th className="px-3 py-3 w-[34%]">Student</th>
+                            <th className="px-3 py-3 w-[18%]">Applied</th>
+                            <th className="px-3 py-3 text-center w-[20%]">Status</th>
+                            <th className="px-3 py-3 text-right w-[14%]">Resume</th>
+                            <th className="px-3 py-3 text-right w-[14%]">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
@@ -1737,45 +1742,45 @@ const JobDetails = () => {
                             const student = app.student || {};
                             return (
                               <tr key={app._id} className="hover:bg-gray-50 transition-colors group">
-                                <td className="px-4 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs">
+                                <td className="px-3 py-3 align-top">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-[10px] shrink-0">
                                       {student.firstName?.[0]}{student.lastName?.[0]}
                                     </div>
-                                    <div>
-                                      <p className="font-bold text-gray-900 text-sm">{student.firstName} {student.lastName}</p>
-                                      <p className="text-[10px] text-gray-500 font-medium">{student.email}</p>
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-gray-900 text-xs leading-tight truncate">{student.firstName} {student.lastName}</p>
+                                      <p className="text-[10px] text-gray-500 font-medium truncate">{student.email}</p>
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-4 py-4 text-sm text-gray-600">
+                                  <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap align-top">
                                   {format(new Date(app.createdAt), 'MMM dd, yyyy')}
                                 </td>
-                                <td className="px-4 py-4 text-center">
+                                  <td className="px-3 py-3 text-center align-top">
                                   <StatusBadge status={app.status} />
                                 </td>
-                                <td className="px-4 py-4 text-right">
+                                  <td className="px-3 py-3 text-right align-top">
                                   {app.resume ? (
                                     <a
                                       href={app.resume.startsWith('http') ? app.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.resume}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="p-1.5 text-primary-600 hover:text-primary-800 transition-colors inline-block"
+                                        className="p-1 text-primary-600 hover:text-primary-800 transition-colors inline-block"
                                       title="View Resume"
                                     >
-                                      <FileText className="w-4 h-4" />
+                                        <FileText className="w-3.5 h-3.5" />
                                     </a>
                                   ) : (
                                     <span className="text-[10px] text-gray-400 font-bold uppercase">No Resume</span>
                                   )}
                                 </td>
-                                <td className="px-4 py-4 text-right">
+                                  <td className="px-3 py-3 text-right align-top">
                                   <Link 
                                     to={`/campus-poc/students/${student._id}`}
-                                    className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                                      className="p-1 text-gray-400 hover:text-primary-600 transition-colors inline-block"
                                     title="View Profile"
                                   >
-                                    <Eye className="w-4 h-4" />
+                                      <Eye className="w-3.5 h-3.5" />
                                   </Link>
                                 </td>
                               </tr>
@@ -1797,15 +1802,15 @@ const JobDetails = () => {
               {eligibleStudentsModal.activeTab === 'selected' && (
                 <>
                   {eligibleStudentsModal.appliedStudents.filter(app => app.status === 'selected').length > 0 ? (
-                    <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-                      <table className="w-full text-left">
+                    <div className="overflow-hidden rounded-xl border border-gray-100 shadow-sm bg-white">
+                      <table className="w-full table-fixed text-left">
                         <thead className="bg-gray-50 text-gray-500 text-[10px] font-black uppercase tracking-widest border-b">
                           <tr>
-                            <th className="px-4 py-3">Student</th>
-                            <th className="px-4 py-3">Applied Date</th>
-                            <th className="px-4 py-3 text-center">Status</th>
-                            <th className="px-4 py-3 text-right">Resume</th>
-                            <th className="px-4 py-3 text-right">Action</th>
+                            <th className="px-3 py-3 w-[34%]">Student</th>
+                            <th className="px-3 py-3 w-[18%]">Applied</th>
+                            <th className="px-3 py-3 text-center w-[20%]">Status</th>
+                            <th className="px-3 py-3 text-right w-[14%]">Resume</th>
+                            <th className="px-3 py-3 text-right w-[14%]">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
@@ -1813,45 +1818,45 @@ const JobDetails = () => {
                             const student = app.student || {};
                             return (
                               <tr key={app._id} className="hover:bg-gray-50 transition-colors group">
-                                <td className="px-4 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-green-50 text-green-700 flex items-center justify-center font-bold text-xs">
+                                <td className="px-3 py-3 align-top">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-7 h-7 rounded-full bg-green-50 text-green-700 flex items-center justify-center font-bold text-[10px] shrink-0">
                                       {student.firstName?.[0]}{student.lastName?.[0]}
                                     </div>
-                                    <div>
-                                      <p className="font-bold text-gray-900 text-sm">{student.firstName} {student.lastName}</p>
-                                      <p className="text-[10px] text-gray-500 font-medium">{student.email}</p>
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-gray-900 text-xs leading-tight truncate">{student.firstName} {student.lastName}</p>
+                                      <p className="text-[10px] text-gray-500 font-medium truncate">{student.email}</p>
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-4 py-4 text-sm text-gray-600">
+                                  <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap align-top">
                                   {format(new Date(app.createdAt), 'MMM dd, yyyy')}
                                 </td>
-                                <td className="px-4 py-4 text-center">
+                                  <td className="px-3 py-3 text-center align-top">
                                   <StatusBadge status={app.status} />
                                 </td>
-                                <td className="px-4 py-4 text-right">
+                                  <td className="px-3 py-3 text-right align-top">
                                   {app.resume ? (
                                     <a
                                       href={app.resume.startsWith('http') ? app.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.resume}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="p-1.5 text-primary-600 hover:text-primary-800 transition-colors inline-block"
+                                        className="p-1 text-primary-600 hover:text-primary-800 transition-colors inline-block"
                                       title="View Resume"
                                     >
-                                      <FileText className="w-4 h-4" />
+                                        <FileText className="w-3.5 h-3.5" />
                                     </a>
                                   ) : (
                                     <span className="text-[10px] text-gray-400 font-bold uppercase">No Resume</span>
                                   )}
                                 </td>
-                                <td className="px-4 py-4 text-right">
+                                  <td className="px-3 py-3 text-right align-top">
                                   <Link 
                                     to={`/campus-poc/students/${student._id}`}
-                                    className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                                      className="p-1 text-gray-400 hover:text-primary-600 transition-colors inline-block"
                                     title="View Profile"
                                   >
-                                    <Eye className="w-4 h-4" />
+                                      <Eye className="w-3.5 h-3.5" />
                                   </Link>
                                 </td>
                               </tr>

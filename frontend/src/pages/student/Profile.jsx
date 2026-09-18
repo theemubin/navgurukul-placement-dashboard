@@ -5,7 +5,7 @@ import { authAPI, userAPI, settingsAPI, campusAPI, placementCycleAPI, skillAPI, 
 import { LoadingSpinner } from '../../components/common/UIComponents';
 import SearchableSelect from '../../components/common/SearchableSelect';
 import {
-  User, Mail, Phone, GraduationCap, Upload, Save, Send,
+  User, Mail, Phone, GraduationCap, Upload, Save,
   Linkedin, Github, Globe, BookOpen, Languages, Brain,
   MapPin, Calendar, Briefcase, CheckCircle, Clock, AlertCircle,
   Plus, Trash2, Award, Building2, Search, MessageSquare
@@ -103,6 +103,8 @@ const StudentProfile = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [profileHydrated, setProfileHydrated] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [fetchingPincode, setFetchingPincode] = useState(false);
   const [activeTab, setActiveTab] = useState('personal');
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -158,6 +160,24 @@ const StudentProfile = () => {
   const [atsCheckingId, setAtsCheckingId] = useState(null);
   const [atsResult, setAtsResult] = useState(null);
   const [atsPrompts, setAtsPrompts] = useState(null);
+  const initialHydrationRef = useRef(true);
+  const draftStorageKey = `student-profile-draft:${user?._id || user?.id || user?.email || 'current'}`;
+
+  useEffect(() => {
+    if (!profileHydrated) return;
+
+    if (initialHydrationRef.current) {
+      initialHydrationRef.current = false;
+      return;
+    }
+
+    setHasUnsavedChanges(true);
+    try {
+      localStorage.setItem(draftStorageKey, JSON.stringify(formData));
+    } catch (error) {
+      console.warn('Unable to save profile draft locally:', error);
+    }
+  }, [draftStorageKey, formData, profileHydrated]);
 
   const schoolList = settings.schools && settings.schools.length > 0
     ? settings.schools
@@ -205,10 +225,19 @@ const StudentProfile = () => {
 
   const fetchProfile = async () => {
     let data = null;
+    initialHydrationRef.current = true;
+    setProfileHydrated(false);
 
     try {
       const response = await authAPI.getMe();
       data = response.data;
+      let localDraft = null;
+      try {
+        const storedDraft = localStorage.getItem(draftStorageKey);
+        localDraft = storedDraft ? JSON.parse(storedDraft) : null;
+      } catch (error) {
+        localDraft = null;
+      }
       setProfile(data);
       setSelectedCampus(data.campus?._id || data.campus || '');
       setSelectedPlacementCycle(data.placementCycle?._id || data.placementCycle || '');
@@ -301,6 +330,19 @@ const StudentProfile = () => {
       } else {
         setAtsResult(null);
       }
+
+      if (localDraft && typeof localDraft === 'object') {
+        setFormData(prev => ({
+          ...prev,
+          ...localDraft,
+          profileStatus: data.studentProfile?.profileStatus || prev.profileStatus,
+          revisionNotes: data.studentProfile?.revisionNotes || prev.revisionNotes
+        }));
+        setHasUnsavedChanges(true);
+      } else {
+        setHasUnsavedChanges(false);
+      }
+      setProfileHydrated(true);
     } catch (error) {
       toast.error('Error loading profile');
     } finally {
@@ -486,7 +528,7 @@ const StudentProfile = () => {
   };
 
   const handleSave = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     setSaving(true);
     try {
       // Validate resume link before saving if present
@@ -522,6 +564,8 @@ const StudentProfile = () => {
       await userAPI.updateProfile(profileData);
       toast.success('Profile updated successfully');
       updateUser({ firstName: formData.firstName, lastName: formData.lastName });
+      localStorage.removeItem(draftStorageKey);
+      setHasUnsavedChanges(false);
       fetchProfile();
     } catch (error) {
       console.error('Profile update error:', error);
@@ -555,6 +599,8 @@ const StudentProfile = () => {
       try {
         await userAPI.updateProfile({ ...formData, campus: selectedCampus, gender: formData.gender });
         toast.success('Profile saved');
+        localStorage.removeItem(draftStorageKey);
+        setHasUnsavedChanges(false);
       } catch (saveErr) {
         toast.error(saveErr.response?.data?.message || 'Error saving profile before submission');
         setSubmitting(false);
@@ -813,41 +859,48 @@ const StudentProfile = () => {
 
   const SectionSaveButton = ({ className = "" }) => (
     canEdit ? (
-      <button form="profile-form" type="submit" disabled={saving} className={`btn btn-primary flex items-center gap-2 shadow-lg hover:shadow-xl transition-all ${className}`}>
+      <button
+        form={hasUnsavedChanges ? 'profile-form' : undefined}
+        type={hasUnsavedChanges ? 'submit' : 'button'}
+        onClick={hasUnsavedChanges ? undefined : handleSubmitForApproval}
+        disabled={saving || submitting || formData.profileStatus === 'pending_approval'}
+        className={`btn btn-primary flex items-center gap-2 shadow-lg hover:shadow-xl transition-all ${className}`}
+      >
         <Save className="w-4 h-4" />
-        {saving ? 'Saving...' : 'Save Changes'}
+        {saving ? 'Saving...' : submitting ? 'Submitting...' : formData.profileStatus === 'pending_approval' ? 'Pending Review' : hasUnsavedChanges ? 'Save Changes' : 'Submit for Approval'}
       </button>
     ) : null
   );
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Sticky Header with Save Button and Tabs */}
-      <div className="sticky top-0 z-20 bg-gray-50/95 backdrop-blur-sm py-4 -mt-4 mb-2 border-b border-gray-200 shadow-sm">
-        <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-            <p className="text-sm text-gray-600">Manage your personal, academic, and skill information</p>
+    <div className="space-y-6 animate-fadeIn px-1 md:px-2 lg:px-3">
+      {/* Floating header with the single save/submit action */}
+      <div className="sticky top-16 z-20 bg-white/95 backdrop-blur-sm px-4 py-3 md:px-5 border border-gray-200 rounded-2xl shadow-sm -mt-2 mb-2">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <div className="space-y-1">
+            <h1 className="text-[2rem] md:text-[2.2rem] font-bold tracking-[-0.04em] text-gray-900 leading-none">My Profile</h1>
+            <p className="text-sm md:text-base text-gray-600">Manage your personal, academic, and skill information</p>
           </div>
-          <div className="flex items-center gap-3">
-            <SectionSaveButton />
-            {getStatusBadge()}
+
+          <div className="flex items-center gap-3 ml-auto">
+            <SectionSaveButton className="min-w-[200px] h-11 rounded-xl text-base font-semibold shadow-md hover:shadow-lg" />
+            <div className="flex items-center h-11">{getStatusBadge()}</div>
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex gap-2 md:gap-2.5 overflow-x-auto no-scrollbar border-b border-gray-200 pb-1">
           {tabs.map(tab => {
             const TabIcon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-[1px] transition flex items-center gap-2 whitespace-nowrap ${activeTab === tab.id
-                  ? 'border-primary-600 text-primary-600 bg-primary-50/50 rounded-t-lg'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100/50 rounded-t-lg'
+                className={`px-3 py-2 md:px-4 text-sm md:text-[15px] font-medium border-b-2 -mb-[1px] transition flex items-center gap-2 whitespace-nowrap ${activeTab === tab.id
+                  ? 'border-primary-600 text-primary-600 bg-primary-50/70 rounded-t-lg'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100/70 rounded-t-lg'
                   }`}
               >
-                <TabIcon className="w-4 h-4" />
+                <TabIcon className="w-4 h-4 md:w-[18px] md:h-[18px]" />
                 {tab.label}
               </button>
             );
@@ -964,14 +1017,14 @@ const StudentProfile = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       First Name
                       {profile?.resolvedProfile?.isNameVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <input
                       type="text"
                       value={formData.firstName}
@@ -982,14 +1035,14 @@ const StudentProfile = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Last Name
                       {profile?.resolvedProfile?.isNameVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <input
                       type="text"
                       value={formData.lastName}
@@ -1000,20 +1053,20 @@ const StudentProfile = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Email
-                    </label>
+                    </div>
                     <input type="email" value={profile?.email || ''} disabled className="bg-gray-100" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Phone
                       {profile?.resolvedProfile?.isPhoneVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <input
                       type="tel"
                       value={formData.phone}
@@ -1023,14 +1076,14 @@ const StudentProfile = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Gender
                       {profile?.resolvedProfile?.isGenderVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <select
                       value={formData.gender || ''}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
@@ -1153,14 +1206,14 @@ const StudentProfile = () => {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Campus *
                       {profile?.resolvedProfile?.isCampusVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-tighter">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     <div className="flex items-center gap-2">
                       <select
                         value={selectedCampus || ''}
@@ -1176,14 +1229,14 @@ const StudentProfile = () => {
                     <p className="text-xs text-gray-500 mt-1">Select your Navgurukul campus</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                       Placement Cycle & Status
                       {profile?.resolvedProfile?.isStatusVerified && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase tracking-tighter">
                           <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                         </span>
                       )}
-                    </label>
+                    </div>
                     {/* Display only the active cycle (read-only) */}
                     <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
                       <div className="flex flex-col gap-2">
@@ -1281,14 +1334,14 @@ const StudentProfile = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                         School
                         {profile?.resolvedProfile?.isSchoolVerified && (
                           <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                             <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                           </span>
                         )}
-                      </label>
+                      </div>
                       <select
                         value={formData.currentSchool || ''}
                         onChange={(e) => setFormData({ ...formData, currentSchool: e.target.value, currentModule: '', customModuleDescription: '' })}
@@ -1317,7 +1370,7 @@ const StudentProfile = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1 font-bold text-primary-700">House Name (Navgurukul)</label>
+                      <div className="text-sm font-bold text-primary-700 mb-1">House Name (Navgurukul)</div>
                       <select value={formData.houseName || ''} onChange={(e) => setFormData({ ...formData, houseName: e.target.value })} disabled={!canEdit} className="border-primary-200 focus:ring-primary-500">
                         <option value="">Select House</option>
                         {['Bageshree House', 'Bhairav House', 'Malhar House'].map(h => <option key={h} value={h}>{h}</option>)}
@@ -1328,14 +1381,14 @@ const StudentProfile = () => {
                     {formData.currentSchool && (
                       hasModulesForSchool ? (
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                          <div className="text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                             Current Module/Phase
                             {profile?.resolvedProfile?.isModuleVerified && (
                               <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
                                 <CheckCircle className="w-2.5 h-2.5" /> Verified by Ghar
                               </span>
                             )}
-                          </label>
+                          </div>
                           <select
                             value={formData.currentModule}
                             onChange={(e) => setFormData({ ...formData, currentModule: e.target.value })}
@@ -2411,23 +2464,6 @@ const StudentProfile = () => {
         </div >
 
         <div className="space-y-6">
-          {formData.profileStatus !== 'approved' && (
-            <div className="card bg-primary-50 border border-primary-200">
-              <h2 className="text-lg font-semibold mb-2 text-primary-900">
-                {formData.profileStatus === 'pending_approval' ? 'Awaiting Approval' : 'Ready to Submit?'}
-              </h2>
-              <p className="text-sm text-primary-700 mb-4">
-                {formData.profileStatus === 'pending_approval'
-                  ? 'Your profile is being reviewed. If you make changes, you\'ll need to resubmit.'
-                  : 'Once you\'ve completed all sections, submit your profile for approval by your Campus POC.'}
-              </p>
-              <button onClick={handleSubmitForApproval} disabled={submitting || formData.profileStatus === 'pending_approval'} className="btn btn-primary w-full flex items-center justify-center gap-2">
-                <Send className="w-4 h-4" />
-                {submitting ? 'Submitting...' : formData.profileStatus === 'pending_approval' ? 'Pending Review' : 'Submit for Approval'}
-              </button>
-            </div>
-          )}
-
           {formData.profileStatus === 'approved' && (
             <div className="card bg-green-50 border border-green-200">
               <h2 className="text-lg font-semibold mb-2 text-green-900 flex items-center gap-2">

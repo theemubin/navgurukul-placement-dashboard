@@ -7,6 +7,7 @@ import BottomNav from '../components/common/BottomNav';
 const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  const [forumUnreadCount, setForumUnreadCount] = useState(0);
 
   // Update isMobile on resize to be defensive against missing responsive classes
   useEffect(() => {
@@ -26,11 +27,18 @@ const DashboardLayout = () => {
       )}
 
       {/* Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onForumCountChange={setForumUnreadCount}
+      />
 
       {/* Main content */}
       <div className="md:pl-64">
-        <Navbar onMenuClick={() => setSidebarOpen(true)} />
+        <Navbar
+          onMenuClick={() => setSidebarOpen(true)}
+          forumUnreadCount={forumUnreadCount}
+        />
 
         <main className="p-4 md:p-6 pb-20 md:pb-6">
           <Outlet />

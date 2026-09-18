@@ -889,9 +889,35 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
       studentQuery['studentProfile.currentStatus'] = filterStatus;
     }
 
-    const students = await User.find(studentQuery);
+    const students = await User.find(studentQuery)
+      .select('studentProfile.skills.status studentProfile.profileStatus studentProfile.currentStatus')
+      .lean();
 
     const studentIds = students.map(s => s._id);
+
+    if (studentIds.length === 0) {
+      return res.json({
+        totalStudents: 0,
+        pendingSkillApprovals: 0,
+        pendingProfileApprovals: 0,
+        totalApplications: 0,
+        totalPlacements: 0,
+        placementRate: 0,
+        statusCounts: {
+          'Active': 0,
+          'In active': 0,
+          'Long Leave': 0,
+          'Dropout': 0,
+          'Placed': 0
+        },
+        readinessPool: {
+          'Job Ready': 0,
+          'Job Ready Under Process': 0,
+          'Not Job Ready': 0
+        },
+        interestCount: 0
+      });
+    }
 
     // Pending skill approvals
     const pendingSkills = students.reduce((count, student) => {
@@ -903,12 +929,20 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
       s.studentProfile?.profileStatus === 'pending_approval'
     ).length;
 
-    // Application stats
-    const applications = await Application.find({
-      student: { $in: studentIds }
-    });
-
-    const placements = applications.filter(a => a.status === 'selected').length;
+    const [totalApplications, placements, readinessRecords, openJobIds] = await Promise.all([
+      Application.countDocuments({ student: { $in: studentIds } }),
+      Application.countDocuments({ student: { $in: studentIds }, status: 'selected' }),
+      StudentJobReadiness.aggregate([
+        { $match: { student: { $in: studentIds } } },
+        {
+          $group: {
+            _id: '$readinessStatus',
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+      Job.distinct('_id', { status: { $in: ['active', 'application_stage'] } })
+    ]);
 
     // Student status counts
     const statusCounts = {
@@ -926,11 +960,6 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
       }
     });
 
-    // Readiness pool stats
-    const readinessRecords = await StudentJobReadiness.find({
-      student: { $in: studentIds }
-    });
-
     const readinessPool = {
       'Job Ready': 0,
       'Job Ready Under Process': 0,
@@ -938,16 +967,13 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
     };
 
     readinessRecords.forEach(record => {
-      const status = record.readinessStatus || 'Not Job Ready';
+      const status = record._id || 'Not Job Ready';
       if (readinessPool[status] !== undefined) {
-        readinessPool[status]++;
+        readinessPool[status] = record.count;
       }
     });
 
     // Interest count (only for jobs that are currently open)
-    const openJobs = await Job.find({ status: { $in: ['active', 'application_stage'] } }).select('_id');
-    const openJobIds = openJobs.map(j => j._id);
-
     const interestCount = await InterestRequest.countDocuments({
       student: { $in: studentIds },
       status: 'pending',
@@ -958,7 +984,7 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
       totalStudents: students.length,
       pendingSkillApprovals: pendingSkills,
       pendingProfileApprovals: pendingProfiles,
-      totalApplications: applications.length,
+      totalApplications,
       totalPlacements: placements,
       placementRate: students.length > 0
         ? Math.round((placements / students.length) * 100)
@@ -1221,7 +1247,8 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
     // Support both legacy 'active' and pipeline stages
     const activeStatuses = ['active', 'application_stage', 'hr_shortlisting', 'interviewing', 'closed'];
 
-    const { cycleId } = req.query;
+    const { cycleId, summary } = req.query;
+    const liteSummary = summary === 'lite';
     const query = {
       status: { $in: activeStatuses },
       $or: [
@@ -1249,17 +1276,28 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
       'studentProfile.currentStatus': { $in: ['Active', 'Intern (In Campus)', 'Intern (Out Campus)'] }
     });
 
-    // Get application counts for each job (including placed/inactive students)
+    // Get application counts for all jobs in one query (including placed/inactive students)
     const allCampusStudents = await User.find({
       role: 'student',
       campus: { $in: campusIds }
     }).select('_id');
+    const studentIds = allCampusStudents.map(student => student._id);
+    const jobIds = jobs.map(job => job._id);
+    const applications = await Application.find({
+      job: { $in: jobIds },
+      student: { $in: studentIds }
+    }).select('job status').lean();
+    const applicationsByJob = new Map();
 
-    const jobsWithStats = await Promise.all(jobs.map(async (job) => {
-      const applications = await Application.find({
-        job: job._id,
-        student: { $in: allCampusStudents.map(s => s._id) }
-      }).select('status');
+    applications.forEach((application) => {
+      const jobId = String(application.job);
+      const jobApplications = applicationsByJob.get(jobId) || [];
+      jobApplications.push(application);
+      applicationsByJob.set(jobId, jobApplications);
+    });
+
+    const jobsWithStats = jobs.map((job) => {
+      const jobApplications = applicationsByJob.get(String(job._id)) || [];
 
       return {
         _id: job._id,
@@ -1269,18 +1307,18 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
         applicationDeadline: job.applicationDeadline,
         maxPositions: job.maxPositions,
         eligibleStudents: studentCount,
-        applicationCount: applications.length,
+        applicationCount: jobApplications.length,
         statusCounts: {
-          applied: applications.filter(a => a.status === 'applied').length,
-          shortlisted: applications.filter(a => a.status === 'shortlisted').length,
-          in_progress: applications.filter(a => a.status === 'in_progress').length,
-          selected: applications.filter(a => a.status === 'selected').length,
-          rejected: applications.filter(a => a.status === 'rejected').length
+          applied: jobApplications.filter(a => a.status === 'applied').length,
+          shortlisted: jobApplications.filter(a => a.status === 'shortlisted').length,
+          in_progress: jobApplications.filter(a => a.status === 'in_progress').length,
+          selected: jobApplications.filter(a => a.status === 'selected').length,
+          rejected: jobApplications.filter(a => a.status === 'rejected').length
         },
         status: job.status,
         createdAt: job.createdAt
       };
-    }));
+    });
 
     res.json({
       jobs: jobsWithStats,
@@ -1450,13 +1488,14 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
 
     const students = await User.find(studentQuery)
       .select('firstName lastName email studentProfile.currentSchool placementCycle')
-      .populate('placementCycle', 'name');
+      .populate('placementCycle', 'name')
+      .lean();
 
     const studentIds = students.map(s => s._id);
 
     const readinessRecords = await StudentJobReadiness.find({
       student: { $in: studentIds }
-    }).select('student readinessPercentage isJobReady jobReady30At jobReady100At updatedAt');
+    }).select('student readinessPercentage isJobReady jobReady30At jobReady100At updatedAt').lean();
 
     const readinessByStudentId = new Map(
       readinessRecords.map((record) => [String(record.student), record])
@@ -1465,7 +1504,14 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
     // Get all applications
     const applications = await Application.find({
       student: { $in: studentIds }
-    }).populate('job', 'title company.name');
+    }).select('student job status').populate('job', 'title company.name').lean();
+    const applicationsByStudentId = new Map();
+    applications.forEach((application) => {
+      const studentId = String(application.student);
+      const studentApplications = applicationsByStudentId.get(studentId) || [];
+      studentApplications.push(application);
+      applicationsByStudentId.set(studentId, studentApplications);
+    });
 
     // Create student map for quick lookup
     const studentMap = {};
@@ -1507,7 +1553,7 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
           jobReady100Count: 0
         };
       }
-      const studentApps = applications.filter(a => a.student.toString() === student._id.toString());
+      const studentApps = applicationsByStudentId.get(String(student._id)) || [];
       const readiness = readinessByStudentId.get(String(student._id));
       const readinessPercentage = readiness?.readinessPercentage || 0;
       const reached30 = readinessPercentage >= 30;
@@ -1518,10 +1564,9 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
       const placed = studentApps.some(a => a.status === 'selected');
       const inProgress = studentApps.some(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status));
 
-      schoolMap[school].students.push({
+      const studentSummary = {
         studentId: student._id,
         name: `${student.firstName} ${student.lastName}`,
-        email: student.email,
         cycle: student.placementCycle?.name,
         applicationCount: studentApps.length,
         readinessPercentage,
@@ -1529,13 +1574,18 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
         reached100,
         jobReady30At,
         jobReady100At,
-        status: placed ? 'placed' : (inProgress ? 'in_progress' : (studentApps.length > 0 ? 'rejected' : 'not_applied')),
-        applications: studentApps.map(a => ({
+        status: placed ? 'placed' : (inProgress ? 'in_progress' : (studentApps.length > 0 ? 'rejected' : 'not_applied'))
+      };
+
+      if (!liteSummary) {
+        studentSummary.applications = studentApps.map(a => ({
           company: a.job?.company?.name,
           job: a.job?.title,
           status: a.status
-        }))
-      });
+        }));
+      }
+
+      schoolMap[school].students.push(studentSummary);
 
       schoolMap[school].totalStudents++;
       schoolMap[school].totalApplications += studentApps.length;
@@ -1572,7 +1622,7 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
 router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), cacheMiddleware({ type: 'student', keyPrefix: 'stats' }), async (req, res) => {
   try {
     const campusIds = getPOCManagedCampusIds(req.user);
-    const { cycleId, status, school } = req.query;
+    const { cycleId, status, school, search } = req.query;
 
     let studentQuery = {
       role: 'student',
@@ -1588,6 +1638,18 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), cacheMi
       studentQuery['studentProfile.currentSchool'] = school;
     }
 
+    if (search) {
+      const escapedSearch = String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (escapedSearch) {
+        studentQuery.$or = [
+          { firstName: { $regex: escapedSearch, $options: 'i' } },
+          { lastName: { $regex: escapedSearch, $options: 'i' } },
+          { email: { $regex: escapedSearch, $options: 'i' } },
+          { 'studentProfile.currentSchool': { $regex: escapedSearch, $options: 'i' } }
+        ];
+      }
+    }
+
     const students = await User.find(studentQuery)
       .select('firstName lastName email studentProfile.currentSchool studentProfile.currentStatus studentProfile.externalData studentProfile.profileStatus placementCycle')
       .populate('placementCycle', 'name')
@@ -1600,10 +1662,17 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), cacheMi
     })
       .populate('job', 'title company.name jobType applicationDeadline')
       .sort({ updatedAt: -1 });
+    const applicationsByStudentId = new Map();
+    applications.forEach((application) => {
+      const studentId = String(application.student);
+      const studentApplications = applicationsByStudentId.get(studentId) || [];
+      studentApplications.push(application);
+      applicationsByStudentId.set(studentId, studentApplications);
+    });
 
     // Build summary for each student
     const studentSummaries = students.map(student => {
-      const studentApps = applications.filter(a => a.student.toString() === student._id.toString());
+      const studentApps = applicationsByStudentId.get(String(student._id)) || [];
       const selectedApp = studentApps.find(a => a.status === 'selected');
       const inProgressApps = studentApps.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status));
 
@@ -1717,22 +1786,37 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), cacheMiddle
     const cycles = await PlacementCycle.find({ isActive: true })
       .sort({ year: -1, month: -1 });
 
-    const cycleStats = await Promise.all(cycles.map(async (cycle) => {
-      // Get students from this POC's managed campuses assigned to this cycle
-      const students = await User.find({
-        role: 'student',
-        campus: { $in: campusIds },
-        placementCycle: cycle._id
-      }).select('_id');
+    const students = await User.find({
+      role: 'student',
+      campus: { $in: campusIds },
+      placementCycle: { $in: cycles.map(cycle => cycle._id) }
+    }).select('_id placementCycle');
+    const studentIds = students.map(student => student._id);
+    const applications = await Application.find({
+      student: { $in: studentIds }
+    }).select('student status').lean();
+    const studentsByCycle = new Map();
+    const applicationsByStudentId = new Map();
 
-      const studentIds = students.map(s => s._id);
+    students.forEach((student) => {
+      const cycleId = String(student.placementCycle);
+      const cycleStudents = studentsByCycle.get(cycleId) || [];
+      cycleStudents.push(student);
+      studentsByCycle.set(cycleId, cycleStudents);
+    });
+    applications.forEach((application) => {
+      const studentApplications = applicationsByStudentId.get(String(application.student)) || [];
+      studentApplications.push(application);
+      applicationsByStudentId.set(String(application.student), studentApplications);
+    });
 
-      const applications = await Application.find({
-        student: { $in: studentIds }
-      });
-
-      const placed = applications.filter(a => a.status === 'selected').length;
-      const inProgress = applications.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status)).length;
+    const cycleStats = cycles.map((cycle) => {
+      const cycleStudents = studentsByCycle.get(String(cycle._id)) || [];
+      const cycleApplications = cycleStudents.flatMap(student =>
+        applicationsByStudentId.get(String(student._id)) || []
+      );
+      const placed = cycleApplications.filter(a => a.status === 'selected').length;
+      const inProgress = cycleApplications.filter(a => ['applied', 'shortlisted', 'in_progress'].includes(a.status)).length;
 
       return {
         cycleId: cycle._id,
@@ -1741,15 +1825,15 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), cacheMiddle
         year: cycle.year,
         status: cycle.status,
         targetPlacements: cycle.targetPlacements,
-        students: students.length,
-        applications: applications.length,
+        students: cycleStudents.length,
+        applications: cycleApplications.length,
         placed,
         inProgress,
         progress: cycle.targetPlacements > 0
-          ? Math.round((placed / cycle.targetPlacements) * 100)
-          : (students.length > 0 ? Math.round((placed / students.length) * 100) : 0)
+              ? Math.round((placed / cycle.targetPlacements) * 100)
+              : (cycleStudents.length > 0 ? Math.round((placed / cycleStudents.length) * 100) : 0)
       };
-    }));
+            });
 
     res.json(cycleStats);
   } catch (error) {
@@ -2152,13 +2236,9 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
     readinessRecords.forEach(r => readinessMap.set(r.student.toString(), r.isJobReady));
 
     // 3. Fetch Active Jobs
-    // Jobs are active if they are not draft/closed/filled and deadline hasn't passed
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
+    // Jobs are considered active until they are marked closed or filled
     const activeJobs = await Job.find({
-      status: { $nin: ['draft', 'closed', 'filled'] },
-      applicationDeadline: { $gte: startOfToday }
+      status: { $nin: ['draft', 'closed', 'filled'] }
     }).select('roleCategory title status company.name');
 
     // 4. Fetch Active Placement Cycle for Goals
@@ -2179,8 +2259,14 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
 
     let totalPlaced = 0;
 
+    // Financial Year: April 1 → March 31
+    // Current date: 2026-09-04 → FY is April 1 2026 → March 31 2027
+    const now_fy = new Date();
+    const fyStartYear = now_fy.getMonth() >= 3 ? now_fy.getFullYear() : now_fy.getFullYear() - 1;
+    const fyStart = new Date(fyStartYear, 3, 1, 0, 0, 0); // April 1
+    const fyEnd = new Date(fyStartYear + 1, 2, 31, 23, 59, 59); // March 31
+
     // Count placements for the current calendar month using Ghar-synced placement date.
-    // This ensures we show placements that occurred this month even if the active cycle is scheduled in a future month.
     const monthStart = new Date(now_date.getFullYear(), now_date.getMonth(), 1);
     const monthEnd = new Date(now_date.getFullYear(), now_date.getMonth() + 1, 0, 23, 59, 59);
 
@@ -2189,6 +2275,9 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       'studentProfile.currentStatus': { $in: ['Placed', 'Intern (In Campus)', 'Intern (Out Campus)'] },
       'studentProfile.dateOfPlacement': { $gte: monthStart, $lte: monthEnd }
     });
+
+    // Fetch all campuses to get their placement targets
+    const allCampusDocs = await Campus.find({ isActive: true }).select('_id placementTarget');
 
     // 5. Aggregate Data by Role
     const pipeline = {};
@@ -2249,6 +2338,8 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
           internsOutCampus: 0,
           openForPlacements: 0, // Active + interns
           placedCount: 0, // from Ghar/resolved status
+          fyPlaced: 0, // Students with "Placed" status who had dateOfPlacement in current FY
+          fyIntern: 0, // Students with intern status who joined/placed in current FY
           placementReady: 0,
           readinessPending: 0,
           cycleNotAllocated: 0,
@@ -2277,6 +2368,21 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
           const pDate = new Date(placementDate);
           if (pDate >= monthStart && pDate <= monthEnd) {
             campusMap[campusId].placedCount++;
+          }
+          // FY Placed: Student has "Placed" status with dateOfPlacement in current financial year
+          if (pDate >= fyStart && pDate <= fyEnd) {
+            campusMap[campusId].fyPlaced++;
+          }
+        }
+      }
+
+      // FY Intern: Students who became Intern (In/Out Campus) with dateOfPlacement in current FY
+      if (statusKeyNorm === 'intern (in campus)' || statusKeyNorm === 'intern (out campus)') {
+        const placementDate = student.studentProfile?.dateOfPlacement;
+        if (placementDate) {
+          const pDate = new Date(placementDate);
+          if (pDate >= fyStart && pDate <= fyEnd) {
+            campusMap[campusId].fyIntern++;
           }
         }
       }
@@ -2327,7 +2433,8 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
 
     // Process Jobs
     activeJobs.forEach(job => {
-      const role = job.roleCategory || 'Other';
+      const trimmedCategory = (job.roleCategory || '').trim();
+      const role = trimmedCategory || 'Other';
       initRole(role);
       pipeline[role].activeJobs++;
       if (pipeline[role].openJobList.length < 3) {
@@ -2439,14 +2546,28 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       }
     });
 
+    // Build a map of campus._id -> placementTarget for quick lookup
+    const campusTargetMap = {};
+    allCampusDocs.forEach(doc => {
+      campusTargetMap[doc._id.toString()] = doc.placementTarget || 0;
+    });
+
     // Build campus breakdown with percentages, sorted by placementReady % desc
     const campusBreakdown = Object.values(campusMap).map(c => {
       const totalStudentsComputed = c.totalStudents || ((c.activeCount || 0) + (c.internsInCampus || 0) + (c.internsOutCampus || 0));
       const denom = totalStudentsComputed || 1;
+      const target = campusTargetMap[c.campusId] || 0;
+      const fyPlaced = c.fyPlaced || 0;
+      const fyIntern = c.fyIntern || 0;
+      const achievementPct = target > 0 ? parseFloat(((fyPlaced + fyIntern) / target * 100).toFixed(1)) : null;
       return {
         totalActive: c.activeCount || totalStudentsComputed || 0,
         totalStudents: totalStudentsComputed,
         ...c,
+        placementTarget: target,
+        fyPlaced,
+        fyIntern,
+        achievementPct,
         placementReadyPct: denom > 0 ? parseFloat(((c.placementReady / denom) * 100).toFixed(1)) : 0,
         readinessPendingPct: denom > 0 ? parseFloat(((c.readinessPending / denom) * 100).toFixed(1)) : 0,
         cycleNotAllocatedPct: denom > 0 ? parseFloat(((c.cycleNotAllocated / denom) * 100).toFixed(1)) : 0,
@@ -2498,6 +2619,7 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       roles: rolesData,
       campusBreakdown,
       campusSchools,
+      fyYear: `FY ${fyStartYear}-${String(fyStartYear + 1).slice(-2)}`,
       cycle: activeCycle ? {
         name: activeCycle.name,
         target: activeCycle.targetPlacements,
@@ -2521,6 +2643,394 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
       payload.stack = error?.stack;
     }
     res.status(500).json(payload);
+  }
+});
+
+/**
+ * @swagger
+ * /api/stats/talent-pipeline/export:
+ *   get:
+ *     summary: Export talent pipeline student-wise data as XLS or PDF
+ *     tags: [Stats]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: campus
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: school
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: format
+ *         schema:
+ *           type: string
+ *           enum: [xls, pdf]
+ *     responses:
+ *       200:
+ *         description: Export file
+ */
+router.get('/talent-pipeline/export', auth, authorize('manager', 'coordinator', 'campus_poc'), async (req, res) => {
+  try {
+    const { campus, school, format = 'xls' } = req.query;
+
+    let studentFilter = { role: 'student', isActive: true };
+    if (campus) studentFilter.campus = campus;
+
+    if (req.user.role === 'campus_poc') {
+      const managedIds = getPOCManagedCampusIds(req.user);
+      if (campus && !managedIds.includes(campus)) {
+        return res.status(403).json({ message: 'Not authorized for this campus' });
+      }
+      if (!campus) {
+        studentFilter.campus = { $in: managedIds };
+      }
+    }
+
+    const students = await User.find(studentFilter)
+      .select('firstName lastName campus studentProfile.currentSchool studentProfile.currentModule studentProfile.currentStatus studentProfile.currentStatus studentProfile.joiningDate studentProfile.dateOfPlacement studentProfile.enrollmentNumber studentProfile.externalData.ghar.stdId studentProfile.englishProficiency studentProfile.externalData.ghar.englishSpeaking studentProfile.externalData.ghar.englishWriting')
+      .populate('campus', 'name');
+
+    const readinessRecords = await StudentJobReadiness.find({ student: { $in: students.map(s => s._id) } })
+      .select('student readinessPercentage isJobReady jobReady30At jobReady100At updatedAt');
+
+    const readinessMap = new Map(
+      readinessRecords.map((record) => [String(record.student), record])
+    );
+
+    const allCampusDocs = await Campus.find({ isActive: true }).select('_id placementTarget name');
+    const campusTargetMap = {};
+    allCampusDocs.forEach(doc => {
+      campusTargetMap[doc._id.toString()] = doc.placementTarget || 0;
+    });
+
+    const campusSummaryMap = {};
+
+    const sortText = (value) => (value || '').toString().toLowerCase();
+
+    const studentRows = students
+      .filter(student => !school || student.studentProfile?.currentSchool === school)
+      .map(student => {
+        const resolvedProfile = student.resolvedProfile || {};
+        const readiness = readinessMap.get(String(student._id));
+        const readinessPercentage = Number(readiness?.readinessPercentage || 0);
+        const isPlacementReady = !!readiness?.isJobReady || readinessPercentage === 100;
+        const statusValue = isPlacementReady ? 'Yes' : 'No';
+        const campusId = student.campus?._id?.toString() || 'unknown';
+        const campusName = student.campus?.name || 'Unknown Campus';
+        const schoolName = student.studentProfile?.currentSchool || 'Unknown School';
+        const statusKey = (resolvedProfile.currentStatus || student.studentProfile?.currentStatus || 'Active').trim().toLowerCase();
+        const gharSpeak = student.studentProfile?.externalData?.ghar?.englishSpeaking?.value;
+        const gharWrite = student.studentProfile?.externalData?.ghar?.englishWriting?.value;
+        const localSpeak = student.studentProfile?.englishProficiency?.speaking;
+        const localWrite = student.studentProfile?.englishProficiency?.writing;
+        const speak = (gharSpeak || localSpeak || '').toUpperCase();
+        const write = (gharWrite || localWrite || '').toUpperCase();
+        const communicationReady = ['B2', 'C1', 'C2'].includes(speak) && ['B2', 'C1', 'C2'].includes(write) ? 'Yes' : 'No';
+        const joiningDate = student.studentProfile?.joiningDate ? new Date(student.studentProfile.joiningDate) : null;
+        const placementDate = student.studentProfile?.dateOfPlacement ? new Date(student.studentProfile.dateOfPlacement) : null;
+        const fyNow = new Date();
+        const fyStartYear = fyNow.getMonth() >= 3 ? fyNow.getFullYear() : fyNow.getFullYear() - 1;
+        const fyStart = new Date(fyStartYear, 3, 1, 0, 0, 0);
+        const fyEnd = new Date(fyStartYear + 1, 2, 31, 23, 59, 59);
+        const inCurrentFy = placementDate && placementDate >= fyStart && placementDate <= fyEnd;
+        const isIntern = statusKey === 'intern (in campus)' || statusKey === 'intern (out campus)';
+        const isActive = statusKey === 'active';
+        const isPlaced = statusKey.includes('placed');
+
+        if (!campusSummaryMap[campusId]) {
+          campusSummaryMap[campusId] = {
+            campusId,
+            campusName,
+            target: campusTargetMap[campusId] || 0,
+            achieved: 0,
+            fyPlaced: 0,
+            fyIntern: 0
+          };
+        }
+
+        if (isPlaced && inCurrentFy) {
+          campusSummaryMap[campusId].fyPlaced += 1;
+        }
+        if (isIntern && inCurrentFy) {
+          campusSummaryMap[campusId].fyIntern += 1;
+        }
+
+        if (!isIntern && !isActive) {
+          return null;
+        }
+
+        return {
+          studentId: student.studentProfile?.externalData?.ghar?.stdId?.value || student.studentProfile?.enrollmentNumber || student._id.toString(),
+          studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+          campus: campusName,
+          school: schoolName,
+          joiningDate: joiningDate ? joiningDate.toLocaleDateString('en-IN') : '',
+          currentModule: student.studentProfile?.currentModule || '',
+          courseCompleted: `${readinessPercentage}%`,
+          expectedPlacementReadyDate: '',
+          communicationReady,
+          placementReady: statusValue,
+          bucket: isIntern ? 'intern' : 'active',
+          sortCampus: sortText(campusName),
+          sortSchool: sortText(schoolName),
+          sortStudent: sortText(`${student.firstName || ''} ${student.lastName || ''}`.trim())
+        };
+      })
+      .filter(Boolean);
+
+    studentRows.sort((a, b) => {
+      if (a.bucket !== b.bucket) return a.bucket === 'intern' ? -1 : 1;
+      if (a.sortCampus !== b.sortCampus) return a.sortCampus.localeCompare(b.sortCampus);
+      if (a.sortSchool !== b.sortSchool) return a.sortSchool.localeCompare(b.sortSchool);
+      return a.sortStudent.localeCompare(b.sortStudent);
+    });
+
+    Object.values(campusSummaryMap).forEach(item => {
+      item.achieved = item.fyPlaced + item.fyIntern;
+      item.achievementPct = item.target > 0 ? parseFloat(((item.achieved / item.target) * 100).toFixed(1)) : null;
+    });
+
+    const campusList = Object.values(campusSummaryMap);
+    const placementTarget = campusList.reduce((sum, item) => sum + Number(item.target || 0), 0);
+    const achieved = campusList.reduce((sum, item) => sum + Number(item.achieved || 0), 0);
+    const achievementPct = placementTarget > 0 ? parseFloat(((achieved / placementTarget) * 100).toFixed(1)) : null;
+    const totalExported = studentRows.length || 1;
+    const internRows = studentRows.filter(row => row.bucket === 'intern');
+    const activeRows = studentRows.filter(row => row.bucket === 'active');
+    const internPct = parseFloat(((internRows.length / totalExported) * 100).toFixed(1));
+    const activePct = parseFloat(((activeRows.length / totalExported) * 100).toFixed(1));
+    const communicationReadyCount = studentRows.filter(row => row.communicationReady === 'Yes').length;
+    const communicationReadyPct = parseFloat(((communicationReadyCount / totalExported) * 100).toFixed(1));
+    const placementReadyCount = studentRows.filter(row => row.placementReady === 'Yes').length;
+    const placementReadyPct = parseFloat(((placementReadyCount / totalExported) * 100).toFixed(1));
+
+    const selectedCampusDoc = campus ? allCampusDocs.find(doc => doc._id.toString() === campus) : null;
+    const reportMeta = {
+      campus: selectedCampusDoc?.name || (campus ? 'Selected Campus' : 'All Campuses'),
+      school: school || 'All Schools',
+      exportedOn: new Date().toLocaleDateString('en-IN'),
+      placementTarget,
+      achieved,
+      achievementPct,
+      internRows: internRows.length,
+      internPct,
+      activeRows: activeRows.length,
+      activePct,
+      communicationReadyCount,
+      communicationReadyPct,
+      placementReadyCount,
+      placementReadyPct
+    };
+
+    const baseName = `talent_pipeline_${(campus || 'all').replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${(school || 'all').replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+
+    if (format === 'pdf') {
+      const PDFDocument = require('pdfkit');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${baseName}.pdf"`);
+
+      const doc = new PDFDocument({
+        size: 'A4',
+        layout: 'landscape',
+        margin: 24
+      });
+
+      doc.pipe(res);
+
+      const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
+      const margin = 24;
+      const contentWidth = pageWidth - margin * 2;
+
+      const cols = [56, 88, 76, 102, 74, 72, 64, 76, 68, 56];
+      const headers = ['StudentID', 'Student Name', 'Campus', 'School', 'Date of Joining', 'Current Module', '% Completed', 'Expected Ready Date', 'Comm. Ready', 'Ready'];
+
+      const clipText = (value, maxLength = 30) => {
+        const text = (value ?? '').toString();
+        if (text.length <= maxLength) return text;
+        return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
+      };
+
+      const drawSummary = () => {
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(18).text('Campus Talent Pipeline Export', margin, 22);
+        doc.fillColor('#64748b').font('Helvetica').fontSize(9).text(`Campus: ${reportMeta.campus}  |  School: ${reportMeta.school}  |  Exported on: ${reportMeta.exportedOn}`, margin, 44);
+
+        const summaryTop = 62;
+        const summaryGap = 12;
+        const boxW = (contentWidth - summaryGap * 2) / 3;
+        const boxH = 42;
+        const boxes = [
+          { label: 'Placement Target', value: String(reportMeta.placementTarget), color: '#1d4ed8' },
+          { label: 'Achieved', value: String(reportMeta.achieved), color: '#059669' },
+          { label: 'Achievement %', value: reportMeta.achievementPct === null ? '-' : `${reportMeta.achievementPct}%`, color: '#7c3aed' }
+        ];
+
+        boxes.forEach((box, index) => {
+          const x = margin + index * (boxW + summaryGap);
+          doc.roundedRect(x, summaryTop, boxW, boxH, 8).fillAndStroke('#f8fafc', '#e2e8f0');
+          doc.fillColor('#64748b').font('Helvetica-Bold').fontSize(8).text(box.label.toUpperCase(), x + 10, summaryTop + 9, { width: boxW - 20 });
+          doc.fillColor(box.color).font('Helvetica-Bold').fontSize(16).text(box.value, x + 10, summaryTop + 21, { width: boxW - 20 });
+        });
+
+        const statTop = summaryTop + boxH + 10;
+        const statW = (contentWidth - 24) / 3;
+        const statBoxes = [
+          { label: 'Interns', value: `${reportMeta.internRows} (${reportMeta.internPct}%)`, color: '#0f766e' },
+          { label: 'Communication Ready', value: `${reportMeta.communicationReadyCount} (${reportMeta.communicationReadyPct}%)`, color: '#2563eb' },
+          { label: 'Placement Ready', value: `${reportMeta.placementReadyCount} (${reportMeta.placementReadyPct}%)`, color: '#16a34a' }
+        ];
+
+        statBoxes.forEach((box, index) => {
+          const x = margin + index * (statW + 12);
+          doc.roundedRect(x, statTop, statW, 34, 8).fillAndStroke('#ffffff', '#e2e8f0');
+          doc.fillColor('#64748b').font('Helvetica-Bold').fontSize(7).text(box.label.toUpperCase(), x + 10, statTop + 8, { width: statW - 20 });
+          doc.fillColor(box.color).font('Helvetica-Bold').fontSize(12).text(box.value, x + 10, statTop + 18, { width: statW - 20 });
+        });
+      };
+
+      const drawTableHeader = (y) => {
+        doc.font('Helvetica-Bold').fontSize(7).fillColor('#475569');
+        doc.rect(margin, y, contentWidth, 18).fill('#f8fafc');
+        let x = margin;
+        headers.forEach((header, index) => {
+          doc.fillColor('#475569').text(header, x + 3, y + 5, { width: cols[index] - 6, align: 'left' });
+          x += cols[index];
+        });
+      };
+
+      const drawRow = (row, y) => {
+        const rowHeight = 18;
+        doc.font('Helvetica').fontSize(7).fillColor('#0f172a');
+        let x = margin;
+        const values = [
+          row.studentId,
+          row.studentName,
+          row.campus,
+          row.school,
+          row.joiningDate,
+          row.currentModule,
+          row.courseCompleted,
+          row.expectedPlacementReadyDate,
+          row.communicationReady,
+          row.placementReady
+        ];
+        values.forEach((value, index) => {
+          doc.rect(x, y, cols[index], rowHeight).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+          doc.text(clipText(value, index === 1 || index === 3 || index === 5 ? 22 : 16), x + 3, y + 5, {
+            width: cols[index] - 6,
+            height: rowHeight - 6,
+            ellipsis: true
+          });
+          x += cols[index];
+        });
+      };
+
+      drawSummary();
+
+      const drawSection = (title, rows, startY) => {
+        let cursorY = startY;
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10).text(title, margin, cursorY);
+        cursorY += 12;
+        drawTableHeader(cursorY);
+        cursorY += 18;
+
+        rows.forEach((row) => {
+          if (cursorY > pageHeight - margin - 22) {
+            doc.addPage({ size: 'A4', layout: 'landscape', margin: 24 });
+            cursorY = margin;
+            doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10).text(title, margin, cursorY);
+            cursorY += 12;
+            drawTableHeader(cursorY);
+            cursorY += 18;
+          }
+          drawRow(row, cursorY);
+          cursorY += 18;
+        });
+
+        return cursorY;
+      };
+
+      let cursorY = 160;
+      cursorY = drawSection('Interns', internRows, cursorY);
+      cursorY += 10;
+      if (activeRows.length > 0) {
+        cursorY = drawSection('Active', activeRows, cursorY);
+      }
+
+      doc.end();
+      return;
+    }
+
+    const headers = [
+      'StudentID',
+      'Student Name',
+      'Campus',
+      'School',
+      'Date of Joining',
+      'Current Module',
+      '% of Course Completed',
+      'Expected Placement Ready Date',
+      'Communication Ready',
+      'Placement Ready (Yes/No)'
+    ];
+
+    const escapeCell = (value) => (value ?? '').toString().replace(/\t/g, ' ').replace(/\n/g, ' ').trim();
+    const summaryRows = [
+      ['Placement Target', reportMeta.placementTarget],
+      ['Achieved', reportMeta.achieved],
+      ['Achievement %', reportMeta.achievementPct === null ? '-' : `${reportMeta.achievementPct}%`],
+      ['Campus', reportMeta.campus],
+      ['School', reportMeta.school],
+      ['Exported On', reportMeta.exportedOn],
+      []
+    ];
+
+    const internRowsTsv = internRows.map(row => ([
+      row.studentId,
+      row.studentName,
+      row.campus,
+      row.school,
+      row.joiningDate,
+      row.currentModule,
+      row.courseCompleted,
+      row.expectedPlacementReadyDate,
+      row.communicationReady,
+      row.placementReady
+    ].map(escapeCell).join('\t')));
+
+    const activeRowsTsv = activeRows.map(row => ([
+      row.studentId,
+      row.studentName,
+      row.campus,
+      row.school,
+      row.joiningDate,
+      row.currentModule,
+      row.courseCompleted,
+      row.expectedPlacementReadyDate,
+        row.communicationReady,
+      row.placementReady
+    ].map(escapeCell).join('\t')));
+
+    const tsv = [
+      ...summaryRows.map(row => row.join('\t')),
+      `Interns (${internRows.length})`,
+      headers.join('\t'),
+      ...internRowsTsv,
+      [],
+      `Active (${activeRows.length})`,
+      headers.join('\t'),
+      ...activeRowsTsv
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'application/vnd.ms-excel');
+    res.setHeader('Content-Disposition', `attachment; filename="${baseName}.xls"`);
+    res.send(tsv);
+  } catch (error) {
+    console.error('Talent pipeline export error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
