@@ -430,6 +430,14 @@ export const campusAPI = {
   deleteCampus: (id) => api.delete(`/campuses/${id}`)
 };
 
+// ATS Resume Checker APIs
+export const atsAPI = {
+  getResumes: () => api.get('/ats/resumes'),
+  analyze: (resumeId, forceRefresh = false) => api.post('/ats/analyze', { resumeId, forceRefresh }),
+  getAnalysis: (resumeId) => api.get(`/ats/resume/${resumeId}`),
+  getHistory: (resumeId) => api.get(`/ats/resume/${resumeId}/history`)
+};
+
 // Utilities
 export const utilsAPI = {
   checkUrl: (url, options = {}) => cachedCheckUrlGetter({ url, ...options }),

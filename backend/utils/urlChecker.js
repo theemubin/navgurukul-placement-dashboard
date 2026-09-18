@@ -87,8 +87,11 @@ async function checkUrlAccessible(rawUrl) {
 
     if (status >= 400) continue; // try next candidate
 
-    // If contentType indicates a file (pdf/zip/msword etc), do an extra HEAD without following redirects to detect sign-in redirects (Google Drive returns redirects to accounts.google.com)
+    // If contentType indicates a file (pdf/zip/msword etc), do an extra HEAD without following redirects to detect sign-in redirects
     if (contentType && !contentType.includes('text/html')) {
+      if (candidate.includes('cloudinary.com')) {
+        return { ok: true, status: status || 200, contentType, candidate };
+      }
       try {
         const headNoRedirect = await axios.head(candidate, { maxRedirects: 0, timeout: 4000, validateStatus: () => true });
         const loc = headNoRedirect.headers && headNoRedirect.headers.location ? headNoRedirect.headers.location.toLowerCase() : '';
@@ -97,11 +100,10 @@ async function checkUrlAccessible(rawUrl) {
           continue;
         }
       } catch (err) {
-        // if the no-redirect head fails, fall back to assuming inaccessible for this candidate
-        continue;
+        // Safe fallback if head probe fails for non-HTML media files
       }
 
-      return { ok: true, status, contentType, candidate };
+      return { ok: true, status: status || 200, contentType, candidate };
     }
 
     // If HTML, fetch body (if we used HEAD) to inspect for login/access issues
