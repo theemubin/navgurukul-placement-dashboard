@@ -584,13 +584,16 @@ class DiscordService {
                 if (!channel) throw new Error('Application updates channel not found');
             }
 
-            // Build affected students mention/name list (limit for readability)
+            // Build affected students mention/name list. Keep mentions within Discord's content limit.
             const mentionUsers = settings.discordConfig?.mentionUsers;
-            const maxList = 10;
             const mentions = [];
             const names = [];
 
-            for (const s of affectedStudents || []) {
+            const uniqueStudents = Array.from(
+                new Map((affectedStudents || []).map((student) => [String(student._id), student])).values()
+            );
+
+            for (const s of uniqueStudents) {
                 const fullName = `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Unnamed';
                 if (mentionUsers && s.discordUserId) {
                     mentions.push(`<@${s.discordUserId}>`);
@@ -599,16 +602,11 @@ class DiscordService {
                 }
             }
 
-            const totalAffected = affectedStudents.length || 0;
             let listDisplay = '';
             if (mentions.length > 0) {
-                const display = mentions.slice(0, maxList).join(' ');
-                const more = mentions.length > maxList ? ` +${mentions.length - maxList} more` : '';
-                listDisplay = display + more;
+                listDisplay = mentions.join(' ');
             } else if (names.length > 0) {
-                const display = names.slice(0, maxList).join(', ');
-                const more = names.length > maxList ? ` +${names.length - maxList} more` : '';
-                listDisplay = display + more;
+                listDisplay = names.join(', ');
             }
 
             const embed = new EmbedBuilder()
@@ -628,8 +626,11 @@ class DiscordService {
                 embed.addFields({ name: '👥 Affected', value: truncated });
             }
 
-            // If we have direct mentions to ping, include them as message content
-            const content = mentions.length > 0 ? mentions.slice(0, maxList).join(' ') : '';
+            // Include every eligible moved-forward student mention that fits Discord's 2,000-character limit.
+            const content = mentions.reduce((result, mention) => {
+                const next = result ? `${result} ${mention}` : mention;
+                return next.length <= 2000 ? next : result;
+            }, '');
 
             const message = await channel.send({ content, embeds: [embed] });
 

@@ -1094,6 +1094,8 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
           let notificationMsg = '';
           if (feedbackToUse) {
             notificationMsg = feedbackToUse;
+          } else if (action === 'advance_round') {
+            notificationMsg = `Your application for ${job.title} has moved forward to round ${application.currentRound + 1}.`;
           } else if (status) {
             notificationMsg = `Your application for ${job.title} has been updated to ${application.status}`;
           } else {
@@ -1164,10 +1166,13 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
 
     // Notify Discord (Summary)
     if (updated > 0) {
+      const discordAction = action === 'advance_round'
+        ? `Moved forward to ${req.body.roundName || `Round ${(req.body.advanceBy || 1)}`}`
+        : `Status: ${status}`;
       await discordService.sendBulkUpdate(
         job,
         updated,
-        action === 'set_status' ? `Status: ${status}` : 'Advanced Round',
+        discordAction,
         req.user,
         affectedStudents
       );
