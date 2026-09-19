@@ -4,11 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import { statsAPI, settingsAPI, campusAPI, jobReadinessAPI, userAPI } from '../../services/api';
 import { useSchools } from '../../context/SchoolsContext';
 import { Card, LoadingSpinner, Badge } from '../../components/common/UIComponents';
-import { 
+import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ComposedChart, Line
 } from 'recharts';
-import { 
+import {
   Target, Briefcase, Users, ArrowUpRight, Search, Download,
   Layers, Zap, Info, ChevronRight, MapPin, Flag,
   CheckCircle, ExternalLink, ChevronDown, ChevronUp,
@@ -407,7 +407,7 @@ const PipelineAnalytics = () => {
             <h3 className="text-xl font-black text-gray-900 mt-1">{stats.totalReady}</h3>
           </div>
         </Card>
-        
+
         {/* Cycle Goal Progress */}
         {cycle && (
           <Card className="p-4 bg-gradient-to-br from-violet-50 to-white border-violet-100 flex flex-col justify-between">
@@ -423,8 +423,8 @@ const PipelineAnalytics = () => {
                 <span className="text-[10px] font-bold text-gray-400 mb-0.5">/ {cycle.target}</span>
               </div>
               <div className="w-full bg-gray-200 h-1 rounded-full mt-2 overflow-hidden">
-                <div 
-                  className="h-full bg-violet-600 rounded-full" 
+                <div
+                  className="h-full bg-violet-600 rounded-full"
                   style={{ width: `${Math.min((cycle.current / (cycle.target || 1)) * 100, 100)}%` }}
                 />
               </div>
@@ -924,9 +924,9 @@ const PipelineAnalytics = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main Chart */}
-        <Card className="lg:col-span-2 p-8 bg-white border-gray-100 shadow-sm relative overflow-hidden">
+        <Card className="lg:col-span-2 min-w-0 p-8 bg-white border-gray-100 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/30 rounded-full blur-3xl -mr-32 -mt-32" />
-          
+
           <div className="flex items-center justify-between mb-8 relative">
             <div>
               <h3 className="text-xl font-bold text-gray-900">Pipeline Visualization</h3>
@@ -945,53 +945,59 @@ const PipelineAnalytics = () => {
             </div>
           </div>
 
-          <div className="h-[600px] min-h-[600px] w-full relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart 
-                layout="vertical"
-                data={data} 
-                margin={{ top: 20, right: 30, left: 100, bottom: 20 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={true} vertical={false} />
-                <XAxis 
-                  type="number"
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#9ca3af', fontSize: 12 }}
-                />
-                <YAxis 
-                  dataKey="role"
-                  type="category"
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#4b5563', fontSize: 11, fontWeight: 600 }}
-                  width={100}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
-                <Bar 
-                  dataKey="totalInterested" 
-                  name="Interested" 
-                  fill="#f3f4f6" 
-                  radius={[0, 6, 6, 0]} 
-                  barSize={20} 
-                />
-                <Bar 
-                  dataKey="jobReady" 
-                  name="Job Ready" 
-                  fill="#4f46e5" 
-                  radius={[0, 6, 6, 0]} 
-                  barSize={20} 
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="activeJobs" 
-                  name="Active Jobs" 
-                  stroke="#10b981" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} 
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+          <div className="h-[600px] min-h-[600px] min-w-0 w-full relative">
+            {data.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                <ComposedChart
+                  layout="vertical"
+                  data={data}
+                  margin={{ top: 20, right: 30, left: 100, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={true} vertical={false} />
+                  <XAxis
+                    type="number"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#9ca3af', fontSize: 12 }}
+                  />
+                  <YAxis
+                    dataKey="role"
+                    type="category"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#4b5563', fontSize: 11, fontWeight: 600 }}
+                    width={100}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
+                  <Bar
+                    dataKey="totalInterested"
+                    name="Interested"
+                    fill="#f3f4f6"
+                    radius={[0, 6, 6, 0]}
+                    barSize={20}
+                  />
+                  <Bar
+                    dataKey="jobReady"
+                    name="Job Ready"
+                    fill="#4f46e5"
+                    radius={[0, 6, 6, 0]}
+                    barSize={20}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="activeJobs"
+                    name="Active Jobs"
+                    stroke="#10b981"
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                No pipeline data available for the selected filters.
+              </div>
+            )}
           </div>
         </Card>
 
@@ -1033,7 +1039,7 @@ const PipelineAnalytics = () => {
                     <span className="text-xs font-bold text-gray-400">{d.jobReady}/{d.totalInterested} Ready</span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-indigo-600 transition-all duration-1000"
                       style={{ width: `${(d.jobReady / (d.totalInterested || 1)) * 100}%` }}
                     />
@@ -1068,8 +1074,8 @@ const PipelineAnalytics = () => {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {data.map((row) => (
-                <tr 
-                  key={row.role} 
+                <tr
+                  key={row.role}
                   className={`hover:bg-indigo-50/30 transition-colors cursor-pointer ${selectedRole?.role === row.role ? 'bg-indigo-50/50' : ''}`}
                   onClick={() => setSelectedRole(row)}
                 >
@@ -1138,7 +1144,7 @@ const PipelineAnalytics = () => {
                         <p className="font-bold text-gray-900 text-sm">{student.name}</p>
                         <p className="text-xs text-gray-500">{student.campus}</p>
 
-                    
+
                       </div>
                     </div>
                     <button className="p-2 text-gray-400 hover:text-indigo-600 transition-colors">
