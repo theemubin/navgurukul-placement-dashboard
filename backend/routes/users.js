@@ -9,6 +9,19 @@ const upload = require('../middleware/upload');
 const cacheService = require('../services/redisCacheService');
 const { cacheMiddleware, invalidateCache } = require('../middleware/cache');
 
+const normalizeCefrLevel = (value) => {
+  if (typeof value !== 'string') return '';
+
+  const compact = value.trim().toUpperCase().replace(/[\s()]/g, '').replace(/-/g, '');
+  const match = compact.match(/^(MINUS)?(A1|A2|B1|B2|C1|C2)$/);
+
+  if (match) {
+    return match[2];
+  }
+
+  return compact;
+};
+
 /**
  * @swagger
  * tags:
@@ -569,9 +582,26 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
       }
 
       if (updates.englishProficiency) {
-        user.studentProfile.englishProficiency = {
+        const cefrLevels = new Set(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
+        const incoming = {
           ...user.studentProfile.englishProficiency,
           ...updates.englishProficiency
+        };
+
+        const speaking = normalizeCefrLevel(incoming.speaking);
+        const writing = normalizeCefrLevel(incoming.writing);
+
+        if (incoming.speaking && incoming.speaking !== '' && !cefrLevels.has(speaking)) {
+          throw new Error('Invalid English speaking level. Choose a valid CEFR level.');
+        }
+
+        if (incoming.writing && incoming.writing !== '' && !cefrLevels.has(writing)) {
+          throw new Error('Invalid English writing level. Choose a valid CEFR level.');
+        }
+
+        user.studentProfile.englishProficiency = {
+          speaking,
+          writing
         };
       }
 
@@ -584,8 +614,8 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
         const normalizedLanguages = updates.languages.map((language, index) => {
           const normalized = {
             language: typeof language?.language === 'string' ? language.language.trim() : '',
-            speaking: typeof language?.speaking === 'string' ? language.speaking.trim().toUpperCase() : '',
-            writing: typeof language?.writing === 'string' ? language.writing.trim().toUpperCase() : '',
+            speaking: normalizeCefrLevel(language?.speaking),
+            writing: normalizeCefrLevel(language?.writing),
             isNative: Boolean(language?.isNative)
           };
 
@@ -594,7 +624,7 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
           }
 
           ['reading', 'listening'].forEach((field) => {
-            const value = typeof language?.[field] === 'string' ? language[field].trim().toUpperCase() : '';
+            const value = normalizeCefrLevel(language?.[field]);
             if (value) {
               if (!cefrLevels.has(value)) {
                 throw new Error(`Invalid ${field} level at language entry ${index + 1}.`);

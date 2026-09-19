@@ -33,6 +33,15 @@ const fallbackSchools = [
   'School of Second Chance'
 ];
 
+const normalizeCefrLevel = (value) => {
+  if (typeof value !== 'string') return '';
+
+  const compact = value.trim().toUpperCase().replace(/[\s()]/g, '').replace(/-/g, '');
+  const match = compact.match(/^(MINUS)?(A1|A2|B1|B2|C1|C2)$/);
+
+  return match ? match[2] : compact;
+};
+
 const cefrLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const cefrDescriptions = {
   'A1': 'Beginner',
@@ -276,8 +285,17 @@ const StudentProfile = () => {
         courses: data.studentProfile?.courses || [],
         hometown: data.studentProfile?.hometown || { pincode: '', village: '', district: '', state: '' },
         openForRoles: data.studentProfile?.openForRoles || [],
-        englishProficiency: data.studentProfile?.englishProficiency || { speaking: '', writing: '' },
-        languages: Array.isArray(data.studentProfile?.languages) ? data.studentProfile.languages : [],
+        englishProficiency: {
+          speaking: normalizeCefrLevel(data.studentProfile?.englishProficiency?.speaking || ''),
+          writing: normalizeCefrLevel(data.studentProfile?.englishProficiency?.writing || '')
+        },
+        languages: Array.isArray(data.studentProfile?.languages) ? data.studentProfile.languages.map(lang => ({
+          ...lang,
+          speaking: normalizeCefrLevel(lang?.speaking),
+          writing: normalizeCefrLevel(lang?.writing),
+          reading: normalizeCefrLevel(lang?.reading),
+          listening: normalizeCefrLevel(lang?.listening)
+        })) : [],
         softSkills: Array.isArray(data.studentProfile?.softSkills) ? data.studentProfile.softSkills : [],
         technicalSkills: technicalFromProfile,
         officeSkills: Array.isArray(data.studentProfile?.officeSkills) ? data.studentProfile.officeSkills : [],
@@ -304,8 +322,8 @@ const StudentProfile = () => {
           gender: data.resolvedProfile.gender || prev.gender,
           phone: data.resolvedProfile.phone || prev.phone,
           englishProficiency: {
-            speaking: data.resolvedProfile.englishSpeaking || prev.englishProficiency.speaking,
-            writing: data.resolvedProfile.englishWriting || prev.englishProficiency.writing
+            speaking: normalizeCefrLevel(data.resolvedProfile.englishSpeaking || prev.englishProficiency.speaking),
+            writing: normalizeCefrLevel(data.resolvedProfile.englishWriting || prev.englishProficiency.writing)
           },
           hometown: data.resolvedProfile.hometown ? { ...prev.hometown, ...data.resolvedProfile.hometown } : prev.hometown,
           readTheoryLevel: data.resolvedProfile.readTheoryLevel || prev.readTheoryLevel || '',

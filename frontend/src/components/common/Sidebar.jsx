@@ -5,7 +5,7 @@ import { questionAPI, userAPI, jobAPI, jobReadinessAPI } from '../../services/ap
 import {
   Home, User, Briefcase, FileText, Users, CheckSquare, BarChart3, Settings,
   X, ClipboardCheck, Target, ExternalLink, Heart, Key, MessageCircle,
-  Image as ImageIcon, Globe, Search, ShieldCheck, Database, Sparkles
+  Image as ImageIcon, Globe, Search, ShieldCheck, ShieldAlert, Database, Sparkles
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {

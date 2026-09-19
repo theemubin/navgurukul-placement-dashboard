@@ -553,6 +553,15 @@ userSchema.virtual('fullName').get(function () {
 
 // Virtual for prioritized profile data
 // Returns prioritized values for keys that could come from Ghar or student
+const normalizeCefrLevel = (value) => {
+  if (typeof value !== 'string') return '';
+
+  const compact = value.trim().toUpperCase().replace(/[\s()]/g, '').replace(/-/g, '');
+  const match = compact.match(/^(MINUS)?(A1|A2|B1|B2|C1|C2)$/);
+
+  return match ? match[2] : compact;
+};
+
 userSchema.virtual('resolvedProfile').get(function () {
   if (this.role !== 'student') return null;
 
@@ -566,8 +575,8 @@ userSchema.virtual('resolvedProfile').get(function () {
     attendancePercentage: ghar.attendancePercentage?.value || local.attendancePercentage || null,
     currentStatus: ghar.currentStatus?.value || local.currentStatus || 'Active',
     gender: (ghar.gender?.value || this.gender || '').toLowerCase(),
-    englishSpeaking: ghar.englishSpeaking?.value || local.englishProficiency?.speaking || '',
-    englishWriting: ghar.englishWriting?.value || local.englishProficiency?.writing || '',
+    englishSpeaking: normalizeCefrLevel(ghar.englishSpeaking?.value || local.englishProficiency?.speaking || ''),
+    englishWriting: normalizeCefrLevel(ghar.englishWriting?.value || local.englishProficiency?.writing || ''),
     hometown: ghar.hometown?.value || local.hometown || null,
     phone: ghar.phone?.value || this.phone || '',
     personalEmail: ghar.personalEmail?.value || local.personalEmail || '',
