@@ -384,7 +384,11 @@ router.put('/', auth, authorize('manager', 'coordinator'), async (req, res) => {
     });
   } catch (error) {
     console.error('Update settings error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    const isValidationError = error?.name === 'ValidationError' || error?.name === 'CastError';
+    res.status(isValidationError ? 400 : 500).json({
+      success: false,
+      message: isValidationError ? error.message : 'Server error'
+    });
   }
 });
 

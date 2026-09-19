@@ -58,7 +58,7 @@ const HistoricalCycleCharts = ({ campusId = null, title = "Historical Placement 
         <div className="card bg-white p-6 rounded-3xl border-2 border-gray-100 shadow-sm">
           <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6">Placement Volume per Cycle</h3>
           <div className="h-[300px] w-full min-h-[300px]">
-            <ResponsiveContainer width="99%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
@@ -85,7 +85,7 @@ const HistoricalCycleCharts = ({ campusId = null, title = "Historical Placement 
         <div className="card bg-white p-6 rounded-3xl border-2 border-gray-100 shadow-sm">
           <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6">Success Rate Trend (%)</h3>
           <div className="h-[300px] w-full min-h-[300px]">
-            <ResponsiveContainer width="99%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">

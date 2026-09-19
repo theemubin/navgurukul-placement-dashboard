@@ -78,7 +78,7 @@ const LongTermStudentsTrend = () => {
           Students with &gt;12 Months Tenure (Not Placed) by Campus
         </h3>
         <div className="h-[400px] w-full min-h-[400px]">
-          <ResponsiveContainer width="99%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <LineChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis 
