@@ -1471,7 +1471,8 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
     const campusIds = req.user.role === 'campus_poc'
       ? getPOCManagedCampusIds(req.user)
       : null;
-    const { cycleId } = req.query;
+    const { cycleId, summary } = req.query;
+    const liteSummary = summary === 'lite';
 
     let studentQuery = {
       role: 'student',
@@ -3035,4 +3036,3 @@ router.get('/talent-pipeline/export', auth, authorize('manager', 'coordinator', 
 });
 
 module.exports = router;
-
