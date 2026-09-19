@@ -412,6 +412,7 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
       ? Job.find(query)
         .select('title company location status jobType applicationDeadline salary roleCategory createdAt updatedAt placementsCount maxPositions minPositions')
         .sort(sortOptions)
+        .lean()
       : Job.find(query)
         .populate('requiredSkills.skill')
         .populate('eligibility.campuses', 'name')

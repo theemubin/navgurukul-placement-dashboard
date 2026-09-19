@@ -260,5 +260,8 @@ jobSchema.index({
   requirements: 'text',
   responsibilities: 'text'
 });
+jobSchema.index({ status: 1, createdAt: -1 });
+jobSchema.index({ status: 1, applicationDeadline: 1 });
+jobSchema.index({ coordinator: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Job', jobSchema);
