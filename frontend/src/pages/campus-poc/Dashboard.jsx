@@ -1222,9 +1222,9 @@ const POCDashboard = () => {
                               </div>
                             </div>
                           ))}
-                          {school.students.length > 5 && (
+                          {(school.studentCount || school.students.length) > school.students.length && (
                             <p className="text-xs text-center text-gray-500 pt-2">
-                              +{school.students.length - 5} more students
+                              +{(school.studentCount || 0) - school.students.length} more students
                             </p>
                           )}
                         </div>

@@ -243,7 +243,7 @@ const JobForm = () => {
 
   const fetchCompanies = async () => {
     try {
-      const res = await settingsAPI.getSettings();
+      const res = await settingsAPI.getSettings({ forceRefresh: true });
       const master = res.data.data.masterCompanies || {};
       setAvailableCompanies(Object.values(master));
       setSettings((prev) => ({ ...prev, ...res.data.data }));
@@ -300,13 +300,27 @@ const JobForm = () => {
       const res = await settingsAPI.addCompanyOption(newCompanyFormData);
       if (res.data.success) {
         toast.success(`Registered "${newCompanyFormData.name}" as a company`);
-        await fetchCompanies();
+        const savedCompanies = res.data.data || {};
+        const savedCompany = Object.values(savedCompanies).find(
+          (company) =>
+            company.name?.trim().toLowerCase() ===
+            newCompanyFormData.name.trim().toLowerCase(),
+        );
+        if (savedCompany) {
+          setAvailableCompanies(Object.values(savedCompanies));
+          setSettings((prev) => ({ ...prev, masterCompanies: savedCompanies }));
+        } else {
+          await fetchCompanies();
+        }
         // Auto-select the newly added company
         setFormData((prev) => ({
           ...prev,
           company: {
+            ...savedCompany,
             ...newCompanyFormData,
-            logo: `https://www.google.com/s2/favicons?domain=${newCompanyFormData.website.replace(/^https?:\/\//, "").split("/")[0]}&sz=128`,
+            logo:
+              savedCompany?.logo ||
+              `https://www.google.com/s2/favicons?domain=${newCompanyFormData.website.replace(/^https?:\/\//, "").split("/")[0]}&sz=128`,
           },
         }));
         setShowAddCompanyModal(false);
@@ -591,28 +605,31 @@ const JobForm = () => {
       if (!payload.salary.min) delete payload.salary.min;
       if (!payload.salary.max) delete payload.salary.max;
 
-      // Sync company details back to master list so they are available for future jobs
-      if (formData.company.name) {
-        try {
-          await settingsAPI.addCompanyOption({
-            name: formData.company.name,
-            website: formData.company.website || "",
-            description: formData.company.description || "",
-            logo: formData.company.logo || "",
-          });
-        } catch (err) {
-          console.error("Failed to sync company details to master list", err);
-          // Don't block job saving if master list sync fails
-        }
-      }
-
       if (isEdit) {
         await jobAPI.updateJob(id, payload);
-        toast.success("Job updated successfully");
+        toast.success(
+          formData.status === "application_stage"
+            ? "Job is now open for applications"
+            : "Job updated successfully"
+        );
       } else {
         await jobAPI.createJob(payload);
         toast.success("Job created successfully");
       }
+
+      // Keep company sync out of the critical save path. A failure here should
+      // not make a successful job save appear stuck or failed.
+      if (formData.company.name) {
+        settingsAPI.addCompanyOption({
+          name: formData.company.name,
+          website: formData.company.website || "",
+          description: formData.company.description || "",
+          logo: formData.company.logo || "",
+        }).catch((err) => {
+          console.error("Failed to sync company details to master list", err);
+        });
+      }
+
       navigate("/coordinator/jobs");
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to save job");
@@ -3129,6 +3146,13 @@ const JobForm = () => {
                   {formData.status.replace("_", " ")} Mode
                 </p>
               </div>
+              {saving && (
+                <p className="text-sm text-primary-700" role="status" aria-live="polite">
+                  {formData.status === "application_stage"
+                    ? "Saving the job and opening applications. Please wait..."
+                    : "Saving your job changes..."}
+                </p>
+              )}
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -3144,7 +3168,9 @@ const JobForm = () => {
                 >
                   <Save className="w-4 h-4" />
                   {saving
-                    ? "Processing..."
+                    ? formData.status === "application_stage"
+                      ? "Opening applications..."
+                      : "Saving..."
                     : isEdit
                       ? "Update Job Details"
                       : "Publish Job Posting"}

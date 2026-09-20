@@ -7,6 +7,18 @@ const Notification = require('../models/Notification');
 const { auth, authorize } = require('../middleware/auth');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 
+function toPlainObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  if (value instanceof Map) {
+    return Object.fromEntries(value);
+  }
+
+  return value;
+}
+
 async function getImpactFromUserQuery(matchQuery) {
   const User = require('../models/User');
   const Campus = require('../models/Campus');
@@ -123,19 +135,20 @@ router.get('/', auth, async (req, res) => {
     const inactive = Array.isArray(settings.inactiveSchools) ? settings.inactiveSchools : [];
 
     // Filter merged schools and gharSchools to exclude admin-deactivated schools
+    const schoolModules = toPlainObject(settings.schoolModules);
     const rawMerged = (settings.mergedSchools && settings.mergedSchools.length > 0)
       ? settings.mergedSchools
-      : Object.keys(Object.fromEntries(settings.schoolModules || new Map()));
+      : Object.keys(schoolModules);
 
     const visibleMerged = rawMerged.filter(s => !inactive.includes(s));
 
-    const rawGharSchools = Object.fromEntries(settings.gharSchools || new Map());
+    const rawGharSchools = toPlainObject(settings.gharSchools);
     const visibleGharSchools = Object.fromEntries(
       Object.entries(rawGharSchools).map(([campus, names]) => [campus, (Array.isArray(names) ? names.filter(n => !inactive.includes(n)) : [])])
     );
 
     const response = {
-      schoolModules: Object.fromEntries(settings.schoolModules || new Map()),
+      schoolModules,
       // Prefer merged schools list (Ghar-first) when available
       schools: visibleMerged,
       gharSchools: visibleGharSchools,
@@ -150,10 +163,10 @@ router.get('/', auth, async (req, res) => {
       roleCategories: settings.roleCategories || [],
       councilPosts: settings.councilPosts || [],
       jobLocations: settings.jobLocations || [],
-      proficiencyRubrics: Object.fromEntries(settings.proficiencyRubrics || new Map()),
-      masterCompanies: Object.fromEntries(settings.masterCompanies || new Map()),
-      institutionOptions: Object.fromEntries(settings.institutionOptions || new Map()),
-      higherEducationOptions: Object.fromEntries(settings.higherEducationOptions || new Map()),
+      proficiencyRubrics: toPlainObject(settings.proficiencyRubrics),
+      masterCompanies: toPlainObject(settings.masterCompanies),
+      institutionOptions: toPlainObject(settings.institutionOptions),
+      higherEducationOptions: toPlainObject(settings.higherEducationOptions),
       // Include discord settings so UI can display and edit them
       discordConfig: settings.discordConfig || { enabled: false, channels: {} },
       hiringPartners: settings.hiringPartners || [],
@@ -1387,7 +1400,7 @@ router.delete('/higher-education', auth, authorize('manager', 'coordinator', 'ca
         notifiedStudents = await notifyImpactedStudents(
           impact.impactedUserIds,
           'Profile Update Required',
-          `A higher-education specialization you selected ("${normalizedSpec}") under "${normalizedDept}" is no longer available. Please update your profile.`
+          'As part of an ongoing data-cleaning and data-hygiene process, some education data has been changed. Please review and update your profile.'
         );
       }
 
@@ -1431,7 +1444,7 @@ router.delete('/higher-education', auth, authorize('manager', 'coordinator', 'ca
         notifiedStudents = await notifyImpactedStudents(
           impact.impactedUserIds,
           'Profile Update Required',
-          `A higher-education department you selected ("${normalizedDept}") is no longer available. Please update your profile.`
+          'As part of an ongoing data-cleaning and data-hygiene process, some education data has been changed. Please review and update your profile.'
         );
       }
 
@@ -1645,9 +1658,38 @@ router.post('/higher-education/add', auth, authorize('manager', 'coordinator', '
       message: 'Education options updated successfully',
       data: Object.fromEntries(currentOptions)
     });
+
   } catch (error) {
     console.error('Add higher education option error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+router.post('/higher-education/request', auth, authorize('student'), async (req, res) => {
+  try {
+    const { department, specialization } = req.body || {};
+    const requestedValue = String(specialization || department || '').trim();
+    if (!requestedValue) {
+      return res.status(400).json({ success: false, message: 'A department or specialization is required' });
+    }
+
+    const managers = await User.find({ role: 'manager', isActive: true }).select('_id');
+    if (managers.length > 0) {
+      const studentName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email;
+      await Notification.insertMany(managers.map((manager) => ({
+        recipient: manager._id,
+        type: 'general',
+        title: 'Higher-education option request',
+        message: `${studentName} requested adding "${requestedValue}"${department ? ` under "${department}"` : ''} to the student profile options.`,
+        link: '/manager/settings',
+        relatedEntity: { type: 'user', id: req.userId }
+      })), { ordered: false });
+    }
+
+    res.json({ success: true, message: 'Request sent to the administrators' });
+  } catch (error) {
+    console.error('Higher-education option request error:', error);
+    res.status(500).json({ success: false, message: 'Failed to send request' });
   }
 });
 
@@ -1861,27 +1903,33 @@ router.post('/education/rename', auth, authorize('manager'), async (req, res) =>
     const settings = await Settings.getSettings();
     let settingsChanged = false;
 
+    const normalizedOldName = oldName.trim();
+    const normalizedNewName = newName.trim();
+    if (normalizedOldName === normalizedNewName) {
+      return res.status(400).json({ success: false, message: 'New name must be different from old name' });
+    }
+
     if (type === 'institution') {
       const insts = settings.institutionOptions || new Map();
-      if (insts.has(oldName)) {
-        const pincode = insts.get(oldName);
-        insts.set(newName, pincode);
-        insts.delete(oldName);
+      if (insts.has(normalizedOldName)) {
+        const pincode = insts.get(normalizedOldName);
+        insts.set(normalizedNewName, pincode);
+        insts.delete(normalizedOldName);
         settings.institutionOptions = insts;
         settingsChanged = true;
       }
       // Update all users who have this institution
       await User.updateMany(
-        { 'higherEducation.institution': oldName },
-        { $set: { 'higherEducation.$[elem].institution': newName } },
-        { arrayFilters: [{ 'elem.institution': oldName }] }
+        { 'studentProfile.higherEducation.institution': normalizedOldName },
+        { $set: { 'studentProfile.higherEducation.$[elem].institution': normalizedNewName } },
+        { arrayFilters: [{ 'elem.institution': normalizedOldName }] }
       );
     } else if (type === 'department') {
       const opts = settings.higherEducationOptions || new Map();
-      if (opts.has(oldName)) {
-        const specs = opts.get(oldName);
-        opts.set(newName, specs);
-        opts.delete(oldName);
+      if (opts.has(normalizedOldName)) {
+        const specs = opts.get(normalizedOldName);
+        opts.set(normalizedNewName, specs);
+        opts.delete(normalizedOldName);
         settings.higherEducationOptions = opts;
         settingsChanged = true;
       }
@@ -1889,25 +1937,103 @@ router.post('/education/rename', auth, authorize('manager'), async (req, res) =>
       await User.updateMany(
         {
           $or: [
-            { 'higherEducation.department': oldName },
-            { 'higherEducation.fieldOfStudy': oldName }
+            { 'studentProfile.higherEducation.department': normalizedOldName },
+            { 'studentProfile.higherEducation.fieldOfStudy': normalizedOldName }
           ]
         },
         {
           $set: {
-            'higherEducation.$[elem].department': newName,
-            'higherEducation.$[elem].fieldOfStudy': newName
+            'studentProfile.higherEducation.$[elem].department': normalizedNewName,
+            'studentProfile.higherEducation.$[elem].fieldOfStudy': normalizedNewName
           }
         },
-        { arrayFilters: [{ $or: [{ 'elem.department': oldName }, { 'elem.fieldOfStudy': oldName }] }] }
+        { arrayFilters: [{ $or: [{ 'elem.department': normalizedOldName }, { 'elem.fieldOfStudy': normalizedOldName }] }] }
       );
+    } else if (type === 'degree') {
+      const degreeOptions = Array.isArray(settings.degreeOptions) ? settings.degreeOptions : [];
+      const degreeIndex = degreeOptions.indexOf(normalizedOldName);
+      if (degreeIndex === -1) {
+        return res.status(404).json({ success: false, message: 'Degree not found' });
+      }
+
+      const nextDegreeOptions = [...degreeOptions];
+      if (!nextDegreeOptions.includes(normalizedNewName)) {
+        nextDegreeOptions[degreeIndex] = normalizedNewName;
+      } else {
+        nextDegreeOptions.splice(degreeIndex, 1);
+      }
+      settings.degreeOptions = nextDegreeOptions;
+
+      const opts = settings.higherEducationOptions || new Map();
+      if (opts.has(normalizedOldName)) {
+        const specs = opts.get(normalizedOldName);
+        opts.delete(normalizedOldName);
+        if (!opts.has(normalizedNewName)) opts.set(normalizedNewName, specs);
+        settings.higherEducationOptions = opts;
+      }
+      settingsChanged = true;
+
+      await User.updateMany(
+        { 'studentProfile.higherEducation.degree': normalizedOldName },
+        { $set: { 'studentProfile.higherEducation.$[elem].degree': normalizedNewName } },
+        { arrayFilters: [{ 'elem.degree': normalizedOldName }] }
+      );
+    } else if (type === 'specialization') {
+      const { department } = req.body;
+      if (!department || !department.trim()) {
+        return res.status(400).json({ success: false, message: 'Department is required when renaming a specialization' });
+      }
+
+      const opts = settings.higherEducationOptions || new Map();
+      const normalizedDepartment = department.trim();
+      const specializations = opts.get(normalizedDepartment) || [];
+      const specializationIndex = specializations.indexOf(normalizedOldName);
+      if (specializationIndex === -1) {
+        return res.status(404).json({ success: false, message: 'Specialization not found' });
+      }
+
+      const nextSpecializations = [...specializations];
+      if (!nextSpecializations.includes(normalizedNewName)) {
+        nextSpecializations[specializationIndex] = normalizedNewName;
+      } else {
+        nextSpecializations.splice(specializationIndex, 1);
+      }
+      opts.set(normalizedDepartment, nextSpecializations);
+      settings.higherEducationOptions = opts;
+      settingsChanged = true;
+
+      await User.updateMany(
+        {
+          'studentProfile.higherEducation': {
+            $elemMatch: {
+              $or: [
+                { department: normalizedDepartment },
+                { fieldOfStudy: normalizedDepartment }
+              ],
+              specialization: normalizedOldName
+            }
+          }
+        },
+        { $set: { 'studentProfile.higherEducation.$[elem].specialization': normalizedNewName } },
+        {
+          arrayFilters: [{
+            specialization: normalizedOldName,
+            $or: [
+              { department: normalizedDepartment },
+              { fieldOfStudy: normalizedDepartment }
+            ]
+          }]
+        }
+      );
+    } else {
+      return res.status(400).json({ success: false, message: 'Unsupported education item type' });
     }
 
     if (settingsChanged) {
       await settings.save();
     }
 
-    res.json({ success: true, message: `Renamed ${type} from "${oldName}" to "${newName}"` });
+    res.json({ success: true, message: `Renamed ${type} from "${normalizedOldName}" to "${normalizedNewName}"` });
   } catch (error) {
     console.error('Rename education error:', error);
     res.status(500).json({ success: false, message: 'Server error' });

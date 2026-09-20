@@ -269,7 +269,21 @@ node scripts/promote_normalized_index_unique.js`;
 
       setSaving(true);
       setError(null);
-      await settingsAPI.updateSettings(settings, user?._id);
+      const updatePayload = {
+        schoolModules: settings.schoolModules,
+        rolePreferences: settings.rolePreferences,
+        technicalSkills: settings.technicalSkills,
+        degreeOptions: settings.degreeOptions,
+        softSkills: settings.softSkills,
+        inactiveSchools: settings.inactiveSchools,
+        institutionOptions: settings.institutionOptions,
+        higherEducationOptions: settings.higherEducationOptions,
+        roleCategories: settings.roleCategories,
+        discordConfig: settings.discordConfig,
+        hiringPartners: settings.hiringPartners,
+        testimonials: settings.testimonials
+      };
+      await settingsAPI.updateSettings(updatePayload, user?._id);
       setSuccess('Settings saved successfully');
       setInitialSettings(JSON.parse(JSON.stringify(settings)));
       setTimeout(() => setSuccess(null), 3000);
@@ -481,15 +495,18 @@ node scripts/promote_normalized_index_unique.js`;
     }
   };
 
-  const handleRename = async (type, oldName) => {
+  const handleRename = async (type, oldName, department = '') => {
     const newName = prompt(`Rename "${oldName}" to:`, oldName);
     if (!newName || newName === oldName) return;
 
     try {
       setSaving(true);
-      await settingsAPI.renameEducationItem({ type, oldName, newName });
+      await settingsAPI.renameEducationItem({ type, oldName, newName, ...(department ? { department } : {}) });
       setSuccess(`Renamed successfully`);
-      fetchSettings(); // Refresh global settings
+      if (type === 'degree' && selectedRegistryDegree === oldName) {
+        setSelectedRegistryDegree(newName);
+      }
+      await fetchSettings(); // Refresh global settings
       fetchEducationAnalytics(); // Refresh stats
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -1048,6 +1065,19 @@ node scripts/promote_normalized_index_unique.js`;
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            handleRename('degree', degree);
+                          }}
+                          className={`p-1 rounded-md transition-colors ${selectedRegistryDegree === degree
+                            ? 'text-blue-200 hover:text-white hover:bg-blue-500'
+                            : 'text-gray-300 hover:text-blue-500 hover:bg-blue-50 opacity-0 group-hover:opacity-100'
+                            }`}
+                          title="Correct this degree for all students"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             removeDegree(degree);
                           }}
                           className={`ml-2 p-1 rounded-md transition-colors ${selectedRegistryDegree === degree
@@ -1101,6 +1131,13 @@ node scripts/promote_normalized_index_unique.js`;
                               className="group px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 flex items-center shadow-sm hover:border-blue-400 hover:text-blue-600 transition-all cursor-default"
                             >
                               {spec}
+                              <button
+                                onClick={() => handleRename('specialization', spec, selectedRegistryDegree)}
+                                className="ml-3 text-gray-300 hover:text-blue-500 transition-colors"
+                                title="Correct this specialization for all students"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 onClick={() => removeSpecialization(selectedRegistryDegree, spec)}
                                 className="ml-3 text-gray-300 hover:text-red-500 transition-colors"

@@ -225,6 +225,11 @@ const userSchema = new mongoose.Schema({
 
     // Higher Education (can have multiple)
     higherEducation: [{
+      level: {
+        type: String,
+        enum: ['', 'Diploma', 'Bachelor', 'Master', 'Doctorate', 'Other'],
+        default: ''
+      },
       institution: String,
       department: String,
       specialization: String,

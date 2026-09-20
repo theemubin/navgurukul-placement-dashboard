@@ -63,6 +63,7 @@ import CoordinatorInterestRequests from './pages/coordinator/InterestRequests';
 import CoordinatorInterestRequestsForManager from './pages/coordinator/InterestRequests';
 import CoordinatorForum from './pages/coordinator/Forum';
 import PipelineAnalytics from './pages/coordinator/PipelineAnalytics';
+import StudentExport from './pages/coordinator/StudentExport';
 // Coordinator Settings sub-pages
 import AIKeysSettings from './pages/coordinator/settings/AIKeys';
 import DiscordSettings from './pages/coordinator/settings/Discord';
@@ -236,6 +237,7 @@ function App() {
         <Route path="jobs/new" element={<JobForm />} />
         <Route path="jobs/:id/edit" element={<JobForm />} />
         <Route path="applications" element={<CoordinatorApplications />} />
+        <Route path="student-export" element={<StudentExport />} />
         {/* Nested Skills routes */}
         <Route path="skills" element={<SkillsLayout role="coordinator" />}>
           <Route index element={<CoordinatorSkills />} />

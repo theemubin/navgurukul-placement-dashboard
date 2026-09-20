@@ -33,6 +33,18 @@ const fallbackSchools = [
   'School of Second Chance'
 ];
 
+const higherEducationLevels = ['Diploma', 'Bachelor', 'Master', 'Doctorate', 'Other'];
+const hasEducationData = (entry) => entry && Object.entries(entry)
+  .some(([key, value]) => key !== 'isCompleted' && String(value ?? '').trim() !== '');
+const normalizeHigherEducation = (entries) => (Array.isArray(entries) ? entries : [])
+  .filter(hasEducationData)
+  .map((entry) => ({
+    ...entry,
+    level: entry.level || '',
+    department: entry.department || entry.fieldOfStudy || '',
+    fieldOfStudy: entry.fieldOfStudy || entry.department || ''
+  }));
+
 const normalizeCefrLevel = (value) => {
   if (typeof value !== 'string') return '';
 
@@ -281,7 +293,7 @@ const StudentProfile = () => {
         customModuleDescription: data.studentProfile?.customModuleDescription || '',
         tenthGrade: data.studentProfile?.tenthGrade || { passingYear: '', state: '', board: '', percentage: '' },
         twelfthGrade: data.studentProfile?.twelfthGrade || { passingYear: '', state: '', board: '', percentage: '' },
-        higherEducation: data.studentProfile?.higherEducation || [],
+        higherEducation: normalizeHigherEducation(data.studentProfile?.higherEducation),
         courses: data.studentProfile?.courses || [],
         hometown: data.studentProfile?.hometown || { pincode: '', village: '', district: '', state: '' },
         openForRoles: data.studentProfile?.openForRoles || [],
@@ -353,6 +365,7 @@ const StudentProfile = () => {
         setFormData(prev => ({
           ...prev,
           ...localDraft,
+          higherEducation: normalizeHigherEducation(localDraft.higherEducation ?? prev.higherEducation),
           profileStatus: data.studentProfile?.profileStatus || prev.profileStatus,
           revisionNotes: data.studentProfile?.revisionNotes || prev.revisionNotes
         }));
@@ -456,6 +469,18 @@ const StudentProfile = () => {
       toast.error('Failed to add new institution');
     }
     return false;
+  };
+
+  const handleRequestHigherEducationOption = async (data) => {
+    try {
+      const response = await settingsAPI.requestHigherEducationOption(data);
+      if (response.data.success) {
+        toast.success('Request sent to the administrators');
+      }
+    } catch (error) {
+      console.error('Error requesting higher-education option:', error);
+      toast.error(error.response?.data?.message || 'Failed to send option request');
+    }
   };
 
   const fetchPincodeAuto = async (institution, index) => {
@@ -578,7 +603,12 @@ const StudentProfile = () => {
       }
 
       // Include campus and gender in the profile update
-      const profileData = { ...formData, campus: selectedCampus, gender: formData.gender };
+      const profileData = {
+        ...formData,
+        campus: selectedCampus,
+        gender: formData.gender,
+        higherEducation: normalizeHigherEducation(formData.higherEducation)
+      };
       await userAPI.updateProfile(profileData);
       toast.success('Profile updated successfully');
       updateUser({ firstName: formData.firstName, lastName: formData.lastName });
@@ -615,7 +645,12 @@ const StudentProfile = () => {
     try {
       // Save profile first to persist any changes (e.g., soft skills) before submission
       try {
-        await userAPI.updateProfile({ ...formData, campus: selectedCampus, gender: formData.gender });
+        await userAPI.updateProfile({
+          ...formData,
+          campus: selectedCampus,
+          gender: formData.gender,
+          higherEducation: normalizeHigherEducation(formData.higherEducation)
+        });
         toast.success('Profile saved');
         localStorage.removeItem(draftStorageKey);
         setHasUnsavedChanges(false);
@@ -1501,6 +1536,7 @@ const StudentProfile = () => {
                         onClick={() => setFormData({
                           ...formData,
                           higherEducation: [...formData.higherEducation, {
+                            level: '',
                             degree: '',
                             institution: '',
                             fieldOfStudy: '',
@@ -1539,6 +1575,35 @@ const StudentProfile = () => {
                             </button>
                           )}
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Education Level</label>
+                              <select
+                                value={edu.level || ''}
+                                onChange={(e) => {
+                                  const updated = [...formData.higherEducation];
+                                  updated[index].level = e.target.value;
+                                  setFormData({ ...formData, higherEducation: updated });
+                                }}
+                                disabled={!canEdit}
+                              >
+                                <option value="">Select Level</option>
+                                {higherEducationLevels.map(level => <option key={level} value={level}>{level}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <SearchableSelect
+                                label="Degree / Diploma"
+                                placeholder={edu.level ? `Select ${edu.level} qualification` : 'Select level first'}
+                                options={settings.degreeOptions || []}
+                                value={edu.degree || ''}
+                                onChange={(value) => {
+                                  const updated = [...formData.higherEducation];
+                                  updated[index].degree = value;
+                                  setFormData({ ...formData, higherEducation: updated });
+                                }}
+                                disabled={!canEdit || !edu.level}
+                              />
+                            </div>
                             <div>
                               <SearchableSelect
                                 label="Institution"
@@ -1629,6 +1694,7 @@ const StudentProfile = () => {
                                   updated[index].specialization = '';
                                   setFormData({ ...formData, higherEducation: updated });
                                 }}
+                                onAdd={(value) => handleRequestHigherEducationOption({ department: value })}
                                 disabled={!canEdit}
                               />
                               <p className="mt-1 text-[11px] text-gray-500">
@@ -1646,6 +1712,10 @@ const StudentProfile = () => {
                                   updated[index].specialization = value;
                                   setFormData({ ...formData, higherEducation: updated });
                                 }}
+                                onAdd={(value) => handleRequestHigherEducationOption({
+                                  department: edu.department || edu.fieldOfStudy,
+                                  specialization: value
+                                })}
                                 disabled={!canEdit}
                               />
                             </div>

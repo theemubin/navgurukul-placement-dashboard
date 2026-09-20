@@ -15,11 +15,12 @@ const SearchableSelect = ({
     const [searchTerm, setSearchTerm] = useState('');
     const wrapperRef = useRef(null);
 
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
     const filteredOptions = options.filter(opt =>
-        opt.toLowerCase().includes(searchTerm.toLowerCase())
+        String(opt).toLowerCase().includes(normalizedSearchTerm)
     );
 
-    const showAddOption = !!onAdd && searchTerm && !options.some(opt => opt.toLowerCase() === searchTerm.toLowerCase());
+    const showAddOption = !!onAdd && normalizedSearchTerm && !options.some(opt => String(opt).trim().toLowerCase() === normalizedSearchTerm);
 
     useEffect(() => {
         function handleClickOutside(event) {
@@ -38,8 +39,8 @@ const SearchableSelect = ({
     };
 
     const handleAdd = () => {
-        if (onAdd && searchTerm) {
-            onAdd(searchTerm);
+        if (onAdd && normalizedSearchTerm) {
+            onAdd(searchTerm.trim());
             setIsOpen(false);
             setSearchTerm('');
         }

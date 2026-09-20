@@ -1017,6 +1017,35 @@ router.get('/campus-students', auth, authorize('campus_poc', 'coordinator', 'man
       return obj;
     });
 
+    // Keep the PoC view aligned with the student view. Existing readiness
+    // records may predate criteria added later to the active configuration.
+    for (const record of recordsWithCycle) {
+      const configs = await JobReadinessConfig.find({
+        school: { $in: [record.school, 'Common'] },
+        $or: [{ campus: record.campus }, { campus: null }],
+        isActive: true
+      }).sort({ campus: 1 }).lean();
+      const criteriaMap = new Map();
+      configs.forEach(config => {
+        config.criteria.forEach(criterion => {
+          const appliesToSchool =
+            config.school === record.school ||
+            config.school === 'Common' ||
+            (criterion.targetSchools || []).includes(record.school);
+          if (criterion.isActive && appliesToSchool) criteriaMap.set(criterion.criteriaId, criterion);
+        });
+      });
+
+      const savedStatus = new Map((record.criteriaStatus || []).map(status => [status.criteriaId, status]));
+      record.criteriaStatus = Array.from(criteriaMap.values()).map(criterion => ({
+        ...criterion,
+        ...(savedStatus.get(criterion.criteriaId) || {
+          criteriaId: criterion.criteriaId,
+          status: 'not_started'
+        })
+      }));
+    }
+
     res.json({
       records: recordsWithCycle,
       pagination: {
@@ -1082,10 +1111,19 @@ router.patch('/student/:studentId/verify/:criteriaId', auth, authorize('campus_p
     }
 
     // Find criterion
-    const criterionIndex = readiness.criteriaStatus.findIndex(c => c.criteriaId === criteriaId);
-
+    let criterionIndex = readiness.criteriaStatus.findIndex(c => c.criteriaId === criteriaId);
     if (criterionIndex === -1) {
-      return res.status(404).json({ message: 'Criterion not found' });
+      const student = await User.findById(studentId).select('studentProfile.currentSchool campus');
+      const configs = await JobReadinessConfig.find({
+        school: { $in: [readiness.school || student?.studentProfile?.currentSchool, 'Common'] },
+        $or: [{ campus: readiness.campus || student?.campus }, { campus: null }],
+        isActive: true
+      }).sort({ campus: 1 });
+      const criterion = configs.flatMap(config => config.criteria)
+        .find(item => item.criteriaId === criteriaId && item.isActive);
+      if (!criterion) return res.status(404).json({ message: 'Criterion not found' });
+      readiness.criteriaStatus.push({ criteriaId, status: 'not_started', updatedAt: new Date() });
+      criterionIndex = readiness.criteriaStatus.length - 1;
     }
 
     readiness.criteriaStatus[criterionIndex].status = verified ? 'verified' : 'not_started';
@@ -1349,4 +1387,3 @@ router.get('/recalculate/:jobId', auth, authorize('coordinator', 'manager'), asy
 });
 
 module.exports = router;
-

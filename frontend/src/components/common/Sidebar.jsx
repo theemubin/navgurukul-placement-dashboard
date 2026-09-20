@@ -111,6 +111,7 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
           { path: '/coordinator', icon: Home, label: 'Dashboard', exact: true },
           { path: '/coordinator/jobs', icon: Briefcase, label: 'Job Management' },
           { path: '/coordinator/applications', icon: FileText, label: 'Applications' },
+          { path: '/coordinator/student-export', icon: Users, label: 'Student Export' },
           { path: '/coordinator/interest-requests', icon: Heart, label: 'Interest Requests', badge: pendingInterestCount },
           { path: '/coordinator/forum', icon: MessageCircle, label: 'Q&A Forum', badge: forumUnreadCount },
           { path: '/coordinator/skills', icon: Settings, label: 'Skill Categories' },

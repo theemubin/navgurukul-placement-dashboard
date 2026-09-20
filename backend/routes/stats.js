@@ -1487,10 +1487,14 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
       studentQuery.placementCycle = cycleId;
     }
 
-    const students = await User.find(studentQuery)
-      .select('firstName lastName email studentProfile.currentSchool placementCycle')
-      .populate('placementCycle', 'name')
-      .lean();
+    const studentsQuery = User.find(studentQuery)
+      .select(liteSummary
+        ? 'studentProfile.currentSchool'
+        : 'firstName lastName email studentProfile.currentSchool placementCycle');
+    if (!liteSummary) {
+      studentsQuery.populate('placementCycle', 'name');
+    }
+    const students = await studentsQuery.lean();
 
     const studentIds = students.map(s => s._id);
 
@@ -1503,21 +1507,19 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
     );
 
     // Get all applications
-    const applications = await Application.find({
+    const applicationsQuery = Application.find({
       student: { $in: studentIds }
-    }).select('student job status').populate('job', 'title company.name').lean();
+    }).select(liteSummary ? 'student status' : 'student job status');
+    if (!liteSummary) {
+      applicationsQuery.populate('job', 'title company.name');
+    }
+    const applications = await applicationsQuery.lean();
     const applicationsByStudentId = new Map();
     applications.forEach((application) => {
       const studentId = String(application.student);
       const studentApplications = applicationsByStudentId.get(studentId) || [];
       studentApplications.push(application);
       applicationsByStudentId.set(studentId, studentApplications);
-    });
-
-    // Create student map for quick lookup
-    const studentMap = {};
-    students.forEach(s => {
-      studentMap[s._id.toString()] = s;
     });
 
     // Group by school
@@ -1528,6 +1530,7 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
       schoolMap[school] = {
         school,
         students: [],
+        studentCount: 0,
         totalStudents: 0,
         totalApplications: 0,
         placed: 0,
@@ -1545,6 +1548,7 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
         schoolMap[school] = {
           school,
           students: [],
+          studentCount: 0,
           totalStudents: 0,
           totalApplications: 0,
           placed: 0,
@@ -1586,7 +1590,10 @@ router.get('/campus-poc/school-tracking', auth, authorize('campus_poc', 'coordin
         }));
       }
 
-      schoolMap[school].students.push(studentSummary);
+      schoolMap[school].studentCount++;
+      if (!liteSummary && schoolMap[school].students.length < 5) {
+        schoolMap[school].students.push(studentSummary);
+      }
 
       schoolMap[school].totalStudents++;
       schoolMap[school].totalApplications += studentApps.length;

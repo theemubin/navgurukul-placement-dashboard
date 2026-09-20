@@ -2,6 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
+const InterestRequest = require('../models/InterestRequest');
+
+const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+const EDUCATION_LEVELS = ['Diploma', 'Bachelor', 'Master', 'Doctorate', 'Other'];
+const cefrLevelsAtOrAbove = (level) => {
+  const index = CEFR_LEVELS.indexOf(String(level || '').toUpperCase());
+  return index === -1 ? [] : CEFR_LEVELS.slice(index);
+};
 const Notification = require('../models/Notification');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
@@ -141,7 +149,8 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
     // Accept pagination, filters and sorting
     const {
       campus, school, batch, page = 1, limit = 20, search, status,
-      sortField, sortOrder, gharAttendanceMin, gharStatus
+      sortField, sortOrder, gharAttendanceMin, gharStatus,
+      graduation, educationType, educationLevel, location, language, languageLevel, englishLevel, interest
     } = req.query;
 
     let query = {
@@ -189,6 +198,62 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
 
     if (school) {
       query['studentProfile.currentSchool'] = school;
+    }
+    if (graduation) query['studentProfile.higherEducation.degree'] = graduation;
+    if (educationType) query['studentProfile.higherEducation.level'] = educationType;
+    if (educationLevel) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { 'studentProfile.higherEducation.department': { $regex: educationLevel, $options: 'i' } },
+          { 'studentProfile.higherEducation.fieldOfStudy': { $regex: educationLevel, $options: 'i' } },
+          { 'studentProfile.higherEducation.degree': { $regex: educationLevel, $options: 'i' } }
+        ]
+      });
+    }
+    if (location) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { 'studentProfile.hometown.state': { $regex: location, $options: 'i' } },
+          { 'studentProfile.hometown.district': { $regex: location, $options: 'i' } },
+          { 'studentProfile.hometown.village': { $regex: location, $options: 'i' } },
+          { 'studentProfile.higherEducation.district': { $regex: location, $options: 'i' } }
+        ]
+      });
+    }
+    if (language) query['studentProfile.languages.language'] = { $regex: language, $options: 'i' };
+    if (languageLevel) {
+      const levels = cefrLevelsAtOrAbove(languageLevel);
+      if (levels.length > 0) query['studentProfile.languages'] = {
+        $elemMatch: {
+          ...(language ? { language: { $regex: language, $options: 'i' } } : {}),
+          $or: [
+            { speaking: { $in: levels } },
+            { writing: { $in: levels } },
+            { reading: { $in: levels } },
+            { listening: { $in: levels } }
+          ]
+        }
+      };
+    }
+    if (englishLevel) {
+      const levels = cefrLevelsAtOrAbove(englishLevel);
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { 'studentProfile.englishProficiency.speaking': { $in: levels } },
+          { 'studentProfile.englishProficiency.writing': { $in: levels } },
+          { 'studentProfile.externalData.ghar.englishSpeaking.value': { $in: levels } },
+          { 'studentProfile.externalData.ghar.englishWriting.value': { $in: levels } }
+        ]
+      });
+    }
+    if (interest === 'yes' || interest === 'no') {
+      const interestedStudentIds = await InterestRequest.distinct('student');
+      query._id = interest === 'yes'
+        ? { $in: interestedStudentIds }
+        : { $nin: interestedStudentIds };
     }
 
     if (batch) {
@@ -261,6 +326,26 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
       });
     }
 
+    if (req.query.summary === 'export') {
+      const students = await User.find(query)
+        .select('firstName lastName email phone gender campus studentProfile.currentSchool studentProfile.higherEducation studentProfile.hometown studentProfile.languages studentProfile.englishProficiency')
+        .populate('campus', 'name')
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .sort(sortObj)
+        .lean();
+
+      const total = await User.countDocuments(query);
+      return res.json({
+        students,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / limit),
+          total
+        }
+      });
+    }
+
     // Full student payload (used when opening student detail)
     const students = await User.find(query)
       .select('-password')
@@ -283,6 +368,184 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
   } catch (error) {
     console.error('Get students error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/students/export-options', auth, authorize('coordinator'), async (req, res) => {
+  try {
+    const [campuses, schools, degrees, educationTypes, departments, fields, languages, states, districts] = await Promise.all([
+      User.distinct('campus', { role: 'student', campus: { $ne: null } }),
+      User.distinct('studentProfile.currentSchool', { role: 'student' }),
+      User.distinct('studentProfile.higherEducation.degree', { role: 'student' }),
+      User.distinct('studentProfile.higherEducation.level', { role: 'student' }),
+      User.distinct('studentProfile.higherEducation.department', { role: 'student' }),
+      User.distinct('studentProfile.higherEducation.fieldOfStudy', { role: 'student' }),
+      User.distinct('studentProfile.languages.language', { role: 'student' }),
+      User.distinct('studentProfile.hometown.state', { role: 'student' }),
+      User.distinct('studentProfile.hometown.district', { role: 'student' })
+    ]);
+    const campusDocs = await require('../models/Campus').find({ _id: { $in: campuses } }).select('_id name').sort({ name: 1 }).lean();
+    const clean = (values) => [...new Set(values.flat().filter(value => typeof value === 'string' && value.trim()))].sort((a, b) => a.localeCompare(b));
+    res.json({
+      campuses: campusDocs,
+      schools: clean(schools),
+      graduations: clean(degrees),
+      educationTypes: clean([...EDUCATION_LEVELS, ...educationTypes]),
+      educationLevels: clean([...departments, ...fields]),
+      locations: clean([...states, ...districts]),
+      languages: clean(languages),
+      proficiencyLevels: CEFR_LEVELS
+    });
+  } catch (error) {
+    console.error('Get student export options error:', error);
+    res.status(500).json({ message: 'Failed to load student export options' });
+  }
+});
+
+router.get('/students/export', auth, authorize('coordinator'), async (req, res) => {
+  try {
+    const {
+      campus, school, graduation, educationType, educationLevel, location,
+      language, languageLevel, englishLevel, interest, ids
+    } = req.query;
+    const query = { role: 'student' };
+    const andFilters = [];
+
+    if (campus) query.campus = campus;
+    if (school) query['studentProfile.currentSchool'] = school;
+    if (graduation) query['studentProfile.higherEducation.degree'] = graduation;
+    if (educationType) query['studentProfile.higherEducation.level'] = educationType;
+    if (educationLevel) {
+      andFilters.push({
+        $or: [
+          { 'studentProfile.higherEducation.department': { $regex: educationLevel, $options: 'i' } },
+          { 'studentProfile.higherEducation.fieldOfStudy': { $regex: educationLevel, $options: 'i' } },
+          { 'studentProfile.higherEducation.degree': { $regex: educationLevel, $options: 'i' } }
+        ]
+      });
+    }
+    if (location) {
+      const locationRegex = { $regex: location, $options: 'i' };
+      andFilters.push({ $or: [
+        { 'studentProfile.hometown.state': locationRegex },
+        { 'studentProfile.hometown.district': locationRegex },
+        { 'studentProfile.hometown.village': locationRegex },
+        { 'studentProfile.higherEducation.district': locationRegex }
+      ] });
+    }
+    if (language) query['studentProfile.languages.language'] = { $regex: language, $options: 'i' };
+    if (languageLevel) {
+      const levels = cefrLevelsAtOrAbove(languageLevel);
+      andFilters.push({ $or: [
+        { 'studentProfile.languages': { $elemMatch: { ...(language ? { language: { $regex: language, $options: 'i' } } : {}), speaking: { $in: levels } } } },
+        { 'studentProfile.languages': { $elemMatch: { ...(language ? { language: { $regex: language, $options: 'i' } } : {}), writing: { $in: levels } } } },
+        { 'studentProfile.languages': { $elemMatch: { ...(language ? { language: { $regex: language, $options: 'i' } } : {}), reading: { $in: levels } } } },
+        { 'studentProfile.languages': { $elemMatch: { ...(language ? { language: { $regex: language, $options: 'i' } } : {}), listening: { $in: levels } } } }
+      ] });
+    }
+    if (englishLevel) {
+      const levels = cefrLevelsAtOrAbove(englishLevel);
+      andFilters.push({ $or: [
+        { 'studentProfile.englishProficiency.speaking': { $in: levels } },
+        { 'studentProfile.englishProficiency.writing': { $in: levels } },
+        { 'studentProfile.externalData.ghar.englishSpeaking.value': { $in: levels } },
+        { 'studentProfile.externalData.ghar.englishWriting.value': { $in: levels } }
+      ] });
+    }
+
+    if (interest === 'yes' || interest === 'no') {
+      const interestedStudentIds = await InterestRequest.distinct('student');
+      query._id = interest === 'yes'
+        ? { $in: interestedStudentIds }
+        : { $nin: interestedStudentIds };
+    }
+
+    if (ids) {
+      const selectedIds = String(ids).split(',').filter(Boolean);
+      query._id = { $in: selectedIds };
+    }
+    if (andFilters.length > 0) query.$and = andFilters;
+
+    const students = await User.find(query)
+      .select([
+        'firstName', 'lastName', 'email', 'phone', 'gender', 'campus',
+        'studentProfile.currentSchool', 'studentProfile.higherEducation',
+        'studentProfile.hometown', 'studentProfile.languages',
+        'studentProfile.englishProficiency',
+        'studentProfile.externalData.ghar.englishSpeaking',
+        'studentProfile.externalData.ghar.englishWriting',
+        'studentProfile.resumeLink', 'studentProfile.resume',
+        'studentProfile.resumes', 'studentProfile.linkedIn',
+        'studentProfile.github', 'studentProfile.portfolio'
+      ].join(' '))
+      .populate('campus', 'name')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+
+    const escapeCsv = (value) => {
+      const text = Array.isArray(value) ? value.join('; ') : String(value ?? '');
+      return `"${text.replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+    };
+    const headers = [
+      'Name', 'Email', 'Phone', 'Gender', 'Campus', 'School',
+      'Graduation', 'Education Level', 'Location', 'Languages',
+      'Language Levels', 'English Level', 'Interest Requests',
+      'Resume Links', 'Portfolio', 'LinkedIn', 'GitHub'
+    ];
+    const rows = students.map((student) => {
+      const profile = student.studentProfile || {};
+      const education = profile.higherEducation || [];
+      const languages = profile.languages || [];
+      const locationValue = [
+        profile.hometown?.village,
+        profile.hometown?.district,
+        profile.hometown?.state
+      ].filter(Boolean).join(', ');
+      const languageNames = languages.map(item => item.language).filter(Boolean);
+      const languageLevels = languages
+        .map(item => `${item.language}: ${[item.speaking, item.writing, item.reading, item.listening].filter(Boolean).join('/')}`)
+        .filter(Boolean);
+      const degrees = education.map(item => item.degree).filter(Boolean);
+      const educationLevels = education.map(item => item.fieldOfStudy || item.department).filter(Boolean);
+      const englishLevels = [
+        profile.englishProficiency?.speaking,
+        profile.englishProficiency?.writing,
+        profile.externalData?.ghar?.englishSpeaking?.value,
+        profile.externalData?.ghar?.englishWriting?.value
+      ].filter(Boolean);
+      const resumeLinks = [
+        profile.resumeLink,
+        profile.resume,
+        ...(profile.resumes || []).flatMap(item => [item.url, item.resumeLink, item.resume])
+      ].filter(Boolean);
+
+      return [
+        `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+        student.email,
+        student.phone,
+        student.gender,
+        student.campus?.name,
+        profile.currentSchool,
+        degrees,
+        educationLevels,
+        locationValue,
+        languageNames,
+        languageLevels,
+        [...new Set(englishLevels)],
+        interest === 'yes' ? 'Yes' : interest === 'no' ? 'No' : 'Any',
+        resumeLinks,
+        profile.portfolio,
+        profile.linkedIn,
+        profile.github
+      ].map(escapeCsv).join(',');
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="coordinator-students.csv"');
+    res.send([headers.map(escapeCsv).join(','), ...rows].join('\n'));
+  } catch (error) {
+    console.error('Export coordinator students error:', error);
+    res.status(500).json({ message: 'Failed to export students' });
   }
 });
 
@@ -652,8 +915,35 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
       }
 
       // Handle higher education
-      if (updates.higherEducation) {
-        user.studentProfile.higherEducation = updates.higherEducation;
+      if (updates.higherEducation !== undefined) {
+        if (!Array.isArray(updates.higherEducation)) {
+          return res.status(400).json({ message: 'Higher education must be an array' });
+        }
+
+        const validLevels = new Set(['', 'Diploma', 'Bachelor', 'Master', 'Doctorate', 'Other']);
+        user.studentProfile.higherEducation = updates.higherEducation
+          .filter((education) => education && Object.entries(education)
+            .some(([key, value]) => key !== 'isCompleted' && String(value ?? '').trim() !== ''))
+          .map((education, index) => {
+            const level = String(education.level || '').trim();
+            if (!validLevels.has(level)) {
+              throw new Error(`Invalid higher education level at entry ${index + 1}.`);
+            }
+            return {
+              level,
+              institution: String(education.institution || '').trim(),
+              department: String(education.department || '').trim(),
+              specialization: String(education.specialization || '').trim(),
+              degree: String(education.degree || '').trim(),
+              fieldOfStudy: String(education.fieldOfStudy || education.department || '').trim(),
+              pincode: String(education.pincode || '').trim(),
+              district: String(education.district || '').trim(),
+              startYear: education.startYear || undefined,
+              endYear: education.endYear || undefined,
+              percentage: education.percentage,
+              isCompleted: Boolean(education.isCompleted)
+            };
+          });
       }
 
       // Handle courses

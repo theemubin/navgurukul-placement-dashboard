@@ -810,38 +810,53 @@ router.post('/', auth, authorize('coordinator', 'manager'), [
     const isVisibleToStudents = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
 
-    // Notify eligible students if job is visible
+    // Notify eligible students asynchronously so creating an open job does not
+    // wait for notification fan-out or the Discord API.
     if (isVisibleToStudents) {
-      const eligibleStudents = await User.find({
-        role: 'student',
-        isActive: true,
-        campus: job.eligibility.campuses?.length > 0
-          ? { $in: job.eligibility.campuses }
-          : { $exists: true }
-      });
+      const jobForBroadcast = job;
+      const userForBroadcast = req.user;
+      setImmediate(async () => {
+        try {
+          const eligibleStudents = await User.find({
+            role: 'student',
+            isActive: true,
+            campus: jobForBroadcast.eligibility.campuses?.length > 0
+              ? { $in: jobForBroadcast.eligibility.campuses }
+              : { $exists: true }
+          });
 
-      const notifications = eligibleStudents.map(student => ({
-        recipient: student._id,
-        type: 'new_job_posting',
-        title: 'New Job Opportunity',
-        message: `${job.company.name} is hiring for ${job.title}. Apply now!`,
-        link: `/student/jobs/${job._id}`,
-        relatedEntity: { type: 'job', id: job._id }
-      }));
+          const notifications = eligibleStudents.map(student => ({
+            recipient: student._id,
+            type: 'new_job_posting',
+            title: 'New Job Opportunity',
+            message: `${jobForBroadcast.company.name} is hiring for ${jobForBroadcast.title}. Apply now!`,
+            link: `/student/jobs/${jobForBroadcast._id}`,
+            relatedEntity: { type: 'job', id: jobForBroadcast._id }
+          }));
 
-      await Notification.insertMany(notifications);
-      const discordResult = await discordService.sendJobPosting(job, req.user, eligibleStudents);
-      console.log('Discord sendJobPosting result for job', job._id, discordResult);
-      if (discordResult?.error) {
-        console.error('Discord job posting error for new job:', job._id, discordResult.error);
-      }
-      if (discordResult) {
-        if (discordResult.messageId) job.discordMessageId = discordResult.messageId;
-        if (discordResult.threadId) job.discordThreadId = discordResult.threadId;
-        if (discordResult.messageId || discordResult.threadId) {
-          await job.save();
+          if (notifications.length > 0) {
+            await Notification.insertMany(notifications);
+          }
+
+          const discordResult = await discordService.sendJobPosting(
+            jobForBroadcast,
+            userForBroadcast,
+            eligibleStudents
+          );
+          console.log('Discord sendJobPosting result for job', jobForBroadcast._id, discordResult);
+          if (discordResult?.error) {
+            console.error('Discord job posting error for new job:', jobForBroadcast._id, discordResult.error);
+          }
+          if (discordResult?.messageId || discordResult?.threadId) {
+            await Job.findByIdAndUpdate(jobForBroadcast._id, {
+              ...(discordResult.messageId ? { discordMessageId: discordResult.messageId } : {}),
+              ...(discordResult.threadId ? { discordThreadId: discordResult.threadId } : {})
+            });
+          }
+        } catch (broadcastError) {
+          console.error('Background job broadcast failed:', jobForBroadcast._id, broadcastError);
         }
-      }
+      });
     }
 
     await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
@@ -907,35 +922,51 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
     const isNowVisible = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
 
-    // If job just became visible to students, notify them
+    // Respond after the job is persisted. Notification and Discord fan-out can
+    // involve many students and external network calls, so they must not block
+    // the coordinator's status update.
     if (!wasVisible && isNowVisible) {
-      const eligibleStudents = await User.find({
-        role: 'student',
-        isActive: true
-      });
+      const jobForBroadcast = job;
+      const userForBroadcast = req.user;
+      setImmediate(async () => {
+        try {
+          const eligibleStudents = await User.find({
+            role: 'student',
+            isActive: true
+          });
 
-      const notifications = eligibleStudents.map(student => ({
-        recipient: student._id,
-        type: 'new_job_posting',
-        title: 'New Job Opportunity',
-        message: `${job.company.name} is hiring for ${job.title}. Apply now!`,
-        link: `/student/jobs/${job._id}`,
-        relatedEntity: { type: 'job', id: job._id }
-      }));
+          const notifications = eligibleStudents.map(student => ({
+            recipient: student._id,
+            type: 'new_job_posting',
+            title: 'New Job Opportunity',
+            message: `${jobForBroadcast.company.name} is hiring for ${jobForBroadcast.title}. Apply now!`,
+            link: `/student/jobs/${jobForBroadcast._id}`,
+            relatedEntity: { type: 'job', id: jobForBroadcast._id }
+          }));
 
-      await Notification.insertMany(notifications);
-      const discordResult = await discordService.sendJobPosting(job, req.user, eligibleStudents);
-      console.log('Discord sendJobPosting result for job', job._id, discordResult);
-      if (discordResult?.error) {
-        console.error('Discord job posting error for job update:', job._id, discordResult.error);
-      }
-      if (discordResult) {
-        if (discordResult.messageId) job.discordMessageId = discordResult.messageId;
-        if (discordResult.threadId) job.discordThreadId = discordResult.threadId;
-        if (discordResult.messageId || discordResult.threadId) {
-          await job.save();
+          if (notifications.length > 0) {
+            await Notification.insertMany(notifications);
+          }
+
+          const discordResult = await discordService.sendJobPosting(
+            jobForBroadcast,
+            userForBroadcast,
+            eligibleStudents
+          );
+          console.log('Discord sendJobPosting result for job', jobForBroadcast._id, discordResult);
+          if (discordResult?.error) {
+            console.error('Discord job posting error for job update:', jobForBroadcast._id, discordResult.error);
+          }
+          if (discordResult?.messageId || discordResult?.threadId) {
+            await Job.findByIdAndUpdate(jobForBroadcast._id, {
+              ...(discordResult.messageId ? { discordMessageId: discordResult.messageId } : {}),
+              ...(discordResult.threadId ? { discordThreadId: discordResult.threadId } : {})
+            });
+          }
+        } catch (broadcastError) {
+          console.error('Background job broadcast failed:', jobForBroadcast._id, broadcastError);
         }
-      }
+      });
     }
 
     await invalidateCache(['cache:jobs:*', 'cache:stats:*']);

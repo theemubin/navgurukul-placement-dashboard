@@ -461,8 +461,7 @@ settingsSchema.statics.getSettings = async function () {
     return settings;
   } catch (error) {
     console.error('CRITICAL: getSettings failed:', error);
-    // Return findOne result as fallback to avoid crashing route
-    return await this.findOne();
+    throw error;
   }
 };
 
