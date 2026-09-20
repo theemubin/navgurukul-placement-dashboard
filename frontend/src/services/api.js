@@ -273,6 +273,7 @@ export const jobAPI = {
     });
   },
   parseJDFromText: (text) => api.post('/jobs/parse-jd', { text }),
+  generateJobPostWithAI: (data) => api.post('/jobs/ai-fill', data),
   // Interest requests (for <60% match students)
   submitInterest: (jobId, data) => api.post(`/jobs/${jobId}/interest`, data),
   getInterestRequests: (jobId, params) => api.get(`/jobs/${jobId}/interest-requests`, { params }),

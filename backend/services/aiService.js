@@ -534,6 +534,9 @@ JSON STRUCTURE:
         } else if (/timeout|timed out/i.test(message)) {
           code = 'TIMEOUT';
           shouldRetry = false; // Don't rotate on timeout
+        } else if (/temporar|unavailable|try again later|503|service error/i.test(message)) {
+          code = 'SERVICE_UNAVAILABLE';
+          shouldRetry = true;
         } else if (error instanceof SyntaxError) {
           code = 'INVALID_RESPONSE';
           shouldRetry = false;
@@ -562,6 +565,38 @@ JSON STRUCTURE:
     err.code = lastError?.code || 'AI_PARSE_FAILED';
     err.originalError = lastError;
     throw err;
+  }
+
+  async generateJobPost(input, existingSkills = []) {
+    if (!this.genAI) throw new Error('AI service not configured. Please add your Google AI API key in Settings.');
+    const model = this.genAI.getGenerativeModel({ model: 'models/gemini-2.5-flash' });
+    const prompt = `You are a technical recruiter creating a complete job post for Navgurukul.
+Use the supplied facts as authoritative. Do not invent company facts, salary, eligibility, or location.
+Return ONLY valid JSON matching this shape:
+{
+  "title": "", "company": {"name": "", "website": "", "description": ""},
+  "description": "", "requirements": [], "responsibilities": [], "location": "",
+  "jobType": "full_time|part_time|internship|contract|paid_project",
+  "duration": "", "salary": {"min": null, "max": null, "currency": "INR"},
+  "suggestedSkills": [], "experienceLevel": "entry|junior|mid|senior",
+  "maxPositions": 1,
+  "eligibility": {
+    "tenthGrade": {"required": false, "minPercentage": null},
+    "twelfthGrade": {"required": false, "minPercentage": null},
+    "higherEducation": {"required": false, "level": "", "acceptedDegrees": []},
+    "femaleOnly": false,
+    "englishProficiency": {"writing": "", "speaking": ""}
+  },
+  "roleCategory": ""
+}
+Use empty strings, nulls, or empty arrays when information is not provided.
+AVAILABLE SKILLS: ${existingSkills.join(', ')}
+BASIC JOB INPUTS:
+${JSON.stringify(input)}`;
+    const result = await model.generateContent(prompt);
+    const responseText = (await result.response).text()
+      .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(responseText);
   }
 
   // Specialized entity extraction for scam analysis search queries

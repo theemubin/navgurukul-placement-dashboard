@@ -17,6 +17,62 @@ const { calculateMatch, getJobsWithMatch } = require('../services/matchService')
 const discordService = require('../services/discordService');
 const multer = require('multer');
 
+const VALID_JOB_TYPES = new Set(['full_time', 'part_time', 'internship', 'contract', 'paid_project']);
+const VALID_CEFR_LEVELS = new Set(['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
+const VALID_EDUCATION_LEVELS = new Set(['', 'bachelor', 'master', 'any']);
+
+function validateParsedJobData(data) {
+  const warnings = [];
+  if (!data || typeof data !== 'object') return ['AI returned an invalid response'];
+
+  // Initialize missing arrays and objects to avoid crashes on the frontend
+  if (!Array.isArray(data.requirements)) data.requirements = [];
+  if (!Array.isArray(data.responsibilities)) data.responsibilities = [];
+  if (!Array.isArray(data.suggestedSkills)) data.suggestedSkills = [];
+  if (!data.company) data.company = { name: '', website: '', description: '' };
+  if (!data.salary) data.salary = { min: null, max: null, currency: 'INR' };
+  if (!data.eligibility) data.eligibility = {};
+  if (!VALID_JOB_TYPES.has(data.jobType)) data.jobType = 'full_time';
+
+  const salary = data.salary;
+  if (salary.min !== null && (typeof salary.min !== 'number' || salary.min < 0)) {
+    warnings.push('salary.min');
+    salary.min = null;
+  }
+  if (salary.max !== null && (typeof salary.max !== 'number' || salary.max < 0)) {
+    warnings.push('salary.max');
+    salary.max = null;
+  }
+  if (salary.min !== null && salary.max !== null && salary.min > salary.max) {
+    warnings.push('salary range');
+    salary.max = null;
+  }
+
+  const eligibility = data.eligibility;
+  if (eligibility.englishProficiency) {
+    if (!VALID_CEFR_LEVELS.has(eligibility.englishProficiency.writing || '')) {
+      warnings.push('eligibility.englishProficiency.writing');
+      eligibility.englishProficiency.writing = '';
+    }
+    if (!VALID_CEFR_LEVELS.has(eligibility.englishProficiency.speaking || '')) {
+      warnings.push('eligibility.englishProficiency.speaking');
+      eligibility.englishProficiency.speaking = '';
+    }
+  }
+  if (eligibility.higherEducation?.level && !VALID_EDUCATION_LEVELS.has(eligibility.higherEducation.level)) {
+    warnings.push('eligibility.higherEducation.level');
+    eligibility.higherEducation.level = '';
+  }
+  for (const grade of ['tenthGrade', 'twelfthGrade']) {
+    const percentage = eligibility[grade]?.minPercentage;
+    if (percentage !== null && percentage !== undefined && (typeof percentage !== 'number' || percentage < 0 || percentage > 100)) {
+      warnings.push(`eligibility.${grade}.minPercentage`);
+      eligibility[grade].minPercentage = null;
+    }
+  }
+  return warnings;
+}
+
 /**
  * @swagger
  * tags:
@@ -129,7 +185,14 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
     }
 
     const settings = await Settings.getSettings();
-    const { keys: allKeys } = await resolveAIKeysForUser(req.userId);
+    const aiKeyResolution = await resolveAIKeysForUser(req.userId);
+    const { keys: allKeys, hasUserKeys, hasGlobalKeys } = aiKeyResolution;
+    if (settings.aiConfig?.enabled === false || allKeys.length === 0) {
+      return res.status(503).json({
+        message: 'Gemini AI is not configured. Add an active Google AI API key in Settings before parsing a job description.',
+        success: false
+      });
+    }
 
     // Get existing skills for better matching
     let existingSkills = [];
@@ -166,50 +229,29 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
       });
     }
 
-    let parsedData;
-
-    // Step 1: Try code-based extraction first (conserves AI quota)
-    console.log('Attempting code-based JD parsing...');
-    parsedData = await aiService.parseJobDescriptionWithCode(text);
-    let parsedWith = 'code';
-
-    // Step 2: If code-based gave minimal results and AI is available, try AI
-    // We want AI help if code based failed to find a title, company, or enough skills/description
-    const isCodeResultsMinimal = !parsedData ||
-      !parsedData.title ||
-      !parsedData.company?.name ||
-      (parsedData.suggestedSkills?.length || 0) < 5 ||
-      (parsedData.description?.length || 0) < 50;
-
-    if (allKeys.length > 0 && settings.aiConfig?.enabled !== false && isCodeResultsMinimal) {
-      console.log('Code extraction had limited results or missing key info, attempting AI parsing...');
-      try {
-        const aiResult = await aiService.parseJobDescription(text, skillNames);
-        // Merge AI results into code results, AI fills gaps
-        parsedData = {
-          ...parsedData,
-          ...aiResult,
-          suggestedSkills: [...new Set([...(parsedData?.suggestedSkills || []), ...(aiResult?.suggestedSkills || [])])],
-          requirements: (aiResult?.requirements?.length || 0) > (parsedData?.requirements?.length || 0) ? aiResult.requirements : (parsedData?.requirements || [])
-        };
-        parsedWith = 'ai';
-      } catch (aiError) {
-        console.error('AI parsing failed, continuing with code extraction:', aiError.message);
-        // Keep code-based results but attach error if possible
-        if (parsedData) {
-          parsedData.aiError = aiError.message || 'AI parse failed';
-          parsedData.aiErrorCode = aiError.code || aiError.originalError?.code || null;
-        }
+    let parsedData = null;
+    try {
+      parsedData = await aiService.parseJobDescription(text, skillNames);
+      if (parsedData) {
+        parsedData.parsedWith = 'gemini';
+      }
+    } catch (aiError) {
+      console.warn('Gemini parsing failed, falling back to code extraction:', aiError.message);
+      parsedData = await aiService.parseJobDescriptionWithCode(text);
+      if (parsedData) {
+        parsedData.parsedWith = 'heuristic';
       }
     }
 
     if (!parsedData) {
-      // Final fallback to regex extraction
-      parsedData = aiService.parseJobDescriptionFallback(text);
-      parsedWith = 'fallback';
+      return res.status(502).json({
+        message: 'Failed to parse job description from the source.',
+        success: false
+      });
     }
 
-    parsedData.parsedWith = parsedWith;
+    const validationErrors = validateParsedJobData(parsedData);
+    // Don't throw 502 for partial data, just return it with warnings
 
     // Match suggested skills with existing skills in database
     if (parsedData.suggestedSkills?.length > 0 && existingSkills.length > 0) {
@@ -222,46 +264,72 @@ router.post('/parse-jd', auth, authorize('coordinator', 'manager'), upload.singl
       parsedData.matchedSkillIds = matchedSkills.map(s => s._id);
     }
 
-    // Ask AI service for a more precise status
-    let aiStatus = {
-      configured: allKeys.length > 0,
-      enabled: settings.aiConfig?.enabled !== false,
-      working: false,
+    const aiStatus = {
+      configured: true,
+      enabled: true,
+      working: true,
+      provider: 'gemini',
       totalKeys: allKeys.length,
-      userKeys: userKeys.length,
-      globalKeys: globalKeys.length
+      userKeys: hasUserKeys ? 1 : 0,
+      globalKeys: hasGlobalKeys ? 1 : 0
     };
-    try {
-      const svcStatus = await aiService.getStatus();
-      aiStatus = { ...aiStatus, ...svcStatus };
-      if (parsedData.aiError) {
-        aiStatus.working = false;
-        aiStatus.message = parsedData.aiError;
-      }
-    } catch (statusErr) {
-      aiStatus.working = false;
-      aiStatus.message = statusErr.message;
-    }
-
-    const responseMessage = parsedData.parsedWith === 'ai'
-      ? 'Job description parsed successfully with AI'
-      : (aiStatus.configured ? 'AI parsing attempted but failed; falling back to basic extraction.' : 'Parsed with basic extraction. Add Google AI API key in Settings for better results.');
 
     res.json({
       success: true,
       data: parsedData,
-      message: responseMessage,
+      message: 'Job description parsed successfully with Gemini AI',
       aiStatus,
-      aiError: parsedData.aiError || null,
-      aiErrorCode: parsedData.aiErrorCode || null
+      warnings: validationErrors
     });
 
   } catch (error) {
     console.error('Parse JD error:', error);
-    res.status(500).json({
+    const retryableCodes = new Set(['QUOTA_EXCEEDED', 'RATE_LIMITED', 'BILLING_ISSUE', 'INVALID_API_KEY', 'FORBIDDEN', 'TIMEOUT', 'SERVICE_UNAVAILABLE']);
+    const status = retryableCodes.has(error.code) ? 503 : (error.code === 'INVALID_RESPONSE' ? 502 : 500);
+    res.status(status).json({
       message: error.message || 'Failed to parse job description',
-      success: false
+      success: false,
+      code: error.code || 'AI_PARSE_FAILED',
+      retryable: status === 503
     });
+  }
+});
+
+router.post('/ai-fill', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const settings = await Settings.getSettings();
+    const resolution = await resolveAIKeysForUser(req.userId);
+    if (settings.aiConfig?.enabled === false || resolution.keys.length === 0) {
+      return res.status(503).json({ success: false, message: 'Gemini AI is not configured.' });
+    }
+    const existingSkills = await Skill.find({ isActive: true }).select('name').lean();
+    const input = {
+      title: req.body.title || '',
+      company: req.body.company || '',
+      location: req.body.location || '',
+      jobType: req.body.jobType || 'full_time',
+      duration: req.body.duration || '',
+      salary: req.body.salary || {},
+      skills: Array.isArray(req.body.skills) ? req.body.skills : [],
+      requirements: Array.isArray(req.body.requirements) ? req.body.requirements : [],
+      eligibility: req.body.eligibility || {},
+      instructions: req.body.instructions || ''
+    };
+    const aiService = new AIService(resolution.keys);
+    const data = await aiService.generateJobPost(input, existingSkills.map(skill => skill.name));
+    const validationErrors = validateParsedJobData(data);
+    // Don't throw 502 for partial data, just return it with warnings
+    
+    data.parsedWith = 'gemini';
+    data.matchedSkillIds = existingSkills
+      .filter(skill => data.suggestedSkills.some(suggested => skill.name.toLowerCase() === suggested.toLowerCase()))
+      .map(skill => skill._id);
+    res.json({ success: true, data, message: 'Job post generated successfully with Gemini AI', warnings: validationErrors });
+  } catch (error) {
+    console.error('AI fill job error:', error);
+    const retryableCodes = new Set(['QUOTA_EXCEEDED', 'RATE_LIMITED', 'BILLING_ISSUE', 'INVALID_API_KEY', 'FORBIDDEN', 'TIMEOUT', 'SERVICE_UNAVAILABLE']);
+    const status = retryableCodes.has(error.code) ? 503 : 502;
+    res.status(status).json({ success: false, message: error.message || 'Gemini could not generate the job post', code: error.code || 'AI_FILL_FAILED', retryable: status === 503 });
   }
 });
 

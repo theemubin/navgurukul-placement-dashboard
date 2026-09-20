@@ -807,6 +807,33 @@ const JobForm = () => {
     }
   };
 
+  const handleGenerateJobPost = async () => {
+    setParsing(true);
+    try {
+      const res = await jobAPI.generateJobPostWithAI({
+        title: formData.title,
+        company: formData.company.name,
+        location: formData.location,
+        jobType: formData.jobType,
+        duration: formData.duration,
+        salary: formData.salary,
+        skills: formData.requiredSkills.map((item) => {
+          const skill = allSkills.find((candidate) => candidate._id === item.skill);
+          return skill?.name;
+        }).filter(Boolean),
+        eligibility: formData.eligibility,
+        instructions: jdRawText.trim(),
+      });
+      setParsedSuggestion(res.data.data);
+      setAiParseInfo({ method: "generate", success: true });
+      toast.success("Job post generated with Gemini. Review the suggestions below.");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Gemini could not generate the job post.", { duration: 5000 });
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const applySuggestion = () => {
     if (!parsedSuggestion) return;
 
@@ -827,90 +854,81 @@ const JobForm = () => {
       });
     }
 
-    // Process custom requirements - CLEAR old ones first if we have new ones
+    // Keep AI requirements visible in both the legacy and structured fields.
+    let requirements = [];
     let customReqs = [];
     if (
       parsedSuggestion.requirements &&
       parsedSuggestion.requirements.length > 0
     ) {
+      requirements = parsedSuggestion.requirements;
       customReqs = parsedSuggestion.requirements.map((req) => ({
         requirement: req,
         isMandatory: true,
       }));
     }
 
-    setFormData((prev) => ({
-      ...prev,
-      title: parsedSuggestion.title || prev.title,
-      description: parsedSuggestion.description || prev.description,
-      roleCategory: parsedSuggestion.roleCategory || prev.roleCategory,
-      company: {
-        ...prev.company,
-        name: parsedSuggestion.company?.name || prev.company.name,
-        website: parsedSuggestion.company?.website || prev.company.website,
-      },
-      location: parsedSuggestion.location || prev.location,
-      jobType: parsedSuggestion.jobType || prev.jobType,
-      duration: parsedSuggestion.duration || prev.duration,
-      salary: {
-        ...prev.salary,
-        min: parsedSuggestion.salary?.min || prev.salary.min,
-        max: parsedSuggestion.salary?.max || prev.salary.max,
-      },
-      eligibility: {
-        ...prev.eligibility,
-        tenthGrade: {
-          ...prev.eligibility.tenthGrade,
-          required:
-            parsedSuggestion.eligibility?.tenthGrade?.required ??
-            prev.eligibility.tenthGrade.required,
-          minPercentage:
-            parsedSuggestion.eligibility?.tenthGrade?.minPercentage ??
-            prev.eligibility.tenthGrade.minPercentage,
+    setFormData((prev) => {
+      // Merge unique skills
+      const newSkills = [...prev.requiredSkills];
+      mappedSkills.forEach(ms => {
+        if (!newSkills.some(ps => ps.skill === ms.skill)) {
+          newSkills.push(ms);
+        }
+      });
+
+      return {
+        ...prev,
+        title: prev.title || parsedSuggestion.title || "",
+        description: prev.description || parsedSuggestion.description || "",
+        roleCategory: prev.roleCategory || parsedSuggestion.roleCategory || "",
+        company: {
+          ...prev.company,
+          name: prev.company?.name || parsedSuggestion.company?.name || "",
+          website: prev.company?.website || parsedSuggestion.company?.website || "",
         },
-        twelfthGrade: {
-          ...prev.eligibility.twelfthGrade,
-          required:
-            parsedSuggestion.eligibility?.twelfthGrade?.required ??
-            prev.eligibility.twelfthGrade.required,
-          minPercentage:
-            parsedSuggestion.eligibility?.twelfthGrade?.minPercentage ??
-            prev.eligibility.twelfthGrade.minPercentage,
+        location: prev.location || parsedSuggestion.location || "",
+        jobType: prev.jobType || parsedSuggestion.jobType || "full_time",
+        duration: prev.duration || parsedSuggestion.duration || "",
+        salary: {
+          ...prev.salary,
+          min: prev.salary?.min || parsedSuggestion.salary?.min || null,
+          max: prev.salary?.max || parsedSuggestion.salary?.max || null,
         },
-        higherEducation: {
-          ...prev.eligibility.higherEducation,
-          required:
-            parsedSuggestion.eligibility?.higherEducation?.required ??
-            prev.eligibility.higherEducation.required,
-          level:
-            parsedSuggestion.eligibility?.higherEducation?.level ??
-            prev.eligibility.higherEducation.level,
-          acceptedDegrees:
-            parsedSuggestion.eligibility?.higherEducation?.acceptedDegrees
-              ?.length > 0
-              ? parsedSuggestion.eligibility.higherEducation.acceptedDegrees
-              : prev.eligibility.higherEducation.acceptedDegrees,
+        eligibility: {
+          ...prev.eligibility,
+          tenthGrade: {
+            ...prev.eligibility.tenthGrade,
+            required: prev.eligibility.tenthGrade.required || (parsedSuggestion.eligibility?.tenthGrade?.required ?? false),
+            minPercentage: prev.eligibility.tenthGrade.minPercentage || (parsedSuggestion.eligibility?.tenthGrade?.minPercentage ?? null),
+          },
+          twelfthGrade: {
+            ...prev.eligibility.twelfthGrade,
+            required: prev.eligibility.twelfthGrade.required || (parsedSuggestion.eligibility?.twelfthGrade?.required ?? false),
+            minPercentage: prev.eligibility.twelfthGrade.minPercentage || (parsedSuggestion.eligibility?.twelfthGrade?.minPercentage ?? null),
+          },
+          higherEducation: {
+            ...prev.eligibility.higherEducation,
+            required: prev.eligibility.higherEducation.required || (parsedSuggestion.eligibility?.higherEducation?.required ?? false),
+            level: prev.eligibility.higherEducation.level || (parsedSuggestion.eligibility?.higherEducation?.level ?? ""),
+            acceptedDegrees: prev.eligibility.higherEducation.acceptedDegrees?.length > 0
+                ? prev.eligibility.higherEducation.acceptedDegrees
+                : (parsedSuggestion.eligibility?.higherEducation?.acceptedDegrees || []),
+          },
+          femaleOnly: prev.eligibility.femaleOnly || (parsedSuggestion.eligibility?.femaleOnly ?? false),
+          englishWriting: prev.eligibility.englishWriting || (parsedSuggestion.eligibility?.englishProficiency?.writing ?? ""),
+          englishSpeaking: prev.eligibility.englishSpeaking || (parsedSuggestion.eligibility?.englishProficiency?.speaking ?? ""),
         },
-        femaleOnly:
-          parsedSuggestion.eligibility?.femaleOnly ??
-          prev.eligibility.femaleOnly,
-        englishWriting:
-          parsedSuggestion.eligibility?.englishProficiency?.writing ??
-          prev.eligibility.englishWriting,
-        englishSpeaking:
-          parsedSuggestion.eligibility?.englishProficiency?.speaking ??
-          prev.eligibility.englishSpeaking,
-      },
-      // Overwrite skills and requirements (replace instead of merge)
-      requiredSkills: mappedSkills,
-      customRequirements: customReqs,
-      // Clear legacy simple lists
-      requirements: [],
-      responsibilities: [],
-    }));
+        // Merge arrays instead of replacing them
+        requiredSkills: newSkills,
+        customRequirements: [...(prev.customRequirements || []), ...customReqs],
+        requirements: [...(prev.requirements || []), ...requirements],
+        responsibilities: [...(prev.responsibilities || []), ...(parsedSuggestion.responsibilities || [])],
+      };
+    });
 
     setParsedSuggestion(null);
-    toast.success("Applied suggestions to form");
+    toast.success("Applied suggestions to form (merged with existing values)");
   };
 
   // Helper for modules
@@ -1136,6 +1154,26 @@ const JobForm = () => {
                     </button>
                   </div>
                 </div>
+                <div className="mt-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                  <textarea
+                    placeholder="Optional: describe the role or add instructions for Gemini..."
+                    className="flex-1 p-3 rounded border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[76px] text-sm bg-white"
+                    value={jdRawText}
+                    onChange={(e) => setJdRawText(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGenerateJobPost}
+                    disabled={parsing}
+                    className="px-5 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 text-sm font-semibold flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {parsing ? "Generating..." : "Generate from basics"}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-indigo-700">
+                  Gemini will use the basic fields already entered above and generate a reviewable draft. Nothing is published automatically.
+                </p>
 
                 {showRawTextInput && (
                   <div className="mt-4 animate-slideDown">
@@ -1179,10 +1217,17 @@ const JobForm = () => {
             {parsedSuggestion && (
               <div className="mt-4 p-4 bg-white rounded border border-indigo-100 animate-slideDown">
                 <div className="flex justify-between items-start mb-3">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-500" />
-                    AI Analysis Result
-                  </h3>
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-medium flex items-center gap-2">
+                      <Sparkles className={`w-4 h-4 ${parsedSuggestion.parsedWith === 'heuristic' ? 'text-amber-500' : 'text-indigo-500'}`} />
+                      {parsedSuggestion.parsedWith === 'heuristic' ? 'Basic Extraction Result' : 'AI Analysis Result'}
+                    </h3>
+                    {parsedSuggestion.parsedWith === 'heuristic' && (
+                      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        AI was unavailable. Some advanced fields may be missing.
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
