@@ -154,7 +154,15 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const updateUser = (updates) => {
-    setUser(prev => ({ ...prev, ...updates }));
+    setUser(prev => {
+      const updated = { ...prev, ...updates };
+      try {
+        localStorage.setItem('user', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Failed to save updated user to localStorage', e);
+      }
+      return updated;
+    });
   };
 
   const value = {

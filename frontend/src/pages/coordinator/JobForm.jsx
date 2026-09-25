@@ -81,6 +81,8 @@ const JobForm = () => {
   const [showHomestateSuggestions, setShowHomestateSuggestions] =
     useState(false);
   const [roleCategories, setRoleCategories] = useState([]);
+  const [skillGroupFilter, setSkillGroupFilter] = useState('all');
+  const [skillSearchInput, setSkillSearchInput] = useState('');
 
   const [formData, setFormData] = useState({
     title: "",
@@ -2135,30 +2137,87 @@ const JobForm = () => {
           )}
 
           {/* Available Skills to Add */}
-          <div className="flex flex-wrap gap-2">
-            {allSkills.map((skill) => {
-              // Hide English as a selectable 'skill' when CEFR fields are set (we use CEFR instead)
-              const isCEFRSet =
-                formData.eligibility.englishSpeaking ||
-                formData.eligibility.englishWriting;
-              if (isCEFRSet && (skill.name || "").toLowerCase() === "english")
-                return null;
+          <div className="space-y-3">
+            {/* Search & Group Filter */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={skillSearchInput}
+                  onChange={(e) => setSkillSearchInput(e.target.value)}
+                  placeholder="Search skills..."
+                  className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: 'common', label: '🌐 Common' },
+                  ...schools.map(s => ({ key: s, label: `🏫 ${s.replace('School of ', '')}` }))
+                ].map(f => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setSkillGroupFilter(f.key)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${
+                      skillGroupFilter === f.key
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-              const isSelected = formData.requiredSkills.some(
-                (s) => s.skill === skill._id || s.skill?._id === skill._id,
-              );
-              if (isSelected) return null;
-              return (
-                <button
-                  key={skill._id}
-                  type="button"
-                  onClick={() => toggleSkill(skill._id)}
-                  className="px-3 py-1 rounded-full text-sm transition bg-gray-100 text-gray-700 hover:bg-gray-200"
-                >
-                  + {skill.name}
-                </button>
-              );
-            })}
+            {/* Grouped Skills */}
+            <div className="flex flex-wrap gap-2">
+              {allSkills
+                .filter((skill) => {
+                  // Hide English when CEFR is set
+                  const isCEFRSet = formData.eligibility.englishSpeaking || formData.eligibility.englishWriting;
+                  if (isCEFRSet && (skill.name || '').toLowerCase() === 'english') return false;
+                  // Hide already selected
+                  if (formData.requiredSkills.some(s => s.skill === skill._id || s.skill?._id === skill._id)) return false;
+                  // Search filter
+                  if (skillSearchInput && !skill.name.toLowerCase().includes(skillSearchInput.toLowerCase())) return false;
+                  // Group filter
+                  if (skillGroupFilter === 'all') return true;
+                  if (skillGroupFilter === 'common') return skill.isCommon || (!skill.isCommon && (!skill.schools || skill.schools.length === 0));
+                  return (skill.schools || []).includes(skillGroupFilter);
+                })
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((skill) => {
+                  // Determine badge color based on school/common
+                  const isCommon = skill.isCommon || (!skill.schools || skill.schools.length === 0);
+                  return (
+                    <button
+                      key={skill._id}
+                      type="button"
+                      onClick={() => toggleSkill(skill._id)}
+                      className={`px-3 py-1 rounded-full text-sm transition ${
+                        isCommon
+                          ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                          : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                      }`}
+                      title={isCommon ? 'Common skill' : `School: ${(skill.schools || []).join(', ')}`}
+                    >
+                      + {skill.name}
+                    </button>
+                  );
+                })}
+              {allSkills.filter(s => {
+                if (formData.requiredSkills.some(rs => rs.skill === s._id || rs.skill?._id === s._id)) return false;
+                if (skillSearchInput && !s.name.toLowerCase().includes(skillSearchInput.toLowerCase())) return false;
+                if (skillGroupFilter === 'all') return true;
+                if (skillGroupFilter === 'common') return s.isCommon || (!s.isCommon && (!s.schools || s.schools.length === 0));
+                return (s.schools || []).includes(skillGroupFilter);
+              }).length === 0 && (
+                <p className="text-gray-400 text-sm py-2">No skills found{skillSearchInput ? ` matching "${skillSearchInput}"` : ' in this group'}.</p>
+              )}
+            </div>
           </div>
         </div>
 

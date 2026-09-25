@@ -9,16 +9,112 @@ import {
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
   MessageSquare, ClipboardList, Search, Bell
 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
+
+const JOB_TYPE_OPTIONS = [
+  { id: 'full_time', label: 'Full Time' },
+  { id: 'internship', label: 'Internships' },
+  { id: 'paid_project', label: 'Paid Projects' },
+  { id: 'part_time', label: 'Part Time' },
+  { id: 'contract', label: 'Contract' }
+];
 
 const POCDashboard = () => {
+  const { user, updateUser } = useAuth();
   const [stats, setStats] = useState(null);
   const [pendingSkills, setPendingSkills] = useState([]);
   const [pendingProfilesCount, setPendingProfilesCount] = useState(0);
   const [companyTracking, setCompanyTracking] = useState([]);
   const [schoolTracking, setSchoolTracking] = useState([]);
   const [eligibleJobs, setEligibleJobs] = useState([]);
-  const [jobTypeFilter, setJobTypeFilter] = useState('all');
+  const [jobTypeFilters, setJobTypeFilters] = useState(user?.pocJobTypeFilters || []);
+  const [roleCategoryFilters, setRoleCategoryFilters] = useState(user?.pocRoleCategoryFilters || []);
+
+  useEffect(() => {
+    if (user?.pocJobTypeFilters && Array.isArray(user.pocJobTypeFilters)) {
+      setJobTypeFilters(user.pocJobTypeFilters);
+    }
+    if (user?.pocRoleCategoryFilters && Array.isArray(user.pocRoleCategoryFilters)) {
+      setRoleCategoryFilters(user.pocRoleCategoryFilters);
+    }
+  }, [user?.pocJobTypeFilters, user?.pocRoleCategoryFilters]);
+
+  // Extract all available role categories dynamically from jobs
+  const availableRoleCategories = useMemo(() => {
+    const categories = new Set();
+    (eligibleJobs || []).forEach(j => {
+      if (j.roleCategory) categories.add(j.roleCategory.trim());
+    });
+    (companyTracking || []).forEach(c => {
+      (c.jobs || []).forEach(j => {
+        if (j.roleCategory) categories.add(j.roleCategory.trim());
+      });
+    });
+    return Array.from(categories).sort();
+  }, [eligibleJobs, companyTracking]);
+
+  const saveFilterPreferences = async (newJobTypes, newRoleCategories) => {
+    try {
+      await userAPI.updateProfile({
+        pocJobTypeFilters: newJobTypes,
+        pocRoleCategoryFilters: newRoleCategories
+      });
+      updateUser({
+        pocJobTypeFilters: newJobTypes,
+        pocRoleCategoryFilters: newRoleCategories
+      });
+    } catch (err) {
+      console.error('Error saving filter preferences:', err);
+      toast.error('Failed to save filter preferences');
+    }
+  };
+
+  const toggleJobTypeFilter = (typeId) => {
+    setJobsPage(1);
+    let updated;
+    if (typeId === 'all') {
+      updated = [];
+    } else {
+      if (jobTypeFilters.includes(typeId)) {
+        updated = jobTypeFilters.filter(id => id !== typeId);
+      } else {
+        updated = [...jobTypeFilters, typeId];
+      }
+    }
+    setJobTypeFilters(updated);
+    saveFilterPreferences(updated, roleCategoryFilters);
+  };
+
+  const toggleRoleCategoryFilter = (cat) => {
+    setJobsPage(1);
+    let updated;
+    if (cat === 'all') {
+      updated = [];
+    } else {
+      if (roleCategoryFilters.includes(cat)) {
+        updated = roleCategoryFilters.filter(c => c !== cat);
+      } else {
+        updated = [...roleCategoryFilters, cat];
+      }
+    }
+    setRoleCategoryFilters(updated);
+    saveFilterPreferences(jobTypeFilters, updated);
+  };
+
+  const resetAllFilters = () => {
+    setJobsPage(1);
+    setJobTypeFilters([]);
+    setRoleCategoryFilters([]);
+    saveFilterPreferences([], []);
+  };
+
+  const filteredJobsList = useMemo(() => {
+    return (eligibleJobs || []).filter(job => {
+      const matchesJobType = jobTypeFilters.length === 0 || jobTypeFilters.includes(job.jobType);
+      const matchesRoleCategory = roleCategoryFilters.length === 0 || (job.roleCategory && roleCategoryFilters.includes(job.roleCategory.trim()));
+      return matchesJobType && matchesRoleCategory;
+    });
+  }, [eligibleJobs, jobTypeFilters, roleCategoryFilters]);
   const [cycles, setCycles] = useState([]);
   const [selectedCycle, setSelectedCycle] = useState('');
   const [studentSummary, setStudentSummary] = useState(null);
@@ -680,27 +776,107 @@ const POCDashboard = () => {
             </span>
           </div>
 
-          {/* Job type tabs */}
-          <div className="flex gap-3 mt-3">
-            <button onClick={() => { setJobTypeFilter('all'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
-              All
-            </button>
-            <button onClick={() => { setJobTypeFilter('internship'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'internship' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
-              Internships
-            </button>
-            <button onClick={() => { setJobTypeFilter('paid_project'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'paid_project' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
-              Paid Projects
-            </button>
+          {/* Multi-Select Job Filters Panel */}
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-sm font-bold text-gray-800">
+                <Filter className="w-4 h-4 text-primary-600" />
+                <span>Filter Opportunities</span>
+                {(jobTypeFilters.length > 0 || roleCategoryFilters.length > 0) && (
+                  <span className="bg-primary-100 text-primary-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                    {jobTypeFilters.length + roleCategoryFilters.length} active
+                  </span>
+                )}
+              </div>
+              {(jobTypeFilters.length > 0 || roleCategoryFilters.length > 0) && (
+                <button
+                  onClick={resetAllFilters}
+                  className="text-xs text-red-600 hover:text-red-800 font-medium hover:underline flex items-center gap-1"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Reset Filters
+                </button>
+              )}
+            </div>
+
+            {/* Job Types Multi-Select Pills */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Job Type</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => toggleJobTypeFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    jobTypeFilters.length === 0
+                      ? 'bg-primary-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  All Job Types
+                </button>
+                {JOB_TYPE_OPTIONS.map(opt => {
+                  const isSelected = jobTypeFilters.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => toggleJobTypeFilter(opt.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${
+                        isSelected
+                          ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {isSelected && <span className="text-[10px]">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Role Categories Multi-Select Pills */}
+            {availableRoleCategories.length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t border-gray-100">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Role Category</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => toggleRoleCategoryFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      roleCategoryFilters.length === 0
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    All Categories
+                  </button>
+                  {availableRoleCategories.map(cat => {
+                    const isSelected = roleCategoryFilters.includes(cat);
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => toggleRoleCategoryFilter(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                            : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>{cat}</span>
+                        {isSelected && <span className="text-[10px]">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Filtered job metrics (update when jobTypeFilter or eligibleJobs change) */}
+          {/* Filtered job metrics (update when jobTypeFilters, roleCategoryFilters or eligibleJobs change) */}
           {eligibleJobs && (
             (() => {
-              const filteredJobs = eligibleJobs.filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter));
-              const activeJobsCount = filteredJobs.length;
-              const totalApplications = filteredJobs.reduce((acc, j) => acc + (j.applicationCount || 0), 0);
-              const eligibleStudentsCount = filteredJobs.reduce((acc, j) => acc + (j.eligibleStudents || 0), 0);
-              const selectedCount = filteredJobs.reduce((acc, j) => acc + (j.statusCounts?.selected || 0), 0);
+              const activeJobsCount = filteredJobsList.length;
+              const totalApplications = filteredJobsList.reduce((acc, j) => acc + (j.applicationCount || 0), 0);
+              const eligibleStudentsCount = filteredJobsList.reduce((acc, j) => acc + (j.eligibleStudents || 0), 0);
+              const selectedCount = filteredJobsList.reduce((acc, j) => acc + (j.statusCounts?.selected || 0), 0);
 
               return (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -778,8 +954,7 @@ const POCDashboard = () => {
             </div>
           ) : eligibleJobs.length > 0 ? (
             (() => {
-              const filteredJobs = eligibleJobs.filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter));
-              const paginatedJobs = filteredJobs.slice((jobsPage - 1) * itemsPerPage, jobsPage * itemsPerPage);
+              const paginatedJobs = filteredJobsList.slice((jobsPage - 1) * itemsPerPage, jobsPage * itemsPerPage);
 
               return (
                 <>
@@ -881,7 +1056,7 @@ const POCDashboard = () => {
                       );
                     })}
                   </div>
-                  {renderPagination(jobsPage, filteredJobs.length, setJobsPage)}
+                  {renderPagination(jobsPage, filteredJobsList.length, setJobsPage)}
                 </>
               );
             })()

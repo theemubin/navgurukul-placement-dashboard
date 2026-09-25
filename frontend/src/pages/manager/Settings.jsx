@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { settingsAPI, placementCycleAPI, campusAPI } from '../../services/api';
+import { settingsAPI, placementCycleAPI, campusAPI, skillAPI } from '../../services/api';
 import { useSchools } from '../../context/SchoolsContext';
 import { Card, Button, Badge, LoadingSpinner, Alert } from '../../components/common/UIComponents';
 import toast from 'react-hot-toast';
-import { Plus, MessageSquare, Edit, Save, X, BookOpen, Globe, Building2, ExternalLink, AlertCircle } from 'lucide-react';
+import { Plus, MessageSquare, Edit, Save, X, BookOpen, Globe, Building2, ExternalLink, AlertCircle, Search, Filter } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Settings = () => {
@@ -36,6 +36,14 @@ const Settings = () => {
   const [newModule, setNewModule] = useState('');
   const [newRole, setNewRole] = useState('');
   const [newSkill, setNewSkill] = useState('');
+  const [managedSkills, setManagedSkills] = useState([]);
+  const [skillSchoolFilter, setSkillSchoolFilter] = useState('all');
+  const [skillSearchQuery, setSkillSearchQuery] = useState('');
+  const [newSkillCategory, setNewSkillCategory] = useState('technical');
+  const [newSkillIsCommon, setNewSkillIsCommon] = useState(true);
+  const [newSkillSchools, setNewSkillSchools] = useState([]);
+  const [editingSkillId, setEditingSkillId] = useState(null);
+  const [editingSkillData, setEditingSkillData] = useState({});
   const [newDegree, setNewDegree] = useState('');
   const [newSpecialization, setNewSpecialization] = useState({}); // degree -> string
   const [newRoleCategory, setNewRoleCategory] = useState('');
@@ -73,7 +81,17 @@ const Settings = () => {
     fetchAiConfig();
     fetchAiStatus();
     fetchEducationAnalytics();
+    fetchManagedSkills();
   }, []);
+
+  const fetchManagedSkills = async () => {
+    try {
+      const response = await skillAPI.getSkills();
+      setManagedSkills(response.data || []);
+    } catch (err) {
+      console.error('Error fetching managed skills:', err);
+    }
+  };
 
   useEffect(() => {
     if (settings?.degreeOptions?.length > 0 && !selectedRegistryDegree) {
@@ -332,15 +350,102 @@ node scripts/promote_normalized_index_unique.js`;
     setSettings({ ...settings, roleCategories: (settings.roleCategories || []).filter(r => r !== role) });
   };
 
-  // Technical skills management
-  const addSkill = () => {
-    if (!newSkill.trim() || settings.technicalSkills.includes(newSkill.trim())) return;
-    setSettings({ ...settings, technicalSkills: [...settings.technicalSkills, newSkill.trim()] });
-    setNewSkill('');
+  // Technical skills management (syncs with Skill model)
+  const addSkill = async () => {
+    const name = newSkill.trim();
+    if (!name) return;
+    // Check duplicate in managed skills
+    if (managedSkills.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+      toast.error('Skill already exists');
+      return;
+    }
+    try {
+      await skillAPI.createSkill({
+        name,
+        category: newSkillCategory,
+        isCommon: newSkillIsCommon,
+        schools: newSkillIsCommon ? [] : newSkillSchools
+      });
+      // Also add to settings.technicalSkills for backward compat
+      if (!settings.technicalSkills?.includes(name)) {
+        setSettings(prev => ({ ...prev, technicalSkills: [...(prev.technicalSkills || []), name] }));
+      }
+      setNewSkill('');
+      setNewSkillCategory('technical');
+      setNewSkillIsCommon(true);
+      setNewSkillSchools([]);
+      await fetchManagedSkills();
+      toast.success('Skill added');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add skill');
+    }
   };
 
-  const removeSkill = (skill) => {
-    setSettings({ ...settings, technicalSkills: settings.technicalSkills.filter(s => s !== skill) });
+  const removeSkill = async (skill) => {
+    if (!confirm(`Remove skill "${skill.name}"? This will deactivate it across the platform.`)) return;
+    try {
+      await skillAPI.deleteSkill(skill._id);
+      // Also remove from settings.technicalSkills
+      setSettings(prev => ({ ...prev, technicalSkills: (prev.technicalSkills || []).filter(s => s !== skill.name) }));
+      await fetchManagedSkills();
+      toast.success('Skill removed');
+    } catch (err) {
+      toast.error('Failed to remove skill');
+    }
+  };
+
+  const updateManagedSkill = async (skillId) => {
+    try {
+      await skillAPI.updateSkill(skillId, editingSkillData);
+      setEditingSkillId(null);
+      setEditingSkillData({});
+      await fetchManagedSkills();
+      toast.success('Skill updated');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update skill');
+    }
+  };
+
+  const toggleSkillSchool = (school) => {
+    setNewSkillSchools(prev =>
+      prev.includes(school) ? prev.filter(s => s !== school) : [...prev, school]
+    );
+  };
+
+  const toggleEditSkillSchool = (school) => {
+    setEditingSkillData(prev => ({
+      ...prev,
+      schools: (prev.schools || []).includes(school)
+        ? (prev.schools || []).filter(s => s !== school)
+        : [...(prev.schools || []), school]
+    }));
+  };
+
+  // Filter managed skills for display
+  const filteredManagedSkills = managedSkills.filter(s => {
+    if (!s.isActive) return false;
+    const matchesSearch = !skillSearchQuery || s.name.toLowerCase().includes(skillSearchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (skillSchoolFilter === 'all') return true;
+    if (skillSchoolFilter === 'common') return s.isCommon;
+    return (s.schools || []).includes(skillSchoolFilter);
+  });
+
+  // Group skills by school for display
+  const groupedSkills = () => {
+    const groups = { common: [] };
+    (schools || []).forEach(s => { groups[s] = []; });
+    managedSkills.filter(s => s.isActive).forEach(skill => {
+      if (skill.isCommon) groups.common.push(skill);
+      (skill.schools || []).forEach(school => {
+        if (groups[school]) groups[school].push(skill);
+      });
+      // Uncategorized: not common and no schools
+      if (!skill.isCommon && (!skill.schools || skill.schools.length === 0)) {
+        groups.common.push(skill); // default to common
+      }
+    });
+    return groups;
   };
 
   // Degree & Higher Education management
@@ -947,25 +1052,195 @@ node scripts/promote_normalized_index_unique.js`;
             </Card>
 
             <Card>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Technical Skills</h3>
-              <p className="text-gray-600 mb-4">Skills for profiling and tracking.</p>
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  value={newSkill}
-                  onChange={(e) => setNewSkill(e.target.value)}
-                  placeholder="New technical skill..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
-                  onKeyPress={(e) => e.key === 'Enter' && addSkill()}
-                />
-                <Button variant="primary" onClick={addSkill}>Add</Button>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Technical Skills</h3>
+                  <p className="text-gray-500 text-sm">Manage skills school-wise and as common pool. {managedSkills.filter(s => s.isActive).length} active skills.</p>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {settings.technicalSkills?.sort().map((skill) => (
-                  <span key={skill} className="inline-flex items-center px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">
-                    {skill}
-                    <button onClick={() => removeSkill(skill)} className="ml-2 hover:text-emerald-900"><X className="w-4 h-4" /></button>
-                  </span>
+
+              {/* Add Skill Form */}
+              <div className="bg-gray-50 rounded-xl p-4 mb-5 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newSkill}
+                    onChange={(e) => setNewSkill(e.target.value)}
+                    placeholder="New skill name..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm"
+                    onKeyPress={(e) => e.key === 'Enter' && addSkill()}
+                  />
+                  <select
+                    value={newSkillCategory}
+                    onChange={(e) => setNewSkillCategory(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="technical">Technical</option>
+                    <option value="soft_skill">Soft Skill</option>
+                    <option value="office">Office</option>
+                    <option value="domain">Domain</option>
+                    <option value="language">Language</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <Button variant="primary" onClick={addSkill}><Plus className="w-4 h-4 mr-1" />Add</Button>
+                </div>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={newSkillIsCommon}
+                      onChange={(e) => {
+                        setNewSkillIsCommon(e.target.checked);
+                        if (e.target.checked) setNewSkillSchools([]);
+                      }}
+                      className="rounded"
+                    />
+                    <Globe className="w-4 h-4 text-blue-500" />
+                    Common (all schools)
+                  </label>
+                  {!newSkillIsCommon && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {schools.map(school => (
+                        <button
+                          key={school}
+                          type="button"
+                          onClick={() => toggleSkillSchool(school)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${
+                            newSkillSchools.includes(school)
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                          }`}
+                        >
+                          {school.replace('School of ', '')}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter Bar */}
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <div className="relative flex-1 min-w-48">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={skillSearchQuery}
+                    onChange={(e) => setSkillSearchQuery(e.target.value)}
+                    placeholder="Search skills..."
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                </div>
+                <div className="flex gap-1 flex-wrap">
+                  {[{ key: 'all', label: 'All' }, { key: 'common', label: '🌐 Common' }, ...schools.map(s => ({ key: s, label: `🏫 ${s.replace('School of ', '')}` }))].map(f => (
+                    <button
+                      key={f.key}
+                      onClick={() => setSkillSchoolFilter(f.key)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                        skillSchoolFilter === f.key
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Skills List */}
+              <div className="space-y-1.5 max-h-96 overflow-y-auto">
+                {filteredManagedSkills.length === 0 && (
+                  <p className="text-gray-400 text-sm text-center py-6">No skills found{skillSearchQuery ? ` matching "${skillSearchQuery}"` : ''}.</p>
+                )}
+                {filteredManagedSkills.sort((a, b) => a.name.localeCompare(b.name)).map(skill => (
+                  <div key={skill._id} className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-gray-50 group border border-transparent hover:border-gray-200 transition-all">
+                    {editingSkillId === skill._id ? (
+                      /* Inline Edit Mode */
+                      <div className="flex-1 space-y-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={editingSkillData.name ?? skill.name}
+                            onChange={(e) => setEditingSkillData(prev => ({ ...prev, name: e.target.value }))}
+                            className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                          />
+                          <select
+                            value={editingSkillData.category ?? skill.category}
+                            onChange={(e) => setEditingSkillData(prev => ({ ...prev, category: e.target.value }))}
+                            className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                          >
+                            <option value="technical">Technical</option>
+                            <option value="soft_skill">Soft Skill</option>
+                            <option value="office">Office</option>
+                            <option value="domain">Domain</option>
+                            <option value="language">Language</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <label className="flex items-center gap-1.5 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={editingSkillData.isCommon ?? skill.isCommon}
+                              onChange={(e) => {
+                                setEditingSkillData(prev => ({ ...prev, isCommon: e.target.checked }));
+                                if (e.target.checked) setEditingSkillData(prev => ({ ...prev, isCommon: true, schools: [] }));
+                              }}
+                              className="rounded"
+                            />
+                            Common
+                          </label>
+                          {!(editingSkillData.isCommon ?? skill.isCommon) && schools.map(school => (
+                            <button
+                              key={school}
+                              type="button"
+                              onClick={() => toggleEditSkillSchool(school)}
+                              className={`px-2 py-0.5 rounded-full text-xs transition ${
+                                (editingSkillData.schools ?? skill.schools ?? []).includes(school)
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-gray-200 text-gray-500'
+                              }`}
+                            >
+                              {school.replace('School of ', '')}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => updateManagedSkill(skill._id)} className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-medium">Save</button>
+                          <button onClick={() => { setEditingSkillId(null); setEditingSkillData({}); }} className="px-3 py-1 bg-gray-200 text-gray-600 rounded-lg text-xs font-medium">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Display Mode */
+                      <>
+                        <span className="font-medium text-gray-800 text-sm">{skill.name}</span>
+                        <Badge variant="default">
+                          {skill.category === 'soft_skill' ? 'Soft' : skill.category === 'technical' ? 'Tech' : skill.category}
+                        </Badge>
+                        {skill.isCommon && <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">🌐 Common</span>}
+                        {(skill.schools || []).map(s => (
+                          <span key={s} className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">{s.replace('School of ', '')}</span>
+                        ))}
+                        <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => { setEditingSkillId(skill._id); setEditingSkillData({ name: skill.name, category: skill.category, isCommon: skill.isCommon, schools: skill.schools || [] }); }}
+                            className="p-1 text-gray-400 hover:text-indigo-600 transition"
+                            title="Edit"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => removeSkill(skill)}
+                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                            title="Remove"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 ))}
               </div>
             </Card>

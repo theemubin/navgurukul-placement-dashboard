@@ -1018,6 +1018,17 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
       }
     }
 
+    if (updates.pocJobTypeFilters !== undefined) {
+      if (Array.isArray(updates.pocJobTypeFilters)) {
+        user.pocJobTypeFilters = updates.pocJobTypeFilters;
+      }
+    }
+    if (updates.pocRoleCategoryFilters !== undefined) {
+      if (Array.isArray(updates.pocRoleCategoryFilters)) {
+        user.pocRoleCategoryFilters = updates.pocRoleCategoryFilters;
+      }
+    }
+
     await user.save();
     if (user.role === 'student') {
       await cacheService.invalidateProfileCache(req.userId);
