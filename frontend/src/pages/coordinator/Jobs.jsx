@@ -447,10 +447,6 @@ const CoordinatorJobs = () => {
     setSearchInput(filters.search);
   }, [filters.search]);
 
-  useEffect(() => {
-    setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
-  }, [summaryFilter]);
-
   const fetchPipelineStages = async () => {
     try {
       const response = await settingsAPI.getPipelineStages();
@@ -517,10 +513,20 @@ const CoordinatorJobs = () => {
     }
   };
 
+  const handleSummaryFilterChange = (filterKey) => {
+    if (summaryFilter !== filterKey) {
+      updatePage(1);
+      setSummaryFilter(filterKey);
+      setViewMode('list');
+    }
+  };
+
   const applySearch = () => {
     const nextSearch = searchInput.trim();
-    setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
-    setFilters(prev => (prev.search === nextSearch ? prev : { ...prev, search: nextSearch }));
+    if (filters.search !== nextSearch) {
+      updatePage(1);
+      setFilters(prev => ({ ...prev, search: nextSearch }));
+    }
   };
 
   const handleSearchKeyDown = (e) => {
@@ -779,10 +785,7 @@ const CoordinatorJobs = () => {
               color="blue"
               helpText="All jobs visible to coordinators."
               active={summaryFilter === 'all'}
-              onClick={() => {
-                setSummaryFilter('all');
-                setViewMode('list');
-              }}
+              onClick={() => handleSummaryFilterChange('all')}
               compact
             />
             <StatsCard
@@ -792,10 +795,7 @@ const CoordinatorJobs = () => {
               color="green"
               helpText="Jobs that are still open and in progress."
               active={summaryFilter === 'active'}
-              onClick={() => {
-                setSummaryFilter('active');
-                setViewMode('list');
-              }}
+              onClick={() => handleSummaryFilterChange('active')}
               compact
             />
             <StatsCard
@@ -805,10 +805,7 @@ const CoordinatorJobs = () => {
               color="indigo"
               helpText="Sum of positions across all active jobs."
               active={summaryFilter === 'totalPositions'}
-              onClick={() => {
-                setSummaryFilter('totalPositions');
-                setViewMode('list');
-              }}
+              onClick={() => handleSummaryFilterChange('totalPositions')}
               compact
             />
             <StatsCard
@@ -818,10 +815,7 @@ const CoordinatorJobs = () => {
               color="indigo"
               helpText="Students from applied to interview stages."
               active={summaryFilter === 'pipeline'}
-              onClick={() => {
-                setSummaryFilter('pipeline');
-                setViewMode('list');
-              }}
+              onClick={() => handleSummaryFilterChange('pipeline')}
               compact
             />
             <StatsCard
@@ -831,10 +825,7 @@ const CoordinatorJobs = () => {
               color="red"
               helpText="Deadline passed and HR shortlisting has not started."
               active={summaryFilter === 'deadlineClosedHrPending'}
-              onClick={() => {
-                setSummaryFilter('deadlineClosedHrPending');
-                setViewMode('list');
-              }}
+              onClick={() => handleSummaryFilterChange('deadlineClosedHrPending')}
               compact
             />
             <StatsCard
@@ -844,10 +835,7 @@ const CoordinatorJobs = () => {
               color="amber"
               helpText="Jobs that have not changed for more than 7 days."
               active={summaryFilter === 'noUpdate7Days'}
-              onClick={() => {
-                setSummaryFilter('noUpdate7Days');
-                setViewMode('list');
-              }}
+              onClick={() => handleSummaryFilterChange('noUpdate7Days')}
               compact
             />
             <StatsCard
@@ -857,10 +845,7 @@ const CoordinatorJobs = () => {
               color="red"
               helpText="Jobs that have not changed for more than 14 days."
               active={summaryFilter === 'noUpdate14Days'}
-              onClick={() => {
-                setSummaryFilter('noUpdate14Days');
-                setViewMode('list');
-              }}
+              onClick={() => handleSummaryFilterChange('noUpdate14Days')}
               compact
             />
             <StatsCard
@@ -870,10 +855,7 @@ const CoordinatorJobs = () => {
               color="purple"
               helpText="Jobs where at least one student has been selected or placed."
               active={summaryFilter === 'selectedPlaced'}
-              onClick={() => {
-                setSummaryFilter('selectedPlaced');
-                setViewMode('list');
-              }}
+              onClick={() => handleSummaryFilterChange('selectedPlaced')}
               compact
             />
       </div>
