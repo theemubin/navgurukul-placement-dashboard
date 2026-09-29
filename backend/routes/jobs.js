@@ -1179,7 +1179,7 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       await application.save();
 
       // If moving to selected/filled, also mark student as Placed
-      if (status === 'selected' || status === 'filled') {
+      if ((status === 'selected' || status === 'filled') && application.student?._id) {
         await User.findByIdAndUpdate(application.student._id, {
           'studentProfile.currentStatus': 'Placed'
         });
@@ -1263,24 +1263,28 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
 
     await job.save();
 
-    // Notify Discord (Summary)
+    // Notify Discord (Summary) - wrapped in try-catch to avoid failing request on Discord errors
     if (updated > 0) {
-      const discordAction = action === 'advance_round'
-        ? `Moved forward to ${req.body.roundName || `Round ${(req.body.advanceBy || 1)}`}`
-        : `Status: ${status}`;
-      await discordService.sendBulkUpdate(
-        job,
-        updated,
-        discordAction,
-        req.user,
-        affectedStudents
-      );
+      try {
+        const discordAction = action === 'advance_round'
+          ? `Moved forward to ${req.body.roundName || `Round ${(req.body.advanceBy || 1)}`}`
+          : `Status: ${status}`;
+        await discordService.sendBulkUpdate(
+          job,
+          updated,
+          discordAction,
+          req.user,
+          affectedStudents
+        );
+      } catch (discordErr) {
+        console.error('Discord bulk notification error:', discordErr.message || discordErr);
+      }
     }
 
     res.json({ message: 'Bulk update completed', updated });
   } catch (error) {
     console.error('Bulk update error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error during bulk update' });
   }
 });
 
@@ -1401,25 +1405,30 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
     const isNowVisible = newStage?.visibleToStudents;
 
     if (!wasVisible && isNowVisible && newStatus !== 'closed' && newStatus !== 'filled') {
-      const eligibleStudents = await User.find({
-        role: 'student',
-        isActive: true,
-        campus: job.eligibility.campuses?.length > 0
-          ? { $in: job.eligibility.campuses }
-          : { $exists: true }
-      });
+      try {
+        const eligibleStudents = await User.find({
+          role: 'student',
+          isActive: true,
+          campus: job.eligibility?.campuses?.length > 0
+            ? { $in: job.eligibility.campuses }
+            : { $exists: true }
+        });
 
-      const notifications = eligibleStudents.map(student => ({
-        recipient: student._id,
-        type: 'new_job_posting',
-        title: 'New Job Opportunity',
-        message: `${job.company.name} is hiring for ${job.title}. Apply now!`,
-        link: `/student/jobs/${job._id}`,
-        relatedEntity: { type: 'job', id: job._id }
-      }));
+        const companyName = job.company?.name || 'Company';
+        const notifications = eligibleStudents.map(student => ({
+          recipient: student._id,
+          type: 'new_job_posting',
+          title: 'New Job Opportunity',
+          message: `${companyName} is hiring for ${job.title}. Apply now!`,
+          link: `/student/jobs/${job._id}`,
+          relatedEntity: { type: 'job', id: job._id }
+        }));
 
-      if (notifications.length > 0) {
-        await Notification.insertMany(notifications);
+        if (notifications.length > 0) {
+          await Notification.insertMany(notifications);
+        }
+      } catch (notifErr) {
+        console.error('Error broadcasting job visibility notification:', notifErr.message || notifErr);
       }
     }
 
@@ -1466,7 +1475,7 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
     });
   } catch (error) {
     console.error('Update job status error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 });
 

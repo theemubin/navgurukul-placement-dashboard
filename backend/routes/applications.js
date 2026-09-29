@@ -629,26 +629,39 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
       );
     }
 
-    await application.save();
-    await cacheService.invalidateApplicationCache(application.student._id || application.student);
+    const studentId = application.student?._id || application.student;
+    if (studentId) {
+      try {
+        await cacheService.invalidateApplicationCache(studentId);
 
-    // Notify student
-    await Notification.create({
-      recipient: application.student._id,
-      type: status === 'selected' ? 'placement_confirmed' : 'application_update',
-      title: 'Application Status Update',
-      message: `Your application for ${application.job.title} at ${application.job.company.name} has been ${status}`,
-      link: `/applications/${application._id}`,
-      relatedEntity: { type: 'application', id: application._id }
-    });
+        const jobTitle = application.job?.title || 'Job';
+        const companyName = application.job?.company?.name || 'Company';
 
-    // Send to Discord
-    await discordService.sendApplicationUpdate(application, application.job, application.student, req.user);
+        // Notify student
+        await Notification.create({
+          recipient: studentId,
+          type: status === 'selected' ? 'placement_confirmed' : 'application_update',
+          title: 'Application Status Update',
+          message: `Your application for ${jobTitle} at ${companyName} has been ${status}`,
+          link: `/applications/${application._id}`,
+          relatedEntity: { type: 'application', id: application._id }
+        });
+      } catch (notifErr) {
+        console.error('Failed to send in-app notification for status update:', notifErr.message || notifErr);
+      }
+    }
+
+    // Send to Discord (wrapped in try-catch to avoid failing status update on Discord errors)
+    try {
+      await discordService.sendApplicationUpdate(application, application.job, application.student, req.user);
+    } catch (discordErr) {
+      console.error('Discord application update error:', discordErr.message || discordErr);
+    }
 
     res.json({ message: 'Application status updated', application });
   } catch (error) {
     console.error('Update status error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 });
 
@@ -749,7 +762,7 @@ router.put('/:id/rounds', auth, authorize('coordinator', 'manager'), async (req,
     res.json({ message: 'Round result updated', application });
   } catch (error) {
     console.error('Update round error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 });
 
