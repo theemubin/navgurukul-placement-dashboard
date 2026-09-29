@@ -1,16 +1,33 @@
 import { useState, useEffect, useRef } from 'react';
 import { jobReadinessAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { jobAPI, settingsAPI, applicationAPI, userAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, ConfirmModal, StatsCard } from '../../components/common/UIComponents';
-import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles, Link as LinkIcon, RefreshCw } from 'lucide-react';
+import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles, Link as LinkIcon, RefreshCw, IndianRupee, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import JobsKanban from './JobsKanban';
 import ApplicantTriageModal from './ApplicantTriageModal';
 
 const CoordinatorJobs = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const getInitialPage = () => {
+    const fromUrl = searchParams.get('page');
+    if (fromUrl && !isNaN(parseInt(fromUrl, 10))) {
+      return parseInt(fromUrl, 10);
+    }
+    const fromSession = sessionStorage.getItem('coordinatorJobsPage');
+    if (fromSession && !isNaN(parseInt(fromSession, 10))) {
+      return parseInt(fromSession, 10);
+    }
+    return 1;
+  };
+
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
@@ -20,7 +37,59 @@ const CoordinatorJobs = () => {
   const [summaryRefreshing, setSummaryRefreshing] = useState(false);
   const [summaryLastUpdated, setSummaryLastUpdated] = useState(null);
   const fetchSeqRef = useRef(0);
-  const location = useLocation();
+
+  const [pagination, setPagination] = useState({ current: getInitialPage(), pages: 1, total: 0 });
+  const [filters, setFilters] = useState({ search: '', status: '', jobType: '', roleCategory: '', sortBy: 'newest' });
+  const [deleteModal, setDeleteModal] = useState({ show: false, jobId: null });
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('jobsViewMode') || 'list';
+  });
+  const [pipelineStages, setPipelineStages] = useState([]);
+  const [roleCategories, setRoleCategories] = useState([]);
+  const [jobReadinessSummaries, setJobReadinessSummaries] = useState({});
+  const [exportModal, setExportModal] = useState({ show: false, jobId: null, jobTitle: '' });
+  const [exportData, setExportData] = useState({ fields: [], allSelected: true });
+  const [availableFields, setAvailableFields] = useState([]);
+  const [exporting, setExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState('csv');
+  const [exportLayout, setExportLayout] = useState('resume'); // 'resume' or 'table'
+  const [presets, setPresets] = useState([]);
+  const [presetName, setPresetName] = useState('');
+  const [selectedPresetId, setSelectedPresetId] = useState(null);
+  const [fieldSearch, setFieldSearch] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState(['Student Info', 'Campus Info']);
+
+  // Applicant modal state & loading
+  const [showApplicantModal, setShowApplicantModal] = useState(false);
+  const [modalJob, setModalJob] = useState(null);
+  const [modalApplicants, setModalApplicants] = useState([]);
+  const [modalApplicantsLoading, setModalApplicantsLoading] = useState(false);
+  const [triageLoadingJobId, setTriageLoadingJobId] = useState(null);
+
+  // Sync pagination with sessionStorage and URL
+  const updatePage = (newPage) => {
+    sessionStorage.setItem('coordinatorJobsPage', newPage.toString());
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('page', newPage.toString());
+      return next;
+    }, { replace: true });
+    setPagination(prev => ({ ...prev, current: newPage }));
+  };
+
+  // Format Salary Helper
+  const formatSalary = (salary) => {
+    if (!salary) return null;
+    if (typeof salary === 'string') return salary;
+    if (salary.min && salary.max) {
+      const minL = (salary.min / 100000).toFixed(1).replace('.0', '');
+      const maxL = (salary.max / 100000).toFixed(1).replace('.0', '');
+      return `₹${minL}L - ₹${maxL}L PA`;
+    }
+    if (salary.min) return `₹${(salary.min / 100000).toFixed(1).replace('.0', '')}L+ PA`;
+    if (salary.max) return `Up to ₹${(salary.max / 100000).toFixed(1).replace('.0', '')}L PA`;
+    return null;
+  };
 
   // Handle jobId from URL for deep linking (open triage)
   useEffect(() => {
@@ -38,37 +107,9 @@ const CoordinatorJobs = () => {
       fetchAndOpen();
     }
   }, [location.search]);
-  const [pagination, setPagination] = useState({ current: 1, pages: 1, total: 0 });
-  const [filters, setFilters] = useState({ search: '', status: '', jobType: '', sortBy: 'newest' });
-  const [deleteModal, setDeleteModal] = useState({ show: false, jobId: null });
-  const [viewMode, setViewMode] = useState(() => {
-    return localStorage.getItem('jobsViewMode') || 'list';
-  });
-  const [pipelineStages, setPipelineStages] = useState([]);
-  const [jobReadinessSummaries, setJobReadinessSummaries] = useState({});
-  const [exportModal, setExportModal] = useState({ show: false, jobId: null, jobTitle: '' });
-  const [exportData, setExportData] = useState({ fields: [], allSelected: true });
-  const [availableFields, setAvailableFields] = useState([]);
-  const [exporting, setExporting] = useState(false);
-  const [exportFormat, setExportFormat] = useState('csv');
-  const [exportLayout, setExportLayout] = useState('resume'); // 'resume' or 'table'
-  const [presets, setPresets] = useState([]);
-  const [presetName, setPresetName] = useState('');
-  const [selectedPresetId, setSelectedPresetId] = useState(null);
-  const [fieldSearch, setFieldSearch] = useState('');
-  const [expandedCategories, setExpandedCategories] = useState(['Student Info', 'Campus Info']);
-
-  // Applicant modal state
-  const [showApplicantModal, setShowApplicantModal] = useState(false);
-  const [modalJob, setModalJob] = useState(null);
-  const [modalApplicants, setModalApplicants] = useState([]);
-
-  const navigate = useNavigate();
-  const { user } = useAuth();
-
-
 
   const fetchApplicantsForJob = async (jobId) => {
+    setModalApplicantsLoading(true);
     try {
       const res = await applicationAPI.getApplications({
         job: jobId,
@@ -80,20 +121,22 @@ const CoordinatorJobs = () => {
     } catch (err) {
       console.error('Error fetching applicants', err);
       toast.error('Error fetching applicants for job');
+    } finally {
+      setModalApplicantsLoading(false);
+      setTriageLoadingJobId(null);
     }
   };
 
   const openManageApplicants = async (job) => {
     setModalJob(job);
     setModalNewStatus(null);
-    await fetchApplicantsForJob(job._id);
-    // initialize per-app overrides
-    setModalApplicants(prev => (prev || []).map(a => ({ ...a, _target: a._target || undefined, _comment: a._comment || '' })));
-    // reset section UI
+    setTriageLoadingJobId(job._id);
+    setShowApplicantModal(true);
+    setModalApplicants([]);
     setSectionComments({ selected: '', notMoving: '', noAction: '' });
     setCollapsedSections({ selected: false, notMoving: false, noAction: false });
     setSectionStatus({ selected: 'selected', notMoving: 'rejected', noAction: 'no_change' });
-    setShowApplicantModal(true);
+    await fetchApplicantsForJob(job._id);
   };
 
   // -- Modal helpers and state for managing applicants
@@ -346,6 +389,7 @@ const CoordinatorJobs = () => {
 
   useEffect(() => {
     fetchPipelineStages();
+    fetchRoleCategories();
     fetchJobReadinessSummaries();
     fetchExportFields();
   }, []);
@@ -416,6 +460,15 @@ const CoordinatorJobs = () => {
     }
   };
 
+  const fetchRoleCategories = async () => {
+    try {
+      const response = await settingsAPI.getSettings();
+      setRoleCategories(response.data.data.roleCategories || []);
+    } catch (error) {
+      console.error('Error fetching role categories:', error);
+    }
+  };
+
   const fetchJobs = async () => {
     const requestId = ++fetchSeqRef.current;
     setLoading(true);
@@ -427,6 +480,7 @@ const CoordinatorJobs = () => {
         search: filters.search || undefined,
         status: filters.status || undefined,
         jobType: filters.jobType || undefined,
+        roleCategory: filters.roleCategory || undefined,
         sortBy: filters.sortBy || undefined,
         summaryFilter: summaryFilter !== 'all' ? summaryFilter : undefined
       });
@@ -517,22 +571,22 @@ const CoordinatorJobs = () => {
       const job = jobs.find(j => j._id === jobId);
       setModalJob(job);
       setModalNewStatus(newStatus);
+      setShowApplicantModal(true);
       await fetchApplicantsForJob(jobId);
       // Only show applicants who are still 'in process' (not rejected/withdrawn/placed)
       setModalApplicants(prev => (prev || []).filter(a => !['rejected', 'withdrawn', 'selected', 'placed', 'filled'].includes(a.status)).map(a => ({ ...a, _target: a._target || undefined, _comment: a._comment || '' })));
       setSectionComments({ selected: '', notMoving: '', noAction: '' });
       setCollapsedSections({ selected: false, notMoving: false, noAction: false });
       setSectionStatus({ selected: 'selected', notMoving: 'rejected', noAction: 'no_change' });
-      setShowApplicantModal(true);
       return;
     }
 
     try {
-      await jobAPI.updateJob(jobId, { status: newStatus });
+      await jobAPI.updateJobStatus(jobId, newStatus);
       toast.success('Job status updated');
       fetchJobs();
     } catch (error) {
-      toast.error('Error updating status');
+      toast.error(error?.response?.data?.message || 'Error updating status');
     }
   };
 
@@ -830,11 +884,11 @@ const CoordinatorJobs = () => {
         <>
       {/* Filters */}
       <div className="card border-none shadow-sm bg-gray-50/50">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-          <div className="md:col-span-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          <div className="md:col-span-3">
             <div className="flex gap-2">
               <div className="flex flex-1 min-w-0 items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm focus-within:border-primary-500 group">
-                <span className="pointer-events-none flex items-center pl-4 pr-2 text-gray-400 group-focus-within:text-primary-600 transition-colors">
+                <span className="pointer-events-none flex items-center pl-3 pr-2 text-gray-400 group-focus-within:text-primary-600 transition-colors">
                   <Search className="w-4 h-4" />
                 </span>
                 <input
@@ -843,13 +897,13 @@ const CoordinatorJobs = () => {
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
-                  className="w-full min-w-0 border-0 bg-transparent py-3 pr-4 pl-0 focus:outline-none focus:ring-0"
+                  className="w-full min-w-0 border-0 bg-transparent py-2.5 pr-3 pl-0 focus:outline-none focus:ring-0 text-sm"
                 />
               </div>
               <button
                 type="button"
                 onClick={applySearch}
-                className="shrink-0 px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors"
+                className="shrink-0 px-3 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 transition-colors"
               >
                 Search
               </button>
@@ -860,10 +914,10 @@ const CoordinatorJobs = () => {
             <select
               value={filters.jobType}
               onChange={(e) => {
-                setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
-                setFilters({ ...filters, jobType: e.target.value });
+                updatePage(1);
+                setFilters(prev => ({ ...prev, jobType: e.target.value }));
               }}
-              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm text-xs py-2.5"
             >
               <option value="">All Types</option>
               <option value="full_time">Full Time</option>
@@ -873,14 +927,30 @@ const CoordinatorJobs = () => {
             </select>
           </div>
 
+          <div className="md:col-span-2">
+            <select
+              value={filters.roleCategory}
+              onChange={(e) => {
+                updatePage(1);
+                setFilters(prev => ({ ...prev, roleCategory: e.target.value }));
+              }}
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm text-xs py-2.5"
+            >
+              <option value="">All Categories</option>
+              {roleCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="md:col-span-3">
             <select
               value={filters.status}
               onChange={(e) => {
-                setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
-                setFilters({ ...filters, status: e.target.value });
+                updatePage(1);
+                setFilters(prev => ({ ...prev, status: e.target.value }));
               }}
-              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm text-xs py-2.5"
             >
               <option value="">All Status</option>
               {pipelineStages.map(stage => (
@@ -889,14 +959,14 @@ const CoordinatorJobs = () => {
             </select>
           </div>
 
-          <div className="md:col-span-3">
+          <div className="md:col-span-2">
             <select
               value={filters.sortBy}
               onChange={(e) => {
-                setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
-                setFilters({ ...filters, sortBy: e.target.value });
+                updatePage(1);
+                setFilters(prev => ({ ...prev, sortBy: e.target.value }));
               }}
-              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm"
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm text-xs py-2.5"
             >
               <option value="newest">Newest First</option>
               <option value="deadline_asc">Deadline (Soonest)</option>
@@ -906,13 +976,13 @@ const CoordinatorJobs = () => {
           </div>
         </div>
 
-        {(filters.search || filters.jobType || filters.status || filters.sortBy !== 'newest') && (
+        {(filters.search || filters.jobType || filters.roleCategory || filters.status || filters.sortBy !== 'newest') && (
           <div className="flex justify-end mt-3">
             <button
               onClick={() => {
                 setSearchInput('');
-                setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
-                setFilters({ search: '', status: '', jobType: '', sortBy: 'newest' });
+                updatePage(1);
+                setFilters({ search: '', status: '', jobType: '', roleCategory: '', sortBy: 'newest' });
               }}
               className="text-[10px] font-black text-red-500 hover:text-red-700 uppercase tracking-widest flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-red-50 shadow-sm transition-all"
             >
@@ -978,7 +1048,12 @@ const CoordinatorJobs = () => {
           ) : jobs.length > 0 ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4">
-                {jobs.map((job) => (
+                {jobs.map((job) => {
+                  const coordinatorName = job.coordinator 
+                    ? `${job.coordinator.firstName || ''} ${job.coordinator.lastName || ''}`.trim()
+                    : (job.createdBy ? `${job.createdBy.firstName || ''} ${job.createdBy.lastName || ''}`.trim() : null);
+
+                  return (
                   <div key={job._id} className="job-card group">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                       <div className="flex-1 min-w-0">
@@ -1008,9 +1083,12 @@ const CoordinatorJobs = () => {
                               <h3 className="text-lg font-bold text-gray-900 truncate hover:text-primary-600 transition-colors">
                                 {job.title}
                               </h3>
-                              <div className="flex gap-1.5">
+                              <div className="flex flex-wrap gap-1.5">
                                 {job.jobType === 'internship' && (
                                   <span className="badge bg-purple-50 text-purple-600 border border-purple-100">Internship</span>
+                                )}
+                                {job.roleCategory && (
+                                  <span className="badge bg-blue-50 text-blue-600 border border-blue-100">{job.roleCategory}</span>
                                 )}
                                 {job.eligibility?.openForAll && (
                                   <span className="badge bg-green-50 text-green-600 border border-green-100">Open for All</span>
@@ -1022,20 +1100,36 @@ const CoordinatorJobs = () => {
                               {job.company?.name}
                             </p>
 
-                            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
                               <div className="flex items-center gap-1.5">
-                                <MapPin className="w-4 h-4 text-gray-400" />
+                                <MapPin className="w-3.5 h-3.5 text-gray-400" />
                                 {job.location || 'Remote'}
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <Users className="w-4 h-4 text-gray-400" />
+                                <Users className="w-3.5 h-3.5 text-gray-400" />
                                 {job.maxPositions} positions
                               </div>
                               <div className={`flex items-center gap-1.5 font-medium ${new Date(job.applicationDeadline) < new Date() ? 'text-red-500' : 'text-primary-600'
                                 }`}>
-                                <Calendar className="w-4 h-4" />
+                                <Calendar className="w-3.5 h-3.5" />
                                 {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
                               </div>
+
+                              {/* Salary Badge */}
+                              {formatSalary(job.salary) && (
+                                <div className="flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                                  <IndianRupee className="w-3 h-3 text-emerald-600" />
+                                  <span>{formatSalary(job.salary)}</span>
+                                </div>
+                              )}
+
+                              {/* Coordinator Name Badge */}
+                              {coordinatorName && (
+                                <div className="flex items-center gap-1 text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 font-medium">
+                                  <UserCheck className="w-3 h-3 text-indigo-600" />
+                                  <span>Coordinator: <strong>{coordinatorName}</strong></span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1054,10 +1148,20 @@ const CoordinatorJobs = () => {
                           </Link>
                           <button
                             onClick={() => openManageApplicants(job)}
-                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl shadow-lg shadow-primary-100 hover:shadow-primary-200 transition-all font-bold text-xs uppercase tracking-widest"
+                            disabled={triageLoadingJobId === job._id}
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl shadow-lg shadow-primary-100 hover:shadow-primary-200 transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-75"
                           >
-                            <Users className="w-3.5 h-3.5" />
-                            Manage Triage
+                            {triageLoadingJobId === job._id ? (
+                              <>
+                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                Loading...
+                              </>
+                            ) : (
+                              <>
+                                <Users className="w-3.5 h-3.5" />
+                                Manage Triage
+                              </>
+                            )}
                           </button>
                         </div>
 
@@ -1098,6 +1202,7 @@ const CoordinatorJobs = () => {
 
                           <Link
                             to={`/coordinator/jobs/${job._id}/edit`}
+                            state={{ fromPage: pagination.current }}
                             className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-gray-400 hover:text-primary-600 hover:border-primary-200 rounded-xl transition-all shadow-sm group"
                             title="Edit Job"
                           >
@@ -1140,13 +1245,14 @@ const CoordinatorJobs = () => {
                       <StatusBadge status={job.status} />
                     </div>
                   </div>
-                ))}
+                );
+                })}
               </div>
 
               <Pagination
                 current={pagination.current}
                 total={pagination.pages}
-                onPageChange={(page) => setPagination({ ...pagination, current: page })}
+                onPageChange={(page) => updatePage(page)}
               />
             </div>
           ) : (
@@ -1166,10 +1272,12 @@ const CoordinatorJobs = () => {
 
       <ApplicantTriageModal
         isOpen={showApplicantModal}
+        isLoading={modalApplicantsLoading}
         onClose={() => {
           setShowApplicantModal(false);
           setModalApplicants([]);
           setModalNewStatus(null);
+          setTriageLoadingJobId(null);
         }}
         job={modalJob}
         applicants={modalApplicants}

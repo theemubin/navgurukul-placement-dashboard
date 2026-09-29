@@ -19,7 +19,8 @@ import {
   GripVertical,
   X,
   EyeOff,
-  Download
+  Download,
+  UserCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -39,12 +40,21 @@ const STAGE_COLORS = {
 // Job Card component for Kanban
 const JobCard = ({ job, index, onExportJob }) => {
   const formatSalary = (salary) => {
-    if (!salary?.min && !salary?.max) return null;
+    if (!salary) return null;
+    if (typeof salary === 'string') return salary;
     if (salary.min && salary.max) {
-      return `₹${(salary.min / 1000).toFixed(0)}k - ₹${(salary.max / 1000).toFixed(0)}k`;
+      const minL = (salary.min / 100000).toFixed(1).replace('.0', '');
+      const maxL = (salary.max / 100000).toFixed(1).replace('.0', '');
+      return `₹${minL}L - ₹${maxL}L PA`;
     }
-    return salary.min ? `₹${(salary.min / 1000).toFixed(0)}k+` : `Up to ₹${(salary.max / 1000).toFixed(0)}k`;
+    if (salary.min) return `₹${(salary.min / 100000).toFixed(1).replace('.0', '')}L+ PA`;
+    if (salary.max) return `Up to ₹${(salary.max / 100000).toFixed(1).replace('.0', '')}L PA`;
+    return null;
   };
+
+  const coordinatorName = job.coordinator 
+    ? `${job.coordinator.firstName || ''} ${job.coordinator.lastName || ''}`.trim()
+    : (job.createdBy ? `${job.createdBy.firstName || ''} ${job.createdBy.lastName || ''}`.trim() : null);
 
   const daysUntilDeadline = () => {
     const deadline = new Date(job.applicationDeadline);
@@ -93,9 +103,17 @@ const JobCard = ({ job, index, onExportJob }) => {
 
           {/* Salary */}
           {formatSalary(job.salary) && (
-            <div className="flex items-center text-gray-600 text-xs mb-2">
-              <IndianRupee className="w-3.5 h-3.5 mr-1.5" />
+            <div className="flex items-center text-emerald-700 font-semibold text-xs mb-2">
+              <IndianRupee className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
               {formatSalary(job.salary)}
+            </div>
+          )}
+
+          {/* Coordinator */}
+          {coordinatorName && (
+            <div className="flex items-center text-indigo-700 text-xs mb-2">
+              <UserCheck className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+              <span className="truncate">Coordinator: <strong>{coordinatorName}</strong></span>
             </div>
           )}
 
@@ -506,6 +524,7 @@ const JobsKanban = ({ onExportJob }) => {
   const [showApplicantModal, setShowApplicantModal] = useState(false);
   const [modalJob, setModalJob] = useState(null);
   const [modalApplicants, setModalApplicants] = useState([]);
+  const [modalApplicantsLoading, setModalApplicantsLoading] = useState(false);
   const [modalNewStatus, setModalNewStatus] = useState(null);
   const [applyingModalChanges, setApplyingModalChanges] = useState(false);
 
@@ -557,6 +576,7 @@ const JobsKanban = ({ onExportJob }) => {
   }, [stages, activeStageId]);
 
   const fetchApplicantsForJob = async (jobId) => {
+    setModalApplicantsLoading(true);
     try {
       const res = await applicationAPI.getApplications({
         job: jobId,
@@ -570,6 +590,8 @@ const JobsKanban = ({ onExportJob }) => {
     } catch (error) {
       console.error('Error fetching applicants', error);
       toast.error('Failed to load applicants for review');
+    } finally {
+      setModalApplicantsLoading(false);
     }
   };
 
@@ -642,7 +664,7 @@ const JobsKanban = ({ onExportJob }) => {
       setShowApplicantModal(false);
       setModalApplicants([]);
       setModalNewStatus(null);
-      fetchData();
+      fetchAll();
     } catch (error) {
       console.error('Triage apply error', error);
       toast.error(error?.response?.data?.message || 'Failed to apply changes');
@@ -672,8 +694,9 @@ const JobsKanban = ({ onExportJob }) => {
       const job = jobs.find(j => j._id === jobId);
       setModalJob(job);
       setModalNewStatus(newStatus);
-      await fetchApplicantsForJob(jobId);
       setShowApplicantModal(true);
+      setModalApplicants([]);
+      await fetchApplicantsForJob(jobId);
       return;
     }
 
@@ -812,6 +835,7 @@ const JobsKanban = ({ onExportJob }) => {
       {/* Applicant Review Modal */}
       <ApplicantTriageModal
         isOpen={showApplicantModal}
+        isLoading={modalApplicantsLoading}
         onClose={() => {
           setShowApplicantModal(false);
           setModalApplicants([]);

@@ -31,7 +31,7 @@ const jobSchema = new mongoose.Schema({
   roleCategory: {
     type: String,
     trim: true,
-    required: [true, 'Role category is required']
+    default: 'Other'
   },
   jobType: {
     type: String,

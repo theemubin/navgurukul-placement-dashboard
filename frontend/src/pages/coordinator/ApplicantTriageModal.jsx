@@ -34,9 +34,10 @@ const ApplicantTriageModal = ({
     job,
     applicants: initialApplicants,
     targetStatus,
-    pipelineStages,
+    pipelineStages = [],
     onConfirm,
-    isApplying
+    isApplying,
+    isLoading = false
 }) => {
     const [applicants, setApplicants] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -47,8 +48,11 @@ const ApplicantTriageModal = ({
 
     // Map job status to label
     const getStatusLabel = (statusId) => {
+        if (!statusId) return 'Applied';
         const stage = pipelineStages.find(s => s.id === statusId);
-        return stage ? stage.label : statusId;
+        if (stage) return stage.label;
+        const normalized = statusId.replace(/_/g, ' ');
+        return normalized.charAt(0).toUpperCase() + normalized.slice(1);
     };
 
     const targetLabel = getStatusLabel(targetStatus || job?.status);
@@ -61,7 +65,7 @@ const ApplicantTriageModal = ({
 
     // Initialize applicants with buckets
     useEffect(() => {
-        if (isOpen && initialApplicants && applicants.length === 0) {
+        if (isOpen && initialApplicants) {
             setApplicants(initialApplicants.map(app => ({
                 ...app,
                 bucket: app._target ? app._target : (app.status === 'rejected' ? 'exit' : 'hold'),
@@ -76,7 +80,7 @@ const ApplicantTriageModal = ({
             // Init Discord Thread
             setDiscordThreadId(job?.discordThreadId || '');
         }
-    }, [isOpen, initialApplicants, hasInterviewRounds, job?.discordThreadId, applicants.length]);
+    }, [isOpen, initialApplicants, hasInterviewRounds, job?.discordThreadId]);
 
     // Reset state when modal is closed
     useEffect(() => {
@@ -163,9 +167,9 @@ const ApplicantTriageModal = ({
                     className={`bg-white border rounded-xl p-2.5 mb-2 shadow-sm transition-all ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary-500 opacity-90 scale-105 z-50' : 'hover:border-primary-300'
                         } ${isExiting && !app.comment.trim() ? 'border-red-200 bg-red-50/50' : 'border-gray-100'}`}
                 >
-                    <div className="flex justify-between items-start gap-2 mb-2">
+                    <div className="flex justify-between items-start gap-2 mb-1">
                         <div className="min-w-0">
-                            <h5 className="font-bold text-gray-900 text-[13px] leading-none mb-0.5 truncate">
+                            <h5 className="font-bold text-gray-900 text-[13px] leading-tight truncate">
                                 {app.student?.firstName} {app.student?.lastName}
                             </h5>
                             <p className="text-[10px] text-gray-400 truncate tracking-tight">{app.student?.email}</p>
@@ -176,6 +180,14 @@ const ApplicantTriageModal = ({
                             }`}>
                             {app.matchPercentage || 0}%
                         </div>
+                    </div>
+
+                    {/* Current Student Stage Badge */}
+                    <div className="flex items-center gap-1.5 mb-2">
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100/80">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
+                            <span className="truncate">Current: {getStatusLabel(app.status)} {app.currentRound ? `(R${app.currentRound})` : ''}</span>
+                        </span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 mb-2">
@@ -290,7 +302,18 @@ const ApplicantTriageModal = ({
                     </div>
                 </div>
 
-                {viewMode === 'triage' ? (
+                {isLoading ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12 bg-gray-50 min-h-[400px]">
+                        <div className="relative flex items-center justify-center mb-6">
+                            <div className="w-16 h-16 rounded-2xl border-4 border-primary-200 border-t-primary-600 animate-spin" />
+                            <Briefcase className="w-6 h-6 text-primary-600 absolute" />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-1">Loading Applicants for Triage...</h3>
+                        <p className="text-sm text-gray-500 max-w-sm text-center">
+                            Preparing applicant pool, match ratings, and current candidate stages.
+                        </p>
+                    </div>
+                ) : viewMode === 'triage' ? (
                     <>
                         {/* Mobile Tabs for Triage */}
                         <div className="md:hidden flex p-1.5 bg-white border-b sticky top-0 z-20">
@@ -526,8 +549,11 @@ const ApplicantTriageModal = ({
                                             <div className="space-y-2">
                                                 <div className="text-[10px] font-bold text-green-600 uppercase tracking-widest bg-green-50 px-2 py-0.5 rounded">Promotions / Advances</div>
                                                 {promoteList.map(app => (
-                                                    <div key={app._id} className="flex items-center justify-between text-sm py-1 border-b border-gray-50 last:border-0">
-                                                        <span className="font-medium">{app.student?.firstName} {app.student?.lastName}</span>
+                                                    <div key={app._id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
+                                                        <div>
+                                                            <span className="font-medium text-gray-900 block">{app.student?.firstName} {app.student?.lastName}</span>
+                                                            <span className="text-[10px] text-gray-400">Current: {getStatusLabel(app.status)}</span>
+                                                        </div>
                                                         <span className="text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded border border-green-100 uppercase text-[10px]">
                                                             {isInterviewingStage && hasInterviewRounds ? 'To Round' : 'Promoted'}
                                                         </span>
@@ -540,8 +566,11 @@ const ApplicantTriageModal = ({
                                             <div className="space-y-2">
                                                 <div className="text-[10px] font-bold text-yellow-600 uppercase tracking-widest bg-yellow-50 px-2 py-0.5 rounded">Remaining / On Hold</div>
                                                 {holdList.map(app => (
-                                                    <div key={app._id} className="flex items-center justify-between text-sm py-1 border-b border-gray-50 last:border-0">
-                                                        <span className="font-medium text-gray-600">{app.student?.firstName} {app.student?.lastName}</span>
+                                                    <div key={app._id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
+                                                        <div>
+                                                            <span className="font-medium text-gray-700 block">{app.student?.firstName} {app.student?.lastName}</span>
+                                                            <span className="text-[10px] text-gray-400">Current: {getStatusLabel(app.status)}</span>
+                                                        </div>
                                                         <span className="text-yellow-600 font-bold bg-yellow-50 px-2 py-0.5 rounded border border-yellow-100 uppercase text-[10px]">No Change</span>
                                                     </div>
                                                 ))}
@@ -554,7 +583,10 @@ const ApplicantTriageModal = ({
                                                 {exitList.map(app => (
                                                     <div key={app._id} className="flex flex-col gap-1 text-sm py-2 border-b border-gray-50 last:border-0">
                                                         <div className="flex items-center justify-between">
-                                                            <span className="font-medium text-gray-700">{app.student?.firstName} {app.student?.lastName}</span>
+                                                            <div>
+                                                                <span className="font-medium text-gray-700 block">{app.student?.firstName} {app.student?.lastName}</span>
+                                                                <span className="text-[10px] text-gray-400">Current: {getStatusLabel(app.status)}</span>
+                                                            </div>
                                                             <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded border border-red-100 uppercase text-[10px]">Exited</span>
                                                         </div>
                                                         {app.comment && (

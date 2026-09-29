@@ -934,13 +934,22 @@ router.get('/export/csv', auth, authorize('coordinator', 'manager'), async (req,
       query.student = { $in: campusStudents.map(s => s._id) };
     }
 
-    const applications = await Application.find(query)
+    const rawApplications = await Application.find(query)
       .populate('student', 'firstName lastName email studentProfile.enrollmentNumber studentProfile.department campus')
       .populate({
         path: 'student',
         populate: { path: 'campus', select: 'name' }
       })
       .populate('job', 'title company.name location jobType');
+
+    // Filter out withdrawn applications if withdrawn before HR shortlisting
+    const hrStages = ['hr_shortlisting', 'shortlisted', 'interviewing', 'in_progress', 'technical_round', 'selected', 'offered'];
+    const applications = rawApplications.filter(app => {
+      if (app.status !== 'withdrawn') return true;
+      return app.statusHistory?.some(sh => hrStages.includes(sh.status?.toLowerCase())) ||
+        (app.currentRound && app.currentRound > 0) ||
+        (app.roundResults && app.roundResults.length > 0);
+    });
 
     // Generate CSV
     const headers = ['Student Name', 'Email', 'Enrollment No', 'Department', 'Campus', 'LinkedIn', 'GitHub', 'Portfolio', 'Job Title', 'Company', 'Status', 'Applied Date'];
@@ -1016,7 +1025,7 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
       query.student = { $in: campusStudents.map(s => s._id) };
     }
 
-    const applications = await Application.find(query)
+    const rawApplications = await Application.find(query)
       .populate({
         path: 'student',
         populate: [
@@ -1026,6 +1035,15 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
       })
       .populate('job', 'title company.name location jobType salary')
       .populate('feedbackBy', 'firstName lastName');
+
+    // Filter out withdrawn applications if withdrawn before HR shortlisting
+    const hrStages = ['hr_shortlisting', 'shortlisted', 'interviewing', 'in_progress', 'technical_round', 'selected', 'offered'];
+    const applications = rawApplications.filter(app => {
+      if (app.status !== 'withdrawn') return true;
+      return app.statusHistory?.some(sh => hrStages.includes(sh.status?.toLowerCase())) ||
+        (app.currentRound && app.currentRound > 0) ||
+        (app.roundResults && app.roundResults.length > 0);
+    });
 
     // Helper for skill rating to labels
     const ratingToLevel = (rating) => {

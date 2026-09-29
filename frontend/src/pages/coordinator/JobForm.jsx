@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   jobAPI,
   skillAPI,
@@ -42,7 +42,13 @@ import toast from "react-hot-toast";
 const JobForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEdit = !!id;
+
+  const returnPage = location.state?.fromPage || sessionStorage.getItem('coordinatorJobsPage') || 1;
+  const goBackToJobs = () => {
+    navigate(`/coordinator/jobs?page=${returnPage}`);
+  };
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -565,7 +571,7 @@ const JobForm = () => {
       });
     } catch (error) {
       toast.error("Failed to load job details");
-      navigate("/coordinator/jobs");
+      goBackToJobs();
     } finally {
       setLoading(false);
     }
@@ -632,7 +638,7 @@ const JobForm = () => {
         });
       }
 
-      navigate("/coordinator/jobs");
+      goBackToJobs();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to save job");
     } finally {
@@ -1041,7 +1047,7 @@ const JobForm = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate("/coordinator/jobs")}
+            onClick={goBackToJobs}
             className="p-2 hover:bg-gray-100 rounded-full transition"
           >
             <ArrowLeft className="w-6 h-6 text-gray-600" />
@@ -3260,7 +3266,7 @@ const JobForm = () => {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => navigate("/coordinator/jobs")}
+                  onClick={goBackToJobs}
                   className="px-6 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-all"
                 >
                   Discard Changes

@@ -322,152 +322,152 @@ router.get('/dashboard', auth, authorize('coordinator', 'manager'), cacheMiddlew
       applicationQuery.student = { $in: campusStudents.map(s => s._id) };
     }
 
-    // Get counts
-    const totalStudents = await User.countDocuments(studentQuery);
-    const totalJobs = await Job.countDocuments({ ...jobQuery, status: { $in: activeStatuses } });
-    const totalApplications = await Application.countDocuments(applicationQuery);
-
-    // For placements, we look at updatedAt or status change date if available, 
-    // but createdAt with status 'selected' is common too. 
-    // Let's use applicationQuery which already has the date filter.
-    const totalPlacements = await Application.countDocuments({ ...applicationQuery, status: 'selected' });
-
-    // Get active companies
-    const activeJobs = await Job.find({ status: { $in: activeStatuses } }).distinct('company.name');
-    const activeCompanies = activeJobs.length;
-
-    const totalCampuses = await Campus.countDocuments({ isActive: true });
-    const totalPocs = await User.countDocuments({ role: 'campus_poc', isActive: true });
-    const totalCoordinators = await User.countDocuments({ role: 'coordinator', isActive: true });
-    const paidProjects = await Job.countDocuments({ jobType: 'paid_project', status: { $in: activeStatuses } });
-
-    // Applications by status
-    const applicationsByStatus = await Application.aggregate([
-      { $match: applicationQuery },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-
-    // Placements by campus
-    const placementsByCampus = await Application.aggregate([
-      { $match: { ...applicationQuery, status: 'selected' } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'student',
-          foreignField: '_id',
-          as: 'studentData'
+    // Execute all queries in parallel for high performance
+    const [
+      totalStudents,
+      totalJobs,
+      totalApplications,
+      totalPlacements,
+      activeJobs,
+      totalCampuses,
+      totalPocs,
+      totalCoordinators,
+      paidProjects,
+      applicationsByStatus,
+      placementsByCampus,
+      studentsBySchool,
+      placementsBySchool,
+      placementsByJobType,
+      recentPlacements,
+      topCompanies,
+      monthlyTrend
+    ] = await Promise.all([
+      User.countDocuments(studentQuery),
+      Job.countDocuments({ ...jobQuery, status: { $in: activeStatuses } }),
+      Application.countDocuments(applicationQuery),
+      Application.countDocuments({ ...applicationQuery, status: 'selected' }),
+      Job.find({ status: { $in: activeStatuses } }).distinct('company.name'),
+      Campus.countDocuments({ isActive: true }),
+      User.countDocuments({ role: 'campus_poc', isActive: true }),
+      User.countDocuments({ role: 'coordinator', isActive: true }),
+      Job.countDocuments({ jobType: 'paid_project', status: { $in: activeStatuses } }),
+      Application.aggregate([
+        { $match: applicationQuery },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      Application.aggregate([
+        { $match: { ...applicationQuery, status: 'selected' } },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'student',
+            foreignField: '_id',
+            as: 'studentData'
+          }
+        },
+        { $unwind: '$studentData' },
+        {
+          $lookup: {
+            from: 'campuses',
+            localField: 'studentData.campus',
+            foreignField: '_id',
+            as: 'campusData'
+          }
+        },
+        { $unwind: { path: '$campusData', preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: '$campusData._id',
+            campusName: { $first: '$campusData.name' },
+            count: { $sum: 1 }
+          }
         }
-      },
-      { $unwind: '$studentData' },
-      {
-        $lookup: {
-          from: 'campuses',
-          localField: 'studentData.campus',
-          foreignField: '_id',
-          as: 'campusData'
+      ]),
+      User.aggregate([
+        { $match: studentQuery },
+        { $group: { _id: { campus: '$campus', school: '$studentProfile.currentSchool' }, count: { $sum: 1 } } },
+        { $lookup: { from: 'campuses', localField: '_id.campus', foreignField: '_id', as: 'campusData' } },
+        { $unwind: { path: '$campusData', preserveNullAndEmptyArrays: true } },
+        { $project: { campusId: '$_id.campus', campusName: '$campusData.name', school: '$_id.school', count: 1, _id: 0 } }
+      ]),
+      Application.aggregate([
+        { $match: { ...applicationQuery, status: 'selected' } },
+        { $lookup: { from: 'users', localField: 'student', foreignField: '_id', as: 'studentData' } },
+        { $unwind: '$studentData' },
+        { $group: { _id: { campus: '$studentData.campus', school: '$studentData.studentProfile.currentSchool' }, count: { $sum: 1 } } },
+        { $lookup: { from: 'campuses', localField: '_id.campus', foreignField: '_id', as: 'campusData' } },
+        { $unwind: { path: '$campusData', preserveNullAndEmptyArrays: true } },
+        { $project: { campusId: '$_id.campus', campusName: '$campusData.name', school: '$_id.school', count: 1, _id: 0 } }
+      ]),
+      Application.aggregate([
+        { $match: { ...applicationQuery, status: 'selected' } },
+        {
+          $lookup: {
+            from: 'jobs',
+            localField: 'job',
+            foreignField: '_id',
+            as: 'jobData'
+          }
+        },
+        { $unwind: '$jobData' },
+        {
+          $group: {
+            _id: '$jobData.jobType',
+            count: { $sum: 1 }
+          }
         }
-      },
-      { $unwind: { path: '$campusData', preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: '$campusData._id',
-          campusName: { $first: '$campusData.name' },
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    // Students by school (per campus) - shows where students are present
-    const studentsBySchool = await User.aggregate([
-      { $match: studentQuery },
-      { $group: { _id: { campus: '$campus', school: '$studentProfile.currentSchool' }, count: { $sum: 1 } } },
-      { $lookup: { from: 'campuses', localField: '_id.campus', foreignField: '_id', as: 'campusData' } },
-      { $unwind: { path: '$campusData', preserveNullAndEmptyArrays: true } },
-      { $project: { campusId: '$_id.campus', campusName: '$campusData.name', school: '$_id.school', count: 1, _id: 0 } }
-    ]);
-
-    // Placements by school (per campus)
-    const placementsBySchool = await Application.aggregate([
-      { $match: { ...applicationQuery, status: 'selected' } },
-      { $lookup: { from: 'users', localField: 'student', foreignField: '_id', as: 'studentData' } },
-      { $unwind: '$studentData' },
-      { $group: { _id: { campus: '$studentData.campus', school: '$studentData.studentProfile.currentSchool' }, count: { $sum: 1 } } },
-      { $lookup: { from: 'campuses', localField: '_id.campus', foreignField: '_id', as: 'campusData' } },
-      { $unwind: { path: '$campusData', preserveNullAndEmptyArrays: true } },
-      { $project: { campusId: '$_id.campus', campusName: '$campusData.name', school: '$_id.school', count: 1, _id: 0 } }
-    ]);
-
-    // Placements by job type
-    const placementsByJobType = await Application.aggregate([
-      { $match: { ...applicationQuery, status: 'selected' } },
-      {
-        $lookup: {
-          from: 'jobs',
-          localField: 'job',
-          foreignField: '_id',
-          as: 'jobData'
-        }
-      },
-      { $unwind: '$jobData' },
-      {
-        $group: {
-          _id: '$jobData.jobType',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    // Recent placements
-    const recentPlacements = await Application.find({ ...applicationQuery, status: 'selected' })
-      .populate('student', 'firstName lastName')
-      .populate('job', 'title company.name')
-      .sort({ updatedAt: -1 })
-      .limit(5);
-
-    // Top companies by placements
-    const topCompanies = await Application.aggregate([
-      { $match: { ...applicationQuery, status: 'selected' } },
-      {
-        $lookup: {
-          from: 'jobs',
-          localField: 'job',
-          foreignField: '_id',
-          as: 'jobData'
-        }
-      },
-      { $unwind: '$jobData' },
-      {
-        $group: {
-          _id: '$jobData.company.name',
-          placements: { $sum: 1 }
-        }
-      },
-      { $sort: { placements: -1 } },
-      { $limit: 5 }
-    ]);
-
-    // Monthly placement trend (last 6 months)
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-    const monthlyTrend = await Application.aggregate([
-      {
-        $match: {
-          status: 'selected',
-          updatedAt: { $gte: sixMonthsAgo }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            year: { $year: '$updatedAt' },
-            month: { $month: '$updatedAt' }
+      ]),
+      Application.find({ ...applicationQuery, status: 'selected' })
+        .populate('student', 'firstName lastName')
+        .populate('job', 'title company.name')
+        .sort({ updatedAt: -1 })
+        .limit(5)
+        .lean(),
+      Application.aggregate([
+        { $match: { ...applicationQuery, status: 'selected' } },
+        {
+          $lookup: {
+            from: 'jobs',
+            localField: 'job',
+            foreignField: '_id',
+            as: 'jobData'
+          }
+        },
+        { $unwind: '$jobData' },
+        {
+          $group: {
+            _id: '$jobData.company.name',
+            placements: { $sum: 1 }
+          }
+        },
+        { $sort: { placements: -1 } },
+        { $limit: 5 }
+      ]),
+      (() => {
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        return Application.aggregate([
+          {
+            $match: {
+              status: 'selected',
+              updatedAt: { $gte: sixMonthsAgo }
+            }
           },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { '_id.year': 1, '_id.month': 1 } }
+          {
+            $group: {
+              _id: {
+                year: { $year: '$updatedAt' },
+                month: { $month: '$updatedAt' }
+              },
+              count: { $sum: 1 }
+            }
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1 } }
+        ]);
+      })()
     ]);
+
+    const activeCompanies = activeJobs.length;
 
     res.json({
       summary: {
