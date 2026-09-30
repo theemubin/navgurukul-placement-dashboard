@@ -10,8 +10,11 @@ const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
-const { cacheMiddleware } = require('../middleware/cache');
+const { cacheMiddleware, invalidateCache } = require('../middleware/cache');
 const cacheService = require('../services/redisCacheService');
+
+const TERMINAL_APPLICATION_STATUSES = ['selected', 'rejected', 'withdrawn', 'offered', 'filled'];
+const PLACEMENT_OUTCOME_STATUSES = ['selected', 'offered', 'filled'];
 
 /**
  * @swagger
@@ -658,6 +661,8 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
       console.error('Discord application update error:', discordErr.message || discordErr);
     }
 
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*', 'cache:analytics:*']);
+
     res.json({ message: 'Application status updated', application });
   } catch (error) {
     console.error('Update status error:', error);
@@ -1269,13 +1274,13 @@ router.get('/analytics/bottlenecks', auth, authorize('coordinator', 'campus_poc'
       const daysInStage = Math.max(1, Math.round((now - lastUpdated) / (1000 * 60 * 60 * 24)));
       stageMap[status].totalDays += daysInStage;
 
-      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status.toLowerCase());
+      const isTerminal = TERMINAL_APPLICATION_STATUSES.includes(status.toLowerCase());
       if (!isTerminal && (now - lastUpdated) > thresholdMs) {
         stageMap[status].stagnantCount += 1;
         totalStagnant += 1;
       }
 
-      if (['selected', 'offered'].includes(status.toLowerCase())) totalOffered += 1;
+      if (PLACEMENT_OUTCOME_STATUSES.includes(status.toLowerCase())) totalOffered += 1;
       if (status.toLowerCase() === 'rejected') totalRejected += 1;
     });
 
@@ -1317,7 +1322,7 @@ router.get('/analytics/bottlenecks', auth, authorize('coordinator', 'campus_poc'
     const companyStagnantMap = {};
     allApps.forEach(app => {
       const status = (app.status || '').toLowerCase();
-      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status);
+      const isTerminal = TERMINAL_APPLICATION_STATUSES.includes(status);
       const lastUpdated = new Date(app.updatedAt || app.createdAt);
       if (!isTerminal && (now - lastUpdated) > thresholdMs && app.job?.company?.name) {
         const compName = app.job.company.name;
@@ -1449,7 +1454,7 @@ router.get('/analytics/stagnant-students', auth, authorize('coordinator', 'campu
   try {
     const { campus, minDays = 7, stage, status, search, school, page = 1, limit = 20 } = req.query;
     const thresholdDate = new Date(Date.now() - Number(minDays) * 24 * 60 * 60 * 1000);
-    const terminalStatuses = ['selected', 'rejected', 'withdrawn', 'offered'];
+    const terminalStatuses = TERMINAL_APPLICATION_STATUSES;
     const stageFilter = stage || status;
 
     const activeStatuses = stageFilter
@@ -1734,7 +1739,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
 
     const formattedApplications = applications.map(app => {
       const status = (app.status || 'applied').toLowerCase();
-      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status);
+      const isTerminal = TERMINAL_APPLICATION_STATUSES.includes(status);
       const lastUpdated = new Date(app.updatedAt || app.createdAt);
       const daysInStage = Math.max(1, Math.round((now - lastUpdated) / (1000 * 60 * 60 * 24)));
       totalDaysInPipeline += daysInStage;
@@ -1743,7 +1748,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
 
       if (!isTerminal) activeCount += 1;
       if (isStagnant) stagnantCount += 1;
-      if (['selected', 'offered'].includes(status)) offeredCount += 1;
+      if (PLACEMENT_OUTCOME_STATUSES.includes(status)) offeredCount += 1;
       if (status === 'rejected') rejectedCount += 1;
 
       if (!summaryMode && app.roundResults && app.roundResults.length > 0) {

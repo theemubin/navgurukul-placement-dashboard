@@ -248,11 +248,11 @@ const CoordinatorJobs = () => {
 
       // After bulk updates, check if the job became 'filled' due to placements
       const latestJobRes = await jobAPI.getJob(modalJob._id);
-      const latestJob = latestJobRes.data.job;
+      const latestJob = latestJobRes.data?.job || latestJobRes.data;
 
       // If backend didn't already mark job filled and caller intended a new status, apply it
-      if (modalNewStatus && latestJob.status !== 'filled') {
-        await jobAPI.updateJob(modalJob._id, { status: modalNewStatus });
+      if (modalNewStatus && latestJob?.status !== 'filled') {
+        await jobAPI.updateJobStatus(modalJob._id, modalNewStatus);
         toast.success('Job status updated');
       }
 
@@ -366,11 +366,11 @@ const CoordinatorJobs = () => {
 
       // After bulk updates, check if the job became 'filled'
       const latestJobRes = await jobAPI.getJob(modalJob._id);
-      const latestJob = latestJobRes.data;
+      const latestJob = latestJobRes.data?.job || latestJobRes.data;
 
       // If job is advancing and not already filled, update it
-      if (modalNewStatus && latestJob.status !== 'filled') {
-        await jobAPI.updateJob(modalJob._id, { status: modalNewStatus });
+      if (modalNewStatus && latestJob?.status !== 'filled') {
+        await jobAPI.updateJobStatus(modalJob._id, modalNewStatus);
         toast.success('Job status updated');
       }
 

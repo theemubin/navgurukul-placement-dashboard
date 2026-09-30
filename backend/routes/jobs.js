@@ -1030,6 +1030,7 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
     }
 
     await job.save();
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
 
     const isNowVisible = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
@@ -1148,9 +1149,9 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       if (!application) continue;
       if (application.job.toString() !== jobId.toString()) continue;
 
-      // Skip updating final-state applications unless force flag set
+      // Skip updating final-state applications unless force flag is set (default force to true for explicit coordinator actions)
       const finalStates = ['selected', 'withdrawn', 'rejected', 'closed'];
-      const force = !!req.body.force;
+      const force = req.body.force !== undefined ? !!req.body.force : true;
       if (finalStates.includes(application.status) && !force) {
         // Do not override final states; continue to next application
         continue;
@@ -1328,6 +1329,7 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       }
     }
 
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
     res.json({ message: 'Bulk update completed', updated });
   } catch (error) {
     console.error('Bulk update error:', error);
@@ -1513,6 +1515,8 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
     await job.populate('requiredSkills.skill');
     await job.populate('eligibility.campuses', 'name');
     await job.populate('createdBy', 'firstName lastName');
+
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
 
     res.json({
       message: 'Job status updated successfully',

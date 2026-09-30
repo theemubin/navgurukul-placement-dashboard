@@ -19,6 +19,26 @@ const getPOCManagedCampusIds = (user) => {
   return [...new Set(ids)];
 };
 
+const emptyOrMissingArray = (field) => ([
+  { [field]: { $exists: false } },
+  { [field]: { $size: 0 } },
+  { [field]: null }
+]);
+
+const jobsEligibleForCampuses = (campusIds) => ({
+  $or: [
+    ...emptyOrMissingArray('eligibility.campuses'),
+    { 'eligibility.campuses': { $in: campusIds } }
+  ]
+});
+
+const jobsEligibleForSchool = (school) => ({
+  $or: [
+    ...emptyOrMissingArray('eligibility.schools'),
+    { 'eligibility.schools': school }
+  ]
+});
+
 /**
  * @swagger
  * tags:
@@ -2244,10 +2264,30 @@ router.get('/talent-pipeline', auth, authorize('manager', 'coordinator', 'campus
     readinessRecords.forEach(r => readinessMap.set(r.student.toString(), r.isJobReady));
 
     // 3. Fetch Active Jobs
-    // Jobs are considered active until they are marked closed or filled
-    const activeJobs = await Job.find({
-      status: { $nin: ['draft', 'closed', 'filled'] }
-    }).select('roleCategory title status company.name');
+    // Match dashboard "active" stages — exclude drafts, pending approval, on hold, closed, and filled
+    const jobQuery = {
+      status: { $in: activeStatuses }
+    };
+
+    const campusIdsForJobs = campus
+      ? [campus]
+      : (req.user.role === 'campus_poc' ? getPOCManagedCampusIds(req.user) : []);
+
+    const jobFilters = [];
+    if (campusIdsForJobs.length > 0) {
+      jobFilters.push(jobsEligibleForCampuses(campusIdsForJobs));
+    }
+    if (school) {
+      jobFilters.push(jobsEligibleForSchool(school));
+    }
+    if (jobFilters.length === 1) {
+      Object.assign(jobQuery, jobFilters[0]);
+    } else if (jobFilters.length > 1) {
+      jobQuery.$and = jobFilters;
+    }
+
+    const activeJobs = await Job.find(jobQuery)
+      .select('roleCategory title status company.name eligibility');
 
     // 4. Fetch Active Placement Cycle for Goals
     // Prioritize cycle matching current month/year, or the most recent active one

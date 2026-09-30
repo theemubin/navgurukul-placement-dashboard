@@ -179,7 +179,7 @@ const PipelineAnalytics = () => {
   const fetchPipelineData = async () => {
     try {
       setLoading(true);
-      const res = await statsAPI.getTalentPipeline(filters);
+      const res = await statsAPI.getTalentPipeline({ ...filters, forceRefresh: true });
       setData(res.data?.roles || []);
       setCampusBreakdown(res.data?.campusBreakdown || []);
       setCampusSchools(res.data?.campusSchools || []);
@@ -214,9 +214,15 @@ const PipelineAnalytics = () => {
               <span className="font-bold text-gray-900">{entry.value}</span>
             </div>
           ))}
-          <div className="mt-2 pt-2 border-t border-gray-50 text-[10px] text-indigo-600 font-bold uppercase tracking-wider">
-            Ready Rate: {((payload[1].value / (payload[0].value || 1)) * 100).toFixed(1)}%
-          </div>
+          {(() => {
+            const interested = payload.find(p => p.dataKey === 'totalInterested')?.value || 0;
+            const ready = payload.find(p => p.dataKey === 'jobReady')?.value || 0;
+            return (
+              <div className="mt-2 pt-2 border-t border-gray-50 text-[10px] text-indigo-600 font-bold uppercase tracking-wider">
+                Ready Rate: {((ready / (interested || 1)) * 100).toFixed(1)}%
+              </div>
+            );
+          })()}
         </div>
       );
     }
@@ -930,7 +936,7 @@ const PipelineAnalytics = () => {
           <div className="flex items-center justify-between mb-8 relative">
             <div>
               <h3 className="text-xl font-bold text-gray-900">Pipeline Visualization</h3>
-              <p className="text-sm text-gray-500">Interested vs. Ready vs. Jobs</p>
+              <p className="text-sm text-gray-500">Student counts (bottom) vs. active jobs (top)</p>
             </div>
             <div className="flex gap-4">
               <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
@@ -951,7 +957,7 @@ const PipelineAnalytics = () => {
                 <ComposedChart
                   layout="vertical"
                   data={data}
-                  margin={{ top: 20, right: 30, left: 100, bottom: 20 }}
+                  margin={{ top: 36, right: 30, left: 100, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={true} vertical={false} />
                   <XAxis
@@ -959,6 +965,15 @@ const PipelineAnalytics = () => {
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: '#9ca3af', fontSize: 12 }}
+                  />
+                  <XAxis
+                    type="number"
+                    xAxisId="jobs"
+                    orientation="top"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#10b981', fontSize: 11, fontWeight: 600 }}
+                    allowDecimals={false}
                   />
                   <YAxis
                     dataKey="role"
@@ -984,7 +999,8 @@ const PipelineAnalytics = () => {
                     barSize={20}
                   />
                   <Line
-                    type="monotone"
+                    type="linear"
+                    xAxisId="jobs"
                     dataKey="activeJobs"
                     name="Active Jobs"
                     stroke="#10b981"
@@ -1159,7 +1175,7 @@ const PipelineAnalytics = () => {
           <Card className="p-6 bg-white border-gray-100 shadow-sm">
             <h4 className="text-lg font-bold text-gray-900 mb-6 flex items-center justify-between">
               Open Jobs: {selectedRole.role}
-              <Badge variant="emerald">{selectedRole.openJobList.length} Active</Badge>
+              <Badge variant="emerald">{selectedRole.activeJobs || 0} Active</Badge>
             </h4>
             {selectedRole.openJobList.length === 0 ? (
               <div className="text-center py-12 px-6">

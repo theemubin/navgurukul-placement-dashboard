@@ -654,10 +654,10 @@ const JobsKanban = ({ onExportJob }) => {
 
       // After bulk updates, check if the job is already filled
       const latestJobRes = await jobAPI.getJob(modalJob._id);
-      const latestJob = latestJobRes.data;
+      const latestJob = latestJobRes.data?.job || latestJobRes.data;
 
-      if (modalNewStatus && latestJob.status !== 'filled') {
-        await jobAPI.updateJob(modalJob._id, { status: modalNewStatus });
+      if (modalNewStatus && latestJob?.status !== 'filled') {
+        await jobAPI.updateJobStatus(modalJob._id, modalNewStatus);
       }
 
       toast.success('Batch processing completed successfully!');
