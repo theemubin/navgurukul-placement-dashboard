@@ -446,6 +446,12 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
     if (campus) query['eligibility.campuses'] = campus;
     if (req.query.myLeads === 'true' && req.user) query.coordinator = req.userId;
     if (req.query.coordinator) query.coordinator = req.query.coordinator;
+    // Filter by postedBy: matches jobs where user is either coordinator or createdBy
+    if (req.query.postedBy) {
+      const postedById = req.query.postedBy;
+      if (!query.$and) query.$and = [];
+      query.$and.push({ $or: [{ coordinator: postedById }, { createdBy: postedById }] });
+    }
     if (roleCategory) query.roleCategory = roleCategory;
     if (search) {
       const searchOr = [
@@ -2024,6 +2030,7 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
     });
 
     await notification.save();
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
 
     res.json({
       message: `Interest request ${status}`,

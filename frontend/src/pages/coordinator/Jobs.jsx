@@ -39,7 +39,8 @@ const CoordinatorJobs = () => {
   const fetchSeqRef = useRef(0);
 
   const [pagination, setPagination] = useState({ current: getInitialPage(), pages: 1, total: 0 });
-  const [filters, setFilters] = useState({ search: '', status: '', jobType: '', roleCategory: '', sortBy: 'newest' });
+  const [filters, setFilters] = useState({ search: '', status: '', jobType: '', roleCategory: '', sortBy: 'newest', postedBy: '' });
+  const [coordinators, setCoordinators] = useState([]);
   const [deleteModal, setDeleteModal] = useState({ show: false, jobId: null });
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('jobsViewMode') || 'list';
@@ -390,6 +391,7 @@ const CoordinatorJobs = () => {
   useEffect(() => {
     fetchPipelineStages();
     fetchRoleCategories();
+    fetchCoordinators();
     fetchJobReadinessSummaries();
     fetchExportFields();
   }, []);
@@ -465,6 +467,15 @@ const CoordinatorJobs = () => {
     }
   };
 
+  const fetchCoordinators = async () => {
+    try {
+      const response = await userAPI.getCoordinators();
+      setCoordinators(response.data.coordinators || []);
+    } catch (error) {
+      console.error('Error fetching coordinators:', error);
+    }
+  };
+
   const fetchJobs = async () => {
     const requestId = ++fetchSeqRef.current;
     setLoading(true);
@@ -478,6 +489,7 @@ const CoordinatorJobs = () => {
         jobType: filters.jobType || undefined,
         roleCategory: filters.roleCategory || undefined,
         sortBy: filters.sortBy || undefined,
+        postedBy: filters.postedBy || undefined,
         summaryFilter: summaryFilter !== 'all' ? summaryFilter : undefined
       });
 
@@ -590,7 +602,7 @@ const CoordinatorJobs = () => {
     try {
       await jobAPI.updateJobStatus(jobId, newStatus);
       toast.success('Job status updated');
-      fetchJobs();
+      await fetchJobs();
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Error updating status');
     }
@@ -867,7 +879,7 @@ const CoordinatorJobs = () => {
       {/* Filters */}
       <div className="card border-none shadow-sm bg-gray-50/50">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-          <div className="md:col-span-3">
+          <div className="md:col-span-2">
             <div className="flex gap-2">
               <div className="flex flex-1 min-w-0 items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm focus-within:border-primary-500 group">
                 <span className="pointer-events-none flex items-center pl-3 pr-2 text-gray-400 group-focus-within:text-primary-600 transition-colors">
@@ -925,7 +937,7 @@ const CoordinatorJobs = () => {
             </select>
           </div>
 
-          <div className="md:col-span-3">
+          <div className="md:col-span-2">
             <select
               value={filters.status}
               onChange={(e) => {
@@ -956,15 +968,33 @@ const CoordinatorJobs = () => {
               <option value="placements">Most Placements</option>
             </select>
           </div>
+
+          <div className="md:col-span-2">
+            <select
+              value={filters.postedBy}
+              onChange={(e) => {
+                updatePage(1);
+                setFilters(prev => ({ ...prev, postedBy: e.target.value }));
+              }}
+              className="w-full bg-white border-gray-200 focus:border-primary-500 rounded-xl shadow-sm text-xs py-2.5"
+            >
+              <option value="">All Posted By</option>
+              {coordinators.map(c => (
+                <option key={c._id} value={c._id}>
+                  {`${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {(filters.search || filters.jobType || filters.roleCategory || filters.status || filters.sortBy !== 'newest') && (
+        {(filters.search || filters.jobType || filters.roleCategory || filters.status || filters.sortBy !== 'newest' || filters.postedBy) && (
           <div className="flex justify-end mt-3">
             <button
               onClick={() => {
                 setSearchInput('');
                 updatePage(1);
-                setFilters({ search: '', status: '', jobType: '', roleCategory: '', sortBy: 'newest' });
+                setFilters({ search: '', status: '', jobType: '', roleCategory: '', sortBy: 'newest', postedBy: '' });
               }}
               className="text-[10px] font-black text-red-500 hover:text-red-700 uppercase tracking-widest flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-red-50 shadow-sm transition-all"
             >

@@ -32,9 +32,21 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle response errors
+const allCacheStores = [];
+
+export const clearApiCache = () => {
+  allCacheStores.forEach((store) => store.clear());
+};
+
+// Handle response errors and automatic cache invalidation on mutations
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = (response.config?.method || '').toLowerCase();
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      clearApiCache();
+    }
+    return response;
+  },
   (error) => {
     if (import.meta.env.DEV) {
       console.warn('API response error:', error?.response?.status, error?.response?.data, error?.response?.headers);
@@ -61,8 +73,9 @@ api.interceptors.response.use(
 const createCachedGetter = (requestFn, { ttl = 5 * 60 * 1000 } = {}) => {
   const cacheStore = new Map();
   const inflightStore = new Map();
+  allCacheStores.push(cacheStore);
 
-  return async (options = {}) => {
+  const getter = async (options = {}) => {
     const forceRefresh = options.forceRefresh === true;
     const cacheTTL = options.cacheTTL ?? ttl;
     const now = Date.now();
@@ -93,6 +106,13 @@ const createCachedGetter = (requestFn, { ttl = 5 * 60 * 1000 } = {}) => {
     inflightStore.set(cacheKey, inflight);
     return inflight;
   };
+
+  getter.clear = () => {
+    cacheStore.clear();
+    inflightStore.clear();
+  };
+
+  return getter;
 };
 
 const cachedMatchingJobsGetter = createCachedGetter(() => api.get('/jobs/matching'), { ttl: 2 * 60 * 1000 });
