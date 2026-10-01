@@ -5,6 +5,7 @@ const PlacementCycle = require("../models/PlacementCycle");
 const User = require("../models/User");
 const Application = require("../models/Application");
 const { auth, authorize } = require("../middleware/auth");
+const { runLongTermStudentCycleAssignmentOncePerDay } = require("../services/longTermStudentCycleService");
 
 /**
  * @swagger
@@ -270,6 +271,7 @@ router.delete("/:cycleId", auth, authorize("manager"), async (req, res) => {
     const assignedStudents = await User.countDocuments({
       placementCycle: cycle._id,
     });
+
     if (assignedStudents > 0) {
       return res.status(400).json({
         message: `Cannot delete cycle with ${assignedStudents} assigned students. Remove students first.`,
@@ -402,6 +404,29 @@ router.post(
     } catch (error) {
       console.error("Assign students error:", error);
       res.status(500).json({ message: "Server error" });
+    }
+  },
+);
+
+router.post(
+  "/current/assign-long-term",
+  auth,
+  authorize("campus_poc", "coordinator", "manager"),
+  async (req, res) => {
+    try {
+      const result = await runLongTermStudentCycleAssignmentOncePerDay(req.userId);
+      if (result.skipped) {
+        return res.status(409).json({
+          message: "This automation has already run today. Please try again tomorrow."
+        });
+      }
+      res.json({
+        message: `${result.assignedCount} eligible student(s) added to the current month cycle.`,
+        count: result.assignedCount
+      });
+    } catch (error) {
+      console.error("Assign long-term students from current cycle error:", error);
+      res.status(500).json({ message: error.message || "Failed to add eligible students" });
     }
   },
 );
@@ -638,8 +663,9 @@ router.get(
       }
 
       const students = await User.find(query)
-        .select("-password")
-        .populate("campus", "name code");
+        .select("_id firstName lastName email campus studentProfile.currentStatus studentProfile.currentSchool studentProfile.joiningDate studentProfile.dateOfPlacement jobReadiness.completeSteps")
+        .populate("campus", "name code")
+        .lean();
 
       res.json(students);
     } catch (error) {
@@ -699,27 +725,59 @@ router.get(
       }
 
       const students = await User.find(studentQuery)
-        .select("-password")
-        .populate("campus", "name code");
+        .select("_id firstName lastName email campus studentProfile.currentStatus studentProfile.currentSchool studentProfile.joiningDate studentProfile.dateOfPlacement jobReadiness.completeSteps")
+        .populate("campus", "name code")
+        .lean();
 
-      // Get application stats for each student
-      const studentsWithStats = await Promise.all(
-        students.map(async (student) => {
-          const applications = await Application.find({
-            student: student._id,
+      const studentIds = students.map((student) => student._id);
+      const applicationStats = await Application.aggregate([
+        {
+          $match: {
+            student: { $in: studentIds },
             status: { $ne: "interested" }
-          }).populate("job", "title company.name");
-
-          const placed = applications.find((a) => a.status === "selected");
-
-          return {
-            ...student.toJSON(),
-            applicationCount: applications.length,
-            placementStatus: placed ? "placed" : "not_placed",
-            placedCompany: placed ? placed.job?.company?.name : null,
-          };
-        }),
+          }
+        },
+        {
+          $lookup: {
+            from: "jobs",
+            localField: "job",
+            foreignField: "_id",
+            as: "job"
+          }
+        },
+        { $unwind: { path: "$job", preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: "$student",
+            applicationCount: { $sum: 1 },
+            placedCompany: {
+              $max: {
+                $cond: [
+                  { $eq: ["$status", "selected"] },
+                  "$job.company.name",
+                  null
+                ]
+              }
+            },
+            placementCount: {
+              $sum: { $cond: [{ $eq: ["$status", "selected"] }, 1, 0] }
+            }
+          }
+        }
+      ]);
+      const applicationStatsByStudent = new Map(
+        applicationStats.map((stats) => [String(stats._id), stats])
       );
+
+      const studentsWithStats = students.map((student) => {
+        const stats = applicationStatsByStudent.get(String(student._id));
+        return {
+          ...student,
+          applicationCount: stats?.applicationCount || 0,
+          placementStatus: stats?.placementCount > 0 ? "placed" : "not_placed",
+          placedCompany: stats?.placedCompany || null,
+        };
+      });
 
       res.json(studentsWithStats);
     } catch (error) {

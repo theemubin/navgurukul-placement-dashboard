@@ -898,6 +898,14 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
   try {
     const campusIds = getPOCManagedCampusIds(req.user);
     const { status: filterStatus } = req.query; // Filter by Active/Placed etc
+    const managedCampuses = await Campus.find({
+      _id: { $in: campusIds },
+      isActive: true
+    }).select('placementTarget').lean();
+    const placementTarget = managedCampuses.reduce(
+      (total, campus) => total + Number(campus.placementTarget || 0),
+      0
+    );
 
     let studentQuery = {
       role: 'student',
@@ -910,7 +918,7 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
     }
 
     const students = await User.find(studentQuery)
-      .select('studentProfile.skills.status studentProfile.profileStatus studentProfile.currentStatus')
+      .select('studentProfile.skills.status studentProfile.profileStatus studentProfile.currentStatus studentProfile.dateOfPlacement')
       .lean();
 
     const studentIds = students.map(s => s._id);
@@ -922,6 +930,13 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
         pendingProfileApprovals: 0,
         totalApplications: 0,
         totalPlacements: 0,
+        placedThisFY: 0,
+        placedThisFYPercentage: 0,
+        pendingThisFY: placementTarget,
+        placementTarget,
+        placedThisMonth: 0,
+        currentCycleStudents: 0,
+        placedLastCycle: 0,
         placementRate: 0,
         statusCounts: {
           'Active': 0,
@@ -1000,12 +1015,79 @@ router.get('/campus-poc', auth, authorize('campus_poc'), cacheMiddleware({ type:
       job: { $in: openJobIds }
     });
 
+    // Keep placement metrics aligned with the Talent Pipeline Placement Target
+    // Tracker: count active student records by current status and Ghar placement date.
+    const now = new Date();
+    const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const fyStart = new Date(fyStartYear, 3, 1, 0, 0, 0);
+    const fyEnd = new Date(fyStartYear + 1, 2, 31, 23, 59, 59);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const placedStudents = students.filter((student) => {
+      const status = (student.studentProfile?.currentStatus || '').trim().toLowerCase();
+      const placementDate = student.studentProfile?.dateOfPlacement
+        ? new Date(student.studentProfile.dateOfPlacement)
+        : null;
+      return status.includes('placed')
+        && placementDate
+        && placementDate >= fyStart
+        && placementDate <= fyEnd;
+    });
+    const internStudentsThisFY = students.filter((student) => {
+      const status = (student.studentProfile?.currentStatus || '').trim().toLowerCase();
+      const placementDate = student.studentProfile?.dateOfPlacement
+        ? new Date(student.studentProfile.dateOfPlacement)
+        : null;
+      return ['intern (in campus)', 'intern (out campus)'].includes(status)
+        && placementDate
+        && placementDate >= fyStart
+        && placementDate <= fyEnd;
+    });
+    const fyTargetAchieved = placedStudents.length + internStudentsThisFY.length;
+    const placedThisFYPercentage = placementTarget > 0
+      ? Math.round((fyTargetAchieved / placementTarget) * 100)
+      : 0;
+
+    const PlacementCycle = require('../models/PlacementCycle');
+    const currentCycle = await PlacementCycle.findOne({
+      month: now.getMonth() + 1,
+      year: now.getFullYear(),
+      isActive: true
+    }).select('_id').lean();
+    const previousCycleDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousCycle = await PlacementCycle.findOne({
+      month: previousCycleDate.getMonth() + 1,
+      year: previousCycleDate.getFullYear()
+    }).select('snapshotStudents').lean();
+    const managedStudentIds = new Set(studentIds.map(id => String(id)));
+    const currentCycleStudents = currentCycle
+      ? await User.countDocuments({
+        role: 'student',
+        campus: { $in: campusIds },
+        placementCycle: currentCycle._id,
+        isActive: true
+      })
+      : 0;
+    const placedLastCycle = (previousCycle?.snapshotStudents || []).filter(entry =>
+      entry.status === 'placed' && managedStudentIds.has(String(entry.student))
+    ).length;
+
     res.json({
       totalStudents: students.length,
       pendingSkillApprovals: pendingSkills,
       pendingProfileApprovals: pendingProfiles,
       totalApplications,
       totalPlacements: placements,
+      placedThisFY: placedStudents.length,
+      placedThisFYPercentage,
+      pendingThisFY: Math.max(placementTarget - fyTargetAchieved, 0),
+      placementTarget,
+      placedThisMonth: placedStudents.filter((student) => {
+        const placementDate = new Date(student.studentProfile.dateOfPlacement);
+        return placementDate >= monthStart && placementDate <= monthEnd;
+      }).length,
+      currentCycleStudents,
+      placedLastCycle,
       placementRate: students.length > 0
         ? Math.round((placements / students.length) * 100)
         : 0,
@@ -1284,7 +1366,8 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
     // Get all active/closed jobs that are eligible for this campus
     const jobs = await Job.find(query)
       .populate('eligibility.campuses', 'name')
-      .select('title company jobType applicationDeadline maxPositions eligibility createdAt status')
+      .populate('coordinator', 'firstName lastName')
+      .select('title company.name company.logo location roleCategory coordinator jobType applicationDeadline maxPositions eligibility createdAt status')
       .sort({ createdAt: -1 });
 
     // Get approved students count for this campus (matches the detail view criteria)
@@ -1322,7 +1405,13 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
       return {
         _id: job._id,
         title: job.title,
-        company: job.company,
+        company: {
+          name: job.company?.name,
+          logo: job.company?.logo
+        },
+        location: job.location,
+        roleCategory: job.roleCategory,
+        coordinator: job.coordinator,
         jobType: job.jobType,
         applicationDeadline: job.applicationDeadline,
         maxPositions: job.maxPositions,
@@ -1817,7 +1906,8 @@ router.get('/campus-poc/cycle-stats', auth, authorize('campus_poc'), cacheMiddle
     const students = await User.find({
       role: 'student',
       campus: { $in: campusIds },
-      placementCycle: { $in: cycles.map(cycle => cycle._id) }
+      placementCycle: { $in: cycles.map(cycle => cycle._id) },
+      isActive: true
     }).select('_id placementCycle');
     const studentIds = students.map(student => student._id);
     const applications = await Application.find({
