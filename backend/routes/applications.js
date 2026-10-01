@@ -12,6 +12,8 @@ const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 const { cacheMiddleware, invalidateCache } = require('../middleware/cache');
 const cacheService = require('../services/redisCacheService');
+const AIService = require('../services/aiService');
+const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 
 const TERMINAL_APPLICATION_STATUSES = ['selected', 'rejected', 'withdrawn', 'offered', 'filled'];
 const PLACEMENT_OUTCOME_STATUSES = ['selected', 'offered', 'filled'];
@@ -1477,7 +1479,8 @@ router.get('/analytics/stagnant-students', auth, authorize('coordinator', 'campu
         })(),
         enrollmentNumber: student.studentProfile?.enrollmentNumber || '',
         department: student.studentProfile?.department || '',
-        currentSchool: student.studentProfile?.currentSchool || ''
+        currentSchool: student.studentProfile?.currentSchool || '',
+        gharStatus: student.studentProfile?.currentStatus || 'Unknown'
       },
       stagnantCount: stagnant.stagnantCount || 0,
       maxDaysStuck: stagnant.maxDaysStuck || 0,
@@ -1714,7 +1717,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
       .sort({ createdAt: -1 });
 
     const applications = summaryMode
-      ? await applicationQuery.select('status applicationType currentRound statusComment createdAt updatedAt job')
+      ? await applicationQuery.select('status applicationType currentRound statusComment feedback statusHistory createdAt updatedAt job')
       : await applicationQuery
         .populate('feedbackBy', 'firstName LastName'.replace('LastName', 'lastName'))
         .populate('interventions.createdBy', 'firstName lastName role');
@@ -1799,6 +1802,42 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
         message: 'Student pipeline metrics are progression-steady with no severe bottlenecks detected.'
       };
 
+    let aiSummary = null;
+    if (stagnantCount > 0) {
+      const aiPayload = {
+        studentStatus: student.studentProfile?.currentStatus || 'Unknown',
+        jobReadiness: jobReadiness ? {
+          overallStatus: jobReadiness.overallStatus,
+          score: jobReadiness.readinessScore || null
+        } : null,
+        applications: applications.map(app => ({
+          company: app.job?.company?.name || 'Unknown company',
+          role: app.job?.title || 'Unknown role',
+          roleCategory: app.job?.roleCategory || '',
+          jobType: app.job?.jobType || '',
+          status: app.status,
+          currentRound: app.currentRound || 0,
+          daysInStage: Math.max(1, Math.round((now - new Date(app.updatedAt || app.createdAt)) / (1000 * 60 * 60 * 24))),
+          feedback: app.feedback || '',
+          statusComment: app.statusComment || '',
+          stageHistory: (app.statusHistory || []).slice(-8).map(history => ({
+            status: history.status || '',
+            comment: history.comment || '',
+            at: history.timestamp || history.createdAt || null
+          })),
+          stagnant: !TERMINAL_APPLICATION_STATUSES.includes((app.status || '').toLowerCase())
+            && (now - new Date(app.updatedAt || app.createdAt)) > thresholdMs
+        }))
+      };
+      try {
+        const { keys } = await resolveAIKeysForUser(req.userId);
+        const ai = new AIService(keys);
+        aiSummary = await ai.summarizeStudentStagnation(aiPayload);
+      } catch (aiError) {
+        console.warn('Student 360 AI summary unavailable:', aiError.message);
+      }
+    }
+
     const summaryStats = {
       totalApplications: applications.length,
       activeApplications: activeCount,
@@ -1821,6 +1860,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
         enrollmentNumber: student.studentProfile?.enrollmentNumber || '',
         department: student.studentProfile?.department || '',
         currentSchool: student.studentProfile?.currentSchool || '',
+        gharStatus: student.studentProfile?.currentStatus || 'Unknown',
         skills: student.studentProfile?.technicalSkills || [],
         jobReadiness: jobReadiness ? {
           overallStatus: jobReadiness.overallStatus,
@@ -1829,6 +1869,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
       },
       summaryStats,
       diagnosticAlert,
+      aiSummary,
       applications: formattedApplications
     });
   } catch (error) {

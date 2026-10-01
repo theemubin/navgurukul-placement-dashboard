@@ -990,6 +990,13 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
     }
 
     const previousStatus = job.status;
+    const isClosingJob = req.body.status === 'closed' && previousStatus !== 'closed';
+    const closeReason = (req.body.notes || '').toString().trim();
+    if (isClosingJob && !closeReason) {
+      return res.status(400).json({
+        message: 'A rejection reason is required when closing a job.'
+      });
+    }
     const settings = await Settings.getSettings();
     const wasVisible = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
@@ -1036,6 +1043,43 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
     }
 
     await job.save();
+
+    if (isClosingJob) {
+      const activeApplications = await Application.find({
+        job: job._id,
+        status: { $nin: ['selected', 'rejected', 'withdrawn', 'closed'] }
+      }).populate('student', '_id');
+      const closedAt = new Date();
+
+      for (const application of activeApplications) {
+        application.status = 'rejected';
+        application.statusComment = closeReason;
+        application.feedback = closeReason;
+        application.feedbackBy = req.userId;
+        application.statusHistory = application.statusHistory || [];
+        application.statusHistory.push({
+          status: 'rejected',
+          changedAt: closedAt,
+          changedBy: req.userId,
+          comment: closeReason
+        });
+        await application.save();
+      }
+
+      if (activeApplications.length > 0) {
+        await Notification.insertMany(activeApplications
+          .filter(application => application.student?._id)
+          .map(application => ({
+            recipient: application.student._id,
+            type: 'application_update',
+            title: `Application Rejected: ${job.title}`,
+            message: closeReason,
+            link: `/applications/${application._id}`,
+            relatedEntity: { type: 'application', id: application._id }
+          })));
+      }
+    }
+
     await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
 
     const isNowVisible = job.status === 'active' ||
@@ -1419,6 +1463,11 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
     if (!newStatus) {
       return res.status(400).json({ message: 'Status is required' });
     }
+    if (newStatus === 'closed' && !notes?.toString().trim()) {
+      return res.status(400).json({
+        message: 'A rejection reason is required when closing a job.'
+      });
+    }
 
     // Validate status against pipeline stages
     const validStatuses = await Settings.getValidStatuses();
@@ -1487,26 +1536,39 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
       }
     }
 
-    // If job moved to 'closed', update pending applications to 'closed' and capture coordinator notes
+    // If job moved to 'closed', reject pending applications and capture coordinator notes.
     if (newStatus === 'closed') {
       try {
-        // Close applications that are not already in final states
-        const excluded = ['selected', 'withdrawn', 'closed'];
+        const excluded = ['selected', 'withdrawn', 'rejected', 'closed'];
+        const affectedApplications = await Application.find({
+          job: job._id,
+          status: { $nin: excluded }
+        }).select('_id student');
         await Application.updateMany(
-          { job: job._id, status: { $nin: excluded } },
+          { _id: { $in: affectedApplications.map(application => application._id) } },
           {
-            $set: { status: 'closed', statusComment: notes || '' },
-            $push: { statusHistory: { status: 'closed', changedAt: new Date(), changedBy: req.userId, comment: notes || '' } }
+            $set: {
+              status: 'rejected',
+              statusComment: notes.trim(),
+              feedback: notes.trim(),
+              feedbackBy: req.userId
+            },
+            $push: {
+              statusHistory: {
+                status: 'rejected',
+                changedAt: new Date(),
+                changedBy: req.userId,
+                comment: notes.trim()
+              }
+            }
           }
         );
 
-        // Notify remaining applicants that the job is closed (optional)
-        const applicants = await Application.find({ job: job._id, status: 'closed' }).select('student');
-        const notifications = applicants.map(a => ({
+        const notifications = affectedApplications.map(a => ({
           recipient: a.student,
           type: 'application_closed',
           title: `Application closed for ${job.title}`,
-          message: notes ? `The job has been closed: ${notes}` : 'The job has been closed by the coordinator.',
+          message: notes.trim(),
           link: `/applications/${a._id}`,
           relatedEntity: { type: 'job', id: job._id }
         }));

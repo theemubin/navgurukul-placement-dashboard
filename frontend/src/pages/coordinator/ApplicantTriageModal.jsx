@@ -28,6 +28,30 @@ const LocalCommentArea = ({ initialValue, onSave, placeholder, isExiting }) => {
     );
 };
 
+const toggleSelected = (appId) => {
+    setSelectedIds(prev => prev.includes(appId)
+        ? prev.filter(id => id !== appId)
+        : [...prev, appId]);
+};
+
+const moveSelected = (bucket) => {
+    if (selectedIds.length === 0) return;
+    setApplicants(prev => prev.map(app =>
+        selectedIds.includes(app._id) ? { ...app, bucket } : app
+    ));
+    setSelectedIds([]);
+};
+
+const copyCommentToAll = () => {
+    const comment = bulkComment.trim();
+    if (!comment) {
+        toast.error('Enter a comment before copying it to all applicants.');
+        return;
+    }
+    setApplicants(prev => prev.map(app => ({ ...app, comment })));
+    toast.success('Comment copied to all applicants.');
+};
+
 const ApplicantTriageModal = ({
     isOpen,
     onClose,
@@ -45,6 +69,8 @@ const ApplicantTriageModal = ({
     const [selectedRoundIndex, setSelectedRoundIndex] = useState(0);
     const [discordThreadId, setDiscordThreadId] = useState('');
     const [activeTab, setActiveTab] = useState('promote');
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkComment, setBulkComment] = useState('');
 
     // Map job status to label
     const getStatusLabel = (statusId) => {
@@ -79,6 +105,8 @@ const ApplicantTriageModal = ({
 
             // Init Discord Thread
             setDiscordThreadId(job?.discordThreadId || '');
+            setSelectedIds([]);
+            setBulkComment('');
         }
     }, [isOpen, initialApplicants, hasInterviewRounds, job?.discordThreadId]);
 
@@ -91,6 +119,8 @@ const ApplicantTriageModal = ({
             setSelectedRoundIndex(0);
             setDiscordThreadId('');
             setActiveTab('promote');
+            setSelectedIds([]);
+            setBulkComment('');
         }
     }, [isOpen]);
 
@@ -168,6 +198,14 @@ const ApplicantTriageModal = ({
                         } ${isExiting && !app.comment.trim() ? 'border-red-200 bg-red-50/50' : 'border-gray-100'}`}
                 >
                     <div className="flex justify-between items-start gap-2 mb-1">
+                        <input
+                            type="checkbox"
+                            checked={selectedIds.includes(app._id)}
+                            onChange={() => toggleSelected(app._id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            aria-label={`Select ${app.student?.firstName || 'applicant'}`}
+                        />
                         <div className="min-w-0">
                             <h5 className="font-bold text-gray-900 text-[13px] leading-tight truncate">
                                 {app.student?.firstName} {app.student?.lastName}
@@ -180,6 +218,33 @@ const ApplicantTriageModal = ({
                             }`}>
                             {app.matchPercentage || 0}%
                         </div>
+                    </div>
+
+                    <div className="px-6 py-3 border-b bg-white flex flex-wrap items-center gap-2">
+                        <textarea
+                            rows={1}
+                            value={bulkComment}
+                            onChange={(e) => setBulkComment(e.target.value)}
+                            placeholder="Same comment for all applicants..."
+                            className="flex-1 min-w-[240px] text-sm border-gray-200 rounded-lg resize-none"
+                        />
+                        <button type="button" onClick={copyCommentToAll} className="btn btn-secondary text-xs">
+                            Copy comment to all
+                        </button>
+                        <span className="text-xs text-gray-500">{selectedIds.length} selected</span>
+                        <select
+                            value=""
+                            onChange={(e) => {
+                                if (e.target.value) moveSelected(e.target.value);
+                            }}
+                            disabled={selectedIds.length === 0}
+                            className="text-xs border-gray-200 rounded-lg disabled:opacity-50"
+                        >
+                            <option value="">Move selected to...</option>
+                            <option value="promote">Promote</option>
+                            <option value="hold">Hold</option>
+                            <option value="exit">Reject</option>
+                        </select>
                     </div>
 
                     {/* Current Student Stage Badge */}

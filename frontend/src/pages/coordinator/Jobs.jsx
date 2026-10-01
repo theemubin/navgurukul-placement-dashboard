@@ -600,7 +600,14 @@ const CoordinatorJobs = () => {
     }
 
     try {
-      await jobAPI.updateJobStatus(jobId, newStatus);
+      const notes = newStatus === 'closed'
+        ? window.prompt('Enter the reason that will be sent to all remaining applicants:')
+        : undefined;
+      if (newStatus === 'closed' && !notes?.trim()) {
+        toast.error('A rejection reason is required when closing a job.');
+        return;
+      }
+      await jobAPI.updateJobStatus(jobId, newStatus, notes?.trim());
       toast.success('Job status updated');
       await fetchJobs();
     } catch (error) {
