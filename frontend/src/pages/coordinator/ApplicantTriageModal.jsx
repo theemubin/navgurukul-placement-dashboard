@@ -1,56 +1,224 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import {
     X, CheckCircle, XCircle, Pause, ArrowRight, User,
     MapPin, GraduationCap, FileText, AlertCircle, Search,
-    ChevronRight, MessageSquare, Briefcase
+    ChevronRight, MessageSquare, Briefcase, Copy, Loader2, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
-const LocalCommentArea = ({ initialValue, onSave, placeholder, isExiting }) => {
+const LocalCommentArea = ({ initialValue, onSave, onCopyToColumn, bucket, placeholder, isExiting }) => {
     const [val, setVal] = useState(initialValue || '');
+    const [isCopying, setIsCopying] = useState(false);
+    const [isCopied, setIsCopied] = useState(false);
 
     useEffect(() => {
         setVal(initialValue || '');
     }, [initialValue]);
 
+    const handleBlur = () => {
+        onSave(val);
+    };
+
+    const handleCopyClick = async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const text = val.trim();
+        if (!text) {
+            toast.error('Please enter a comment before copying to column.');
+            return;
+        }
+        onSave(text);
+        setIsCopying(true);
+        try {
+            const success = await onCopyToColumn(text);
+            if (success) {
+                setIsCopied(true);
+                setTimeout(() => setIsCopied(false), 1500);
+            }
+        } finally {
+            setIsCopying(false);
+        }
+    };
+
+    const bucketLabels = {
+        promote: 'Promote',
+        hold: 'Hold',
+        exit: 'Exit'
+    };
+    const colName = bucketLabels[bucket] || 'column';
+
     return (
-        <textarea
-            rows={1}
-            value={val}
-            onChange={(e) => setVal(e.target.value)}
-            onBlur={() => onSave(val)}
-            placeholder={placeholder}
-            className={`w-full text-xs p-2 border rounded resize-none focus:ring-1 focus:ring-primary-500 ${isExiting && !val.trim() ? 'border-red-300 bg-red-50 focus:border-red-500' : 'border-gray-200'
+        <div className="flex items-center gap-1.5">
+            <textarea
+                rows={1}
+                value={val}
+                onChange={(e) => setVal(e.target.value)}
+                onBlur={handleBlur}
+                placeholder={placeholder}
+                className={`flex-1 text-xs p-1.5 border rounded resize-none focus:ring-1 focus:ring-primary-500 ${
+                    isExiting && !val.trim() ? 'border-red-300 bg-red-50 focus:border-red-500' : 'border-gray-200'
                 }`}
-        />
+            />
+            <button
+                type="button"
+                onClick={handleCopyClick}
+                disabled={isCopying}
+                title={`Copy this comment to all candidates in ${colName}`}
+                className={`shrink-0 px-2 py-1.5 rounded border transition-all flex items-center gap-1 text-[10px] font-semibold ${
+                    isCopied
+                        ? 'border-green-300 bg-green-50 text-green-700'
+                        : isCopying
+                        ? 'border-primary-300 bg-primary-50 text-primary-700 cursor-wait'
+                        : 'border-gray-200 text-gray-500 hover:text-primary-600 hover:bg-primary-50 active:bg-primary-100 hover:border-primary-300'
+                }`}
+            >
+                {isCopying ? (
+                    <>
+                        <Loader2 className="w-3 h-3 animate-spin text-primary-600" />
+                        <span>Copying...</span>
+                    </>
+                ) : isCopied ? (
+                    <>
+                        <Check className="w-3 h-3 text-green-600" />
+                        <span>Copied!</span>
+                    </>
+                ) : (
+                    <>
+                        <Copy className="w-3 h-3" />
+                        <span>To column</span>
+                    </>
+                )}
+            </button>
+        </div>
     );
 };
 
-const toggleSelected = (appId) => {
-    setSelectedIds(prev => prev.includes(appId)
-        ? prev.filter(id => id !== appId)
-        : [...prev, appId]);
-};
+const StudentCard = React.memo(({
+    app,
+    index,
+    isSelected,
+    selectedCount,
+    isExiting = false,
+    isCopyingColumn,
+    currentStatusLabel,
+    targetRoundOrStatusLabel,
+    onToggleSelect,
+    onUpdateComment,
+    onCopyToColumn
+}) => {
+    return (
+        <Draggable draggableId={app._id} index={index}>
+            {(provided, snapshot) => (
+                <div
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    {...provided.dragHandleProps}
+                    className={`bg-white border rounded-xl p-2.5 mb-2 shadow-sm transition-all duration-200 ${
+                        snapshot.isDragging
+                            ? 'shadow-xl ring-2 ring-primary-500 opacity-95 scale-105 z-50'
+                            : 'hover:border-primary-300'
+                    } ${
+                        isExiting && !app.comment?.trim() ? 'border-red-200 bg-red-50/50' : 'border-gray-100'
+                    } ${
+                        isSelected ? 'ring-2 ring-primary-400 bg-primary-50/30 border-primary-300' : ''
+                    } ${
+                        isCopyingColumn ? 'ring-2 ring-primary-500 bg-primary-50/70 shadow-md animate-pulse' : ''
+                    }`}
+                >
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                        <div className="flex items-start gap-2 min-w-0">
+                            <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => onToggleSelect(app._id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer shrink-0"
+                                aria-label={`Select ${app.student?.firstName || 'applicant'}`}
+                            />
+                            <div className="min-w-0">
+                                <h5 className="font-bold text-gray-900 text-[13px] leading-tight truncate">
+                                    {app.student?.firstName} {app.student?.lastName}
+                                </h5>
+                                <p className="text-[10px] text-gray-400 truncate tracking-tight">{app.student?.email}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            {snapshot.isDragging && isSelected && selectedCount > 1 && (
+                                <span className="bg-primary-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow">
+                                    +{selectedCount - 1} more
+                                </span>
+                            )}
+                            <div className={`px-1.5 py-0.5 rounded-lg text-[10px] font-black tracking-tighter shrink-0 ${
+                                app.matchPercentage >= 80 ? 'bg-green-50 text-green-700 border border-green-100' :
+                                app.matchPercentage >= 60 ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                                    'bg-gray-50 text-gray-600 border border-gray-100'
+                            }`}>
+                                {app.matchPercentage || 0}%
+                            </div>
+                        </div>
+                    </div>
 
-const moveSelected = (bucket) => {
-    if (selectedIds.length === 0) return;
-    setApplicants(prev => prev.map(app =>
-        selectedIds.includes(app._id) ? { ...app, bucket } : app
-    ));
-    setSelectedIds([]);
-};
+                    {/* Current Student Stage Badge */}
+                    <div className="flex items-center gap-1.5 mb-2 mt-1">
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100/80">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
+                            <span className="truncate">Current: {currentStatusLabel} {app.currentRound ? `(R${app.currentRound})` : ''}</span>
+                        </span>
+                    </div>
 
-const copyCommentToAll = () => {
-    const comment = bulkComment.trim();
-    if (!comment) {
-        toast.error('Enter a comment before copying it to all applicants.');
-        return;
-    }
-    setApplicants(prev => prev.map(app => ({ ...app, comment })));
-    toast.success('Comment copied to all applicants.');
-};
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                        <div className="flex items-center gap-1 text-[9px] font-medium text-gray-500 bg-white px-1.5 py-0.5 rounded-full border border-gray-100">
+                            <MapPin className="w-2.5 h-2.5" />
+                            {app.student?.campus?.name?.split(' ')[0] || 'N/A'}
+                        </div>
+                        <div className="flex items-center gap-1 text-[9px] font-medium text-gray-500 bg-white px-1.5 py-0.5 rounded-full border border-gray-100">
+                            <GraduationCap className="w-2.5 h-2.5" />
+                            {app.student?.currentModule || 'N/A'}
+                        </div>
+                    </div>
+
+                    {app.bucket === 'promote' && (
+                        <div className="mb-2">
+                            {currentStatusLabel === targetRoundOrStatusLabel ? (
+                                <div className="flex items-center gap-1 text-[9px] font-black text-primary-600 uppercase tracking-tight bg-primary-50/50 p-1.5 rounded-lg border border-primary-100/50">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Advancing To {targetRoundOrStatusLabel}
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-1 text-[9px] font-black text-green-700 bg-green-50/50 p-1.5 rounded-lg border border-green-100/50">
+                                    <span className="opacity-50 line-through truncate max-w-[60px]">{currentStatusLabel}</span>
+                                    <ArrowRight className="w-3 h-3 text-green-400" />
+                                    <span className="truncate">{targetRoundOrStatusLabel}</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {app.bucket === 'exit' && (
+                        <div className="flex items-center gap-1 text-[9px] font-black text-red-700 bg-red-50/50 p-1.5 rounded-lg mb-2 border border-red-100/50">
+                            <span className="opacity-50 line-through truncate max-w-[60px]">{currentStatusLabel}</span>
+                            <ArrowRight className="w-3 h-3 text-red-400" />
+                            <span>REJECT</span>
+                        </div>
+                    )}
+
+                    <div className="pt-2 border-t border-gray-50">
+                        <LocalCommentArea
+                            initialValue={app.comment}
+                            onSave={(val) => onUpdateComment(app._id, val)}
+                            onCopyToColumn={(val) => onCopyToColumn(app.bucket, val)}
+                            bucket={app.bucket}
+                            placeholder={isExiting ? "Why reject?" : "Add note..."}
+                            isExiting={isExiting}
+                        />
+                    </div>
+                </div>
+            )}
+        </Draggable>
+    );
+});
 
 const ApplicantTriageModal = ({
     isOpen,
@@ -70,16 +238,68 @@ const ApplicantTriageModal = ({
     const [discordThreadId, setDiscordThreadId] = useState('');
     const [activeTab, setActiveTab] = useState('promote');
     const [selectedIds, setSelectedIds] = useState([]);
-    const [bulkComment, setBulkComment] = useState('');
+    const [copyingBucket, setCopyingBucket] = useState(null);
+
+    const toggleSelected = useCallback((appId) => {
+        setSelectedIds(prev => prev.includes(appId)
+            ? prev.filter(id => id !== appId)
+            : [...prev, appId]);
+    }, []);
+
+    const copyCommentToColumn = useCallback(async (targetBucket, commentText) => {
+        const comment = (commentText || '').trim();
+        if (!comment) {
+            toast.error('Enter a comment before copying to column.');
+            return false;
+        }
+
+        const bucketNames = {
+            promote: 'Promote',
+            hold: 'Hold',
+            exit: 'Exit'
+        };
+        const colLabel = bucketNames[targetBucket] || targetBucket;
+
+        // Calculate count directly from current state so count is never 0!
+        const matchingApps = applicants.filter(app => app.bucket === targetBucket);
+        const affectedCount = matchingApps.length;
+
+        if (affectedCount === 0) {
+            toast.error(`No candidates currently in ${colLabel}.`);
+            return false;
+        }
+
+        // Show brief column pulse animation
+        setCopyingBucket(targetBucket);
+
+        // Apply comment updates across all matching candidates
+        setApplicants(prev => prev.map(app =>
+            app.bucket === targetBucket ? { ...app, comment } : app
+        ));
+
+        // Let pulse highlight show briefly, then clear
+        setTimeout(() => {
+            setCopyingBucket(null);
+        }, 400);
+
+        toast.success(`Copied comment to all ${affectedCount} candidate${affectedCount > 1 ? 's' : ''} in ${colLabel}.`);
+        return true;
+    }, [applicants]);
 
     // Map job status to label
-    const getStatusLabel = (statusId) => {
+    const getStatusLabel = useCallback((statusId) => {
         if (!statusId) return 'Applied';
         const stage = pipelineStages.find(s => s.id === statusId);
         if (stage) return stage.label;
         const normalized = statusId.replace(/_/g, ' ');
         return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-    };
+    }, [pipelineStages]);
+
+    const updateComment = useCallback((appId, comment) => {
+        setApplicants(prev => prev.map(app =>
+            app._id === appId ? { ...app, comment } : app
+        ));
+    }, []);
 
     const targetLabel = getStatusLabel(targetStatus || job?.status);
     const currentLabel = getStatusLabel(job?.status);
@@ -87,7 +307,7 @@ const ApplicantTriageModal = ({
     const activeStatus = targetStatus || job?.status;
     const isInterviewingStage = activeStatus === 'interviewing' || activeStatus?.includes('interview');
     const hasInterviewRounds = job?.interviewRounds?.length > 0;
-
+    const targetRoundOrStatusLabel = isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel;
 
     // Initialize applicants with buckets
     useEffect(() => {
@@ -106,7 +326,6 @@ const ApplicantTriageModal = ({
             // Init Discord Thread
             setDiscordThreadId(job?.discordThreadId || '');
             setSelectedIds([]);
-            setBulkComment('');
         }
     }, [isOpen, initialApplicants, hasInterviewRounds, job?.discordThreadId]);
 
@@ -120,7 +339,6 @@ const ApplicantTriageModal = ({
             setDiscordThreadId('');
             setActiveTab('promote');
             setSelectedIds([]);
-            setBulkComment('');
         }
     }, [isOpen]);
 
@@ -136,19 +354,34 @@ const ApplicantTriageModal = ({
         const { destination, source, draggableId } = result;
 
         if (!destination) return;
-        if (destination.droppableId === source.droppableId) return;
 
-        setApplicants(prev => prev.map(app =>
-            app._id === draggableId
-                ? { ...app, bucket: destination.droppableId }
-                : app
-        ));
-    };
+        const targetBucket = destination.droppableId;
 
-    const updateComment = (appId, comment) => {
-        setApplicants(prev => prev.map(app =>
-            app._id === appId ? { ...app, comment } : app
-        ));
+        // If the dragged applicant is part of multi-selection, move all selected applicants together
+        if (selectedIds.includes(draggableId)) {
+            const hasChange = applicants.some(
+                app => selectedIds.includes(app._id) && app.bucket !== targetBucket
+            );
+            if (!hasChange) return;
+
+            setApplicants(prev => prev.map(app =>
+                selectedIds.includes(app._id)
+                    ? { ...app, bucket: targetBucket }
+                    : app
+            ));
+            const count = selectedIds.length;
+            setSelectedIds([]);
+            toast.success(`Moved ${count} selected applicant${count > 1 ? 's' : ''}`);
+        } else {
+            // Dragged an unselected applicant: move single card
+            if (destination.droppableId === source.droppableId) return;
+
+            setApplicants(prev => prev.map(app =>
+                app._id === draggableId
+                    ? { ...app, bucket: targetBucket }
+                    : app
+            ));
+        }
     };
 
     const validateAndShowPreview = () => {
@@ -186,123 +419,6 @@ const ApplicantTriageModal = ({
     const filteredPromoteList = filteredApplicants.filter(a => a.bucket === 'promote');
     const filteredExitList = filteredApplicants.filter(a => a.bucket === 'exit');
     const filteredHoldList = filteredApplicants.filter(a => a.bucket === 'hold');
-
-    const StudentCard = ({ app, index, isExiting }) => (
-        <Draggable draggableId={app._id} index={index}>
-            {(provided, snapshot) => (
-                <div
-                    ref={provided.innerRef}
-                    {...provided.draggableProps}
-                    {...provided.dragHandleProps}
-                    className={`bg-white border rounded-xl p-2.5 mb-2 shadow-sm transition-all ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary-500 opacity-90 scale-105 z-50' : 'hover:border-primary-300'
-                        } ${isExiting && !app.comment.trim() ? 'border-red-200 bg-red-50/50' : 'border-gray-100'}`}
-                >
-                    <div className="flex justify-between items-start gap-2 mb-1">
-                        <input
-                            type="checkbox"
-                            checked={selectedIds.includes(app._id)}
-                            onChange={() => toggleSelected(app._id)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                            aria-label={`Select ${app.student?.firstName || 'applicant'}`}
-                        />
-                        <div className="min-w-0">
-                            <h5 className="font-bold text-gray-900 text-[13px] leading-tight truncate">
-                                {app.student?.firstName} {app.student?.lastName}
-                            </h5>
-                            <p className="text-[10px] text-gray-400 truncate tracking-tight">{app.student?.email}</p>
-                        </div>
-                        <div className={`px-1.5 py-0.5 rounded-lg text-[10px] font-black tracking-tighter shrink-0 ${app.matchPercentage >= 80 ? 'bg-green-50 text-green-700 border border-green-100' :
-                            app.matchPercentage >= 60 ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-                                'bg-gray-50 text-gray-600 border border-gray-100'
-                            }`}>
-                            {app.matchPercentage || 0}%
-                        </div>
-                    </div>
-
-                    <div className="px-6 py-3 border-b bg-white flex flex-wrap items-center gap-2">
-                        <textarea
-                            rows={1}
-                            value={bulkComment}
-                            onChange={(e) => setBulkComment(e.target.value)}
-                            placeholder="Same comment for all applicants..."
-                            className="flex-1 min-w-[240px] text-sm border-gray-200 rounded-lg resize-none"
-                        />
-                        <button type="button" onClick={copyCommentToAll} className="btn btn-secondary text-xs">
-                            Copy comment to all
-                        </button>
-                        <span className="text-xs text-gray-500">{selectedIds.length} selected</span>
-                        <select
-                            value=""
-                            onChange={(e) => {
-                                if (e.target.value) moveSelected(e.target.value);
-                            }}
-                            disabled={selectedIds.length === 0}
-                            className="text-xs border-gray-200 rounded-lg disabled:opacity-50"
-                        >
-                            <option value="">Move selected to...</option>
-                            <option value="promote">Promote</option>
-                            <option value="hold">Hold</option>
-                            <option value="exit">Reject</option>
-                        </select>
-                    </div>
-
-                    {/* Current Student Stage Badge */}
-                    <div className="flex items-center gap-1.5 mb-2">
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100/80">
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
-                            <span className="truncate">Current: {getStatusLabel(app.status)} {app.currentRound ? `(R${app.currentRound})` : ''}</span>
-                        </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                        <div className="flex items-center gap-1 text-[9px] font-medium text-gray-500 bg-white px-1.5 py-0.5 rounded-full border border-gray-100">
-                            <MapPin className="w-2.5 h-2.5" />
-                            {app.student?.campus?.name?.split(' ')[0] || 'N/A'}
-                        </div>
-                        <div className="flex items-center gap-1 text-[9px] font-medium text-gray-500 bg-white px-1.5 py-0.5 rounded-full border border-gray-100">
-                            <GraduationCap className="w-2.5 h-2.5" />
-                            {app.student?.currentModule || 'N/A'}
-                        </div>
-                    </div>
-
-                    {app.bucket === 'promote' && (
-                        <div className="mb-2">
-                            {(getStatusLabel(app.status) === (isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel)) ? (
-                                <div className="flex items-center gap-1 text-[9px] font-black text-primary-600 uppercase tracking-tight bg-primary-50/50 p-1.5 rounded-lg border border-primary-100/50">
-                                    <CheckCircle className="w-3 h-3" />
-                                    Advancing To {isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel}
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-1 text-[9px] font-black text-green-700 bg-green-50/50 p-1.5 rounded-lg border border-green-100/50">
-                                    <span className="opacity-50 line-through truncate max-w-[60px]">{getStatusLabel(app.status)}</span>
-                                    <ArrowRight className="w-3 h-3 text-green-400" />
-                                    <span className="truncate">{isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name : targetLabel}</span>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {app.bucket === 'exit' && (
-                        <div className="flex items-center gap-1 text-[9px] font-black text-red-700 bg-red-50/50 p-1.5 rounded-lg mb-2 border border-red-100/50">
-                            <span className="opacity-50 line-through truncate max-w-[60px]">{getStatusLabel(app.status)}</span>
-                            <ArrowRight className="w-3 h-3 text-red-400" />
-                            <span>REJECT</span>
-                        </div>
-                    )}
-
-                    <div className="pt-2 border-t border-gray-50">
-                        <LocalCommentArea
-                            initialValue={app.comment}
-                            onSave={(val) => updateComment(app._id, val)}
-                            placeholder={isExiting ? "Why reject?" : "Add note..."}
-                            isExiting={isExiting}
-                        />
-                    </div>
-                </div>
-            )}
-        </Draggable>
-    );
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
@@ -409,117 +525,241 @@ const ApplicantTriageModal = ({
                         </div>
 
                         {/* Triage Workspace */}
-                        <div className="flex-1 p-4 sm:p-6 bg-gray-100 overflow-hidden">
+                        <div className="flex-1 p-4 sm:p-6 bg-gray-100 overflow-hidden flex flex-col">
+                            {/* Multi-selection banner */}
+                            {selectedIds.length > 0 && (
+                                <div className="mb-3 px-4 py-2 bg-primary-50 border border-primary-200 rounded-xl flex items-center justify-between text-xs animate-fadeIn shrink-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-primary-900">
+                                            {selectedIds.length} candidate{selectedIds.length > 1 ? 's' : ''} selected
+                                        </span>
+                                        <span className="text-primary-600 hidden sm:inline">
+                                            — Drag any selected card to move all together
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedIds([])}
+                                        className="text-xs font-semibold text-primary-700 hover:text-primary-900 underline"
+                                    >
+                                        Clear selection
+                                    </button>
+                                </div>
+                            )}
+
                             <DragDropContext onDragEnd={onDragEnd}>
-                                <div className="flex md:flex-row flex-col gap-6 h-[65vh] md:h-[60vh]">
+                                <div className="flex md:flex-row flex-col gap-6 h-[65vh] md:h-[60vh] flex-1 min-h-0">
 
                                     {/* Column 1: PROMOTE */}
                                     <Droppable droppableId="promote">
-                                        {(provided, snapshot) => (
-                                            <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'promote' && 'hidden md:flex'}`}>
-                                                <div className="flex items-center justify-between mb-3 px-2">
-                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
-                                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                                        PROMOTE TO {isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name.toUpperCase() : targetLabel.toUpperCase()}
-                                                    </h3>
-                                                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-bold">
-                                                        {promoteList.length}
-                                                    </span>
-                                                </div>
-                                                <div
-                                                    ref={provided.innerRef}
-                                                    {...provided.droppableProps}
-                                                    className={`flex-1 overflow-y-auto p-2 rounded-xl border-2 border-dashed transition-colors flex flex-col ${snapshot.isDraggingOver ? 'bg-green-50 border-green-300' : 'bg-white/50 border-gray-200'
-                                                        }`}
-                                                >
-                                                    {filteredPromoteList.length === 0 && !snapshot.isDraggingOver && (
-                                                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
-                                                            <CheckCircle className="w-12 h-12 mb-3 opacity-20" />
-                                                            <p className="text-sm">Drag candidates here to advance them</p>
+                                        {(provided, snapshot) => {
+                                            const promoteColIds = filteredPromoteList.map(a => a._id);
+                                            const allPromoteSelected = promoteColIds.length > 0 && promoteColIds.every(id => selectedIds.includes(id));
+
+                                            return (
+                                                <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'promote' && 'hidden md:flex'}`}>
+                                                    <div className="flex items-center justify-between mb-3 px-2">
+                                                        <div className="flex items-center gap-2">
+                                                            {filteredPromoteList.length > 0 && (
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={allPromoteSelected}
+                                                                    onChange={() => {
+                                                                        if (allPromoteSelected) {
+                                                                            setSelectedIds(prev => prev.filter(id => !promoteColIds.includes(id)));
+                                                                        } else {
+                                                                            setSelectedIds(prev => [...new Set([...prev, ...promoteColIds])]);
+                                                                        }
+                                                                    }}
+                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                                                    title="Select all in this column"
+                                                                />
+                                                            )}
+                                                            <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
+                                                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                                                PROMOTE TO {isInterviewingStage && hasInterviewRounds ? job.interviewRounds[selectedRoundIndex]?.name.toUpperCase() : targetLabel.toUpperCase()}
+                                                            </h3>
                                                         </div>
-                                                    )}
-                                                    {filteredPromoteList.map((app, index) => (
-                                                        <StudentCard key={app._id} app={app} index={index} />
-                                                    ))}
-                                                    {provided.placeholder}
+                                                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                                                            {promoteList.length}
+                                                        </span>
+                                                    </div>
+                                                    <div
+                                                        ref={provided.innerRef}
+                                                        {...provided.droppableProps}
+                                                        className={`flex-1 overflow-y-auto p-2 rounded-xl border-2 border-dashed transition-colors flex flex-col ${snapshot.isDraggingOver ? 'bg-green-50 border-green-300' : 'bg-white/50 border-gray-200'
+                                                            }`}
+                                                    >
+                                                        {filteredPromoteList.length === 0 && !snapshot.isDraggingOver && (
+                                                            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
+                                                                <CheckCircle className="w-12 h-12 mb-3 opacity-20" />
+                                                                <p className="text-sm">Drag candidates here to advance them</p>
+                                                            </div>
+                                                        )}
+                                                        {filteredPromoteList.map((app, index) => (
+                                                            <StudentCard
+                                                                key={app._id}
+                                                                app={app}
+                                                                index={index}
+                                                                isSelected={selectedIds.includes(app._id)}
+                                                                selectedCount={selectedIds.length}
+                                                                isCopyingColumn={copyingBucket === app.bucket}
+                                                                currentStatusLabel={getStatusLabel(app.status)}
+                                                                targetRoundOrStatusLabel={targetRoundOrStatusLabel}
+                                                                onToggleSelect={toggleSelected}
+                                                                onUpdateComment={updateComment}
+                                                                onCopyToColumn={copyCommentToColumn}
+                                                            />
+                                                        ))}
+                                                        {provided.placeholder}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
+                                            );
+                                        }}
                                     </Droppable>
 
                                     {/* Column 2: HOLD */}
                                     <Droppable droppableId="hold">
-                                        {(provided, snapshot) => (
-                                            <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'hold' && 'hidden md:flex'}`}>
-                                                <div className="flex items-center justify-between mb-3 px-2">
-                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
-                                                        <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                                                        KEEP ON HOLD
-                                                    </h3>
-                                                    <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-xs font-bold">
-                                                        {holdList.length}
-                                                    </span>
-                                                </div>
-                                                <div
-                                                    ref={provided.innerRef}
-                                                    {...provided.droppableProps}
-                                                    className={`flex-1 overflow-y-auto p-2 rounded-xl border-2 border-dashed transition-colors flex flex-col ${snapshot.isDraggingOver ? 'bg-yellow-50 border-yellow-300' : 'bg-white/50 border-gray-200'
-                                                        }`}
-                                                >
-                                                    {filteredHoldList.length === 0 && !snapshot.isDraggingOver && (
-                                                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
-                                                            <Pause className="w-12 h-12 mb-3 opacity-20" />
-                                                            <p className="text-sm">Candidates dropped here won't change status</p>
+                                        {(provided, snapshot) => {
+                                            const holdColIds = filteredHoldList.map(a => a._id);
+                                            const allHoldSelected = holdColIds.length > 0 && holdColIds.every(id => selectedIds.includes(id));
+
+                                            return (
+                                                <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'hold' && 'hidden md:flex'}`}>
+                                                    <div className="flex items-center justify-between mb-3 px-2">
+                                                        <div className="flex items-center gap-2">
+                                                            {filteredHoldList.length > 0 && (
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={allHoldSelected}
+                                                                    onChange={() => {
+                                                                        if (allHoldSelected) {
+                                                                            setSelectedIds(prev => prev.filter(id => !holdColIds.includes(id)));
+                                                                        } else {
+                                                                            setSelectedIds(prev => [...new Set([...prev, ...holdColIds])]);
+                                                                        }
+                                                                    }}
+                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                                                    title="Select all in this column"
+                                                                />
+                                                            )}
+                                                            <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
+                                                                <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                                                                KEEP ON HOLD
+                                                            </h3>
                                                         </div>
-                                                    )}
-                                                    {filteredHoldList.map((app, index) => (
-                                                        <StudentCard key={app._id} app={app} index={index} />
-                                                    ))}
-                                                    {provided.placeholder}
+                                                        <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                                                            {holdList.length}
+                                                        </span>
+                                                    </div>
+                                                    <div
+                                                        ref={provided.innerRef}
+                                                        {...provided.droppableProps}
+                                                        className={`flex-1 overflow-y-auto p-2 rounded-xl border-2 border-dashed transition-colors flex flex-col ${snapshot.isDraggingOver ? 'bg-yellow-50 border-yellow-300' : 'bg-white/50 border-gray-200'
+                                                            }`}
+                                                    >
+                                                        {filteredHoldList.length === 0 && !snapshot.isDraggingOver && (
+                                                            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
+                                                                <Pause className="w-12 h-12 mb-3 opacity-20" />
+                                                                <p className="text-sm">Candidates dropped here won't change status</p>
+                                                            </div>
+                                                        )}
+                                                        {filteredHoldList.map((app, index) => (
+                                                            <StudentCard
+                                                                key={app._id}
+                                                                app={app}
+                                                                index={index}
+                                                                isSelected={selectedIds.includes(app._id)}
+                                                                selectedCount={selectedIds.length}
+                                                                isCopyingColumn={copyingBucket === app.bucket}
+                                                                currentStatusLabel={getStatusLabel(app.status)}
+                                                                targetRoundOrStatusLabel={targetRoundOrStatusLabel}
+                                                                onToggleSelect={toggleSelected}
+                                                                onUpdateComment={updateComment}
+                                                                onCopyToColumn={copyCommentToColumn}
+                                                            />
+                                                        ))}
+                                                        {provided.placeholder}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
+                                            );
+                                        }}
                                     </Droppable>
 
                                     {/* Column 3: EXIT */}
                                     <Droppable droppableId="exit">
-                                        {(provided, snapshot) => (
-                                            <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'exit' && 'hidden md:flex'}`}>
-                                                <div className="flex items-center justify-between mb-3 px-2">
-                                                    <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
-                                                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                                                        EXIT AT {currentLabel.toUpperCase()}
-                                                    </h3>
-                                                    <div className="flex items-center gap-2">
-                                                        {exitList.some(a => !a.comment.trim()) && (
-                                                            <span className="text-[10px] text-red-600 font-medium animate-pulse flex items-center gap-1">
-                                                                <AlertCircle className="w-3 h-3" />
+                                        {(provided, snapshot) => {
+                                            const exitColIds = filteredExitList.map(a => a._id);
+                                            const allExitSelected = exitColIds.length > 0 && exitColIds.every(id => selectedIds.includes(id));
+
+                                            return (
+                                                <div className={`flex-1 flex flex-col min-w-0 md:min-w-[320px] ${activeTab !== 'exit' && 'hidden md:flex'}`}>
+                                                    <div className="flex items-center justify-between mb-3 px-2">
+                                                        <div className="flex items-center gap-2">
+                                                            {filteredExitList.length > 0 && (
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={allExitSelected}
+                                                                    onChange={() => {
+                                                                        if (allExitSelected) {
+                                                                            setSelectedIds(prev => prev.filter(id => !exitColIds.includes(id)));
+                                                                        } else {
+                                                                            setSelectedIds(prev => [...new Set([...prev, ...exitColIds])]);
+                                                                        }
+                                                                    }}
+                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                                                    title="Select all in this column"
+                                                                />
+                                                            )}
+                                                            <h3 className="font-bold text-gray-700 flex items-center gap-2 text-xs sm:text-sm">
+                                                                <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                                                                EXIT AT {currentLabel.toUpperCase()}
+                                                            </h3>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {exitList.some(a => !a.comment.trim()) && (
+                                                                <span className="text-[10px] text-red-600 font-medium animate-pulse flex items-center gap-1">
+                                                                    <AlertCircle className="w-3 h-3" />
+                                                                </span>
+                                                            )}
+                                                            <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                                                                {exitList.length}
                                                             </span>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        ref={provided.innerRef}
+                                                        {...provided.droppableProps}
+                                                        className={`flex-1 overflow-y-auto p-2 rounded-xl border-2 border-dashed transition-colors flex flex-col ${snapshot.isDraggingOver ? 'bg-red-50 border-red-300' : 'bg-white/50 border-gray-200'
+                                                            }`}
+                                                    >
+                                                        {filteredExitList.length === 0 && !snapshot.isDraggingOver && (
+                                                            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
+                                                                <XCircle className="w-12 h-12 mb-3 opacity-20" />
+                                                                <p className="text-sm">Candidates here will be rejected</p>
+                                                            </div>
                                                         )}
-                                                        <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold">
-                                                            {exitList.length}
-                                                        </span>
+                                                        {filteredExitList.map((app, index) => (
+                                                            <StudentCard
+                                                                key={app._id}
+                                                                app={app}
+                                                                index={index}
+                                                                isExiting
+                                                                isSelected={selectedIds.includes(app._id)}
+                                                                selectedCount={selectedIds.length}
+                                                                isCopyingColumn={copyingBucket === app.bucket}
+                                                                currentStatusLabel={getStatusLabel(app.status)}
+                                                                targetRoundOrStatusLabel={targetRoundOrStatusLabel}
+                                                                onToggleSelect={toggleSelected}
+                                                                onUpdateComment={updateComment}
+                                                                onCopyToColumn={copyCommentToColumn}
+                                                            />
+                                                        ))}
+                                                        {provided.placeholder}
                                                     </div>
                                                 </div>
-                                                <div
-                                                    ref={provided.innerRef}
-                                                    {...provided.droppableProps}
-                                                    className={`flex-1 overflow-y-auto p-2 rounded-xl border-2 border-dashed transition-colors flex flex-col ${snapshot.isDraggingOver ? 'bg-red-50 border-red-300' : 'bg-white/50 border-gray-200'
-                                                        }`}
-                                                >
-                                                    {filteredExitList.length === 0 && !snapshot.isDraggingOver && (
-                                                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
-                                                            <XCircle className="w-12 h-12 mb-3 opacity-20" />
-                                                            <p className="text-sm">Candidates here will be rejected</p>
-                                                        </div>
-                                                    )}
-                                                    {filteredExitList.map((app, index) => (
-                                                        <StudentCard key={app._id} app={app} index={index} isExiting />
-                                                    ))}
-                                                    {provided.placeholder}
-                                                </div>
-                                            </div>
-                                        )}
+                                            );
+                                        }}
                                     </Droppable>
 
                                 </div>
