@@ -5,7 +5,7 @@ import { StatsCard, LoadingSpinner, StatusBadge } from '../../components/common/
 import { 
   FileText, Briefcase, CheckCircle, XCircle, Clock, 
   TrendingUp, DollarSign, User, ArrowRight, ArrowUpRight,
-  ShieldCheck, AlertTriangle, Search, Heart
+  ShieldCheck, AlertTriangle, Search, Heart, Eye
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -407,6 +407,22 @@ const StudentDashboard = () => {
               </div>
            </Link>
 
+           {/* View Portfolios Card */}
+           <Link to="/students" className="block group">
+              <div className="bg-gradient-to-br from-purple-600 to-indigo-800 rounded-[2rem] p-8 text-white shadow-xl shadow-purple-200 hover:-translate-y-1 transition-all duration-300">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center mb-6">
+                  <Eye size={30} className="text-white" />
+                </div>
+                <h3 className="text-2xl font-black tracking-tight leading-tight">View Portfolios</h3>
+                <p className="text-purple-100 font-medium text-sm mt-3 opacity-80 leading-relaxed">
+                  Browse student portfolios and discover peer project highlights.
+                </p>
+                <div className="flex items-center gap-2 mt-8 font-black text-xs uppercase tracking-[0.2em]">
+                  Browse Portfolios <ArrowRight size={14} className="group-hover:translate-x-2 transition-transform" />
+                </div>
+              </div>
+           </Link>
+
            {/* Paid Projects Spotlight */}
            <div className="bg-white rounded-[2rem] p-8 border border-gray-100 shadow-xl shadow-gray-100/50">
               <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-6">
@@ -428,6 +444,20 @@ const StudentDashboard = () => {
            </div>
 
            {/* Tip Card */}
+            <Link to="/student/post-placement" className="block group">
+              <div className="bg-gradient-to-br from-indigo-600 to-slate-900 rounded-[2rem] p-8 text-white shadow-xl shadow-indigo-200 hover:-translate-y-1 transition-all duration-300">
+                <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center mb-6">
+                  <ShieldCheck size={30} className="text-white" />
+                </div>
+                <h3 className="text-2xl font-black tracking-tight leading-tight">Post-Placement Tracking</h3>
+                <p className="text-indigo-100 font-medium text-sm mt-3 opacity-80 leading-relaxed">
+                 Upload offer letters, salary slips, and internship documents from one place.
+                </p>
+                <div className="flex items-center gap-2 mt-8 font-black text-xs uppercase tracking-[0.2em]">
+                  Open Tracking <ArrowRight size={14} className="group-hover:translate-x-2 transition-transform" />
+                </div>
+              </div>
+            </Link>
            <div className="bg-primary-50 rounded-[2rem] p-8 border border-primary-100 relative overflow-hidden">
               <div className="absolute -top-4 -right-4 w-24 h-24 bg-primary-100 rounded-full blur-2xl" />
               <div className="flex items-center gap-3 mb-4">

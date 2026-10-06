@@ -1,4 +1,12 @@
 /** @type {import('tailwindcss').Config} */
+const animatePlugin = (() => {
+  try {
+    return require("tailwindcss-animate")
+  } catch {
+    return undefined
+  }
+})()
+
 export default {
   content: [
     "./index.html",
@@ -22,5 +30,5 @@ export default {
       }
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: animatePlugin ? [animatePlugin] : [],
 }

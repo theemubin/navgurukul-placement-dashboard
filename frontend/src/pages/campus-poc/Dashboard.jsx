@@ -548,7 +548,6 @@ const POCDashboard = () => {
             </button>
           </div>
         </div>
-
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 bg-gray-50 px-2 py-1.5 rounded-xl border border-gray-100">
             <Filter className="w-3.5 h-3.5 text-gray-400" />
@@ -580,6 +579,22 @@ const POCDashboard = () => {
               ))}
             </select>
           </div>
+
+          <button
+            onClick={() => setShowCycleModal(true)}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            New Placement Cycle
+          </button>
+          <Link
+            to="/students"
+            className="btn btn-secondary flex items-center gap-2"
+            title="View student portfolios"
+          >
+            <Eye className="w-4 h-4" />
+            Portfolios
+          </Link>
         </div>
       </div>
 

@@ -369,6 +369,52 @@ export const applicationAPI = {
   logIntervention: (id, data) => api.post(`/applications/${id}/interventions`, data)
 };
 
+// Post-Placement APIs
+const cachedMyPostPlacementGetter = createCachedGetter(() => api.get('/post-placements/me'), { ttl: 60 * 1000 });
+const cachedAdminPostPlacementsGetter = createCachedGetter((params) => api.get('/post-placements/admin', { params }), { ttl: 30 * 1000 });
+
+export const postPlacementAPI = {
+  getMyPlacement: (options = {}) => cachedMyPostPlacementGetter(options),
+  selfReportPlacement: (data) => api.post('/post-placements/me/self-report', data),
+  resetMyPlacement: () => api.delete('/post-placements/me'),
+  updateMyPlacement: (data) => api.put('/post-placements/me', data),
+  getMyDocuments: () => api.get('/post-placements/me/documents'),
+  uploadMyDocument: ({ file, documentType, documentPeriodKey }) => {
+    const formData = new FormData();
+    formData.append('document', file);
+    formData.append('documentType', documentType);
+    if (documentPeriodKey) {
+      formData.append('documentPeriodKey', documentPeriodKey);
+    }
+    return api.post('/post-placements/me/documents', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  replaceMyDocument: (documentId, file) => {
+    const formData = new FormData();
+    formData.append('document', file);
+    return api.post(`/post-placements/me/documents/${documentId}/replace`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  getAdminPlacements: (params) => cachedAdminPostPlacementsGetter(params),
+  getAdminPlacement: (placementId) => api.get(`/post-placements/admin/${placementId}`),
+  verifyDocument: (placementId, documentId, status, rejectionReason = '') =>
+    api.patch(`/post-placements/admin/${placementId}/documents/${documentId}`, { status, rejectionReason }),
+  syncFromApplication: (applicationId) => api.post('/post-placements/sync-from-application', { applicationId })
+};
+
+export const dailyTrackerAPI = {
+  getMyTracker: (limit) => api.get('/daily-trackers/me', { params: limit ? { limit } : undefined }),
+  submitToday: (data) => api.post('/daily-trackers/me', data),
+  updateToday: (data) => api.put('/daily-trackers/me/today', data)
+};
+
+export const dailyTrackerMonitoringAPI = {
+  getPlacements: (params = {}) => api.get('/daily-tracker-monitoring', { params }),
+  getStudent: (studentId) => api.get(`/daily-tracker-monitoring/${studentId}`)
+};
+
 // Skill APIs
 export const skillAPI = {
   getSkills: (params, options = {}) => cachedSkillsGetter({ params, ...options }),
@@ -684,6 +730,13 @@ export const resolveResumeUrl = (url) => {
   // Fallback to backend base url
   const cleanApi = rawApi.replace(/\/+$/, '');
   return `${cleanApi}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
+// Portfolio APIs (public, no auth required)
+export const portfolioAPI = {
+  getPortfolioStudents: (params) => api.get('/users/portfolio', { params }),
+  getPortfolioCampuses: () => api.get('/users/portfolio/campuses'),
+  getPortfolioSkills: () => api.get('/users/portfolio/skills')
 };
 
 export default api;
