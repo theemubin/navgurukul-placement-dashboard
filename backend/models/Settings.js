@@ -97,6 +97,10 @@ const settingsSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  lastLongTermCycleAssignmentDate: {
+    type: Date,
+    default: null
+  },
   // Job pipeline stages (customizable workflow)
   jobPipelineStages: {
     type: [pipelineStageSchema],

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   jobAPI,
   skillAPI,
@@ -42,7 +42,13 @@ import toast from "react-hot-toast";
 const JobForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEdit = !!id;
+
+  const returnPage = location.state?.fromPage || sessionStorage.getItem('coordinatorJobsPage') || 1;
+  const goBackToJobs = () => {
+    navigate(`/coordinator/jobs?page=${returnPage}`);
+  };
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -81,6 +87,8 @@ const JobForm = () => {
   const [showHomestateSuggestions, setShowHomestateSuggestions] =
     useState(false);
   const [roleCategories, setRoleCategories] = useState([]);
+  const [skillGroupFilter, setSkillGroupFilter] = useState('all');
+  const [skillSearchInput, setSkillSearchInput] = useState('');
 
   const [formData, setFormData] = useState({
     title: "",
@@ -138,6 +146,7 @@ const JobForm = () => {
     interviewRounds: [{ name: "Round 1", type: "other" }], // Initialize with one round
   });
   const [salaryPeriod, setSalaryPeriod] = useState("yearly"); // 'yearly' or 'monthly'
+  const [closeReason, setCloseReason] = useState("");
 
   const [settings, setSettings] = useState({
     jobLocations: [],
@@ -500,6 +509,10 @@ const JobForm = () => {
     try {
       const response = await jobAPI.getJob(id);
       const job = response.data;
+      const lastClosedEntry = [...(job.statusHistory || [])]
+        .reverse()
+        .find(entry => entry.status === "closed");
+      setCloseReason(lastClosedEntry?.notes || "");
 
       setFormData({
         ...job,
@@ -563,7 +576,7 @@ const JobForm = () => {
       });
     } catch (error) {
       toast.error("Failed to load job details");
-      navigate("/coordinator/jobs");
+      goBackToJobs();
     } finally {
       setLoading(false);
     }
@@ -587,6 +600,14 @@ const JobForm = () => {
 
     try {
       const payload = { ...formData };
+      if (formData.status === "closed") {
+        if (!closeReason.trim()) {
+          toast.error("Enter a reason for rejecting applicants when closing this job.");
+          setSaving(false);
+          return;
+        }
+        payload.notes = closeReason.trim();
+      }
       
       if (formData.applicationDeadlineDate) {
         const time = formData.applicationDeadlineTime || "23:59:59";
@@ -630,7 +651,7 @@ const JobForm = () => {
         });
       }
 
-      navigate("/coordinator/jobs");
+      goBackToJobs();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to save job");
     } finally {
@@ -1039,7 +1060,7 @@ const JobForm = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate("/coordinator/jobs")}
+            onClick={goBackToJobs}
             className="p-2 hover:bg-gray-100 rounded-full transition"
           >
             <ArrowLeft className="w-6 h-6 text-gray-600" />
@@ -1740,6 +1761,24 @@ const JobForm = () => {
                   </option>
                 ))}
               </select>
+              {formData.status === "closed" && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-red-700 mb-1.5">
+                    Rejection reason for participating students
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={closeReason}
+                    onChange={(e) => setCloseReason(e.target.value)}
+                    placeholder="Explain why the remaining applicants are being rejected..."
+                    className="w-full border-red-200 focus:border-red-500 focus:ring-red-500"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    This reason will be saved on each participant's application.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div>
@@ -2135,30 +2174,87 @@ const JobForm = () => {
           )}
 
           {/* Available Skills to Add */}
-          <div className="flex flex-wrap gap-2">
-            {allSkills.map((skill) => {
-              // Hide English as a selectable 'skill' when CEFR fields are set (we use CEFR instead)
-              const isCEFRSet =
-                formData.eligibility.englishSpeaking ||
-                formData.eligibility.englishWriting;
-              if (isCEFRSet && (skill.name || "").toLowerCase() === "english")
-                return null;
+          <div className="space-y-3">
+            {/* Search & Group Filter */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={skillSearchInput}
+                  onChange={(e) => setSkillSearchInput(e.target.value)}
+                  placeholder="Search skills..."
+                  className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: 'common', label: '🌐 Common' },
+                  ...schools.map(s => ({ key: s, label: `🏫 ${s.replace('School of ', '')}` }))
+                ].map(f => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setSkillGroupFilter(f.key)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${
+                      skillGroupFilter === f.key
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-              const isSelected = formData.requiredSkills.some(
-                (s) => s.skill === skill._id || s.skill?._id === skill._id,
-              );
-              if (isSelected) return null;
-              return (
-                <button
-                  key={skill._id}
-                  type="button"
-                  onClick={() => toggleSkill(skill._id)}
-                  className="px-3 py-1 rounded-full text-sm transition bg-gray-100 text-gray-700 hover:bg-gray-200"
-                >
-                  + {skill.name}
-                </button>
-              );
-            })}
+            {/* Grouped Skills */}
+            <div className="flex flex-wrap gap-2">
+              {allSkills
+                .filter((skill) => {
+                  // Hide English when CEFR is set
+                  const isCEFRSet = formData.eligibility.englishSpeaking || formData.eligibility.englishWriting;
+                  if (isCEFRSet && (skill.name || '').toLowerCase() === 'english') return false;
+                  // Hide already selected
+                  if (formData.requiredSkills.some(s => s.skill === skill._id || s.skill?._id === skill._id)) return false;
+                  // Search filter
+                  if (skillSearchInput && !skill.name.toLowerCase().includes(skillSearchInput.toLowerCase())) return false;
+                  // Group filter
+                  if (skillGroupFilter === 'all') return true;
+                  if (skillGroupFilter === 'common') return skill.isCommon || (!skill.isCommon && (!skill.schools || skill.schools.length === 0));
+                  return (skill.schools || []).includes(skillGroupFilter);
+                })
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((skill) => {
+                  // Determine badge color based on school/common
+                  const isCommon = skill.isCommon || (!skill.schools || skill.schools.length === 0);
+                  return (
+                    <button
+                      key={skill._id}
+                      type="button"
+                      onClick={() => toggleSkill(skill._id)}
+                      className={`px-3 py-1 rounded-full text-sm transition ${
+                        isCommon
+                          ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                          : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                      }`}
+                      title={isCommon ? 'Common skill' : `School: ${(skill.schools || []).join(', ')}`}
+                    >
+                      + {skill.name}
+                    </button>
+                  );
+                })}
+              {allSkills.filter(s => {
+                if (formData.requiredSkills.some(rs => rs.skill === s._id || rs.skill?._id === s._id)) return false;
+                if (skillSearchInput && !s.name.toLowerCase().includes(skillSearchInput.toLowerCase())) return false;
+                if (skillGroupFilter === 'all') return true;
+                if (skillGroupFilter === 'common') return s.isCommon || (!s.isCommon && (!s.schools || s.schools.length === 0));
+                return (s.schools || []).includes(skillGroupFilter);
+              }).length === 0 && (
+                <p className="text-gray-400 text-sm py-2">No skills found{skillSearchInput ? ` matching "${skillSearchInput}"` : ' in this group'}.</p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -3201,7 +3297,7 @@ const JobForm = () => {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => navigate("/coordinator/jobs")}
+                  onClick={goBackToJobs}
                   className="px-6 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-all"
                 >
                   Discard Changes

@@ -15,14 +15,8 @@ const Applications = () => {
 
   const canManageJob = (job) => {
     if (!user) return false;
-    if (user.role === 'manager') return true;
-    const userId = String(user._id || user.id || '');
-    if (!job) return false;
-    const coordId = job.coordinator?._id ? String(job.coordinator._id) : String(job.coordinator || '');
-    const creatorId = job.createdBy?._id ? String(job.createdBy._id) : String(job.createdBy || '');
-    if (coordId && coordId === userId) return true;
-    if (creatorId && creatorId === userId) return true;
-    return false;
+    // Removing the blocker: all coordinators and managers can edit any job or student movement.
+    return true;
   };
 
   const [applications, setApplications] = useState([]);

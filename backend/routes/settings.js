@@ -6,6 +6,7 @@ const { JobReadinessConfig, DEFAULT_CRITERIA } = require('../models/JobReadiness
 const Notification = require('../models/Notification');
 const { auth, authorize } = require('../middleware/auth');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
+const Skill = require('../models/Skill');
 
 function toPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -691,17 +692,44 @@ router.delete('/roles/:role', auth, authorize('manager', 'coordinator'), async (
  */
 router.post('/skills', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
-    const { skill } = req.body;
+    const { skill, category, isCommon, schools: skillSchools, description } = req.body;
+    const skillName = (skill || '').trim();
+    if (!skillName) {
+      return res.status(400).json({ success: false, message: 'Skill name is required' });
+    }
 
     const settings = await Settings.getSettings();
 
-    if (settings.technicalSkills.includes(skill)) {
+    if (settings.technicalSkills.includes(skillName)) {
       return res.status(400).json({ success: false, message: 'Skill already exists' });
     }
 
-    settings.technicalSkills.push(skill);
+    settings.technicalSkills.push(skillName);
     settings.lastUpdatedBy = req.userId;
     await settings.save();
+
+    // Sync with Skill collection — upsert by normalizedName
+    const normalizedName = skillName.toLowerCase();
+    const existingSkill = await Skill.findOne({ normalizedName });
+    if (existingSkill) {
+      existingSkill.isActive = true;
+      if (category) existingSkill.category = category;
+      if (typeof isCommon === 'boolean') existingSkill.isCommon = isCommon;
+      if (Array.isArray(skillSchools)) existingSkill.schools = skillSchools;
+      if (description) existingSkill.description = description;
+      await existingSkill.save();
+    } else {
+      await Skill.create({
+        name: skillName,
+        normalizedName,
+        category: category || 'technical',
+        isCommon: typeof isCommon === 'boolean' ? isCommon : true,
+        schools: Array.isArray(skillSchools) ? skillSchools : [],
+        description: description || '',
+        isActive: true,
+        createdBy: req.userId
+      });
+    }
 
     res.json({
       success: true,
@@ -736,9 +764,10 @@ router.post('/skills', auth, authorize('manager', 'coordinator'), async (req, re
 router.delete('/skills/:skill', auth, authorize('manager', 'coordinator'), async (req, res) => {
   try {
     const { skill } = req.params;
+    const decodedSkill = decodeURIComponent(skill);
 
     const settings = await Settings.getSettings();
-    const index = settings.technicalSkills.indexOf(decodeURIComponent(skill));
+    const index = settings.technicalSkills.indexOf(decodedSkill);
 
     if (index === -1) {
       return res.status(404).json({ success: false, message: 'Skill not found' });
@@ -747,6 +776,10 @@ router.delete('/skills/:skill', auth, authorize('manager', 'coordinator'), async
     settings.technicalSkills.splice(index, 1);
     settings.lastUpdatedBy = req.userId;
     await settings.save();
+
+    // Sync with Skill collection — deactivate by normalizedName
+    const normalizedName = decodedSkill.toLowerCase();
+    await Skill.findOneAndUpdate({ normalizedName }, { isActive: false });
 
     res.json({
       success: true,

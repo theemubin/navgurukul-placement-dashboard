@@ -3,22 +3,157 @@ import { formatDistanceToNow, isPast, format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { statsAPI, placementCycleAPI, userAPI, campusAPI, gharAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
+import toast from 'react-hot-toast';
 import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
-  MessageSquare, ClipboardList, Search, Bell
+  MessageSquare, ClipboardList, Search, Bell, UserPlus
 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
+
+const JOB_TYPE_OPTIONS = [
+  { id: 'full_time', label: 'Full Time' },
+  { id: 'internship', label: 'Internships' },
+  { id: 'paid_project', label: 'Paid Projects' },
+  { id: 'part_time', label: 'Part Time' },
+  { id: 'contract', label: 'Contract' }
+];
 
 const POCDashboard = () => {
+  const { user, updateUser } = useAuth();
   const [stats, setStats] = useState(null);
   const [pendingSkills, setPendingSkills] = useState([]);
   const [pendingProfilesCount, setPendingProfilesCount] = useState(0);
   const [companyTracking, setCompanyTracking] = useState([]);
   const [schoolTracking, setSchoolTracking] = useState([]);
   const [eligibleJobs, setEligibleJobs] = useState([]);
-  const [jobTypeFilter, setJobTypeFilter] = useState('all');
+  const [jobTypeFilters, setJobTypeFilters] = useState(user?.pocJobTypeFilters || []);
+  const [roleCategoryFilters, setRoleCategoryFilters] = useState(user?.pocRoleCategoryFilters || []);
+  const [jobSearchInput, setJobSearchInput] = useState('');
+  const [coordinatorSearchInput, setCoordinatorSearchInput] = useState('');
+  const [jobSearch, setJobSearch] = useState('');
+  const [coordinatorSearch, setCoordinatorSearch] = useState('');
+  const [showOpportunityFilters, setShowOpportunityFilters] = useState(false);
+
+  useEffect(() => {
+    if (user?.pocJobTypeFilters && Array.isArray(user.pocJobTypeFilters)) {
+      setJobTypeFilters(user.pocJobTypeFilters);
+    }
+    if (user?.pocRoleCategoryFilters && Array.isArray(user.pocRoleCategoryFilters)) {
+      setRoleCategoryFilters(user.pocRoleCategoryFilters);
+    }
+  }, [user?.pocJobTypeFilters, user?.pocRoleCategoryFilters]);
+
+  // Extract all available role categories dynamically from jobs
+  const availableRoleCategories = useMemo(() => {
+    const categories = new Set();
+    (eligibleJobs || []).forEach(j => {
+      if (j.roleCategory) categories.add(j.roleCategory.trim());
+    });
+    (companyTracking || []).forEach(c => {
+      (c.jobs || []).forEach(j => {
+        if (j.roleCategory) categories.add(j.roleCategory.trim());
+      });
+    });
+    return Array.from(categories).sort();
+  }, [eligibleJobs, companyTracking]);
+
+  const availableCoordinators = useMemo(() => {
+    const coordinators = new Map();
+    (eligibleJobs || []).forEach((job) => {
+      const coordinator = job.coordinator;
+      if (coordinator?._id) {
+        coordinators.set(coordinator._id, {
+          id: coordinator._id,
+          name: `${coordinator.firstName || ''} ${coordinator.lastName || ''}`.trim() || 'Unnamed coordinator'
+        });
+      }
+    });
+    return Array.from(coordinators.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [eligibleJobs]);
+
+  const saveFilterPreferences = async (newJobTypes, newRoleCategories) => {
+    try {
+      await userAPI.updateProfile({
+        pocJobTypeFilters: newJobTypes,
+        pocRoleCategoryFilters: newRoleCategories
+      });
+      updateUser({
+        pocJobTypeFilters: newJobTypes,
+        pocRoleCategoryFilters: newRoleCategories
+      });
+    } catch (err) {
+      console.error('Error saving filter preferences:', err);
+      toast.error('Failed to save filter preferences');
+    }
+  };
+
+  const toggleJobTypeFilter = (typeId) => {
+    setJobsPage(1);
+    let updated;
+    if (typeId === 'all') {
+      updated = [];
+    } else {
+      if (jobTypeFilters.includes(typeId)) {
+        updated = jobTypeFilters.filter(id => id !== typeId);
+      } else {
+        updated = [...jobTypeFilters, typeId];
+      }
+    }
+    setJobTypeFilters(updated);
+    saveFilterPreferences(updated, roleCategoryFilters);
+  };
+
+  const toggleRoleCategoryFilter = (cat) => {
+    setJobsPage(1);
+    let updated;
+    if (cat === 'all') {
+      updated = [];
+    } else {
+      if (roleCategoryFilters.includes(cat)) {
+        updated = roleCategoryFilters.filter(c => c !== cat);
+      } else {
+        updated = [...roleCategoryFilters, cat];
+      }
+    }
+    setRoleCategoryFilters(updated);
+    saveFilterPreferences(jobTypeFilters, updated);
+  };
+
+  const resetAllFilters = () => {
+    setJobsPage(1);
+    setJobTypeFilters([]);
+    setRoleCategoryFilters([]);
+    setJobSearchInput('');
+    setCoordinatorSearchInput('');
+    setJobSearch('');
+    setCoordinatorSearch('');
+    saveFilterPreferences([], []);
+  };
+
+  const applyJobSearch = () => {
+    setJobsPage(1);
+    setJobSearch(jobSearchInput.trim());
+    setCoordinatorSearch(coordinatorSearchInput.trim());
+  };
+
+  const filteredJobsList = useMemo(() => {
+    return (eligibleJobs || []).filter(job => {
+      const matchesJobType = jobTypeFilters.length === 0 || jobTypeFilters.includes(job.jobType);
+      const matchesRoleCategory = roleCategoryFilters.length === 0 || (job.roleCategory && roleCategoryFilters.includes(job.roleCategory.trim()));
+      const normalizedSearch = jobSearch.toLowerCase();
+      const matchesSearch = !normalizedSearch || [
+        job.title,
+        job.company?.name,
+        job.location,
+        job.roleCategory,
+        job.description
+      ].some(value => String(value || '').toLowerCase().includes(normalizedSearch));
+      const matchesCoordinator = !coordinatorSearch || String(job.coordinator?._id || '') === coordinatorSearch;
+      return matchesJobType && matchesRoleCategory && matchesSearch && matchesCoordinator;
+    });
+  }, [eligibleJobs, jobTypeFilters, roleCategoryFilters, jobSearch, coordinatorSearch]);
   const [cycles, setCycles] = useState([]);
   const [selectedCycle, setSelectedCycle] = useState('');
   const [studentSummary, setStudentSummary] = useState(null);
@@ -50,6 +185,12 @@ const POCDashboard = () => {
   const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ isOpen: false, job: null, students: [], loading: false, total: 0, applied: 0, notApplied: 0 });
   const [studentFilter, setStudentFilter] = useState('all'); // 'all', 'applied', 'not-applied'
   const [notifying, setNotifying] = useState(false);
+  const currentCycleStats = useMemo(() => {
+    const now = new Date();
+    return cycles.find(cycle =>
+      cycle.month === now.getMonth() + 1 && cycle.year === now.getFullYear()
+    );
+  }, [cycles]);
 
   useEffect(() => {
     fetchCampusData();
@@ -467,6 +608,41 @@ const POCDashboard = () => {
         <StatusBadge color="purple" count={stats?.interestCount || 0} label="Interested" />
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatsCard
+          icon={TrendingUp}
+          label="Placed this FY"
+          value={stats?.placedThisFY || 0}
+          subValue={`${stats?.placedThisFYPercentage || 0}% of ${stats?.placementTarget || 0} target · ${stats?.pendingThisFY || 0} pending`}
+          color="success"
+          compact
+        />
+        <StatsCard
+          icon={CheckCircle}
+          label="Placed this month"
+          value={stats?.placedThisMonth || 0}
+          subValue="Based on Ghar placement date"
+          color="blue"
+          compact
+        />
+        <StatsCard
+          icon={Calendar}
+          label="Current month cycle"
+          value={currentCycleStats?.students ?? stats?.currentCycleStudents ?? 0}
+          subValue="Students in this month's cycle"
+          color="primary"
+          compact
+        />
+        <StatsCard
+          icon={CheckCircle}
+          label="Placed in last cycle"
+          value={stats?.placedLastCycle || 0}
+          subValue="Placed students from previous cycle"
+          color="teal"
+          compact
+        />
+      </div>
+
 
       {/* Campus Selection Modal */}
       {showCampusModal && (
@@ -695,27 +871,170 @@ const POCDashboard = () => {
             </span>
           </div>
 
-          {/* Job type tabs */}
-          <div className="flex gap-3 mt-3">
-            <button onClick={() => { setJobTypeFilter('all'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
-              All
-            </button>
-            <button onClick={() => { setJobTypeFilter('internship'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'internship' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
-              Internships
-            </button>
-            <button onClick={() => { setJobTypeFilter('paid_project'); setJobsPage(1); }} className={`px-3 py-1 rounded ${jobTypeFilter === 'paid_project' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border'}`}>
-              Paid Projects
-            </button>
+          {/* Multi-Select Job Filters Panel */}
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowOpportunityFilters(prev => !prev)}
+                className="flex items-center gap-2 text-sm font-bold text-gray-800"
+                aria-expanded={showOpportunityFilters}
+                aria-controls="opportunity-filters"
+              >
+                <Filter className="w-4 h-4 text-primary-600" />
+                <span>Filter Opportunities</span>
+                {(jobTypeFilters.length > 0 || roleCategoryFilters.length > 0 || jobSearch || coordinatorSearch) && (
+                  <span className="bg-primary-100 text-primary-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                    {jobTypeFilters.length + roleCategoryFilters.length + (jobSearch ? 1 : 0) + (coordinatorSearch ? 1 : 0)} active
+                  </span>
+                )}
+                {showOpportunityFilters ? (
+                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
+              {(jobTypeFilters.length > 0 || roleCategoryFilters.length > 0 || jobSearch || coordinatorSearch || jobSearchInput || coordinatorSearchInput) && (
+                <button
+                  onClick={resetAllFilters}
+                  className="text-xs text-red-600 hover:text-red-800 font-medium hover:underline flex items-center gap-1"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Reset Filters
+                </button>
+              )}
+            </div>
+
+            {showOpportunityFilters && (
+              <div id="opportunity-filters" className="space-y-4 pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
+              <div>
+                <label htmlFor="poc-job-search" className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  Search
+                </label>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    id="poc-job-search"
+                    type="search"
+                    value={jobSearchInput}
+                    onChange={(event) => setJobSearchInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') applyJobSearch();
+                    }}
+                    placeholder="Title, company, location..."
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
+                  />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="poc-coordinator-search" className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  Coordinator Name
+                </label>
+                <select
+                  id="poc-coordinator-search"
+                  value={coordinatorSearchInput}
+                  onChange={(event) => setCoordinatorSearchInput(event.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
+                >
+                  <option value="">All Coordinators</option>
+                  {availableCoordinators.map((coordinator) => (
+                    <option key={coordinator.id} value={coordinator.id}>
+                      {coordinator.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={applyJobSearch}
+                className="self-end inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                <Search className="w-4 h-4" />
+                Search
+              </button>
+                </div>
+
+            {/* Job Types Multi-Select Pills */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Job Type</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => toggleJobTypeFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    jobTypeFilters.length === 0
+                      ? 'bg-primary-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  All Job Types
+                </button>
+                {JOB_TYPE_OPTIONS.map(opt => {
+                  const isSelected = jobTypeFilters.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => toggleJobTypeFilter(opt.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${
+                        isSelected
+                          ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {isSelected && <span className="text-[10px]">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Role Categories Multi-Select Pills */}
+            {availableRoleCategories.length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t border-gray-100">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Role Category</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => toggleRoleCategoryFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      roleCategoryFilters.length === 0
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    All Categories
+                  </button>
+                  {availableRoleCategories.map(cat => {
+                    const isSelected = roleCategoryFilters.includes(cat);
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => toggleRoleCategoryFilter(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                            : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>{cat}</span>
+                        {isSelected && <span className="text-[10px]">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+              </div>
+            )}
           </div>
 
-          {/* Filtered job metrics (update when jobTypeFilter or eligibleJobs change) */}
+          {/* Filtered job metrics (update when jobTypeFilters, roleCategoryFilters or eligibleJobs change) */}
           {eligibleJobs && (
             (() => {
-              const filteredJobs = eligibleJobs.filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter));
-              const activeJobsCount = filteredJobs.length;
-              const totalApplications = filteredJobs.reduce((acc, j) => acc + (j.applicationCount || 0), 0);
-              const eligibleStudentsCount = filteredJobs.reduce((acc, j) => acc + (j.eligibleStudents || 0), 0);
-              const selectedCount = filteredJobs.reduce((acc, j) => acc + (j.statusCounts?.selected || 0), 0);
+              const activeJobsCount = filteredJobsList.length;
+              const totalApplications = filteredJobsList.reduce((acc, j) => acc + (j.applicationCount || 0), 0);
+              const eligibleStudentsCount = filteredJobsList.reduce((acc, j) => acc + (j.eligibleStudents || 0), 0);
+              const selectedCount = filteredJobsList.reduce((acc, j) => acc + (j.statusCounts?.selected || 0), 0);
 
               return (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -793,8 +1112,7 @@ const POCDashboard = () => {
             </div>
           ) : eligibleJobs.length > 0 ? (
             (() => {
-              const filteredJobs = eligibleJobs.filter(j => jobTypeFilter === 'all' ? true : (j.jobType === jobTypeFilter));
-              const paginatedJobs = filteredJobs.slice((jobsPage - 1) * itemsPerPage, jobsPage * itemsPerPage);
+              const paginatedJobs = filteredJobsList.slice((jobsPage - 1) * itemsPerPage, jobsPage * itemsPerPage);
 
               return (
                 <>
@@ -896,7 +1214,7 @@ const POCDashboard = () => {
                       );
                     })}
                   </div>
-                  {renderPagination(jobsPage, filteredJobs.length, setJobsPage)}
+                  {renderPagination(jobsPage, filteredJobsList.length, setJobsPage)}
                 </>
               );
             })()
@@ -1519,6 +1837,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
   const [editingTargetId, setEditingTargetId] = useState(null);
   const [editTargetValue, setEditTargetValue] = useState('');
   const [expandedSchools, setExpandedSchools] = useState({});
+  const [assigningLongTerm, setAssigningLongTerm] = useState(false);
 
   const saveTarget = async (cycleId) => {
     try {
@@ -1611,18 +1930,14 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
     }
   };
 
-  // Fetch unassigned students eagerly so available count is shown everywhere consistently
-  useEffect(() => { fetchUnassigned(); }, []);
-
-  const fetchCycleStudents = async (cycleId) => {
+  const fetchCycleStudents = async (cycleId, refreshUnassigned = false) => {
     setLoadingStudents(true);
     try {
-      const [cycleRes, unassignedRes] = await Promise.all([
-        placementCycleAPI.getCycleStudents(cycleId),
-        placementCycleAPI.getUnassignedStudents()
-      ]);
+      const requests = [placementCycleAPI.getCycleStudents(cycleId)];
+      if (refreshUnassigned) requests.push(placementCycleAPI.getUnassignedStudents());
+      const [cycleRes, unassignedRes] = await Promise.all(requests);
       setCycleStudents(cycleRes.data);
-      setUnassignedStudents(unassignedRes.data);
+      if (unassignedRes) setUnassignedStudents(unassignedRes.data);
     } catch (error) {
       console.error('Error fetching students:', error);
     } finally {
@@ -1635,10 +1950,28 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
     try {
       await placementCycleAPI.assignStudents(selectedCycleId, selectedStudents);
       setSelectedStudents([]);
-      fetchCycleStudents(selectedCycleId);
+      fetchCycleStudents(selectedCycleId, true);
       onUpdate();
     } catch (error) {
       console.error('Error assigning students:', error);
+    }
+  };
+
+  const handleAssignLongTermStudents = async () => {
+    setAssigningLongTerm(true);
+    try {
+      const response = await placementCycleAPI.assignLongTermStudentsToCurrent();
+      toast.success(response.data.message);
+      await fetchCycleStudents(selectedCycleId, true);
+      onUpdate();
+    } catch (error) {
+      if (error.response?.status === 409) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to add eligible students');
+      }
+    } finally {
+      setAssigningLongTerm(false);
     }
   };
 
@@ -1646,7 +1979,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
     if (!selectedCycleId) return;
     try {
       await placementCycleAPI.removeStudents(selectedCycleId, [studentId]);
-      fetchCycleStudents(selectedCycleId);
+      fetchCycleStudents(selectedCycleId, true);
       onUpdate();
     } catch (error) {
       console.error('Error removing student:', error);
@@ -1658,6 +1991,15 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
       <div className="flex justify-between items-center">
         <h3 className="font-semibold text-gray-900">Placement Cycles</h3>
         <div className="flex gap-2">
+          <button
+            onClick={handleAssignLongTermStudents}
+            disabled={assigningLongTerm}
+            className="btn btn-secondary btn-sm flex items-center gap-1 text-xs"
+            title="Add active students with at least 12 months tenure to this month's cycle"
+          >
+            <UserPlus className="w-3 h-3" />
+            {assigningLongTerm ? 'Adding...' : 'Add 12+ month students'}
+          </button>
           <button
             onClick={async () => {
               try {
@@ -1705,7 +2047,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                   className="p-4 cursor-pointer"
                   onClick={() => {
                     setSelectedCycleId(cycle.cycleId);
-                    fetchCycleStudents(cycle.cycleId);
+                    fetchCycleStudents(cycle.cycleId, true);
                   }}
                 >
                   <div className="flex justify-between items-start">

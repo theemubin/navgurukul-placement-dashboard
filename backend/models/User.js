@@ -85,6 +85,14 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Campus'
   }],
+  // Campus PoC dashboard filter preferences
+  pocJobTypeFilters: [{
+    type: String,
+    enum: ['full_time', 'part_time', 'internship', 'contract', 'paid_project']
+  }],
+  pocRoleCategoryFilters: [{
+    type: String
+  }],
   // Placement cycle assignment (for students)
   placementCycle: {
     type: mongoose.Schema.Types.ObjectId,

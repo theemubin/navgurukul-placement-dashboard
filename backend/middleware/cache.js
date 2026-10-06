@@ -82,11 +82,17 @@ const cacheMiddleware = (options = {}) => {
       if (cachedResponse) {
         res.setHeader('X-Cache', 'HIT');
         res.setHeader('X-Cache-Key', cacheKey);
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         return res.json(cachedResponse);
       }
 
       // Cache miss - intercept res.json to capture and cache response payload
       res.setHeader('X-Cache', 'MISS');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       const originalJson = res.json.bind(res);
 
       res.json = (body) => {

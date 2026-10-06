@@ -32,9 +32,21 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle response errors
+const allCacheStores = [];
+
+export const clearApiCache = () => {
+  allCacheStores.forEach((store) => store.clear());
+};
+
+// Handle response errors and automatic cache invalidation on mutations
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = (response.config?.method || '').toLowerCase();
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      clearApiCache();
+    }
+    return response;
+  },
   (error) => {
     if (import.meta.env.DEV) {
       console.warn('API response error:', error?.response?.status, error?.response?.data, error?.response?.headers);
@@ -61,8 +73,9 @@ api.interceptors.response.use(
 const createCachedGetter = (requestFn, { ttl = 5 * 60 * 1000 } = {}) => {
   const cacheStore = new Map();
   const inflightStore = new Map();
+  allCacheStores.push(cacheStore);
 
-  return async (options = {}) => {
+  const getter = async (options = {}) => {
     const forceRefresh = options.forceRefresh === true;
     const cacheTTL = options.cacheTTL ?? ttl;
     const now = Date.now();
@@ -93,6 +106,13 @@ const createCachedGetter = (requestFn, { ttl = 5 * 60 * 1000 } = {}) => {
     inflightStore.set(cacheKey, inflight);
     return inflight;
   };
+
+  getter.clear = () => {
+    cacheStore.clear();
+    inflightStore.clear();
+  };
+
+  return getter;
 };
 
 const cachedMatchingJobsGetter = createCachedGetter(() => api.get('/jobs/matching'), { ttl: 2 * 60 * 1000 });
@@ -425,7 +445,7 @@ export const notificationAPI = {
 
 // Stats APIs
 const cachedDashboardGetter = createCachedGetter((options = {}) => api.get('/stats/dashboard', { params: options.params }), { ttl: 2 * 60 * 1000 });
-const cachedCampusPocStatsGetter = createCachedGetter(({ status } = {}) => api.get('/stats/campus-poc', { params: { status } }), { ttl: 2 * 60 * 1000 });
+const cachedCampusPocStatsGetter = createCachedGetter(({ status, refresh } = {}) => api.get('/stats/campus-poc', { params: { status, refresh } }), { ttl: 2 * 60 * 1000 });
 const cachedEligibleJobsGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/eligible-jobs', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
 const cachedCompanyTrackingGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
 const cachedSchoolTrackingGetter = createCachedGetter(({ cycleId, summary } = {}) => api.get('/stats/campus-poc/school-tracking', {
@@ -436,7 +456,7 @@ const cachedSchoolTrackingGetter = createCachedGetter(({ cycleId, summary } = {}
   }
 }), { ttl: 2 * 60 * 1000 });
 const cachedStudentSummaryGetter = createCachedGetter(({ params } = {}) => api.get('/stats/campus-poc/student-summary', { params }), { ttl: 2 * 60 * 1000 });
-const cachedCycleStatsGetter = createCachedGetter(() => api.get('/stats/campus-poc/cycle-stats'), { ttl: 2 * 60 * 1000 });
+const cachedCycleStatsGetter = createCachedGetter(({ refresh } = {}) => api.get('/stats/campus-poc/cycle-stats', { params: { refresh } }), { ttl: 2 * 60 * 1000 });
 
 export const statsAPI = {
   getDashboard: (params, options = {}) => cachedDashboardGetter({ params, ...options }),
@@ -444,14 +464,21 @@ export const statsAPI = {
   getReports: (params) => api.get('/stats/reports', { params }),
   getCampusStats: () => api.get('/stats/campus'),
   getStudentStats: () => api.get('/stats/student'),
-  getCampusPocStats: (status, options = {}) => cachedCampusPocStatsGetter({ status, ...options }),
+  getCampusPocStats: (status, options = {}) => cachedCampusPocStatsGetter({
+    status,
+    refresh: options.forceRefresh ? 'true' : undefined,
+    ...options
+  }),
   getEligibleJobs: (cycleId, options = {}) => cachedEligibleJobsGetter({ cycleId, ...options }),
   getJobEligibleStudents: (jobId) => api.get(`/stats/campus-poc/job/${jobId}/eligible-students`),
   notifyEligibleStudents: (jobId) => api.post(`/stats/campus-poc/job/${jobId}/notify-eligible`),
   getCompanyTracking: (cycleId, options = {}) => cachedCompanyTrackingGetter({ cycleId, ...options }),
   getSchoolTracking: (cycleId, options = {}) => cachedSchoolTrackingGetter({ cycleId, ...options }),
   getStudentSummary: (params, options = {}) => cachedStudentSummaryGetter({ params, ...options }),
-  getCycleStats: (options = {}) => cachedCycleStatsGetter(options),
+  getCycleStats: (options = {}) => cachedCycleStatsGetter({
+    refresh: options.forceRefresh ? 'true' : undefined,
+    ...options
+  }),
   getCoordinatorStats: (params) => api.get('/stats/coordinator-stats', { params }),
   getHistoricalCycles: (campusId) => api.get('/stats/historical-cycles', { params: { campus: campusId } }),
   getCampusPlacementTrends: () => api.get('/stats/campus-placement-trends'),
@@ -474,7 +501,8 @@ export const placementCycleAPI = {
   getUnassignedStudents: (params) => api.get('/placement-cycles/unassigned/students', { params }),
   updateMyCycle: (cycleId) => api.put('/placement-cycles/my-cycle', { cycleId }),
   updateStudentCycleOnPlacement: (studentId) => api.put(`/placement-cycles/student/${studentId}/placement-success`),
-  releaseExpiredStudents: () => api.post('/placement-cycles/release-expired')
+  releaseExpiredStudents: () => api.post('/placement-cycles/release-expired'),
+  assignLongTermStudentsToCurrent: () => api.post('/placement-cycles/current/assign-long-term')
 };
 
 // Campus APIs

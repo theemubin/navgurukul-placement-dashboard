@@ -262,8 +262,10 @@ mongoose.connect(process.env.MONGODB_URI)
     // Initialize Discord Bot
     const discordService = require('./services/discordService');
     const { startInterestRequestScheduler } = require('./services/interestRequestScheduler');
+    const { startLongTermStudentCycleScheduler } = require('./services/longTermStudentCycleService');
     discordService.initialize();
     startInterestRequestScheduler();
+    startLongTermStudentCycleScheduler();
   })
   .catch(err => {
     console.error('MongoDB Connection Error:', err);
