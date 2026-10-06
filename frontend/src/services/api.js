@@ -704,4 +704,11 @@ export const resolveResumeUrl = (url) => {
   return `${cleanApi}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
+// Portfolio APIs (public, no auth required)
+export const portfolioAPI = {
+  getPortfolioStudents: (params) => api.get('/users/portfolio', { params }),
+  getPortfolioCampuses: () => api.get('/users/portfolio/campuses'),
+  getPortfolioSkills: () => api.get('/users/portfolio/skills')
+};
+
 export default api;

@@ -26,6 +26,9 @@ import AuthCallback from './pages/auth/AuthCallback';
 import PendingApproval from './pages/auth/PendingApproval';
 import AccountInactive from './pages/auth/AccountInactive';
 
+// Public Pages
+import StudentPortfolio from './pages/StudentPortfolio';
+
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
 import StudentProfile from './pages/student/Profile';
@@ -190,6 +193,7 @@ function App() {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/pending-approval" element={<PendingApproval />} />
       <Route path="/auth/account-inactive" element={<AccountInactive />} />
+      <Route path="/students" element={<StudentPortfolio />} />
 
       {/* Student Routes */}
       <Route path="/student" element={

@@ -5,7 +5,7 @@ import { StatsCard, LoadingSpinner, StatusBadge } from '../../components/common/
 import { 
   FileText, Briefcase, CheckCircle, XCircle, Clock, 
   TrendingUp, DollarSign, User, ArrowRight, ArrowUpRight,
-  ShieldCheck, AlertTriangle, Search, Heart
+  ShieldCheck, AlertTriangle, Search, Heart, Eye
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -404,6 +404,22 @@ const StudentDashboard = () => {
                  <div className="flex items-center gap-2 mt-8 font-black text-xs uppercase tracking-[0.2em]">
                     Update Now <ArrowRight size={14} className="group-hover:translate-x-2 transition-transform" />
                  </div>
+              </div>
+           </Link>
+
+           {/* View Portfolios Card */}
+           <Link to="/students" className="block group">
+              <div className="bg-gradient-to-br from-purple-600 to-indigo-800 rounded-[2rem] p-8 text-white shadow-xl shadow-purple-200 hover:-translate-y-1 transition-all duration-300">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center mb-6">
+                  <Eye size={30} className="text-white" />
+                </div>
+                <h3 className="text-2xl font-black tracking-tight leading-tight">View Portfolios</h3>
+                <p className="text-purple-100 font-medium text-sm mt-3 opacity-80 leading-relaxed">
+                  Browse student portfolios and discover peer project highlights.
+                </p>
+                <div className="flex items-center gap-2 mt-8 font-black text-xs uppercase tracking-[0.2em]">
+                  Browse Portfolios <ArrowRight size={14} className="group-hover:translate-x-2 transition-transform" />
+                </div>
               </div>
            </Link>
 
