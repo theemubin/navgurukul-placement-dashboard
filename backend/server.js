@@ -8,7 +8,13 @@ const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const passport = require('./config/passport');
 const { initRedis, getRedisStats, getClient } = require('./config/redis');
-const { RedisStore } = require('connect-redis');
+
+let RedisStore = null;
+try {
+  ({ RedisStore } = require('connect-redis'));
+} catch (error) {
+  console.warn('[Redis] connect-redis package is unavailable; sessions will use the default store');
+}
 
 // Initialize Redis Client
 initRedis();
@@ -37,6 +43,9 @@ const scamReportsRoutes = require('./routes/scamReports');
 const gharIntegrationRoutes = require('./routes/gharIntegration');
 const loginBackgroundRoutes = require('./routes/loginBackgrounds');
 const atsRoutes = require('./routes/ats');
+const postPlacementRoutes = require('./routes/postPlacements');
+const dailyTrackerRoutes = require('./routes/dailyTrackers');
+const dailyTrackerMonitoringRoutes = require('./routes/dailyTrackerMonitoring');
 
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
@@ -95,7 +104,7 @@ const sessionOptions = {
 
 if (process.env.REDIS_ENABLED !== 'false') {
   const redisClient = getClient();
-  if (redisClient) {
+  if (redisClient && RedisStore) {
     sessionOptions.store = new RedisStore({
       client: redisClient,
       prefix: 'session:'
@@ -140,6 +149,9 @@ app.use('/api/scam-reports', scamReportsRoutes);
 app.use('/api/ghar', gharIntegrationRoutes);
 app.use('/api/login-backgrounds', loginBackgroundRoutes);
 app.use('/api/ats', atsRoutes);
+app.use('/api/post-placements', postPlacementRoutes);
+app.use('/api/daily-trackers', dailyTrackerRoutes);
+app.use('/api/daily-tracker-monitoring', dailyTrackerMonitoringRoutes);
 
 // Redirect root to frontend
 app.get('/', (req, res) => {

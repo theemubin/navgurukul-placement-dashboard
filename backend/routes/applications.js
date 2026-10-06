@@ -8,10 +8,12 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
+const PostPlacementTracking = require('../models/PostPlacementTracking');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
 const { cacheMiddleware } = require('../middleware/cache');
 const cacheService = require('../services/redisCacheService');
+const { inferEmploymentType, parseDate } = require('../utils/postPlacement');
 
 /**
  * @swagger
@@ -627,6 +629,30 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
         { _id: cycle._id, 'snapshotStudents.student': application.student },
         { $set: { 'snapshotStudents.$.status': 'placed' } }
       );
+
+      const placementPayload = {
+        student: application.student._id || application.student,
+        application: application._id,
+        job: application.job._id || application.job,
+        companyName: application.job.company?.name || '',
+        designation: application.job.title || '',
+        employmentType: inferEmploymentType(application),
+        joiningDate: parseDate(application.offerDetails?.joiningDate),
+        ctc: Number(application.offerDetails?.salary || application.job.salary?.max || application.job.salary?.min || null) || null,
+        stipendOrSalary: Number(application.offerDetails?.salary || application.job.salary?.max || application.job.salary?.min || null) || null,
+        currency: application.offerDetails?.currency || application.job.salary?.currency || 'INR',
+        status: 'active',
+        updatedBy: req.userId
+      };
+
+      const existingPlacement = await PostPlacementTracking.findOne({ application: application._id });
+      if (!existingPlacement) {
+        placementPayload.createdBy = req.userId;
+        await PostPlacementTracking.create(placementPayload);
+      } else {
+        Object.assign(existingPlacement, placementPayload);
+        await existingPlacement.save();
+      }
     }
 
     await application.save();
