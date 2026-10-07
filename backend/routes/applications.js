@@ -10,8 +10,13 @@ const PlacementCycle = require('../models/PlacementCycle');
 const { StudentJobReadiness } = require('../models/JobReadiness');
 const discordService = require('../services/discordService');
 const { auth, authorize, sameCampus } = require('../middleware/auth');
-const { cacheMiddleware } = require('../middleware/cache');
+const { cacheMiddleware, invalidateCache } = require('../middleware/cache');
 const cacheService = require('../services/redisCacheService');
+const AIService = require('../services/aiService');
+const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
+
+const TERMINAL_APPLICATION_STATUSES = ['selected', 'rejected', 'withdrawn', 'offered', 'filled'];
+const PLACEMENT_OUTCOME_STATUSES = ['selected', 'offered', 'filled'];
 
 /**
  * @swagger
@@ -658,6 +663,8 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
       console.error('Discord application update error:', discordErr.message || discordErr);
     }
 
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*', 'cache:analytics:*']);
+
     res.json({ message: 'Application status updated', application });
   } catch (error) {
     console.error('Update status error:', error);
@@ -934,13 +941,22 @@ router.get('/export/csv', auth, authorize('coordinator', 'manager'), async (req,
       query.student = { $in: campusStudents.map(s => s._id) };
     }
 
-    const applications = await Application.find(query)
+    const rawApplications = await Application.find(query)
       .populate('student', 'firstName lastName email studentProfile.enrollmentNumber studentProfile.department campus')
       .populate({
         path: 'student',
         populate: { path: 'campus', select: 'name' }
       })
       .populate('job', 'title company.name location jobType');
+
+    // Filter out withdrawn applications if withdrawn before HR shortlisting
+    const hrStages = ['hr_shortlisting', 'shortlisted', 'interviewing', 'in_progress', 'technical_round', 'selected', 'offered'];
+    const applications = rawApplications.filter(app => {
+      if (app.status !== 'withdrawn') return true;
+      return app.statusHistory?.some(sh => hrStages.includes(sh.status?.toLowerCase())) ||
+        (app.currentRound && app.currentRound > 0) ||
+        (app.roundResults && app.roundResults.length > 0);
+    });
 
     // Generate CSV
     const headers = ['Student Name', 'Email', 'Enrollment No', 'Department', 'Campus', 'LinkedIn', 'GitHub', 'Portfolio', 'Job Title', 'Company', 'Status', 'Applied Date'];
@@ -1016,7 +1032,7 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
       query.student = { $in: campusStudents.map(s => s._id) };
     }
 
-    const applications = await Application.find(query)
+    const rawApplications = await Application.find(query)
       .populate({
         path: 'student',
         populate: [
@@ -1026,6 +1042,15 @@ router.post('/export/xls', auth, authorize('coordinator', 'manager'), async (req
       })
       .populate('job', 'title company.name location jobType salary')
       .populate('feedbackBy', 'firstName lastName');
+
+    // Filter out withdrawn applications if withdrawn before HR shortlisting
+    const hrStages = ['hr_shortlisting', 'shortlisted', 'interviewing', 'in_progress', 'technical_round', 'selected', 'offered'];
+    const applications = rawApplications.filter(app => {
+      if (app.status !== 'withdrawn') return true;
+      return app.statusHistory?.some(sh => hrStages.includes(sh.status?.toLowerCase())) ||
+        (app.currentRound && app.currentRound > 0) ||
+        (app.roundResults && app.roundResults.length > 0);
+    });
 
     // Helper for skill rating to labels
     const ratingToLevel = (rating) => {
@@ -1251,13 +1276,13 @@ router.get('/analytics/bottlenecks', auth, authorize('coordinator', 'campus_poc'
       const daysInStage = Math.max(1, Math.round((now - lastUpdated) / (1000 * 60 * 60 * 24)));
       stageMap[status].totalDays += daysInStage;
 
-      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status.toLowerCase());
+      const isTerminal = TERMINAL_APPLICATION_STATUSES.includes(status.toLowerCase());
       if (!isTerminal && (now - lastUpdated) > thresholdMs) {
         stageMap[status].stagnantCount += 1;
         totalStagnant += 1;
       }
 
-      if (['selected', 'offered'].includes(status.toLowerCase())) totalOffered += 1;
+      if (PLACEMENT_OUTCOME_STATUSES.includes(status.toLowerCase())) totalOffered += 1;
       if (status.toLowerCase() === 'rejected') totalRejected += 1;
     });
 
@@ -1299,7 +1324,7 @@ router.get('/analytics/bottlenecks', auth, authorize('coordinator', 'campus_poc'
     const companyStagnantMap = {};
     allApps.forEach(app => {
       const status = (app.status || '').toLowerCase();
-      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status);
+      const isTerminal = TERMINAL_APPLICATION_STATUSES.includes(status);
       const lastUpdated = new Date(app.updatedAt || app.createdAt);
       if (!isTerminal && (now - lastUpdated) > thresholdMs && app.job?.company?.name) {
         const compName = app.job.company.name;
@@ -1431,7 +1456,7 @@ router.get('/analytics/stagnant-students', auth, authorize('coordinator', 'campu
   try {
     const { campus, minDays = 7, stage, status, search, school, page = 1, limit = 20 } = req.query;
     const thresholdDate = new Date(Date.now() - Number(minDays) * 24 * 60 * 60 * 1000);
-    const terminalStatuses = ['selected', 'rejected', 'withdrawn', 'offered'];
+    const terminalStatuses = TERMINAL_APPLICATION_STATUSES;
     const stageFilter = stage || status;
 
     const activeStatuses = stageFilter
@@ -1454,7 +1479,8 @@ router.get('/analytics/stagnant-students', auth, authorize('coordinator', 'campu
         })(),
         enrollmentNumber: student.studentProfile?.enrollmentNumber || '',
         department: student.studentProfile?.department || '',
-        currentSchool: student.studentProfile?.currentSchool || ''
+        currentSchool: student.studentProfile?.currentSchool || '',
+        gharStatus: student.studentProfile?.currentStatus || 'Unknown'
       },
       stagnantCount: stagnant.stagnantCount || 0,
       maxDaysStuck: stagnant.maxDaysStuck || 0,
@@ -1691,7 +1717,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
       .sort({ createdAt: -1 });
 
     const applications = summaryMode
-      ? await applicationQuery.select('status applicationType currentRound statusComment createdAt updatedAt job')
+      ? await applicationQuery.select('status applicationType currentRound statusComment feedback statusHistory createdAt updatedAt job')
       : await applicationQuery
         .populate('feedbackBy', 'firstName LastName'.replace('LastName', 'lastName'))
         .populate('interventions.createdBy', 'firstName lastName role');
@@ -1716,7 +1742,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
 
     const formattedApplications = applications.map(app => {
       const status = (app.status || 'applied').toLowerCase();
-      const isTerminal = ['selected', 'rejected', 'withdrawn', 'offered'].includes(status);
+      const isTerminal = TERMINAL_APPLICATION_STATUSES.includes(status);
       const lastUpdated = new Date(app.updatedAt || app.createdAt);
       const daysInStage = Math.max(1, Math.round((now - lastUpdated) / (1000 * 60 * 60 * 24)));
       totalDaysInPipeline += daysInStage;
@@ -1725,7 +1751,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
 
       if (!isTerminal) activeCount += 1;
       if (isStagnant) stagnantCount += 1;
-      if (['selected', 'offered'].includes(status)) offeredCount += 1;
+      if (PLACEMENT_OUTCOME_STATUSES.includes(status)) offeredCount += 1;
       if (status === 'rejected') rejectedCount += 1;
 
       if (!summaryMode && app.roundResults && app.roundResults.length > 0) {
@@ -1776,6 +1802,42 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
         message: 'Student pipeline metrics are progression-steady with no severe bottlenecks detected.'
       };
 
+    let aiSummary = null;
+    if (stagnantCount > 0) {
+      const aiPayload = {
+        studentStatus: student.studentProfile?.currentStatus || 'Unknown',
+        jobReadiness: jobReadiness ? {
+          overallStatus: jobReadiness.overallStatus,
+          score: jobReadiness.readinessScore || null
+        } : null,
+        applications: applications.map(app => ({
+          company: app.job?.company?.name || 'Unknown company',
+          role: app.job?.title || 'Unknown role',
+          roleCategory: app.job?.roleCategory || '',
+          jobType: app.job?.jobType || '',
+          status: app.status,
+          currentRound: app.currentRound || 0,
+          daysInStage: Math.max(1, Math.round((now - new Date(app.updatedAt || app.createdAt)) / (1000 * 60 * 60 * 24))),
+          feedback: app.feedback || '',
+          statusComment: app.statusComment || '',
+          stageHistory: (app.statusHistory || []).slice(-8).map(history => ({
+            status: history.status || '',
+            comment: history.comment || '',
+            at: history.timestamp || history.createdAt || null
+          })),
+          stagnant: !TERMINAL_APPLICATION_STATUSES.includes((app.status || '').toLowerCase())
+            && (now - new Date(app.updatedAt || app.createdAt)) > thresholdMs
+        }))
+      };
+      try {
+        const { keys } = await resolveAIKeysForUser(req.userId);
+        const ai = new AIService(keys);
+        aiSummary = await ai.summarizeStudentStagnation(aiPayload);
+      } catch (aiError) {
+        console.warn('Student 360 AI summary unavailable:', aiError.message);
+      }
+    }
+
     const summaryStats = {
       totalApplications: applications.length,
       activeApplications: activeCount,
@@ -1798,6 +1860,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
         enrollmentNumber: student.studentProfile?.enrollmentNumber || '',
         department: student.studentProfile?.department || '',
         currentSchool: student.studentProfile?.currentSchool || '',
+        gharStatus: student.studentProfile?.currentStatus || 'Unknown',
         skills: student.studentProfile?.technicalSkills || [],
         jobReadiness: jobReadiness ? {
           overallStatus: jobReadiness.overallStatus,
@@ -1806,6 +1869,7 @@ router.get('/analytics/student-360/:studentId', auth, authorize('coordinator', '
       },
       summaryStats,
       diagnosticAlert,
+      aiSummary,
       applications: formattedApplications
     });
   } catch (error) {

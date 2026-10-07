@@ -663,6 +663,9 @@ const PipelineBottleneckAnalyzer = ({ defaultStudentId = null, embedded = false 
                         <div>
                           <p className="font-bold text-sm text-gray-900">{s.name}</p>
                           <p className="text-xs text-gray-500">{s.campus} • {s.department || 'Student'}</p>
+                          <span className="inline-flex mt-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold">
+                            Ghar: {s.gharStatus || 'Unknown'}
+                          </span>
                         </div>
                         <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
                           {item.maxDaysStuck}d stuck
@@ -763,6 +766,41 @@ const PipelineBottleneckAnalyzer = ({ defaultStudentId = null, embedded = false 
                       <p className="text-[10px] mt-1 opacity-80">
                         Generated from application timing and stage history, not AI.
                       </p>
+                    </div>
+                  </div>
+                )}
+
+                {student360Report.aiSummary && (
+                  <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/60 text-indigo-950">
+                    <div className="flex items-start gap-3">
+                      <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-indigo-600" />
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-sm">AI Placement Coaching Summary</h4>
+                        <p className="text-xs mt-1 leading-relaxed">{student360Report.aiSummary.summary}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase text-indigo-600">Company types</p>
+                            <p className="text-xs mt-1">{(student360Report.aiSummary.companyTypes || []).join(', ') || 'Not enough data'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase text-indigo-600">Likely stuck at</p>
+                            <p className="text-xs mt-1">{student360Report.aiSummary.stuckAt || 'Not enough data'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase text-indigo-600">Probable reasons</p>
+                            <ul className="list-disc pl-4 text-xs mt-1 space-y-0.5">
+                              {(student360Report.aiSummary.probableReasons || []).map((item, index) => <li key={index}>{item}</li>)}
+                            </ul>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase text-indigo-600">Work on next</p>
+                            <ul className="list-disc pl-4 text-xs mt-1 space-y-0.5">
+                              {(student360Report.aiSummary.needsToWorkOn || []).map((item, index) => <li key={index}>{item}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                        <p className="text-[10px] mt-3 text-indigo-600/80">AI summary is grounded in the student’s applications, stages, and recorded feedback.</p>
+                      </div>
                     </div>
                   </div>
                 )}

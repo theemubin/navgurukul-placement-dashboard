@@ -385,11 +385,12 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
   try {
     const {
       status, company, jobType, campus, search,
-      roleCategory, sortBy, summaryFilter,
+      roleCategory, sortBy, summaryFilter, summary,
       page = 1, limit = 20
     } = req.query;
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 20;
+    const liteSummary = summary === 'lite';
 
     let query = {};
 
@@ -445,6 +446,12 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
     if (campus) query['eligibility.campuses'] = campus;
     if (req.query.myLeads === 'true' && req.user) query.coordinator = req.userId;
     if (req.query.coordinator) query.coordinator = req.query.coordinator;
+    // Filter by postedBy: matches jobs where user is either coordinator or createdBy
+    if (req.query.postedBy) {
+      const postedById = req.query.postedBy;
+      if (!query.$and) query.$and = [];
+      query.$and.push({ $or: [{ coordinator: postedById }, { createdBy: postedById }] });
+    }
     if (roleCategory) query.roleCategory = roleCategory;
     if (search) {
       const searchOr = [
@@ -474,16 +481,17 @@ router.get('/', auth, cacheMiddleware({ type: 'jobs', keyPrefix: 'jobs' }), asyn
     else if (sortBy === 'placements') sortOptions = { placementsCount: -1 };
 
     const useSummaryFilter = summaryFilter && summaryFilter !== 'all';
-    const liteSummary = req.query.summary === 'lite';
-
     const jobsQuery = liteSummary
       ? Job.find(query)
-        .select('title company location status jobType applicationDeadline salary roleCategory createdAt updatedAt placementsCount maxPositions minPositions')
+        .select('title company location status jobType applicationDeadline salary roleCategory createdAt updatedAt placementsCount maxPositions minPositions coordinator createdBy school eligibility')
+        .populate('coordinator', 'firstName lastName')
+        .populate('createdBy', 'firstName lastName')
         .sort(sortOptions)
         .lean()
       : Job.find(query)
         .populate('requiredSkills.skill')
         .populate('eligibility.campuses', 'name')
+        .populate('coordinator', 'firstName lastName')
         .populate('createdBy', 'firstName lastName')
         .sort(sortOptions);
 
@@ -704,17 +712,29 @@ router.get('/:id/match', auth, authorize('student'), async (req, res) => {
 
     const matchDetails = calculateMatch(student, job);
 
+    // Run expiration check for any pending request past deadline
+    await expirePastDeadlineInterestRequests(req.params.id);
+
     // Check if student has an existing interest request
     const existingInterest = await InterestRequest.findOne({
       student: req.userId,
       job: req.params.id
     });
 
+    const isPastDeadline = job.applicationDeadline && new Date(job.applicationDeadline) < new Date();
+    const resolvedStatus = (existingInterest && existingInterest.status === 'pending' && isPastDeadline)
+      ? 'rejected'
+      : existingInterest?.status;
+    const resolvedReason = (existingInterest && existingInterest.status === 'pending' && isPastDeadline)
+      ? (existingInterest.rejectionReason || 'PoC has not approved before deadline')
+      : existingInterest?.rejectionReason;
+
     res.json({
       ...job.toObject(),
       matchDetails,
       interestRequest: existingInterest ? {
-        status: existingInterest.status,
+        status: resolvedStatus,
+        rejectionReason: resolvedReason,
         createdAt: existingInterest.createdAt
       } : null
     });
@@ -969,6 +989,14 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
       return res.status(404).json({ message: 'Job not found' });
     }
 
+    const previousStatus = job.status;
+    const isClosingJob = req.body.status === 'closed' && previousStatus !== 'closed';
+    const closeReason = (req.body.notes || '').toString().trim();
+    if (isClosingJob && !closeReason) {
+      return res.status(400).json({
+        message: 'A rejection reason is required when closing a job.'
+      });
+    }
     const settings = await Settings.getSettings();
     const wasVisible = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
@@ -984,8 +1012,75 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
       });
     }
 
+    // Apply updates
     Object.assign(job, req.body);
+
+    // Provide default fallbacks for older legacy job documents so validation passes
+    job.roleCategory = job.roleCategory || 'Other';
+    job.createdBy = job.createdBy || req.userId;
+    if (!job.applicationDeadline) {
+      job.applicationDeadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    }
+
+    // If status changed, record in statusHistory and timeline
+    if (req.body.status && req.body.status !== previousStatus) {
+      job.statusHistory = job.statusHistory || [];
+      job.statusHistory.push({
+        status: req.body.status,
+        changedAt: new Date(),
+        changedBy: req.userId,
+        notes: req.body.notes || 'Status updated'
+      });
+
+      job.timeline = job.timeline || [];
+      job.timeline.push({
+        event: 'status_changed',
+        description: `Job status changed from ${previousStatus} to ${req.body.status}`,
+        changedBy: req.userId,
+        changedAt: new Date(),
+        metadata: { from: previousStatus, to: req.body.status }
+      });
+    }
+
     await job.save();
+
+    if (isClosingJob) {
+      const activeApplications = await Application.find({
+        job: job._id,
+        status: { $nin: ['selected', 'rejected', 'withdrawn', 'closed'] }
+      }).populate('student', '_id');
+      const closedAt = new Date();
+
+      for (const application of activeApplications) {
+        application.status = 'rejected';
+        application.statusComment = closeReason;
+        application.feedback = closeReason;
+        application.feedbackBy = req.userId;
+        application.statusHistory = application.statusHistory || [];
+        application.statusHistory.push({
+          status: 'rejected',
+          changedAt: closedAt,
+          changedBy: req.userId,
+          comment: closeReason
+        });
+        await application.save();
+      }
+
+      if (activeApplications.length > 0) {
+        await Notification.insertMany(activeApplications
+          .filter(application => application.student?._id)
+          .map(application => ({
+            recipient: application.student._id,
+            type: 'application_update',
+            title: `Application Rejected: ${job.title}`,
+            message: closeReason,
+            link: `/applications/${application._id}`,
+            relatedEntity: { type: 'application', id: application._id }
+          })));
+      }
+    }
+
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
 
     const isNowVisible = job.status === 'active' ||
       settings.jobPipelineStages.find(s => s.id === job.status)?.visibleToStudents;
@@ -1041,7 +1136,10 @@ router.put('/:id', auth, authorize('coordinator', 'manager'), async (req, res) =
     res.json({ message: 'Job updated successfully', job });
   } catch (error) {
     console.error('Update job error:', error);
-    res.status(500).json({ message: 'Server error' });
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: error.message, error: error.message });
+    }
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 });
 
@@ -1101,9 +1199,9 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       if (!application) continue;
       if (application.job.toString() !== jobId.toString()) continue;
 
-      // Skip updating final-state applications unless force flag set
+      // Skip updating final-state applications unless force flag is set (default force to true for explicit coordinator actions)
       const finalStates = ['selected', 'withdrawn', 'rejected', 'closed'];
-      const force = !!req.body.force;
+      const force = req.body.force !== undefined ? !!req.body.force : true;
       if (finalStates.includes(application.status) && !force) {
         // Do not override final states; continue to next application
         continue;
@@ -1281,6 +1379,7 @@ router.post('/:id/bulk-update', auth, authorize('coordinator', 'manager'), async
       }
     }
 
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
     res.json({ message: 'Bulk update completed', updated });
   } catch (error) {
     console.error('Bulk update error:', error);
@@ -1364,6 +1463,11 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
     if (!newStatus) {
       return res.status(400).json({ message: 'Status is required' });
     }
+    if (newStatus === 'closed' && !notes?.toString().trim()) {
+      return res.status(400).json({
+        message: 'A rejection reason is required when closing a job.'
+      });
+    }
 
     // Validate status against pipeline stages
     const validStatuses = await Settings.getValidStatuses();
@@ -1432,26 +1536,39 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
       }
     }
 
-    // If job moved to 'closed', update pending applications to 'closed' and capture coordinator notes
+    // If job moved to 'closed', reject pending applications and capture coordinator notes.
     if (newStatus === 'closed') {
       try {
-        // Close applications that are not already in final states
-        const excluded = ['selected', 'withdrawn', 'closed'];
+        const excluded = ['selected', 'withdrawn', 'rejected', 'closed'];
+        const affectedApplications = await Application.find({
+          job: job._id,
+          status: { $nin: excluded }
+        }).select('_id student');
         await Application.updateMany(
-          { job: job._id, status: { $nin: excluded } },
+          { _id: { $in: affectedApplications.map(application => application._id) } },
           {
-            $set: { status: 'closed', statusComment: notes || '' },
-            $push: { statusHistory: { status: 'closed', changedAt: new Date(), changedBy: req.userId, comment: notes || '' } }
+            $set: {
+              status: 'rejected',
+              statusComment: notes.trim(),
+              feedback: notes.trim(),
+              feedbackBy: req.userId
+            },
+            $push: {
+              statusHistory: {
+                status: 'rejected',
+                changedAt: new Date(),
+                changedBy: req.userId,
+                comment: notes.trim()
+              }
+            }
           }
         );
 
-        // Notify remaining applicants that the job is closed (optional)
-        const applicants = await Application.find({ job: job._id, status: 'closed' }).select('student');
-        const notifications = applicants.map(a => ({
+        const notifications = affectedApplications.map(a => ({
           recipient: a.student,
           type: 'application_closed',
           title: `Application closed for ${job.title}`,
-          message: notes ? `The job has been closed: ${notes}` : 'The job has been closed by the coordinator.',
+          message: notes.trim(),
           link: `/applications/${a._id}`,
           relatedEntity: { type: 'job', id: job._id }
         }));
@@ -1466,6 +1583,8 @@ router.patch('/:id/status', auth, authorize('coordinator', 'manager'), async (re
     await job.populate('requiredSkills.skill');
     await job.populate('eligibility.campuses', 'name');
     await job.populate('createdBy', 'firstName lastName');
+
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
 
     res.json({
       message: 'Job status updated successfully',
@@ -1539,6 +1658,47 @@ router.post('/:id/broadcast', auth, authorize('coordinator', 'manager'), async (
     res.status(500).json({ message: 'Failed to broadcast job' });
   }
 });
+
+// Helper to auto-reject unapproved interest requests past the job application deadline
+const expirePastDeadlineInterestRequests = async (filterJobId = null) => {
+  try {
+    const now = new Date();
+    const query = { status: 'pending' };
+    if (filterJobId) query.job = filterJobId;
+
+    const pendingRequests = await InterestRequest.find(query).populate('job');
+    for (const req of pendingRequests) {
+      if (req.job && req.job.applicationDeadline && new Date(req.job.applicationDeadline) < now) {
+        req.status = 'rejected';
+        req.rejectionReason = 'PoC has not approved before deadline';
+        req.reviewNotes = 'Automatically rejected because Campus PoC did not approve before the application deadline.';
+        req.reviewedAt = now;
+        await req.save();
+
+        const Application = require('../models/Application');
+        await Application.updateMany(
+          { student: req.student, job: req.job._id, applicationType: 'interest', status: { $in: ['applied', 'interested', 'pending'] } },
+          {
+            $set: {
+              status: 'rejected',
+              feedback: 'PoC has not approved before deadline',
+              statusComment: 'PoC has not approved before deadline'
+            },
+            $push: {
+              statusHistory: {
+                status: 'rejected',
+                changedAt: now,
+                comment: 'PoC has not approved before deadline'
+              }
+            }
+          }
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Error expiring past deadline interest requests:', err);
+  }
+};
 
 // === Interest Request Routes ===
 
@@ -1697,6 +1857,9 @@ router.post('/:id/interest', auth, authorize('student'), [
  */
 router.get('/interest-requests/all', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
+    // Expire any pending interest requests past application deadline
+    await expirePastDeadlineInterestRequests();
+
     const { status, page = 1, limit = 20 } = req.query;
     let allowedStudentsQuery = {};
 
@@ -1770,6 +1933,7 @@ router.get('/interest-requests/all', auth, authorize('campus_poc', 'coordinator'
  */
 router.get('/:id/interest-requests', auth, authorize('coordinator', 'manager', 'campus_poc'), async (req, res) => {
   try {
+    await expirePastDeadlineInterestRequests(req.params.id);
     const { status } = req.query;
     let query = { job: req.params.id };
 
@@ -1848,6 +2012,14 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
       return res.status(404).json({ message: 'Interest request not found' });
     }
 
+    // Check if application deadline has passed
+    const isPastDeadline = request.job && request.job.applicationDeadline && new Date(request.job.applicationDeadline) < new Date();
+    if (isPastDeadline && status === 'approved') {
+      return res.status(400).json({
+        message: 'Cannot approve interest request: Job application deadline has already passed.'
+      });
+    }
+
     // Campus PoC can only review their campus students
     if (req.user.role === 'campus_poc') {
       const campusIds = (req.user.managedCampuses || []).map(id => id.toString());
@@ -1859,13 +2031,15 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
       }
     }
 
-    request.status = status;
+    request.status = isPastDeadline ? 'rejected' : status;
     request.reviewedBy = req.userId;
     request.reviewedAt = new Date();
     request.reviewNotes = reviewNotes;
 
-    if (status === 'rejected') {
-      request.rejectionReason = rejectionReason || 'Not approved by Campus PoC';
+    if (request.status === 'rejected') {
+      request.rejectionReason = isPastDeadline
+        ? (rejectionReason || 'PoC has not approved before deadline')
+        : (rejectionReason || 'Not approved by Campus PoC');
     }
 
     // If approved, convert or create a regular application so the student has a proper application journey
@@ -1918,6 +2092,7 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
     });
 
     await notification.save();
+    await invalidateCache(['cache:jobs:*', 'cache:stats:*']);
 
     res.json({
       message: `Interest request ${status}`,
@@ -2591,7 +2766,7 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
     }
 
     // Get applications for this job with comprehensive population
-    const applications = await Application.find({ job: id })
+    const rawApplications = await Application.find({ job: id })
       .populate({
         path: 'student',
         populate: [
@@ -2601,6 +2776,15 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
       })
       .populate('job', 'title company.name location jobType salary customRequirements')
       .populate('feedbackBy', 'firstName lastName');
+
+    // Filter out withdrawn applications if withdrawn before HR shortlisting
+    const hrStages = ['hr_shortlisting', 'shortlisted', 'interviewing', 'in_progress', 'technical_round', 'selected', 'offered'];
+    const applications = rawApplications.filter(app => {
+      if (app.status !== 'withdrawn') return true;
+      return app.statusHistory?.some(sh => hrStages.includes(sh.status?.toLowerCase())) ||
+        (app.currentRound && app.currentRound > 0) ||
+        (app.roundResults && app.roundResults.length > 0);
+    });
 
     // Get job readiness data for students
     const studentIds = applications.map(app => app.student._id);

@@ -632,12 +632,35 @@ ${JSON.stringify(input)}`;
     }
   }
 
+  async summarizeStudentStagnation(payload) {
+    if (!this.genAI) {
+      throw new Error('AI service not configured');
+    }
+    const model = this.genAI.getGenerativeModel({ model: 'models/gemini-2.5-flash' });
+    const prompt = `You are a placement-coaching analyst. Analyze only the supplied student application data.
+Do not invent facts. Distinguish observed feedback from reasonable hypotheses.
+Return ONLY valid JSON:
+{
+    "summary": "2-3 sentence plain-language summary",
+    "companyTypes": ["types or sectors inferred from company names and roles"],
+    "stuckAt": "the most common or latest stage where the student is stuck",
+    "probableReasons": ["up to 4 likely reasons, clearly framed as probable"],
+    "needsToWorkOn": ["up to 5 actionable areas based on feedback and stage history"],
+    "evidence": ["up to 5 short observations from the supplied data"]
+}
+STUDENT:
+${JSON.stringify(payload)}`;
+    const result = await model.generateContent(prompt);
+    const text = (await result.response).text()
+      .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(text);
+  }
+
   // Analyze for scam signals using Gemini with optional screenshot/email context
   async analyzeScam(payload) {
     if (!this.genAI) {
       throw new Error('AI service not configured. Please add your Google AI API key in Settings.');
     }
-
     const normalized = typeof payload === 'string'
       ? { input: payload }
       : (payload || {});

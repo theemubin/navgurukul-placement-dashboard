@@ -767,6 +767,16 @@ router.post('/login', loginValidation, async (req, res) => {
       gharApiService.syncStudentData(user.email).catch(err => console.error('Background Ghar sync error (login):', err.message));
     }
     
+    // Trigger long-term cycle assignment on the first successful login of each day.
+    (async () => {
+      try {
+        const { runLongTermStudentCycleAssignmentOncePerDay } = require('../services/longTermStudentCycleService');
+        await runLongTermStudentCycleAssignmentOncePerDay();
+      } catch (err) {
+        console.error('[LongTermCycle] Error:', err.message);
+      }
+    })();
+
     // Auto-trigger daily bulk sync on first admin/coordinator/PoC login
     if (['manager', 'coordinator', 'campus_poc'].includes(user.role)) {
       (async () => {
