@@ -481,6 +481,7 @@ const seedData = async () => {
         requirements: ['BS in Computer Science', '0-2 years experience', 'Strong programming skills'],
         responsibilities: ['Develop web applications', 'Write clean code', 'Collaborate with team'],
         location: 'Bangalore',
+        roleCategory: 'Full Stack Developer',
         jobType: 'full_time',
         salary: { min: 600000, max: 1000000, currency: 'INR' },
         requiredSkills: [
@@ -515,6 +516,7 @@ const seedData = async () => {
         requirements: ['BS/MS in Computer Science or related field', 'Experience with Python', 'Knowledge of ML algorithms'],
         responsibilities: ['Build ML models', 'Analyze data', 'Present insights'],
         location: 'Mumbai',
+        roleCategory: 'Data Analyst',
         jobType: 'full_time',
         salary: { min: 800000, max: 1400000, currency: 'INR' },
         requiredSkills: [
@@ -547,6 +549,7 @@ const seedData = async () => {
         requirements: ['Currently pursuing BS in CS/IT', 'Basic Java knowledge'],
         responsibilities: ['Assist in development', 'Learn enterprise practices', 'Write unit tests'],
         location: 'Delhi',
+        roleCategory: 'Backend Developer',
         jobType: 'internship',
         salary: { min: 25000, max: 35000, currency: 'INR' },
         requiredSkills: [
@@ -579,6 +582,7 @@ const seedData = async () => {
         requirements: ['Familiarity with React', 'CSS and responsive design'],
         responsibilities: ['Implement UI features', 'Collaborate with product team', 'Deliver milestone-based work'],
         location: 'Remote',
+        roleCategory: 'Frontend Developer',
         jobType: 'paid_project',
         salary: { min: 15000, max: 30000, currency: 'INR' },
         requiredSkills: [
