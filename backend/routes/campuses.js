@@ -102,7 +102,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', auth, authorize('manager'), async (req, res) => {
   try {
-    const { name, code, location, contactEmail, contactPhone, discordChannelId } = req.body;
+    const { name, code, location, contactEmail, contactPhone, discordChannelId, discordPocUserId } = req.body;
 
     const existing = await Campus.findOne({ code: code.toUpperCase() });
     if (existing) {
@@ -115,7 +115,8 @@ router.post('/', auth, authorize('manager'), async (req, res) => {
       location,
       contactEmail,
       contactPhone,
-      discordChannelId
+      discordChannelId,
+      discordPocUserId
     });
 
     await campus.save();
@@ -153,7 +154,7 @@ router.post('/', auth, authorize('manager'), async (req, res) => {
  */
 router.put('/:id', auth, authorize('manager'), async (req, res) => {
   try {
-    const { name, location, contactEmail, contactPhone, isActive, discordChannelId, placementTarget } = req.body;
+    const { name, location, contactEmail, contactPhone, isActive, discordChannelId, discordPocUserId, placementTarget } = req.body;
 
     const campus = await Campus.findById(req.params.id);
     if (!campus) {
@@ -166,6 +167,7 @@ router.put('/:id', auth, authorize('manager'), async (req, res) => {
     if (contactPhone) campus.contactPhone = contactPhone;
     if (isActive !== undefined) campus.isActive = isActive;
     if (discordChannelId !== undefined) campus.discordChannelId = discordChannelId;
+    if (discordPocUserId !== undefined) campus.discordPocUserId = discordPocUserId;
     if (placementTarget !== undefined) campus.placementTarget = Number(placementTarget);
 
     await campus.save();

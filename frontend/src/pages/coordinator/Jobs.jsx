@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { jobAPI, settingsAPI, applicationAPI, userAPI } from '../../services/api';
 import { LoadingSpinner, StatusBadge, Pagination, EmptyState, ConfirmModal, StatsCard } from '../../components/common/UIComponents';
-import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles, Link as LinkIcon, RefreshCw, IndianRupee, UserCheck } from 'lucide-react';
+import { Briefcase, Plus, Search, Edit, Trash2, MapPin, Calendar, Users, GraduationCap, Clock, LayoutGrid, List, Download, Settings, X, CheckCircle, XCircle, Pause, ChevronDown, ChevronUp, AlertCircle, Share2, Sparkles, Link as LinkIcon, RefreshCw, IndianRupee, UserCheck, MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import JobsKanban from './JobsKanban';
@@ -66,6 +66,9 @@ const CoordinatorJobs = () => {
   const [modalApplicants, setModalApplicants] = useState([]);
   const [modalApplicantsLoading, setModalApplicantsLoading] = useState(false);
   const [triageLoadingJobId, setTriageLoadingJobId] = useState(null);
+  const [messageModal, setMessageModal] = useState({ show: false, job: null, recipients: [], loading: false });
+  const [coordinatorMessage, setCoordinatorMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   // Sync pagination with sessionStorage and URL
   const updatePage = (newPage) => {
@@ -580,6 +583,50 @@ const CoordinatorJobs = () => {
     }
   };
 
+  const openMessageModal = async (job) => {
+    setMessageModal({ show: true, job, recipients: [], loading: true });
+    setCoordinatorMessage('');
+    try {
+      const response = await jobAPI.getMessageRecipients(job._id);
+      setMessageModal({ show: true, job, recipients: response.data.recipients || [], loading: false });
+    } catch (error) {
+      console.error('Failed to load job message recipients:', error);
+      toast.error(error.response?.data?.message || 'Failed to load message recipients');
+      setMessageModal({ show: false, job: null, recipients: [], loading: false });
+    }
+  };
+
+  const closeMessageModal = () => {
+    if (!sendingMessage) {
+      setMessageModal({ show: false, job: null, recipients: [], loading: false });
+      setCoordinatorMessage('');
+    }
+  };
+
+  const handleSendMessage = async () => {
+    const message = coordinatorMessage.trim();
+    if (!message) {
+      toast.error('Enter a message before sending.');
+      return;
+    }
+
+    setSendingMessage(true);
+    try {
+      const response = await jobAPI.sendMessage(messageModal.job._id, message);
+      const threadError = response.data.discord?.threadDelivery?.error;
+      toast.success(threadError
+        ? 'Message sent to available channels; the job thread was unavailable.'
+        : 'Message sent to Discord.');
+      setMessageModal({ show: false, job: null, recipients: [], loading: false });
+      setCoordinatorMessage('');
+    } catch (error) {
+      console.error('Failed to send job message:', error);
+      toast.error(error.response?.data?.message || 'Failed to send Discord message');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
   const handleStatusChange = async (jobId, newStatus) => {
     // statuses that should trigger applicant review modal
     const reviewStatuses = ['hr_shortlisting', 'interviewing', 'application_stage', 'filled'];
@@ -880,7 +927,7 @@ const CoordinatorJobs = () => {
       </div>
 
       {viewMode === 'kanban' ? (
-        <JobsKanban onExportJob={openExportModal} />
+        <JobsKanban onExportJob={openExportModal} onSendMessage={openMessageModal} />
       ) : (
         <>
       {/* Filters */}
@@ -1212,6 +1259,15 @@ const CoordinatorJobs = () => {
                           </button>
 
                           <button
+                            onClick={() => openMessageModal(job)}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-all shadow-sm text-[11px] font-bold"
+                            title="Send message to job participants"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            Send Message
+                          </button>
+
+                          <button
                             onClick={() => openExportModal(job._id, job.title)}
                             className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-gray-400 hover:text-green-600 hover:border-green-200 rounded-xl transition-all shadow-sm group"
                             title="Export Data"
@@ -1287,6 +1343,68 @@ const CoordinatorJobs = () => {
             />
           )}
         </>
+      )}
+
+      {messageModal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={closeMessageModal} />
+          <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Send Message</h2>
+                <p className="text-sm text-gray-500">
+                  Send an update for <span className="font-medium text-gray-700">{messageModal.job?.title}</span> to its current process participants.
+                </p>
+              </div>
+              <button onClick={closeMessageModal} disabled={sendingMessage} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close message dialog">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label htmlFor="coordinator-job-message" className="mb-1 block text-sm font-semibold text-gray-700">
+              Message
+            </label>
+            <textarea
+              id="coordinator-job-message"
+              value={coordinatorMessage}
+              onChange={(event) => setCoordinatorMessage(event.target.value)}
+              maxLength={1500}
+              rows={5}
+              placeholder="Share an update with the applicants..."
+              className="w-full resize-y rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              disabled={sendingMessage}
+            />
+            <p className="mt-1 text-right text-xs text-gray-400">{coordinatorMessage.length}/1500</p>
+
+            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-800">Recipients in the job process</h3>
+                {!messageModal.loading && <span className="text-xs text-gray-500">{messageModal.recipients.length} students</span>}
+              </div>
+              {messageModal.loading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500"><LoadingSpinner /> Loading recipients...</div>
+              ) : messageModal.recipients.length > 0 ? (
+                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                  {messageModal.recipients.map((recipient) => (
+                    <div key={recipient.applicationId} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm">
+                      <span className="font-medium text-gray-800">{recipient.name}</span>
+                      <span className="text-xs text-gray-500">{recipient.campus} · {recipient.status.replace(/_/g, ' ')}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No active process participants are available for this job.</p>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={closeMessageModal} disabled={sendingMessage} className="btn btn-secondary">Cancel</button>
+              <button onClick={handleSendMessage} disabled={sendingMessage || messageModal.loading} className="btn btn-primary">
+                {sendingMessage ? 'Sending...' : 'Send Message'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <ApplicantTriageModal

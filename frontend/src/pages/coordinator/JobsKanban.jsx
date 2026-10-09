@@ -20,7 +20,8 @@ import {
   X,
   EyeOff,
   Download,
-  UserCheck
+  UserCheck,
+  MessageSquare
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -38,7 +39,7 @@ const STAGE_COLORS = {
 };
 
 // Job Card component for Kanban
-const JobCard = ({ job, index, onExportJob }) => {
+const JobCard = ({ job, index, onExportJob, onSendMessage }) => {
   const formatSalary = (salary) => {
     if (!salary) return null;
     if (typeof salary === 'string') return salary;
@@ -130,7 +131,7 @@ const JobCard = ({ job, index, onExportJob }) => {
           </div>
 
           {/* Actions */}
-          <div className="grid grid-cols-3 gap-1 mt-3 pt-2 border-t border-gray-100">
+          <div className="grid grid-cols-2 gap-1 mt-3 pt-2 border-t border-gray-100">
             <Link
               to={`/coordinator/jobs/${job._id}`}
               className="flex items-center justify-center gap-1 text-xs text-gray-600 hover:text-primary-600 py-1.5 rounded hover:bg-gray-50 transition-colors"
@@ -148,6 +149,16 @@ const JobCard = ({ job, index, onExportJob }) => {
                 Export
               </button>
             )}
+            {onSendMessage && (
+              <button
+                onClick={() => onSendMessage(job)}
+                className="flex items-center justify-center gap-1 text-xs text-gray-600 hover:text-blue-600 py-1.5 rounded hover:bg-gray-50 transition-colors"
+                title="Send message to job participants"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Message
+              </button>
+            )}
             <Link
               to={`/coordinator/jobs/${job._id}/edit`}
               className="flex items-center justify-center gap-1 text-xs text-gray-600 hover:text-primary-600 py-1.5 rounded hover:bg-gray-50 transition-colors"
@@ -163,7 +174,7 @@ const JobCard = ({ job, index, onExportJob }) => {
 };
 
 // Kanban Column component
-const KanbanColumn = ({ stage, jobs, onEditStage, onExportJob }) => {
+const KanbanColumn = ({ stage, jobs, onEditStage, onExportJob, onSendMessage }) => {
   const colorConfig = STAGE_COLORS[stage.color] || STAGE_COLORS.gray;
 
   return (
@@ -209,7 +220,7 @@ const KanbanColumn = ({ stage, jobs, onEditStage, onExportJob }) => {
               </div>
             ) : (
               jobs.map((job, index) => (
-                <JobCard key={job._id} job={job} index={index} onExportJob={onExportJob} />
+                <JobCard key={job._id} job={job} index={index} onExportJob={onExportJob} onSendMessage={onSendMessage} />
               ))
             )}
             {provided.placeholder}
@@ -512,7 +523,7 @@ const StageManagementModal = ({ isOpen, onClose, stages, onSave }) => {
 };
 
 // Main Kanban Board component
-const JobsKanban = ({ onExportJob }) => {
+const JobsKanban = ({ onExportJob, onSendMessage }) => {
   const [jobs, setJobs] = useState([]);
   const [stages, setStages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -796,6 +807,7 @@ const JobsKanban = ({ onExportJob }) => {
               jobs={jobsByStatus[stage.id] || []}
               onEditStage={handleEditStage}
               onExportJob={onExportJob}
+              onSendMessage={onSendMessage}
             />
           ))}
         </div>
@@ -809,6 +821,7 @@ const JobsKanban = ({ onExportJob }) => {
               jobs={jobsByStatus[stage.id] || []}
               onEditStage={handleEditStage}
               onExportJob={onExportJob}
+              onSendMessage={onSendMessage}
             />
           ))}
         </div>

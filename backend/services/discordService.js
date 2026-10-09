@@ -1,6 +1,8 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ChannelType } = require('discord.js');
 const Settings = require('../models/Settings');
 const InterestRequest = require('../models/InterestRequest');
+const User = require('../models/User');
+const Campus = require('../models/Campus');
 
 const DIGEST_TIMEZONE = process.env.INTEREST_REQUEST_REMINDER_TIMEZONE || 'Asia/Kolkata';
 
@@ -109,6 +111,186 @@ class DiscordService {
         return this.isReady;
     }
 
+    isValidDiscordUserId(userId) {
+        return typeof userId === 'string' && /^\d{17,19}$/.test(userId);
+    }
+
+    async resolveCampusPoc(campus) {
+        if (!campus?._id) return null;
+
+        const campusId = campus._id;
+        const query = campus.discordPocUserId
+            ? { _id: campus.discordPocUserId, role: 'campus_poc', isActive: true }
+            : {
+            role: 'campus_poc',
+            isActive: true,
+            $or: [
+                { campus: campusId },
+                { managedCampuses: campusId }
+            ],
+            'discord.userId': { $regex: /^\d{17,19}$/ }
+        };
+        const poc = await User.findOne(query).select('firstName lastName discord.userId').lean();
+
+        if (!poc || !this.isValidDiscordUserId(poc.discord?.userId)) {
+            console.warn(`No configured Discord POC found for campus ${campus.name || campusId}`);
+            return null;
+        }
+        return poc;
+    }
+
+    async getCampus(campus) {
+        if (!campus) return null;
+        if (typeof campus === 'object' && campus._id) {
+            return campus.discordChannelId !== undefined ? campus : Campus.findById(campus._id).lean();
+        }
+        return Campus.findById(campus).lean();
+    }
+
+    async getNotificationContext(campus) {
+        const resolvedCampus = await this.getCampus(campus);
+        const poc = await this.resolveCampusPoc(resolvedCampus);
+        const pocMention = poc ? `<@${poc.discord.userId}>` : '';
+        return { campus: resolvedCampus, poc, pocMention };
+    }
+
+    async sendToChannels(channelIds, payload) {
+        const uniqueChannelIds = [...new Set(channelIds.filter(Boolean))];
+        const { pocUserId, mentionUserIds = [], ...messagePayload } = payload;
+        const allowedUserIds = [...new Set([pocUserId, ...mentionUserIds].filter((userId) => this.isValidDiscordUserId(userId)))];
+        const results = [];
+
+        for (const channelId of uniqueChannelIds) {
+            try {
+                const channel = await this.client.channels.fetch(channelId);
+                if (!channel) throw new Error(`Channel ${channelId} not found`);
+                const message = await channel.send({
+                    ...messagePayload,
+                    allowedMentions: messagePayload.allowedMentions || {
+                        parse: [],
+                        users: allowedUserIds
+                    }
+                });
+                results.push({ channelId: channel.id, messageId: message.id });
+            } catch (error) {
+                console.error(`Discord delivery failed for channel ${channelId}:`, error);
+                results.push({ channelId, error: error.message });
+            }
+        }
+
+        return results;
+    }
+
+    async getConfiguredChannels(settings, type, campus) {
+        const mainChannel = settings.discordConfig?.channels?.[type]
+            || settings.discordConfig?.channels?.general
+            || settings.discordConfig?.channels?.applicationUpdates;
+        const campusChannel = campus?.discordChannelId;
+        if (!mainChannel && !campusChannel) {
+            console.warn(`No Discord channel configured for ${type}${campus?.name ? ` (${campus.name})` : ''}`);
+        }
+        return [...new Set([mainChannel, campusChannel].filter(Boolean))];
+    }
+
+    buildMentionChunks(userIds, prefix = '') {
+        const mentions = [...new Set(userIds.filter((userId) => this.isValidDiscordUserId(userId)))]
+            .map((userId) => `<@${userId}>`);
+        const chunks = [];
+        let currentChunk = prefix;
+
+        for (const mention of mentions) {
+            const nextChunk = currentChunk ? `${currentChunk} ${mention}` : mention;
+            if (nextChunk.length > 2000 && currentChunk) {
+                chunks.push(currentChunk);
+                currentChunk = mention;
+            } else {
+                currentChunk = nextChunk;
+            }
+        }
+
+        if (currentChunk || chunks.length === 0) chunks.push(currentChunk);
+        return chunks;
+    }
+
+    async sendCoordinatorMessage(job, coordinator, students, messageText) {
+        try {
+            const ready = await this.ensureReady();
+            if (!ready) {
+                return { error: 'Discord bot is not ready', deliveries: [] };
+            }
+
+            const settings = await Settings.getSettings();
+            const uniqueStudents = Array.from(
+                new Map((students || []).filter((student) => student?._id).map((student) => [String(student._id), student])).values()
+            );
+            const studentDiscordIds = uniqueStudents.map((student) => student.discord?.userId);
+            const campusesById = new Map();
+            for (const student of uniqueStudents) {
+                const campus = student.campus;
+                const campusId = campus?._id || campus;
+                if (campusId) campusesById.set(String(campusId), campus);
+            }
+            const campuses = await Promise.all(
+                [...campusesById.values()].map((campus) => this.getCampus(campus))
+            );
+            const channelIds = [
+                job.discordThreadId,
+                settings.discordConfig?.channels?.general,
+                ...campuses.map((campus) => campus?.discordChannelId)
+            ].filter(Boolean);
+            const uniqueChannelIds = [...new Set(channelIds)];
+            if (uniqueChannelIds.length === 0) {
+                return { error: 'No Discord destinations are configured for this job', deliveries: [] };
+            }
+            const mentionChunks = this.buildMentionChunks(studentDiscordIds);
+            const coordinatorName = `${coordinator.firstName} ${coordinator.lastName}`.trim() || 'Coordinator';
+            const embed = new EmbedBuilder()
+                .setColor('#3b82f6')
+                .setTitle(`💬 Coordinator Update: ${job.title}`)
+                .setDescription(messageText)
+                .addFields(
+                    { name: '🏢 Company', value: job.company?.name || 'Not specified', inline: true },
+                    { name: '👤 Coordinator', value: coordinatorName, inline: true },
+                    { name: '👥 Process Participants', value: String(uniqueStudents.length), inline: true }
+                )
+                .setTimestamp();
+
+            const deliveries = [];
+            for (const channelId of uniqueChannelIds) {
+                try {
+                    const channel = await this.client.channels.fetch(channelId);
+                    if (!channel) throw new Error('Channel not found');
+
+                    for (let index = 0; index < mentionChunks.length; index += 1) {
+                        const content = mentionChunks[index];
+                        const mentionedUserIds = [...content.matchAll(/<@(\d{17,19})>/g)].map((match) => match[1]);
+                        const message = await channel.send({
+                            content,
+                            embeds: index === 0 ? [embed] : [],
+                            allowedMentions: { parse: [], users: mentionedUserIds }
+                        });
+                        deliveries.push({ channelId: channel.id, messageId: message.id });
+                    }
+                } catch (error) {
+                    console.error(`Discord coordinator message failed for channel ${channelId}:`, error);
+                    deliveries.push({ channelId, error: error.message });
+                }
+            }
+
+            const threadDelivery = job.discordThreadId
+                ? deliveries.find((delivery) => delivery.channelId === job.discordThreadId)
+                : { channelId: null, error: 'Job has no Discord thread configured' };
+            return {
+                deliveries,
+                threadDelivery,
+                recipientCount: uniqueStudents.length
+            };
+        } catch (error) {
+            console.error('Error sending coordinator Discord message:', error);
+            return { error: error.message, deliveries: [] };
+        }
+    }
+
     /**
      * Send a new job posting notification
      * @param {Object} job - Job document
@@ -124,6 +306,16 @@ class DiscordService {
             }
 
             const settings = await Settings.getSettings();
+            const jobCampus = job.eligibility?.campuses?.length === 1
+                ? await this.getCampus(job.eligibility.campuses[0])
+                : null;
+            const campusContext = await this.getNotificationContext(jobCampus);
+            const jobCampuses = job.eligibility?.campuses?.length > 1
+                ? await Promise.all(job.eligibility.campuses.map((campus) => this.getCampus(campus)))
+                : [];
+            const campusContexts = jobCampuses.length > 0
+                ? await Promise.all(jobCampuses.map((campus) => this.getNotificationContext(campus)))
+                : [campusContext];
 
             // Priority: Campus-specific channel (if job is for a single campus)
             let channelId = null;
@@ -131,7 +323,7 @@ class DiscordService {
             const jobPostingsChannel = settings.discordConfig?.channels?.jobPostings;
 
             if (job.eligibility?.campuses?.length === 1) {
-                const campus = job.eligibility.campuses[0];
+                const campus = campusContext.campus;
                 // campus may be a populated object or just an id; prefer campus.discordChannelId when available
                 const campusChannelId = campus?.discordChannelId || null;
                 if (campusChannelId) {
@@ -192,6 +384,8 @@ class DiscordService {
                 .setDescription(job.description.substring(0, 300) + (job.description.length > 300 ? '...' : ''))
                 .addFields(
                     { name: '🏢 Company', value: job.company.name, inline: true },
+                    { name: '🎓 Campus', value: campusContext.campus?.name || 'All campuses', inline: true },
+                    { name: '🏷️ Campus POC', value: campusContexts.map((context) => context.pocMention).filter(Boolean).join(' ') || 'Not configured', inline: true },
                     { name: '📍 Location', value: job.location || 'Not specified', inline: true },
                     { name: '💼 Type', value: job.jobType.replace('_', ' ').toUpperCase(), inline: true },
                     { name: '💰 Salary', value: salaryText, inline: true },
@@ -201,8 +395,27 @@ class DiscordService {
                 .setTimestamp()
                 .setFooter({ text: `Posted by ${coordinator.firstName} ${coordinator.lastName}` });
 
-            // Send message
-            const message = await channel.send({ embeds: [embed] });
+            const pocMentions = campusContexts.map((context) => context.pocMention).filter(Boolean);
+            const pocUserIds = campusContexts.map((context) => context.poc?.discord?.userId);
+            const content = pocMentions.join(' ');
+            const message = await channel.send({
+                content,
+                embeds: [embed],
+                allowedMentions: {
+                    parse: [],
+                    users: pocUserIds.filter((userId) => this.isValidDiscordUserId(userId))
+                }
+            });
+
+            const broadcastChannel = generalChannel || jobPostingsChannel;
+            const campusChannelIds = campusContexts.map((context) => context.campus?.discordChannelId);
+            const additionalChannels = [broadcastChannel, ...campusChannelIds]
+                .filter((targetChannelId) => targetChannelId && targetChannelId !== channelId);
+            const additionalDeliveries = await this.sendToChannels(additionalChannels, {
+                content,
+                embeds: [embed],
+                mentionUserIds: pocUserIds
+            });
 
             // Create thread if enabled
             let thread = null;
@@ -223,7 +436,11 @@ class DiscordService {
             return {
                 messageId: message.id,
                 channelId: channel.id,
-                threadId: thread?.id
+                threadId: thread?.id,
+                deliveries: [
+                    { channelId: channel.id, messageId: message.id },
+                    ...additionalDeliveries
+                ]
             };
         } catch (error) {
             console.error('Error sending job posting to Discord:', error);
@@ -244,35 +461,9 @@ class DiscordService {
             if (!ready) return null;
 
             const settings = await Settings.getSettings();
-            let channel = null;
-
-            // Priority: Job Thread > Configured Channel
-            if (job.discordThreadId) {
-                try {
-                    channel = await this.client.channels.fetch(job.discordThreadId);
-                    if (!channel) throw new Error('Thread not found');
-                } catch (e) {
-                    console.warn(`Failed to fetch job thread ${job.discordThreadId}, falling back to channel`);
-                }
-            }
-
-            if (!channel) {
-                // Priority: Campus-specific channel (Mandatory for campus-specific updates)
-                let channelId = null;
-                if (student.campus?.discordChannelId) {
-                    channelId = student.campus.discordChannelId;
-                    console.log(`Using campus-specific channel ${channelId} for application update`);
-                } else if (settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general) {
-                    channelId = settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general;
-                    console.log(`Application update for student with no campus Discord channel. Falling back to global channel.`);
-                } else {
-                    console.log(`Application update for student with no campus Discord channel and no fallback. Skipping notification.`);
-                    return null;
-                }
-
-                channel = await this.client.channels.fetch(channelId);
-                if (!channel) throw new Error('Application updates channel not found');
-            }
+            const context = await this.getNotificationContext(student.campus);
+            const channelIds = await this.getConfiguredChannels(settings, 'applicationUpdates', context.campus);
+            if (job.discordThreadId) channelIds.unshift(job.discordThreadId);
 
             const statusEmoji = {
                 applied: '📝',
@@ -299,9 +490,11 @@ class DiscordService {
                 .setTitle(`${statusEmoji[application.status]} Application Update`)
                 .setDescription(`**${student.firstName} ${student.lastName}**'s application status changed`)
                 .addFields(
+                    { name: '🎓 Campus', value: context.campus?.name || 'N/A', inline: true },
                     { name: '💼 Job', value: job.title, inline: true },
                     { name: '🏢 Company', value: job.company.name, inline: true },
                     { name: '📊 New Status', value: application.status.replace('_', ' ').toUpperCase(), inline: true },
+                    { name: '👤 Campus POC', value: context.pocMention || 'Not configured', inline: true },
                     { name: '👤 Updated By', value: `${updatedBy.firstName} ${updatedBy.lastName}`, inline: true }
                 )
                 .setTimestamp();
@@ -311,18 +504,19 @@ class DiscordService {
                 embed.addFields({ name: '💬 Feedback', value: application.feedback.substring(0, 1024) });
             }
 
-            // Mention student if they have Discord ID and mentions are enabled
-            let content = '';
-            if (settings.discordConfig?.mentionUsers && student.discord?.userId) {
-                content = `<@${student.discord.userId}>`;
+            const mentions = [context.pocMention];
+            if (settings.discordConfig?.mentionUsers && this.isValidDiscordUserId(student.discord?.userId)) {
+                mentions.push(`<@${student.discord.userId}>`);
             }
-
-            const message = await channel.send({ content, embeds: [embed] });
-
-            return {
-                messageId: message.id,
-                channelId: channel.id
-            };
+            const results = await this.sendToChannels(channelIds, {
+                content: mentions.filter(Boolean).join(' '),
+                embeds: [embed],
+                mentionUserIds: [
+                    context.poc?.discord?.userId,
+                    settings.discordConfig?.mentionUsers ? student.discord?.userId : null
+                ]
+            });
+            return { deliveries: results, messageId: results.find(result => result.messageId)?.messageId };
         } catch (error) {
             console.error('Error sending application update to Discord:', error);
             return { error: error.message };
@@ -335,17 +529,8 @@ class DiscordService {
             if (!ready) return null;
 
             const settings = await Settings.getSettings();
-            const campusChannelId = student.campus?.discordChannelId;
-            const fallbackChannelId = settings.discordConfig?.channels?.general || settings.discordConfig?.channels?.applicationUpdates || '';
-            const channelId = campusChannelId || fallbackChannelId;
-
-            if (!channelId) {
-                console.log('Interest request created but no Discord channel is configured for the student campus');
-                return null;
-            }
-
-            const channel = await this.client.channels.fetch(channelId);
-            if (!channel) throw new Error('Interest request channel not found');
+            const context = await this.getNotificationContext(student.campus);
+            const channelIds = await this.getConfiguredChannels(settings, 'applicationUpdates', context.campus);
 
             const applyLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/campus-poc/interest-requests/${interestRequest._id}`;
             const reasons = (interestRequest.reason || '').trim();
@@ -359,7 +544,8 @@ class DiscordService {
                 .setURL(applyLink)
                 .setDescription(`**${student.firstName} ${student.lastName}** wants to apply for **${job.title}** at **${job.company?.name || 'Unknown Company'}**.`)
                 .addFields(
-                    { name: '🎓 Campus', value: student.campus?.name || 'N/A', inline: true },
+                    { name: '🎓 Campus', value: context.campus?.name || 'N/A', inline: true },
+                    { name: '🏷️ Campus POC', value: context.pocMention || 'Not configured', inline: true },
                     { name: '📊 Match', value: `${interestRequest.matchDetails?.overallPercentage || 0}%`, inline: true },
                     { name: '📝 Gaps', value: gapText.substring(0, 1024), inline: false },
                     { name: '💬 Reason', value: reasons ? reasons.substring(0, 1024) : 'No reason provided', inline: false },
@@ -367,12 +553,19 @@ class DiscordService {
                 )
                 .setTimestamp();
 
-            const content = settings.discordConfig?.mentionUsers && student.discord?.userId
-                ? `<@${student.discord.userId}>`
-                : '';
-
-            const message = await channel.send({ content, embeds: [embed] });
-            return { messageId: message.id, channelId: channel.id };
+            const mentions = [context.pocMention];
+            if (settings.discordConfig?.mentionUsers && this.isValidDiscordUserId(student.discord?.userId)) {
+                mentions.push(`<@${student.discord.userId}>`);
+            }
+            const results = await this.sendToChannels(channelIds, {
+                content: mentions.filter(Boolean).join(' '),
+                embeds: [embed],
+                mentionUserIds: [
+                    context.poc?.discord?.userId,
+                    settings.discordConfig?.mentionUsers ? student.discord?.userId : null
+                ]
+            });
+            return { deliveries: results, messageId: results.find(result => result.messageId)?.messageId };
         } catch (error) {
             console.error('Error sending interest request Discord notification:', error);
             return { error: error.message };
@@ -496,20 +689,8 @@ class DiscordService {
             const settings = await Settings.getSettings();
 
 
-            // Prioritize Campus specific channel (Mandatory)
-            let channelId = null;
-            if (student.campus?.discordChannelId) {
-                channelId = student.campus.discordChannelId;
-            } else if (settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general) {
-                channelId = settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general;
-                console.log(`Profile update for student with no campus Discord channel. Falling back to global channel.`);
-            } else {
-                console.log(`Profile update for student with no campus Discord channel and no fallback. Skipping notification.`);
-                return null;
-            }
-
-            const channel = await this.client.channels.fetch(channelId);
-            if (!channel) throw new Error('Profile updates channel not found');
+            const context = await this.getNotificationContext(student.campus);
+            const channelIds = await this.getConfiguredChannels(settings, 'profileUpdates', context.campus);
 
             const typeConfig = {
                 approved: { emoji: '✅', color: '#10b981', title: 'Profile Approved' },
@@ -524,7 +705,8 @@ class DiscordService {
                 .setTitle(`${config.emoji} ${config.title}`)
                 .setDescription(`**${student.firstName} ${student.lastName}**'s profile has been updated`)
                 .addFields(
-                    { name: '🎓 Campus', value: student.campus?.name || 'N/A', inline: true },
+                    { name: '🎓 Campus', value: context.campus?.name || 'N/A', inline: true },
+                    { name: '🏷️ Campus POC', value: context.pocMention || 'Not configured', inline: true },
                     { name: '👤 Updated By', value: `${updatedBy.firstName} ${updatedBy.lastName}`, inline: true }
                 )
                 .setTimestamp();
@@ -534,18 +716,16 @@ class DiscordService {
                 embed.addFields({ name: '📋 Notes', value: student.studentProfile.revisionNotes.substring(0, 1024) });
             }
 
-            // Mention student if they have Discord ID
-            let content = '';
-            if (settings.discordConfig?.mentionUsers && student.discord?.userId) {
-                content = `<@${student.discord.userId}>`;
+            const mentions = [context.pocMention];
+            if (settings.discordConfig?.mentionUsers && this.isValidDiscordUserId(student.discord?.userId)) {
+                mentions.push(`<@${student.discord.userId}>`);
             }
-
-            const message = await channel.send({ content, embeds: [embed] });
-
-            return {
-                messageId: message.id,
-                channelId: channel.id
-            };
+            const results = await this.sendToChannels(channelIds, {
+                content: mentions.filter(Boolean).join(' '),
+                embeds: [embed],
+                pocUserId: context.poc?.discord?.userId
+            });
+            return { deliveries: results, messageId: results.find(result => result.messageId)?.messageId };
         } catch (error) {
             console.error('Error sending profile update to Discord:', error);
             return { error: error.message };
@@ -632,7 +812,16 @@ class DiscordService {
                 return next.length <= 2000 ? next : result;
             }, '');
 
-            const message = await channel.send({ content, embeds: [embed] });
+            const allowedUserIds = [...new Set(
+                uniqueStudents
+                    .map((student) => student.discordUserId)
+                    .filter((userId) => this.isValidDiscordUserId(userId))
+            )];
+            const message = await channel.send({
+                content,
+                embeds: [embed],
+                allowedMentions: { parse: [], users: allowedUserIds }
+            });
 
             return {
                 messageId: message.id,
@@ -777,11 +966,12 @@ class DiscordService {
             if (!ready) return null;
 
             const settings = await Settings.getSettings();
+            const context = await this.getNotificationContext(student.campus);
             let channelId = null;
 
             // Prioritize campus-specific channel (Mandatory for self-applications)
-            if (student.campus?.discordChannelId) {
-                channelId = student.campus.discordChannelId;
+            if (context.campus?.discordChannelId) {
+                channelId = context.campus.discordChannelId;
             } else if (settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general) {
                 channelId = settings.discordConfig?.channels?.jobPostings || settings.discordConfig?.channels?.general;
                 console.log(`Self-application for student with no campus Discord channel. Falling back to global channel.`);
@@ -798,13 +988,28 @@ class DiscordService {
                 .setTitle(`🏠 New Self-Application: ${selfApplication.jobTitle}`)
                 .setDescription(`**${student.firstName} ${student.lastName}** applied externally`)
                 .addFields(
+                    { name: '🎓 Campus', value: context.campus?.name || 'N/A', inline: true },
+                    { name: '🏷️ Campus POC', value: context.pocMention || 'Not configured', inline: true },
                     { name: '🏢 Company', value: selfApplication.company.name, inline: true },
                     { name: '📍 Location', value: selfApplication.location || 'N/A', inline: true },
                     { name: '📅 Date', value: new Date(selfApplication.applicationDate).toLocaleDateString('en-IN'), inline: true }
                 )
                 .setTimestamp();
 
-            const message = await channel.send({ embeds: [embed] });
+            const message = await channel.send({
+                content: context.pocMention,
+                embeds: [embed],
+                allowedMentions: {
+                    parse: [],
+                    users: context.poc?.discord?.userId ? [context.poc.discord.userId] : []
+                }
+            });
+            const mainChannel = settings.discordConfig?.channels?.jobPostings
+                || settings.discordConfig?.channels?.general;
+            const additionalDeliveries = await this.sendToChannels(
+                [mainChannel === channelId ? null : mainChannel],
+                { content: context.pocMention, embeds: [embed], pocUserId: context.poc?.discord?.userId }
+            );
 
             let threadId = null;
             if (settings.discordConfig?.useThreads) {
@@ -820,7 +1025,8 @@ class DiscordService {
             return {
                 messageId: message.id,
                 channelId: channel.id,
-                threadId
+                threadId,
+                deliveries: [{ channelId: channel.id, messageId: message.id }, ...additionalDeliveries]
             };
         } catch (error) {
             console.error('Error sending self-application to Discord:', error);
@@ -837,6 +1043,7 @@ class DiscordService {
             if (!ready) return null;
 
             const settings = await Settings.getSettings();
+            const context = await this.getNotificationContext(student.campus);
             let channel = null;
 
             if (selfApplication.discordThreadId) {
@@ -848,7 +1055,7 @@ class DiscordService {
             }
 
             if (!channel) {
-                let channelId = student.campus?.discordChannelId;
+                let channelId = context.campus?.discordChannelId;
                 if (!channelId) {
                     channelId = settings.discordConfig?.channels?.applicationUpdates || settings.discordConfig?.channels?.general;
                 }
@@ -880,6 +1087,8 @@ class DiscordService {
                 .setTitle(`${statusEmoji[selfApplication.status] || '🔔'} Status Update: ${selfApplication.status.replace('_', ' ').toUpperCase()}`)
                 .setDescription(`**${student.firstName} ${student.lastName}**'s external application to **${selfApplication.company.name}** has changed.`)
                 .addFields(
+                    { name: '🎓 Campus', value: context.campus?.name || 'N/A', inline: true },
+                    { name: '🏷️ Campus POC', value: context.pocMention || 'Not configured', inline: true },
                     { name: '💼 Position', value: selfApplication.jobTitle, inline: true },
                     { name: '👤 Updated By', value: `${updatedBy.firstName} ${updatedBy.lastName}`, inline: true }
                 )
@@ -889,8 +1098,22 @@ class DiscordService {
                 embed.addFields({ name: '💬 Notes', value: selfApplication.notes.substring(0, 500) });
             }
 
-            const message = await channel.send({ embeds: [embed] });
-            return { messageId: message.id };
+            const message = await channel.send({
+                content: context.pocMention,
+                embeds: [embed],
+                allowedMentions: {
+                    parse: [],
+                    users: context.poc?.discord?.userId ? [context.poc.discord.userId] : []
+                }
+            });
+            const mainChannel = settings.discordConfig?.channels?.applicationUpdates
+                || settings.discordConfig?.channels?.general;
+            const additionalDeliveries = await this.sendToChannels(
+                [context.campus?.discordChannelId, mainChannel]
+                    .filter((channelId) => channelId && channelId !== channel.id),
+                { content: context.pocMention, embeds: [embed], pocUserId: context.poc?.discord?.userId }
+            );
+            return { messageId: message.id, deliveries: [{ channelId: channel.id, messageId: message.id }, ...additionalDeliveries] };
         } catch (error) {
             console.error('Error sending self-app update to Discord:', error);
             return null;

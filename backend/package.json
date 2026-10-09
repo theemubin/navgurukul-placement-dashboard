@@ -11,6 +11,7 @@
     "seed": "node seed.js",
     "automation:assign-long-term": "node scripts/assign-long-term-students.js",
     "test": "node tests/run_ats_tests.js",
+    "test:discord": "node tests/discord_notifications.test.js",
     "migrate:skill-ids": "node scripts/migrate_skill_ids.js",
     "migrate:skill-ids:dry": "node scripts/migrate_skill_ids.js --dry-run",
     "migrate:skills:normalized": "node scripts/backfill_normalized_skill_name.js"

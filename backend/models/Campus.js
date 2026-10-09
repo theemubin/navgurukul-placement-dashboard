@@ -28,6 +28,11 @@ const campusSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  discordPocUserId: {
+    type: String,
+    default: '',
+    trim: true
+  },
   placementTarget: {
     type: Number,
     default: 0

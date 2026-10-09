@@ -53,6 +53,20 @@ If you want notifications for specific campuses (e.g., "Pune Campus Profile Appr
 5.  Paste the **Channel ID** into the notification field.
 6.  Click **Save**.
 
+Each campus can also have a designated Campus POC Discord user ID. Set
+`discordPocUserId` on the campus through the manager campus API (or the
+deployment configuration workflow). The ID must be the 17-19 digit Discord
+user ID, not a username. If it is not set, the bot selects an active
+`campus_poc` user whose `campus` or `managedCampuses` contains that campus and
+who has a valid linked Discord ID.
+
+Student-related notifications are sent to both the configured global channel
+and the campus channel when both exist. The POC mention is included in message
+content and Discord `allowedMentions` is restricted to that configured user.
+If either mapping is missing, the notification falls back to the available
+global channel and logs the missing configuration without failing the
+underlying workflow.
+
 ## 6. Job Threading Features
 The system uses Discord Threads to keep updates organized.
 *   **Automatic**: When a new job is posted, the bot creates a thread under the job posting. All status updates for that job are sent to that thread.

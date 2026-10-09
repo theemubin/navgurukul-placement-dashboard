@@ -656,11 +656,14 @@ router.put('/:id/status', auth, authorize('coordinator', 'manager'), async (req,
       }
     }
 
-    // Send to Discord (wrapped in try-catch to avoid failing status update on Discord errors)
-    try {
-      await discordService.sendApplicationUpdate(application, application.job, application.student, req.user);
-    } catch (discordErr) {
-      console.error('Discord application update error:', discordErr.message || discordErr);
+    // Send only for an actual transition; retries of the same API call must not
+    // create duplicate Discord notifications.
+    if (prevStatus !== status) {
+      try {
+        await discordService.sendApplicationUpdate(application, application.job, application.student, req.user);
+      } catch (discordErr) {
+        console.error('Discord application update error:', discordErr.message || discordErr);
+      }
     }
 
     await invalidateCache(['cache:jobs:*', 'cache:stats:*', 'cache:analytics:*']);

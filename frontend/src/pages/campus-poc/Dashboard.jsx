@@ -180,7 +180,10 @@ const POCDashboard = () => {
   const [allCampuses, setAllCampuses] = useState([]);
   const [managedCampuses, setManagedCampuses] = useState([]);
   const [selectedCampuses, setSelectedCampuses] = useState([]);
+  const [discordUserId, setDiscordUserId] = useState(user?.discord?.userId || '');
   const [savingCampuses, setSavingCampuses] = useState(false);
+  const [campusSettingsErrors, setCampusSettingsErrors] = useState({});
+  const [campusSetupRequired, setCampusSetupRequired] = useState(false);
   // Eligible students modal state
   const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ isOpen: false, job: null, students: [], loading: false, total: 0, applied: 0, notApplied: 0 });
   const [studentFilter, setStudentFilter] = useState('all'); // 'all', 'applied', 'not-applied'
@@ -193,8 +196,10 @@ const POCDashboard = () => {
   }, [cycles]);
 
   useEffect(() => {
-    fetchCampusData();
-  }, []);
+    if (user?.role === 'campus_poc') {
+      fetchCampusData();
+    }
+  }, [user?._id, user?.role]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -212,19 +217,48 @@ const POCDashboard = () => {
       ]);
       setAllCampuses(campusesRes.data);
       const managed = managedRes.data.managedCampuses || [];
+      const configuredDiscordUserId = managedRes.data.discord?.userId || user?.discord?.userId || '';
+      const hasValidDiscordUserId = /^\d{17,19}$/.test(configuredDiscordUserId);
+
       setManagedCampuses(managed);
       setSelectedCampuses(managed.map(c => c._id));
+      setDiscordUserId(configuredDiscordUserId);
+      setCampusSetupRequired(managed.length === 0 || !hasValidDiscordUserId);
+      setShowCampusModal(managed.length === 0 || !hasValidDiscordUserId);
+      setCampusSettingsErrors({});
     } catch (error) {
       console.error('Error fetching campus data:', error);
+      toast.error(error.response?.data?.message || 'Failed to load campus settings');
     }
   };
 
   const handleUpdateManagedCampuses = async (campusIds) => {
-    setSavingCampuses(true); // Assuming this is still relevant for the new function
+    const normalizedDiscordUserId = discordUserId.trim();
+    const validationErrors = {};
+    if (campusIds.length === 0) {
+      validationErrors.campuses = 'Select at least one campus before saving.';
+    }
+    if (!normalizedDiscordUserId) {
+      validationErrors.discordUserId = 'Enter your Discord user ID before saving.';
+    } else if (!/^\d{17,19}$/.test(normalizedDiscordUserId)) {
+      validationErrors.discordUserId = 'Enter a valid 17-19 digit Discord user ID.';
+    }
+    if (Object.keys(validationErrors).length > 0) {
+      setCampusSettingsErrors(validationErrors);
+      return;
+    }
+
+    setCampusSettingsErrors({});
+    setSavingCampuses(true);
     try {
-      await userAPI.updateManagedCampuses(campusIds);
-      toast.success('Managed campuses updated');
-      setShowCampusModal(false); // Changed from setShowCampusSelector to setShowCampusModal
+      const response = await userAPI.updateManagedCampuses(campusIds, normalizedDiscordUserId);
+      updateUser({
+        discord: response.data.discord,
+        managedCampuses: response.data.managedCampuses
+      });
+      toast.success('Campus and Discord settings updated');
+      setCampusSetupRequired(false);
+      setShowCampusModal(false);
       fetchCampusData();
       fetchDashboardData(true);
     } catch (error) {
@@ -270,6 +304,7 @@ const POCDashboard = () => {
         ? prev.filter(id => id !== campusId)
         : [...prev, campusId]
     );
+    setCampusSettingsErrors(prev => ({ ...prev, campuses: undefined }));
   };
   const fetchDashboardData = async (forceRefresh = false) => {
     setStatsLoading(true);
@@ -544,7 +579,7 @@ const POCDashboard = () => {
               <span className="font-bold text-gray-700">None Selected</span>
             )}
             <button onClick={() => setShowCampusModal(true)} className="text-primary-600 hover:underline flex items-center gap-1 font-bold ml-1">
-              <Settings className="w-3 h-3" /> Change
+              <Settings className="w-3 h-3" /> Campus Settings
             </button>
           </div>
         </div>
@@ -629,19 +664,32 @@ const POCDashboard = () => {
       </div>
 
 
-      {/* Campus Selection Modal */}
+      {/* Campus and Discord Settings Modal */}
       {showCampusModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="campus-settings-title">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-4">Select Campuses to Manage</h2>
+            <h2 id="campus-settings-title" className="text-lg font-semibold mb-2">Campus Settings</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Choose the campuses you want to manage. You will see students and approve profiles from these campuses.
+              Select the campuses you manage and enter your Discord user ID to receive campus notifications.
             </p>
+            {campusSetupRequired && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                Complete both required settings to continue using the Campus PoC dashboard.
+              </div>
+            )}
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Campuses <span className="text-red-600">*</span></span>
+              {campusSettingsErrors.campuses && (
+                <span className="text-xs font-medium text-red-600">{campusSettingsErrors.campuses}</span>
+              )}
+            </div>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {allCampuses.map(campus => (
                 <label
                   key={campus._id}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedCampuses.includes(campus._id)
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${campusSettingsErrors.campuses
+                    ? 'border-red-400 bg-red-50'
+                    : selectedCampuses.includes(campus._id)
                     ? 'border-primary-500 bg-primary-50'
                     : 'border-gray-200 hover:border-gray-300'
                     }`}
@@ -663,22 +711,54 @@ const POCDashboard = () => {
                 </label>
               ))}
             </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setSelectedCampuses(managedCampuses.map(c => c._id));
-                  setShowCampusModal(false);
+            <div className="mt-5">
+              <label htmlFor="campus-poc-discord-user-id" className="block text-sm font-medium text-gray-700 mb-1">
+                Discord User ID <span className="text-red-600">*</span>
+              </label>
+              <input
+                id="campus-poc-discord-user-id"
+                type="text"
+                inputMode="numeric"
+                value={discordUserId}
+                onChange={(event) => {
+                  setDiscordUserId(event.target.value);
+                  setCampusSettingsErrors(prev => ({ ...prev, discordUserId: undefined }));
                 }}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
+                placeholder="17-19 digit Discord user ID"
+                aria-invalid={!!campusSettingsErrors.discordUserId}
+                aria-describedby="campus-poc-discord-help"
+                className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${campusSettingsErrors.discordUserId
+                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                  : 'border-gray-300 focus:border-primary-500 focus:ring-primary-500'
+                  }`}
+              />
+              {campusSettingsErrors.discordUserId && (
+                <p className="mt-1 text-xs font-medium text-red-600">{campusSettingsErrors.discordUserId}</p>
+              )}
+              <p id="campus-poc-discord-help" className="mt-1 text-xs text-gray-500">
+                In Discord, enable Developer Mode, then right-click your profile and choose Copy User ID.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              {!campusSetupRequired && (
+                <button
+                  onClick={() => {
+                    setSelectedCampuses(managedCampuses.map(c => c._id));
+                    setDiscordUserId(user?.discord?.userId || '');
+                    setCampusSettingsErrors({});
+                    setShowCampusModal(false);
+                  }}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+              )}
               <button
                 onClick={() => handleUpdateManagedCampuses(selectedCampuses)}
-                disabled={savingCampuses || selectedCampuses.length === 0}
+                disabled={savingCampuses}
                 className="btn btn-primary"
               >
-                {savingCampuses ? 'Saving...' : 'Save Changes'}
+                {savingCampuses ? 'Saving...' : 'Save Settings'}
               </button>
             </div>
           </div>

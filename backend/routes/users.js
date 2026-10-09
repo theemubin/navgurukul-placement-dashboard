@@ -1296,6 +1296,7 @@ router.delete('/profile/resumes/:resumeId', auth, authorize('student'), async (r
 router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
   try {
     const user = await User.findById(req.userId);
+    const previousProfileStatus = user.studentProfile.profileStatus;
 
     user.studentProfile.profileStatus = 'pending_approval';
     user.studentProfile.lastSubmittedAt = new Date();
@@ -1321,6 +1322,14 @@ router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
         link: `/students/${user._id}`,
         relatedEntity: { type: 'user', id: user._id }
       });
+    }
+
+    if (previousProfileStatus !== 'pending_approval') {
+      try {
+        await discordService.sendProfileUpdate(user, 'submitted', user);
+      } catch (discordError) {
+        console.error('Failed to send profile submission Discord notification:', discordError);
+      }
     }
 
     await invalidateCache('cache:students:*');
@@ -1357,11 +1366,23 @@ router.post('/profile/submit', auth, authorize('student'), async (req, res) => {
  */
 router.put('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'manager'), async (req, res) => {
   try {
-    const { campusIds } = req.body;
+    const { campusIds, discordUserId } = req.body;
     console.log(`[UpdateManagedCampuses] User: ${req.userId}, Role: ${req.user.role}, CampusIds:`, campusIds);
 
     if (!Array.isArray(campusIds)) {
       return res.status(400).json({ message: 'campusIds must be an array' });
+    }
+
+    if (req.user.role === 'campus_poc' && campusIds.length === 0) {
+      return res.status(400).json({ message: 'Select at least one campus to manage' });
+    }
+
+    if (discordUserId !== undefined && !/^\d{17,19}$/.test(discordUserId)) {
+      return res.status(400).json({ message: 'Enter a valid 17-19 digit Discord user ID' });
+    }
+
+    if (req.user.role === 'campus_poc' && !discordUserId) {
+      return res.status(400).json({ message: 'Enter your Discord user ID' });
     }
 
     const user = await User.findById(req.userId);
@@ -1370,7 +1391,14 @@ router.put('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'ma
     }
 
     user.managedCampuses = campusIds;
+    if (discordUserId !== undefined) {
+      user.discord = user.discord || {};
+      user.discord.userId = discordUserId;
+      user.discord.verified = true;
+      user.discord.verifiedAt = new Date();
+    }
     user.markModified('managedCampuses');
+    user.markModified('discord');
     await user.save();
 
     const updatedUser = await User.findById(req.userId)
@@ -1379,8 +1407,9 @@ router.put('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'ma
 
     await invalidateCache('cache:students:*');
     res.json({
-      message: 'Managed campuses updated successfully',
-      managedCampuses: updatedUser.managedCampuses
+      message: 'Campus and Discord settings updated successfully',
+      managedCampuses: updatedUser.managedCampuses,
+      discord: updatedUser.discord
     });
   } catch (error) {
     console.error('Update managed campuses error:', error);
@@ -1417,7 +1446,10 @@ router.get('/managed-campuses', auth, authorize('campus_poc', 'coordinator', 'ma
       });
     }
 
-    res.json({ managedCampuses: allowed });
+    res.json({
+      managedCampuses: allowed,
+      discord: user.discord
+    });
   } catch (error) {
     console.error('Get managed campuses error:', error);
     res.status(500).json({ message: 'Server error' });

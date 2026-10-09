@@ -167,7 +167,8 @@ export const userAPI = {
   updateUser: (id, data) => api.put(`/users/${id}`, data),
   // Managed campuses for Campus POCs
   getManagedCampuses: () => api.get('/users/managed-campuses'),
-  updateManagedCampuses: (campusIds) => api.put('/users/managed-campuses', { campusIds }),
+  updateManagedCampuses: (campusIds, discordUserId) =>
+    api.put('/users/managed-campuses', { campusIds, discordUserId }),
   uploadAvatar: (file) => {
     const formData = new FormData();
     formData.append('avatar', file);
@@ -310,6 +311,8 @@ export const jobAPI = {
   // Coordinator assignment
   assignCoordinator: (jobId, coordinatorId) => api.patch(`/jobs/${jobId}/coordinator`, { coordinatorId }),
   broadcastJob: (jobId) => api.post(`/jobs/${jobId}/broadcast`),
+  getMessageRecipients: (jobId) => api.get(`/jobs/${jobId}/message-recipients`),
+  sendMessage: (jobId, message) => api.post(`/jobs/${jobId}/send-message`, { message }),
   bulkUpdate: (jobId, data) => api.post(`/jobs/${jobId}/bulk-update`, data),
   getCoordinatorJobStats: (params) => api.get('/jobs/stats/summary', { params })
 };

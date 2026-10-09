@@ -1660,6 +1660,74 @@ router.post('/:id/broadcast', auth, authorize('coordinator', 'manager'), async (
   }
 });
 
+const getMessageRecipients = async (jobId) => Application.find({
+  job: jobId,
+  status: { $nin: ['rejected', 'withdrawn'] }
+})
+  .populate({
+    path: 'student',
+    select: 'firstName lastName campus discord',
+    populate: { path: 'campus', select: 'name code discordChannelId' }
+  })
+  .sort({ updatedAt: -1 })
+  .lean();
+
+router.get('/:id/message-recipients', auth, authorize('coordinator', 'manager'), async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id).select('_id');
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+
+    const applications = await getMessageRecipients(job._id);
+    const recipients = applications
+      .filter((application) => application.student)
+      .map((application) => ({
+        applicationId: application._id,
+        studentId: application.student._id,
+        name: `${application.student.firstName} ${application.student.lastName}`.trim(),
+        status: application.status,
+        campus: application.student.campus?.name || 'No campus',
+        discordConfigured: !!application.student.discord?.userId
+      }));
+
+    res.json({ recipients });
+  } catch (error) {
+    console.error('Get job message recipients error:', error);
+    res.status(500).json({ message: 'Failed to load message recipients' });
+  }
+});
+
+router.post('/:id/send-message', auth, authorize('coordinator', 'manager'), [
+  body('message').isString().trim().isLength({ min: 1, max: 1500 }).withMessage('Message must be between 1 and 1500 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const job = await Job.findById(req.params.id).select('title company coordinator createdBy discordThreadId');
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+
+    const applications = await getMessageRecipients(job._id);
+    const students = applications.map((application) => application.student).filter(Boolean);
+    const result = await discordService.sendCoordinatorMessage(job, req.user, students, req.body.message.trim());
+
+    if (result.error && result.deliveries.length === 0) {
+      return res.status(502).json({ message: 'Unable to send Discord message', discord: result });
+    }
+
+    const failedDeliveries = result.deliveries.filter((delivery) => delivery.error);
+    res.json({
+      message: failedDeliveries.length > 0
+        ? 'Message delivered to available Discord destinations'
+        : 'Message sent to Discord',
+      recipientCount: result.recipientCount,
+      discord: result
+    });
+  } catch (error) {
+    console.error('Send job Discord message error:', error);
+    res.status(500).json({ message: 'Failed to send Discord message' });
+  }
+});
+
 // Helper to auto-reject unapproved interest requests past the job application deadline
 const expirePastDeadlineInterestRequests = async (filterJobId = null) => {
   try {
