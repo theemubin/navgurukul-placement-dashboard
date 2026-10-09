@@ -3,6 +3,8 @@
  * Calculates compatibility between a student's profile and job requirements
  */
 
+const { studentSchoolMatches } = require('../utils/schoolEligibility');
+
 // Module hierarchy for School of Programming (order matters for comparison)
 const MODULE_HIERARCHY = [
   'Foundation',
@@ -22,10 +24,10 @@ const PROFICIENCY_LABELS = ['None', 'Beginner', 'Intermediate', 'Advanced', 'Exp
  * @param {Object} job - Job object with eligibility and requirements
  * @returns {Object} Match details with percentage and breakdown
  */
-function calculateMatch(student, job) {
+function calculateMatch(student, job, options = {}) {
   const breakdown = {
     skills: calculateSkillMatch(student, job),
-    eligibility: calculateEligibilityMatch(student, job),
+    eligibility: calculateEligibilityMatch(student, job, options),
     requirements: calculateRequirementsMatch(student, job)
   };
 
@@ -206,7 +208,7 @@ function calculateSkillMatch(student, job) {
 /**
  * Calculate eligibility match
  */
-function calculateEligibilityMatch(student, job) {
+function calculateEligibilityMatch(student, job, options = {}) {
   const profile = student.studentProfile || {};
   const eligibility = job.eligibility || {};
   const details = {};
@@ -282,16 +284,16 @@ function calculateEligibilityMatch(student, job) {
     details.higherEducation = { required: false, meets: true };
   }
 
-  // School
+  // School (child batches resolve to parent schools via schoolParents config)
   const requiredSchools = eligibility.schools || [];
   if (requiredSchools.length > 0) {
     totalRequired++;
-    const studentSchool = (profile.currentSchool || '').trim();
-    // Normalize for comparison
-    const normalizedStudentSchool = studentSchool.toLowerCase();
-    const normalizedRequiredSchools = requiredSchools.map(s => (s || '').trim().toLowerCase());
-
-    const meets = normalizedRequiredSchools.includes(normalizedStudentSchool);
+    const studentSchool = (
+      student.resolvedProfile?.currentSchool ||
+      profile.currentSchool ||
+      ''
+    ).trim();
+    const meets = studentSchoolMatches(studentSchool, requiredSchools, options.schoolParents);
     if (meets) passedCount++;
     details.school = {
       required: true,
@@ -660,10 +662,10 @@ function generateSummary(breakdown, overallPercentage) {
 /**
  * Get all jobs with match percentage for a student
  */
-async function getJobsWithMatch(student, jobs) {
+async function getJobsWithMatch(student, jobs, options = {}) {
   return jobs.map(job => ({
     ...job.toObject ? job.toObject() : job,
-    matchDetails: calculateMatch(student, job)
+    matchDetails: calculateMatch(student, job, options)
   }));
 }
 

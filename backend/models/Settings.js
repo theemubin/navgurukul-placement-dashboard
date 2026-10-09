@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { DEFAULT_SCHOOL_PARENTS } = require('../utils/schoolEligibility');
 
 // Pipeline stage schema for job workflow
 const pipelineStageSchema = new mongoose.Schema({
@@ -86,6 +87,12 @@ const settingsSchema = new mongoose.Schema({
   mergedSchools: {
     type: [String],
     default: []
+  },
+  // Child program/school name -> parent school (batch years stripped before lookup)
+  schoolParents: {
+    type: Map,
+    of: String,
+    default: () => new Map(Object.entries(DEFAULT_SCHOOL_PARENTS))
   },
   // Timestamp when schools were last synced from Ghar
   lastSchoolsSync: {
@@ -302,6 +309,7 @@ settingsSchema.statics.getSettings = async function () {
     if (!settings) {
       settings = await this.create({
         schoolModules: DEFAULT_SCHOOL_MODULES,
+        schoolParents: new Map(Object.entries(DEFAULT_SCHOOL_PARENTS)),
         rolePreferences: [],
         technicalSkills: [],
         degreeOptions: [],
@@ -448,6 +456,19 @@ settingsSchema.statics.getSettings = async function () {
     if (!settings.mergedSchools || !Array.isArray(settings.mergedSchools)) {
       settings.mergedSchools = [];
       schoolsChanged = true;
+    }
+
+    if (!settings.schoolParents || typeof settings.schoolParents.has !== 'function') {
+      const source = settings.schoolParents && typeof settings.schoolParents === 'object' ? settings.schoolParents : {};
+      const entries = source instanceof Map ? source : Object.entries(source);
+      settings.schoolParents = new Map(entries.length > 0 ? entries : Object.entries(DEFAULT_SCHOOL_PARENTS));
+      schoolsChanged = true;
+    }
+    for (const [child, parent] of Object.entries(DEFAULT_SCHOOL_PARENTS)) {
+      if (!settings.schoolParents.has(child)) {
+        settings.schoolParents.set(child, parent);
+        schoolsChanged = true;
+      }
     }
 
     // Ensure masterCompanies is initialized

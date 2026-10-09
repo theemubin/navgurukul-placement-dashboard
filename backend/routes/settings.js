@@ -7,6 +7,7 @@ const Notification = require('../models/Notification');
 const { auth, authorize } = require('../middleware/auth');
 const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 const Skill = require('../models/Skill');
+const { normalizeSchoolName } = require('../utils/schoolEligibility');
 
 function toPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -152,6 +153,7 @@ router.get('/', auth, async (req, res) => {
       schoolModules,
       // Prefer merged schools list (Ghar-first) when available
       schools: visibleMerged,
+      schoolParents: toPlainObject(settings.schoolParents),
       gharSchools: visibleGharSchools,
       lastSchoolsSync: settings.lastSchoolsSync || null,
       // MERGED: rolePreferences now aliases to roleCategories for backward compatibility
@@ -204,19 +206,6 @@ router.post('/sync-schools', auth, authorize('manager', 'coordinator'), async (r
 
     const gharMap = new Map();
     const allGharSchoolNames = new Set();
-
-    // Normalize school names coming from Ghar to remove trailing numeric suffixes like "25-28"
-    const normalizeSchoolName = (raw) => {
-      if (!raw || typeof raw !== 'string') return raw;
-      let s = raw.trim();
-      // collapse multiple spaces
-      s = s.replace(/\s+/g, ' ');
-      // remove trailing numeric ranges or single numbers e.g. " 25-28" or " - 25"
-      s = s.replace(/\s*[-–—:]?\s*\d+(\s*-\s*\d+)?\s*$/u, '').trim();
-      // remove trailing separators left behind
-      s = s.replace(/[\-–—:\s]+$/u, '').trim();
-      return s;
-    };
 
     // For each campus fetch its schools
     for (const c of campuses) {

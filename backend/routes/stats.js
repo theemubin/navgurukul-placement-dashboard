@@ -11,6 +11,7 @@ const { auth, authorize } = require('../middleware/auth');
 const { cacheMiddleware } = require('../middleware/cache');
 const cacheService = require('../services/redisCacheService');
 const fs = require('fs');
+const { getSchoolQueryValues } = require('../utils/schoolEligibility');
 
 // Helper to get all campus IDs a POC is authorized to manage
 const getPOCManagedCampusIds = (user) => {
@@ -35,7 +36,7 @@ const jobsEligibleForCampuses = (campusIds) => ({
 const jobsEligibleForSchool = (school) => ({
   $or: [
     ...emptyOrMissingArray('eligibility.schools'),
-    { 'eligibility.schools': school }
+    { 'eligibility.schools': { $in: getSchoolQueryValues(school) } }
   ]
 });
 

@@ -654,7 +654,7 @@ router.get('/matching', auth, authorize('student'), cacheMiddleware({ type: 'job
     const jobsWithMatch = jobs
       .filter(job => !appliedJobIds.has(job._id.toString()))
       .map(job => {
-        const matchDetails = calculateMatch(student, job);
+        const matchDetails = calculateMatch(student, job, { schoolParents: settings.schoolParents });
         return {
           ...job.toObject(),
           matchDetails
@@ -710,7 +710,8 @@ router.get('/:id/match', auth, authorize('student'), async (req, res) => {
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    const matchDetails = calculateMatch(student, job);
+    const settings = await Settings.getSettings();
+    const matchDetails = calculateMatch(student, job, { schoolParents: settings.schoolParents });
 
     // Run expiration check for any pending request past deadline
     await expirePastDeadlineInterestRequests(req.params.id);
@@ -1757,7 +1758,8 @@ router.post('/:id/interest', auth, authorize('student'), [
       .populate('campus');
 
     // Calculate match
-    const matchDetails = calculateMatch(student, job);
+    const settings = await Settings.getSettings();
+    const matchDetails = calculateMatch(student, job, { schoolParents: settings.schoolParents });
 
     // Calculate readiness to see if they meet the readiness requirement
     const studentReadiness = await StudentJobReadiness.findOne({ student: req.userId });
