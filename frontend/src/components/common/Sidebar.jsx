@@ -85,6 +85,9 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
             { path: '/student/profile', icon: User, label: 'My Profile' },
             { path: '/student/jobs', icon: Briefcase, label: 'Job Listings', badge: eligibleJobsCount },
             { path: '/student/applications', icon: FileText, label: 'My Applications' },
+            { path: '/student/post-placement-dashboard', icon: ClipboardCheck, label: 'Post-Placement Dashboard' },
+            { path: '/student/daily-tracker-history', icon: ClipboardCheck, label: 'Daily Tracker History' },
+            { path: '/student/post-placement', icon: ShieldCheck, label: 'Post-Placement Tracking' },
             { path: '/student/job-readiness', icon: Target, label: 'Job Readiness', badge: pendingReadinessCount },
             { path: '/student/self-applications', icon: ExternalLink, label: 'Self Applications' },
             { path: '/student/ats-checker', icon: Sparkles, label: 'ATS Resume Checker' },
@@ -103,6 +106,7 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
           { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests', badge: pendingInterestCount },
           { path: '/campus-poc/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
           { path: '/campus-poc/stagnation', icon: ShieldAlert, label: 'Stagnation & Bottlenecks' },
+          { path: '/campus-poc/post-placement-monitoring', icon: ClipboardCheck, label: 'Post-Placement Monitoring' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' }
         ];
@@ -119,6 +123,7 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
           { path: '/coordinator/job-readiness', icon: Target, label: 'Job Readiness' },
           { path: '/coordinator/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
           { path: '/coordinator/stagnation', icon: ShieldAlert, label: 'Stagnation & Bottlenecks' },
+          { path: '/coordinator/post-placement-monitoring', icon: ClipboardCheck, label: 'Post-Placement Monitoring' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' },
           { path: '/coordinator/settings', icon: Key, label: 'Settings' }
@@ -130,6 +135,8 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
           { path: '/manager/partners', icon: Globe, label: 'Hiring Partners' },
           { path: '/manager/leads', icon: MessageCircle, label: 'Recruitment Leads' },
           { path: '/manager/reports', icon: BarChart3, label: 'Reports & Export' },
+          { path: '/manager/post-placement', icon: ShieldCheck, label: 'Post-Placement Tracking' },
+          { path: '/manager/post-placement-monitoring', icon: ClipboardCheck, label: 'Post-Placement Monitoring' },
           { path: '/manager/settings', icon: Settings, label: 'Platform Settings' },
           { path: '/manager/profile-options', icon: Settings, label: 'Profile Options' },
           { path: '/manager/job-readiness', icon: Target, label: 'Job Readiness' },

@@ -1,78 +1,123 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-// Resolve Cloudinary Credentials (mandatory, no local fallback)
+// Resolve Cloudinary Credentials
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME;
 const apiKey = process.env.CLOUDINARY_API_KEY;
 const apiSecret = process.env.CLOUDINARY_API_SECRET;
+const hasCloudinaryCredentials = Boolean(cloudName && apiKey && apiSecret);
 
-if (!cloudName || !apiKey || !apiSecret) {
-  throw new Error(
-    'Cloudinary configuration error: CLOUDINARY_NAME (or CLOUDINARY_CLOUD_NAME), ' +
-    'CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET must be set. ' +
-    'Local disk storage fallback is disabled.'
-  );
-}
+const uploadsRoot = path.join(__dirname, '..', 'uploads');
+const ensureUploadDirectory = (folderPath) => {
+  fs.mkdirSync(folderPath, { recursive: true });
+};
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: cloudName,
-  api_key: apiKey,
-  api_secret: apiSecret
-});
+const getRelativeUploadPath = (fieldname) => {
+  if (fieldname === 'avatar') return 'avatars';
+  if (fieldname === 'heroImage') return 'hero_images';
+  if (fieldname === 'resume') return 'resumes';
+  if (fieldname === 'document' || fieldname === 'placementDocument') return 'post-placement-documents';
+  return 'documents';
+};
 
-// Debug Cloudinary Config (without exposing secrets)
-console.log('Cloudinary Configured:', {
-  cloud_name: cloudName,
-  api_key: apiKey ? '***' : 'MISSING',
-  api_secret: apiSecret ? '***' : 'MISSING'
-});
+let storage;
 
-// Configure Cloudinary Storage (Cloudinary only)
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+if (hasCloudinaryCredentials) {
+  // Configure Cloudinary
+  cloudinary.config({
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret
+  });
 
-    if (file.fieldname === 'avatar') {
+  // Debug Cloudinary Config (without exposing secrets)
+  console.log('Cloudinary Configured:', {
+    cloud_name: cloudName,
+    api_key: apiKey ? '***' : 'MISSING',
+    api_secret: apiSecret ? '***' : 'MISSING'
+  });
+
+  storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: async (req, file) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+
+      if (file.fieldname === 'avatar') {
+        return {
+          folder: 'placements/avatars',
+          resource_type: 'image',
+          public_id: `avatar-${uniqueSuffix}`
+        };
+      }
+
+      if (file.fieldname === 'heroImage') {
+        return {
+          folder: 'placements/hero_images',
+          resource_type: 'image',
+          public_id: `heroImage-${uniqueSuffix}`
+        };
+      }
+
+      if (file.fieldname === 'resume') {
+        const ext = path.extname(file.originalname) || '.pdf';
+        return {
+          folder: 'placements/resumes',
+          resource_type: 'raw',
+          public_id: `resume-${uniqueSuffix}${ext}`
+        };
+      }
+
+      if (file.fieldname === 'document' || file.fieldname === 'placementDocument') {
+        const ext = path.extname(file.originalname) || '';
+        return {
+          folder: 'placements/post-placement-documents',
+          resource_type: 'raw',
+          public_id: `placement-document-${uniqueSuffix}${ext}`
+        };
+      }
+
+      // Default fallback for any other documents
+      const ext = path.extname(file.originalname) || '';
       return {
-        folder: 'placements/avatars',
-        resource_type: 'image',
-        public_id: `avatar-${uniqueSuffix}`
-      };
-    }
-
-    if (file.fieldname === 'heroImage') {
-      return {
-        folder: 'placements/hero_images',
-        resource_type: 'image',
-        public_id: `heroImage-${uniqueSuffix}`
-      };
-    }
-
-    if (file.fieldname === 'resume') {
-      const ext = path.extname(file.originalname) || '.pdf';
-      return {
-        folder: 'placements/resumes',
+        folder: 'placements/documents',
         resource_type: 'raw',
-        public_id: `resume-${uniqueSuffix}${ext}`
+        public_id: `document-${uniqueSuffix}${ext}`
       };
     }
+  });
 
-    // Default fallback for any other documents
-    const ext = path.extname(file.originalname) || '';
-    return {
-      folder: 'placements/documents',
-      resource_type: 'raw',
-      public_id: `document-${uniqueSuffix}${ext}`
-    };
-  }
-});
+  console.log('Using Cloudinary Storage for uploads');
+} else {
+  console.warn('[Uploads] Cloudinary credentials are missing; using local disk storage fallback');
 
-console.log('Using Cloudinary Storage for uploads (disk storage disabled)');
+  storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      const relativeFolder = getRelativeUploadPath(file.fieldname);
+      const destination = path.join(uploadsRoot, relativeFolder);
+      ensureUploadDirectory(destination);
+      cb(null, destination);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(file.originalname) || '';
+      const baseName = file.fieldname === 'avatar'
+        ? `avatar-${uniqueSuffix}`
+        : file.fieldname === 'heroImage'
+          ? `heroImage-${uniqueSuffix}`
+          : file.fieldname === 'resume'
+            ? `resume-${uniqueSuffix}`
+            : file.fieldname === 'document' || file.fieldname === 'placementDocument'
+              ? `placement-document-${uniqueSuffix}`
+              : `document-${uniqueSuffix}`;
+
+      cb(null, `${baseName}${ext}`);
+    }
+  });
+}
 
 
 // File filter (same as before)
@@ -88,6 +133,18 @@ const fileFilter = (req, file, cb) => {
     } else {
       console.error('Upload rejected: Invalid resume format', file.mimetype);
       cb(new Error('Resume must be PDF, DOC, or DOCX'), false);
+    }
+  } else if (file.fieldname === 'document' || file.fieldname === 'placementDocument') {
+    if (
+      file.mimetype === 'application/pdf' ||
+      file.mimetype === 'application/msword' ||
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      file.mimetype.startsWith('image/')
+    ) {
+      cb(null, true);
+    } else {
+      console.error('Upload rejected: Invalid document format', file.mimetype);
+      cb(new Error('Document must be PDF, DOC, DOCX, or an image'), false);
     }
   } else if (file.fieldname === 'avatar' || file.fieldname === 'heroImage') {
     // Allow images

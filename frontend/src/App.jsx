@@ -26,6 +26,9 @@ import AuthCallback from './pages/auth/AuthCallback';
 import PendingApproval from './pages/auth/PendingApproval';
 import AccountInactive from './pages/auth/AccountInactive';
 
+// Public Pages
+import StudentPortfolio from './pages/StudentPortfolio';
+
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
 import StudentProfile from './pages/student/Profile';
@@ -35,6 +38,9 @@ import JobDetails from './pages/student/JobDetails';
 import StudentJobReadiness from './pages/student/JobReadiness';
 import StudentSelfApplications from './pages/student/SelfApplications';
 import AtsResumeChecker from './pages/student/AtsResumeChecker';
+import StudentPostPlacementTracking from './pages/student/PostPlacementTracking';
+import PostPlacementDashboard from './pages/student/PostPlacementDashboard';
+import DailyTrackerHistory from './pages/student/DailyTrackerHistory';
 import StudentScamDetector from './pages/student/Scamdetector';
 import ScamReportsRepository from './pages/student/ScamReportsRepository';
 import ScamReportDetails from './pages/student/ScamReportDetails';
@@ -81,9 +87,11 @@ import PartnerManagement from './pages/manager/PartnerManagement';
 import LeadsManagement from './pages/manager/LeadsManagement';
 import GharManagement from './pages/manager/GharManagement';
 import ManagerCommunication from './pages/manager/Communication';
+import ManagerPostPlacementTracking from './pages/manager/PostPlacementTracking';
 
 // Common Pages
 import Notifications from './pages/common/Notifications';
+import PostPlacementMonitoring from './pages/common/PostPlacementMonitoring';
 import NotFound from './pages/common/NotFound';
 
 // Public Pages
@@ -185,6 +193,7 @@ function App() {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/pending-approval" element={<PendingApproval />} />
       <Route path="/auth/account-inactive" element={<AccountInactive />} />
+      <Route path="/students" element={<StudentPortfolio />} />
 
       {/* Student Routes */}
       <Route path="/student" element={
@@ -199,6 +208,9 @@ function App() {
         <Route path="applications" element={<StudentApplications />} />
         <Route path="job-readiness" element={<StudentJobReadiness />} />
         <Route path="self-applications" element={<StudentSelfApplications />} />
+        <Route path="post-placement-dashboard" element={<PostPlacementDashboard />} />
+        <Route path="daily-tracker-history" element={<DailyTrackerHistory />} />
+        <Route path="post-placement" element={<StudentPostPlacementTracking />} />
         <Route path="ats-checker" element={<AtsResumeChecker />} />
         <Route path="notifications" element={<Notifications />} />
 
@@ -224,6 +236,7 @@ function App() {
         <Route path="jobs/:id" element={<JobDetails />} />
         <Route path="pipeline" element={<PipelineAnalytics />} />
         <Route path="stagnation" element={<BottlenecksPage />} />
+        <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
       </Route>
 
       {/* Coordinator Routes */}
@@ -256,6 +269,7 @@ function App() {
         <Route path="stagnation" element={<BottlenecksPage />} />
         <Route path="students/:id" element={<POCStudentDetails />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
       </Route>
 
       {/* Manager Routes */}
@@ -277,6 +291,8 @@ function App() {
         <Route path="pipeline" element={<PipelineAnalytics />} />
         <Route path="stagnation" element={<BottlenecksPage />} />
         <Route path="communication" element={<ManagerCommunication />} />
+        <Route path="post-placement" element={<ManagerPostPlacementTracking />} />
+        <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />
         <Route path="users" element={<UsersManager />} />

@@ -10,7 +10,13 @@
  * 6. Health check utility (exposes getRedisStats to verify ping latency and memory usage).
  * 7. Matches the existing Node.js commonJS module style.
  */
-const { createClient } = require('redis');
+let createClient = null;
+
+try {
+  ({ createClient } = require('redis'));
+} catch (error) {
+  console.warn('[Redis] redis package is unavailable; running without Redis cache support');
+}
 
 let client = null;
 let isReady = false;
@@ -22,21 +28,29 @@ const initRedis = async () => {
     return null;
   }
 
-  // Construct configuration options
+  if (!createClient) {
+    console.warn('[Redis] Redis client cannot be initialized because the redis package is missing');
+    return null;
+  }
+
+  // Construct configuration options only when Redis is explicitly configured.
+  if (!process.env.REDIS_URL && !process.env.REDIS_HOST) {
+    console.log('[Redis] No REDIS_URL or REDIS_HOST configured; running without Redis cache support');
+    return null;
+  }
+
   let clientOptions = {};
 
   if (process.env.REDIS_URL) {
     clientOptions.url = process.env.REDIS_URL;
   } else if (process.env.REDIS_HOST) {
-    const host = process.env.REDIS_HOST || '127.0.0.1';
+    const host = process.env.REDIS_HOST;
     const port = process.env.REDIS_PORT || 6379;
     const username = process.env.REDIS_USERNAME || '';
     const password = process.env.REDIS_PASSWORD || '';
     const protocol = process.env.REDIS_TLS === 'true' ? 'rediss' : 'redis';
     const auth = password ? `${username ? `${username}:` : ''}${password}@` : '';
     clientOptions.url = `${protocol}://${auth}${host}:${port}`;
-  } else {
-    clientOptions.url = 'redis://127.0.0.1:6379';
   }
 
   const sanitizedDisplayUrl = clientOptions.url.replace(/\/\/([^:]+):([^@]+)@/, '//$1:***@');
@@ -105,7 +119,7 @@ const isRedisReady = () => isReady && client !== null;
 const getRedisStats = async () => {
   if (!isRedisReady()) {
     return {
-      status: process.env.REDIS_ENABLED === 'false' ? 'disabled' : 'disconnected',
+      status: process.env.REDIS_ENABLED === 'false' || (!process.env.REDIS_URL && !process.env.REDIS_HOST) ? 'disabled' : 'disconnected',
       latency: null,
       memory: null
     };

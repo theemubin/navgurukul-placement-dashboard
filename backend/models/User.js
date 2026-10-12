@@ -492,6 +492,48 @@ const userSchema = new mongoose.Schema({
       resumeAccessible: { type: Boolean, default: null },
       resumeAccessibilityRemark: String
     }],
+    postPlacementDocuments: [{
+      placement: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'PostPlacementTracking'
+      },
+      documentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'PostPlacementDocument'
+      },
+      documentType: {
+        type: String,
+        enum: ['OFFER_LETTER', 'INTERNSHIP_STIPEND_SLIP', 'FULL_TIME_SALARY_SLIP']
+      },
+      documentKey: String,
+      documentPeriod: {
+        key: String,
+        label: String,
+        startDate: Date,
+        endDate: Date
+      },
+      fileUrl: String,
+      storagePath: String,
+      originalName: String,
+      mimeType: String,
+      fileSize: Number,
+      verificationStatus: {
+        type: String,
+        enum: ['Pending', 'Uploaded', 'Verified', 'Rejected'],
+        default: 'Uploaded'
+      },
+      rejectionReason: {
+        type: String,
+        default: ''
+      },
+      uploadedAt: Date,
+      verifiedAt: Date,
+      replacedAt: Date,
+      syncedAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
     linkedIn: String,
     github: String,
     portfolio: String,
