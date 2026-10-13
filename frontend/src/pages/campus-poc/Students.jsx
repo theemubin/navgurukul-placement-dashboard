@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { userAPI, statsAPI, gharAPI, resolveResumeUrl } from '../../services/api';
-import { LoadingSpinner, Pagination, EmptyState, StatusBadge, Button, StatsCard, SearchInput } from '../../components/common/UIComponents';
+import { LoadingSpinner, Pagination, EmptyState, StatusBadge, Button, StatsCard } from '../../components/common/UIComponents';
+import SearchInput from '../../components/common/SearchInput';
 import { BulkUploadModal } from '../../components/common/BulkUpload';
 import { Users, Search, ChevronRight, GraduationCap, Upload, Filter, UserCheck, UserX, Clock, Briefcase, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';

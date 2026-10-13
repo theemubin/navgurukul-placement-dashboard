@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { userAPI, campusAPI } from '../../services/api';
-import { LoadingSpinner, Pagination, Modal, SearchInput } from '../../components/common/UIComponents';
+import { LoadingSpinner, Pagination, Modal } from '../../components/common/UIComponents';
+import SearchInput from '../../components/common/SearchInput';
 import { Edit, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
