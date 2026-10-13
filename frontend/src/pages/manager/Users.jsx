@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { userAPI, campusAPI } from '../../services/api';
-import { LoadingSpinner, Pagination, Modal } from '../../components/common/UIComponents';
+import { LoadingSpinner, Pagination, Modal, SearchInput } from '../../components/common/UIComponents';
 import { Edit, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -10,7 +10,8 @@ const UsersManager = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [gharAttendanceMin, setGharAttendanceMin] = useState('');
   const [gharStatus, setGharStatus] = useState('');
@@ -25,7 +26,7 @@ const UsersManager = () => {
       const res = await userAPI.getUsers({
         page: pagination.page,
         limit: 20,
-        search,
+        search: appliedSearch,
         role: roleFilter,
         gharAttendanceMin,
         gharStatus
@@ -52,7 +53,19 @@ const UsersManager = () => {
     fetchUsers();
     fetchCampuses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, search, roleFilter, gharAttendanceMin, gharStatus]);
+  }, [pagination.page, appliedSearch, roleFilter, gharAttendanceMin, gharStatus]);
+
+  useEffect(() => {
+    setSearchInput(appliedSearch);
+  }, [appliedSearch]);
+
+  const applySearch = () => {
+    const nextSearch = searchInput.trim();
+    if (appliedSearch !== nextSearch) {
+      setPagination(prev => ({ ...prev, page: 1 }));
+      setAppliedSearch(nextSearch);
+    }
+  };
 
   const handleRoleChange = async (userId, newRole) => {
     const prev = users.slice();
@@ -116,7 +129,21 @@ const UsersManager = () => {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="text-xs text-gray-500 mb-1 block">Search</label>
-            <input className="w-full pl-3 py-2 border rounded-md" placeholder="Search by name or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <div className="flex gap-2">
+              <SearchInput
+                placeholder="Search by name or email"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onEnter={applySearch}
+              />
+              <button
+                type="button"
+                onClick={applySearch}
+                className="shrink-0 px-3 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 transition-colors"
+              >
+                Search
+              </button>
+            </div>
           </div>
 
           <div className="w-[150px]">
@@ -150,10 +177,11 @@ const UsersManager = () => {
             </select>
           </div>
 
-          {(search || roleFilter || gharAttendanceMin || gharStatus) && (
+          {(appliedSearch || roleFilter || gharAttendanceMin || gharStatus) && (
             <button
               onClick={() => {
-                setSearch('');
+                setSearchInput('');
+                setAppliedSearch('');
                 setRoleFilter('');
                 setGharAttendanceMin('');
                 setGharStatus('');

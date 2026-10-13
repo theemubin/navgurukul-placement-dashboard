@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { userAPI, statsAPI, gharAPI, resolveResumeUrl } from '../../services/api';
-import { LoadingSpinner, Pagination, EmptyState, StatusBadge, Button, StatsCard } from '../../components/common/UIComponents';
+import { LoadingSpinner, Pagination, EmptyState, StatusBadge, Button, StatsCard, SearchInput } from '../../components/common/UIComponents';
 import { BulkUploadModal } from '../../components/common/BulkUpload';
 import { Users, Search, ChevronRight, GraduationCap, Upload, Filter, UserCheck, UserX, Clock, Briefcase, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -45,12 +45,16 @@ const POCStudents = () => {
   }, []);
 
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setFilters((prev) => (prev.search === searchInput ? prev : { ...prev, search: searchInput }));
-    }, 300);
+    setSearchInput(filters.search);
+  }, [filters.search]);
 
-    return () => clearTimeout(timeoutId);
-  }, [searchInput]);
+  const applySearch = () => {
+    const nextSearch = searchInput.trim();
+    if (filters.search !== nextSearch) {
+      setPagination(prev => ({ ...prev, current: 1 }));
+      setFilters(prev => ({ ...prev, search: nextSearch }));
+    }
+  };
 
   const fetchStats = async (forceRefresh = false) => {
     try {
@@ -291,15 +295,22 @@ const POCStudents = () => {
       {/* Filters */}
       <div className="card !p-3 md:!p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="col-span-1 sm:col-span-2 md:col-span-2 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search students..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-9 text-sm"
-            />
+          <div className="col-span-1 sm:col-span-2 md:col-span-2">
+            <div className="flex gap-2">
+              <SearchInput
+                placeholder="Search students..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onEnter={applySearch}
+              />
+              <button
+                type="button"
+                onClick={applySearch}
+                className="shrink-0 px-3 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 transition-colors"
+              >
+                Search
+              </button>
+            </div>
           </div>
           <select
             value={filters.school}

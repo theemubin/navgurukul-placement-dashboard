@@ -1735,33 +1735,56 @@ const expirePastDeadlineInterestRequests = async (filterJobId = null) => {
     const query = { status: 'pending' };
     if (filterJobId) query.job = filterJobId;
 
-    const pendingRequests = await InterestRequest.find(query).populate('job');
+    const pendingRequests = await InterestRequest.find(query).populate('job').populate('student');
     for (const req of pendingRequests) {
       if (req.job && req.job.applicationDeadline && new Date(req.job.applicationDeadline) < now) {
-        req.status = 'rejected';
-        req.rejectionReason = 'PoC has not approved before deadline';
-        req.reviewNotes = 'Automatically rejected because Campus PoC did not approve before the application deadline.';
-        req.reviewedAt = now;
-        await req.save();
-
-        const Application = require('../models/Application');
-        await Application.updateMany(
-          { student: req.student, job: req.job._id, applicationType: 'interest', status: { $in: ['applied', 'interested', 'pending'] } },
+        // Atomic update: only transition if still pending to prevent duplicate processing
+        const updated = await InterestRequest.findOneAndUpdate(
+          { _id: req._id, status: 'pending' },
           {
-            $set: {
-              status: 'rejected',
-              feedback: 'PoC has not approved before deadline',
-              statusComment: 'PoC has not approved before deadline'
-            },
-            $push: {
-              statusHistory: {
-                status: 'rejected',
-                changedAt: now,
-                comment: 'PoC has not approved before deadline'
-              }
-            }
-          }
+            status: 'rejected',
+            rejectionReason: 'PoC has not approved before deadline',
+            reviewNotes: 'Automatically rejected because Campus PoC did not approve before the application deadline.',
+            reviewedAt: now
+          },
+          { new: true }
         );
+
+        // Only proceed with side effects if this process performed the transition
+        if (updated) {
+          const Application = require('../models/Application');
+          try {
+            await Application.updateMany(
+              { student: req.student, job: req.job._id, applicationType: 'interest', status: { $in: ['applied', 'interested', 'pending'] } },
+              {
+                $set: {
+                  status: 'rejected',
+                  feedback: 'PoC has not approved before deadline',
+                  statusComment: 'PoC has not approved before deadline'
+                },
+                $push: {
+                  statusHistory: {
+                    status: 'rejected',
+                    changedAt: now,
+                    comment: 'PoC has not approved before deadline'
+                  }
+                }
+              }
+            );
+          } catch (appUpdateErr) {
+            console.error(`Failed to update Application for rejected InterestRequest ${req._id}:`, appUpdateErr);
+            console.error(`InterestRequest is 'rejected' but Application may still be 'interested'. Reconciliation will retry on next scheduler run.`);
+            // Don't send Discord notification if Application update failed to avoid inconsistency
+            return;
+          }
+
+          // Send Discord notification for auto-rejection
+          try {
+            await discordService.sendInterestRequestRejectionNotification(req, req.student, req.job);
+          } catch (discordErr) {
+            console.error('Failed to send Discord notification for auto-rejected interest request:', discordErr);
+          }
+        }
       }
     }
   } catch (err) {
@@ -1875,6 +1898,19 @@ router.post('/:id/interest', auth, authorize('student'), [
     });
 
     await interestRequest.save();
+
+    // Create an Application record with type 'interest' so the student appears in eligible students list
+    const Application = require('../models/Application');
+    const interestApplication = new Application({
+      student: req.userId,
+      job: jobId,
+      resume: resume || student.studentProfile?.resume,
+      coverLetter: '',
+      customResponses: [],
+      applicationType: 'interest',
+      status: 'interested'
+    });
+    await interestApplication.save();
 
     // Notify Campus PoC
     const campusPoCs = await User.find({
@@ -2115,8 +2151,12 @@ router.patch('/interest-requests/:requestId', auth, authorize('campus_poc', 'coo
     // If approved, convert or create a regular application so the student has a proper application journey
     if (status === 'approved') {
       try {
-        // Find existing interest application
-        let interestApp = await Application.findOne({ student: request.student._id, job: request.job._id, applicationType: 'interest' });
+        // Find existing interest application (status should be 'interested')
+        let interestApp = await Application.findOne({
+          student: request.student._id,
+          job: request.job._id,
+          applicationType: 'interest'
+        });
 
         if (interestApp) {
           // Convert to regular application
