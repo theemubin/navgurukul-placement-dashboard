@@ -106,6 +106,7 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
           { path: '/campus-poc/interest-requests', icon: Heart, label: 'Interest Requests', badge: pendingInterestCount },
           { path: '/campus-poc/pipeline', icon: BarChart3, label: 'Talent Pipeline' },
           { path: '/campus-poc/stagnation', icon: ShieldAlert, label: 'Stagnation & Bottlenecks' },
+          { path: '/campus-poc/post-placement', icon: ShieldCheck, label: 'Post-Placement Tracking' },
           { path: '/campus-poc/post-placement-monitoring', icon: ClipboardCheck, label: 'Post-Placement Monitoring' },
           { path: '/scam-detector', icon: ShieldCheck, label: 'Scam Detector (Beta)' },
           { path: '/scam-reports', icon: Database, label: 'Scam Reports' }

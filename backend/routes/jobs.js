@@ -2898,6 +2898,53 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
 
     // Get job readiness data for students
     const studentIds = applications.map(app => app.student._id);
+
+    // Get interest requests for these students for this job
+    const interestRequests = await InterestRequest.find({
+      student: { $in: studentIds },
+      job: id
+    });
+
+    // Create interest request lookup
+    const interestRequestLookup = {};
+    interestRequests.forEach(ir => {
+      interestRequestLookup[ir.student.toString()] = ir;
+    });
+
+    // Helper to determine Interest Request Status
+    const getInterestRequestStatus = (app) => {
+      const interestRequest = interestRequestLookup[app.student._id.toString()];
+      if (!interestRequest) {
+        return 'Standard Application';
+      }
+
+      // Check the status and rejection reason to determine the specific status
+      if (interestRequest.status === 'approved') {
+        return 'Approved';
+      }
+
+      if (interestRequest.status === 'pending') {
+        return 'Pending';
+      }
+
+      if (interestRequest.status === 'rejected') {
+        // Distinguish between manual PoC rejection and deadline-based rejection
+        // Manual rejection has reviewedBy set
+        // Deadline rejection has specific rejectionReason and no reviewedBy
+        if (interestRequest.reviewedBy) {
+          return 'Rejected by PoC';
+        }
+        // Check for deadline rejection by examining the rejection reason
+        if (interestRequest.rejectionReason?.includes('PoC has not approved before deadline')) {
+          return 'Rejected due to Deadline';
+        }
+        // Fallback: if no reviewedBy but generic reason, assume deadline
+        return 'Rejected due to Deadline';
+      }
+
+      return 'Standard Application';
+    };
+
     const jobReadinessData = await StudentJobReadiness.find({
       student: { $in: studentIds }
     }).populate('student', 'firstName lastName');
@@ -3007,7 +3054,8 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
       jobReadinessStatus: (app) => {
         const jrd = jobReadinessLookup[app.student?._id?.toString()];
         return jrd?.status || 'Pending';
-      }
+      },
+      interestRequestStatus: (app) => getInterestRequestStatus(app)
     };
 
     // Priority fields that must always come first if selected
@@ -3025,7 +3073,13 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
     const prioritizedSelection = fixedPriority.filter(pk => incomingFields.includes(pk));
     const dynamicSelection = incomingFields.filter(ik => !fixedPriority.includes(ik));
 
-    const selectedFields = [...prioritizedSelection, ...dynamicSelection];
+    let selectedFields = [...prioritizedSelection, ...dynamicSelection];
+
+    // Always include interestRequestStatus for CSV exports
+    if (format === 'csv' && !selectedFields.includes('interestRequestStatus')) {
+      selectedFields.push('interestRequestStatus');
+    }
+
     const layout = req.body.layout || 'resume'; // 'resume' or 'table'
 
     // Handle different export formats
@@ -3094,6 +3148,9 @@ router.post('/:id/export', auth, authorize('coordinator', 'manager'), async (req
           // Header on profile pages
           doc.fontSize(7).fillColor('#cbd5e1').font('Helvetica-Bold')
             .text(`APPLICANT ${index + 1} OF ${applications.length} | ${job.title.toUpperCase()}`, margin, 25);
+
+          // Add interest request status to app object for PDF display
+          app.interestRequestStatus = getInterestRequestStatus(app);
 
           drawPortfolioProfile(doc, app, margin, 55, contentWidth, doc.page.height - 110);
 

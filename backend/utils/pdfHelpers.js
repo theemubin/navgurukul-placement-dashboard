@@ -183,6 +183,13 @@ function drawPortfolioProfile(doc, app, margin, y, w, h) {
   const statusY = y + h - 20;
   const statusText = `APPLICATION STATUS: ${(app.status || 'Applied').toUpperCase()}`;
   doc.fontSize(8).fillColor('#94a3b8').font('Helvetica-Bold').text(statusText, statusX, statusY);
+
+  // Interest Request Status
+  if (app.interestRequestStatus && app.interestRequestStatus !== 'Standard Application') {
+    const interestStatusY = y + h - 35;
+    const interestStatusText = `INTEREST REQUEST: ${app.interestRequestStatus.toUpperCase()}`;
+    doc.fontSize(8).fillColor('#64748b').font('Helvetica-Bold').text(interestStatusText, statusX, interestStatusY);
+  }
 }
 
 module.exports = {

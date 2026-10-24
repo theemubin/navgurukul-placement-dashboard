@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Building2, CheckCircle2, ShieldCheck, UserCheck } from 'lucide-react';
+import { Building2, CheckCircle2, Download, FileText, Image as ImageIcon, ShieldCheck, UserCheck, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { postPlacementAPI } from '../../services/api';
-import { Button, LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
+import { Button, LoadingSpinner, Modal, StatusBadge } from '../../components/common/UIComponents';
 import { completionText, formatMonthYear, getDocumentLabel, toPeriodKey } from '../../utils/postPlacement';
 
 const statusPillClasses = {
@@ -87,6 +87,12 @@ const StudentPostPlacementTracking = () => {
     ctc: '',
     stipendOrSalary: '',
     currency: 'INR'
+  });
+  const [previewModal, setPreviewModal] = useState({
+    isOpen: false,
+    document: null,
+    loading: false,
+    error: null
   });
 
   useEffect(() => {
@@ -201,7 +207,7 @@ const StudentPostPlacementTracking = () => {
         stipendOrSalary: '',
         currency: 'INR'
       });
-      toast.success(placement ? 'Placement details saved successfully' : 'Placement submitted successfully');
+      toast.success(placement ? 'Placement details updated successfully' : 'Placement submitted successfully');
       await fetchTracking({ forceRefresh: true });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to submit placement');
@@ -221,6 +227,50 @@ const StudentPostPlacementTracking = () => {
     } finally {
       setUploadingKey('');
     }
+  };
+
+  const openPreview = (document) => {
+    setPreviewModal({
+      isOpen: true,
+      document,
+      loading: false,
+      error: null
+    });
+  };
+
+  const closePreview = () => {
+    setPreviewModal({
+      isOpen: false,
+      document: null,
+      loading: false,
+      error: null
+    });
+  };
+
+  const downloadDocument = (document) => {
+    try {
+      const link = document.createElement('a');
+      link.href = document.fileUrl;
+      link.download = document.originalName || 'document';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      toast.error('Failed to download document');
+    }
+  };
+
+  const getFileIcon = (mimeType) => {
+    if (!mimeType) return <FileText className="h-5 w-5 text-gray-400" />;
+    if (mimeType.startsWith('image/')) return <ImageIcon className="h-5 w-5 text-blue-500" />;
+    if (mimeType === 'application/pdf') return <FileText className="h-5 w-5 text-red-500" />;
+    return <FileText className="h-5 w-5 text-gray-400" />;
+  };
+
+  const isPreviewable = (mimeType) => {
+    if (!mimeType) return false;
+    return mimeType.startsWith('image/') || mimeType === 'application/pdf';
   };
 
   const replaceDocument = async (documentId, file) => {
@@ -258,8 +308,8 @@ const StudentPostPlacementTracking = () => {
     const key = required.documentKey;
 
     return (
-      <div key={key} className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-gray-50/60 p-4 md:flex-row md:items-center md:justify-between">
-        <div>
+      <div key={key} className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-gray-50/60 p-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-black text-gray-900">{getDocumentLabel(required)}</p>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${statusPillClasses[status] || 'bg-gray-100 text-gray-700'}`}>
@@ -273,13 +323,41 @@ const StudentPostPlacementTracking = () => {
             </p>
           )}
           {document?.rejectionReason && <p className="mt-1 text-xs text-red-600">Reason: {document.rejectionReason}</p>}
-        </div>
-        <div className="flex flex-wrap gap-2">
+
+          {/* Document card for uploaded files */}
           {document?.fileUrl && (
-            <a href={document.fileUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">
-              View
-            </a>
+            <div className="mt-3 max-w-xs">
+              <div
+                className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 hover:border-primary-300 hover:shadow-md transition-all cursor-pointer"
+                onClick={() => openPreview(document)}
+              >
+                <div className="flex-shrink-0">
+                  {getFileIcon(document.mimeType)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {document.originalName || 'Document'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {document.mimeType || 'Unknown type'}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadDocument(document);
+                  }}
+                  className="flex-shrink-0"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           )}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3 md:mt-0">
           <Button variant="outline" size="sm" onClick={() => handleFilePick(required.documentType, required.period?.key || '', document ? 'replace' : 'upload', document?._id)} disabled={uploadingKey === document?.documentKey || uploadingKey === document?._id}>
             {document ? 'Replace' : 'Upload'}
           </Button>
@@ -318,7 +396,7 @@ const StudentPostPlacementTracking = () => {
     );
   }
 
-  if (true) {
+  if (!placement) {
     return (
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-xl shadow-gray-100/50">
@@ -420,7 +498,7 @@ const StudentPostPlacementTracking = () => {
 
           <div className="mt-6">
             <Button onClick={handleSelfReport} disabled={creatingPlacement}>
-              {creatingPlacement ? 'Saving...' : placement ? 'Save Placement Details' : 'I am Placed - Submit Details'}
+              {creatingPlacement ? 'Saving...' : 'Submit Placement Details'}
             </Button>
           </div>
         </div>
@@ -575,6 +653,78 @@ const StudentPostPlacementTracking = () => {
           </div>
         </div>
       </div>
+
+      {/* Document Preview Modal */}
+      <Modal
+        isOpen={previewModal.isOpen}
+        onClose={closePreview}
+        title="Document Preview"
+        size="xl"
+      >
+        {previewModal.document && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  {previewModal.document.originalName || 'Document'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {previewModal.document.mimeType || 'Unknown type'}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadDocument(previewModal.document)}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download
+              </Button>
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 min-h-[400px] flex items-center justify-center">
+              {isPreviewable(previewModal.document.mimeType) ? (
+                previewModal.document.mimeType?.startsWith('image/') ? (
+                  <img
+                    src={previewModal.document.fileUrl}
+                    alt={previewModal.document.originalName || 'Document preview'}
+                    className="max-w-full max-h-[600px] object-contain"
+                    onError={() => setPreviewModal(prev => ({ ...prev, error: 'Failed to load image' }))}
+                  />
+                ) : previewModal.document.mimeType === 'application/pdf' ? (
+                  <iframe
+                    src={previewModal.document.fileUrl}
+                    title={previewModal.document.originalName || 'PDF preview'}
+                    className="w-full h-[600px] border-0"
+                    onError={() => setPreviewModal(prev => ({ ...prev, error: 'Failed to load PDF' }))}
+                  />
+                ) : (
+                  <div className="text-center">
+                    <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-sm text-gray-600">Preview not available for this file type</p>
+                  </div>
+                )
+              ) : (
+                <div className="text-center">
+                  <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-sm text-gray-600 mb-2">Preview not available for this file type</p>
+                  <p className="text-xs text-gray-500">Please download the file to view it</p>
+                </div>
+              )}
+
+              {previewModal.error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90">
+                  <div className="text-center">
+                    <X className="h-16 w-16 text-red-500 mx-auto mb-4" />
+                    <p className="text-sm font-medium text-gray-900">{previewModal.error}</p>
+                    <p className="text-xs text-gray-500 mt-2">Please try downloading the file instead</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

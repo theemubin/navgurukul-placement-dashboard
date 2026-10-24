@@ -88,6 +88,7 @@ import LeadsManagement from './pages/manager/LeadsManagement';
 import GharManagement from './pages/manager/GharManagement';
 import ManagerCommunication from './pages/manager/Communication';
 import ManagerPostPlacementTracking from './pages/manager/PostPlacementTracking';
+import POCPostPlacementTracking from './pages/campus-poc/PostPlacementTracking';
 
 // Common Pages
 import Notifications from './pages/common/Notifications';
@@ -237,6 +238,7 @@ function App() {
         <Route path="pipeline" element={<PipelineAnalytics />} />
         <Route path="stagnation" element={<BottlenecksPage />} />
         <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
+        <Route path="post-placement" element={<POCPostPlacementTracking />} />
       </Route>
 
       {/* Coordinator Routes */}

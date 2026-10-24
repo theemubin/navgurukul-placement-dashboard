@@ -94,23 +94,12 @@ const buildPlacementResponse = async (placement) => {
 };
 
 const syncPlacementDocumentToStudentProfile = async ({ studentId, placementId, document }) => {
-  const student = await User.findById(studentId).select('studentProfile');
-  if (!student) return;
-
-  if (!student.studentProfile) {
-    student.studentProfile = { profileStatus: 'draft' };
-  }
-
-  if (!Array.isArray(student.studentProfile.postPlacementDocuments)) {
-    student.studentProfile.postPlacementDocuments = [];
-  }
-
+  // Use raw MongoDB update to avoid Mongoose validation on existing null documentPeriod values
   const entry = {
     placement: placementId || document.placement || null,
     documentId: document._id,
     documentType: document.documentType,
     documentKey: document.documentKey,
-    documentPeriod: document.documentPeriod || null,
     fileUrl: document.fileUrl,
     storagePath: document.storagePath,
     originalName: document.originalName,
@@ -124,23 +113,54 @@ const syncPlacementDocumentToStudentProfile = async ({ studentId, placementId, d
     syncedAt: new Date()
   };
 
-  const existingIndex = student.studentProfile.postPlacementDocuments.findIndex((item) => {
-    if (item.documentId && String(item.documentId) === String(document._id)) return true;
-    if (item.documentKey && document.documentKey && String(item.documentKey) === String(document.documentKey)) return true;
-    return false;
-  });
-
-  if (existingIndex >= 0) {
-    student.studentProfile.postPlacementDocuments[existingIndex] = {
-      ...student.studentProfile.postPlacementDocuments[existingIndex],
-      ...entry
-    };
-  } else {
-    student.studentProfile.postPlacementDocuments.push(entry);
+  // Only add documentPeriod if it exists (for salary/stipend slips)
+  if (document.documentPeriod) {
+    entry.documentPeriod = document.documentPeriod;
   }
 
-  student.markModified('studentProfile.postPlacementDocuments');
-  await student.save();
+  try {
+    const result = await User.updateOne(
+      { _id: studentId },
+      {
+        $pull: {
+          'studentProfile.postPlacementDocuments': {
+            $or: [
+              { documentId: document._id },
+              { documentKey: document.documentKey }
+            ]
+          }
+        }
+      }
+    );
+
+    // Remove null documentPeriod from all documents
+    await User.updateOne(
+      { _id: studentId },
+      {
+        $set: {
+          'studentProfile.postPlacementDocuments.$[elem].documentPeriod': {
+            $cond: [
+              { $eq: ['$studentProfile.postPlacementDocuments.$[elem].documentPeriod', null] },
+              '$$REMOVE',
+              '$studentProfile.postPlacementDocuments.$[elem].documentPeriod'
+            ]
+          }
+        }
+      }
+    );
+
+    await User.updateOne(
+      { _id: studentId },
+      {
+        $push: {
+          'studentProfile.postPlacementDocuments': entry
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Error syncing document to student profile:', error);
+    // Don't throw - the document is saved in PostPlacementDocument, sync failure shouldn't block the upload
+  }
 };
 
 const syncPlacementDocumentsForPlacementToStudentProfile = async ({ studentId, placementId }) => {
@@ -176,9 +196,6 @@ router.get('/me', auth, authorize('student'), async (req, res) => {
 router.post('/me/self-report', auth, authorize('student'), async (req, res) => {
   try {
     const existingPlacement = await loadPlacementForStudent(req.userId);
-    if (existingPlacement) {
-      return res.status(409).json({ message: 'A placement record already exists for this student' });
-    }
 
     const {
       companyName,
@@ -227,32 +244,83 @@ router.post('/me/self-report', auth, authorize('student'), async (req, res) => {
       }
     }
 
-    const placement = await PostPlacementTracking.create({
-      student: req.userId,
-      companyName: String(companyName).trim(),
-      designation: String(designation).trim(),
-      employmentType,
-      joiningDate: normalizedJoiningDate,
-      internshipStartDate: normalizedStart,
-      internshipEndDate: normalizedEnd,
-      hasFullTimeConversion: employmentType === 'Full-Time Placement' ? null : hasFullTimeConversion === true,
-      fullTimeConversionDate: employmentType === 'Full-Time Placement' ? null : normalizedConversionDate,
-      ctc: ctc === '' || ctc === undefined ? null : Number(ctc),
-      stipendOrSalary: stipendOrSalary === '' || stipendOrSalary === undefined ? null : Number(stipendOrSalary),
-      currency: currency || 'INR',
-      status: 'active',
-      createdBy: req.userId,
-      updatedBy: req.userId
-    });
+    let placement;
+    if (existingPlacement) {
+      // Update existing placement (from GHAR sync or previous self-report)
+      Object.assign(existingPlacement, {
+        companyName: String(companyName).trim(),
+        designation: String(designation).trim(),
+        employmentType,
+        joiningDate: normalizedJoiningDate,
+        internshipStartDate: normalizedStart,
+        internshipEndDate: normalizedEnd,
+        hasFullTimeConversion: employmentType === 'Full-Time Placement' ? null : hasFullTimeConversion === true,
+        fullTimeConversionDate: employmentType === 'Full-Time Placement' ? null : normalizedConversionDate,
+        ctc: ctc === '' || ctc === undefined ? null : Number(ctc),
+        stipendOrSalary: stipendOrSalary === '' || stipendOrSalary === undefined ? null : Number(stipendOrSalary),
+        currency: currency || 'INR',
+        updatedBy: req.userId
+      });
+      placement = await existingPlacement.save();
+      console.log('Self-report placement updated:', {
+        placementId: placement._id,
+        employmentType: placement.employmentType,
+        joiningDate: placement.joiningDate,
+        internshipStartDate: placement.internshipStartDate,
+        internshipEndDate: placement.internshipEndDate
+      });
+    } else {
+      // Create new placement
+      placement = await PostPlacementTracking.create({
+        student: req.userId,
+        companyName: String(companyName).trim(),
+        designation: String(designation).trim(),
+        employmentType,
+        joiningDate: normalizedJoiningDate,
+        internshipStartDate: normalizedStart,
+        internshipEndDate: normalizedEnd,
+        hasFullTimeConversion: employmentType === 'Full-Time Placement' ? null : hasFullTimeConversion === true,
+        fullTimeConversionDate: employmentType === 'Full-Time Placement' ? null : normalizedConversionDate,
+        ctc: ctc === '' || ctc === undefined ? null : Number(ctc),
+        stipendOrSalary: stipendOrSalary === '' || stipendOrSalary === undefined ? null : Number(stipendOrSalary),
+        currency: currency || 'INR',
+        status: 'active',
+        createdBy: req.userId,
+        updatedBy: req.userId
+      });
+      console.log('Self-report placement created:', {
+        placementId: placement._id,
+        employmentType: placement.employmentType,
+        joiningDate: placement.joiningDate,
+        internshipStartDate: placement.internshipStartDate,
+        internshipEndDate: placement.internshipEndDate
+      });
+    }
 
     await User.findByIdAndUpdate(req.userId, {
       'studentProfile.currentStatus': 'Placed'
     });
 
-    res.status(201).json(await buildPlacementResponse(await placement.populate(placementPopulation)));
+    try {
+      const populatedPlacement = await placement.populate(placementPopulation);
+      const response = await buildPlacementResponse(populatedPlacement);
+      res.status(existingPlacement ? 200 : 201).json(response);
+    } catch (responseError) {
+      console.error('Error building placement response:', responseError);
+      console.error('Response error details:', {
+        message: responseError.message,
+        stack: responseError.stack
+      });
+      res.status(500).json({ message: 'Failed to build placement response' });
+    }
   } catch (error) {
     console.error('Self-report placement error:', error);
-    res.status(500).json({ message: 'Failed to create self-reported placement' });
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({ message: error.message || 'Failed to create self-reported placement' });
   }
 });
 
@@ -418,18 +486,28 @@ router.post('/me/documents', auth, authorize('student'), upload.single('document
 
     const requiredDocuments = buildRequiredDocuments(placement);
     const isRequired = requiredDocuments.some((required) => required.documentKey === documentKey);
+
+    // For self-report flow, allow document upload even if not strictly required
+    // This handles cases where dates might not be perfectly aligned yet
     if (!isRequired) {
-      return res.status(400).json({ message: 'This document is not required for the current placement' });
+      console.warn('Document not in required list, but allowing upload:', {
+        documentKey,
+        documentType,
+        periodKey,
+        employmentType: placement.employmentType
+      });
+      // Don't reject - allow the upload to proceed
     }
 
     const existing = await PostPlacementDocument.findOne({ placement: placement._id, documentKey });
-    if (existing && existing.storagePath && existing.storagePath !== req.file.filename) {
-      try {
-        await cloudinary.uploader.destroy(existing.storagePath, { resource_type: 'raw' });
-      } catch (cloudinaryErr) {
-        console.warn('Unable to delete previous placement document from Cloudinary:', cloudinaryErr.message);
-      }
-    }
+    // NOTE: We do NOT delete from Cloudinary when replacing - keep old records for audit trail
+    // if (existing && existing.storagePath && existing.storagePath !== req.file.filename) {
+    //   try {
+    //     await cloudinary.uploader.destroy(existing.storagePath, { resource_type: 'raw' });
+    //   } catch (cloudinaryErr) {
+    //     console.warn('Unable to delete previous placement document from Cloudinary:', cloudinaryErr.message);
+    //   }
+    // }
 
     const requiredDocument = requiredDocuments.find((required) => required.documentKey === documentKey);
     const documentPeriod = requiredDocument?.period || null;
@@ -464,7 +542,20 @@ router.post('/me/documents', auth, authorize('student'), upload.single('document
     });
   } catch (error) {
     console.error('Upload placement document error:', error);
-    res.status(500).json({ message: 'Failed to upload document' });
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      reqFile: req.file ? {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path,
+        filename: req.file.filename
+      } : null,
+      reqBody: req.body
+    });
+    res.status(500).json({ message: error.message || 'Failed to upload document' });
   }
 });
 
@@ -481,13 +572,14 @@ router.post('/me/documents/:documentId/replace', auth, authorize('student'), upl
       return res.status(400).json({ message: 'No document uploaded' });
     }
 
-    if (document.storagePath) {
-      try {
-        await cloudinary.uploader.destroy(document.storagePath, { resource_type: 'raw' });
-      } catch (cloudinaryErr) {
-        console.warn('Unable to delete previous placement document from Cloudinary:', cloudinaryErr.message);
-      }
-    }
+    // NOTE: We do NOT delete from Cloudinary when replacing - keep old records for audit trail
+    // if (document.storagePath) {
+    //   try {
+    //     await cloudinary.uploader.destroy(document.storagePath, { resource_type: 'raw' });
+    //   } catch (cloudinaryErr) {
+    //     console.warn('Unable to delete previous placement document from Cloudinary:', cloudinaryErr.message);
+    //   }
+    // }
 
     document.fileUrl = req.file.path;
     document.storagePath = req.file.filename || req.file.public_id || '';
@@ -535,6 +627,24 @@ router.get('/admin', auth, authorize('campus_poc', 'coordinator', 'manager'), as
       query.joiningDate = {};
       if (joiningDateFrom) query.joiningDate.$gte = new Date(joiningDateFrom);
       if (joiningDateTo) query.joiningDate.$lte = new Date(joiningDateTo);
+    }
+
+    // Campus PoC filter: only show students from their campus
+    if (req.user.role === 'campus_poc') {
+      const campusIds = [];
+      if (req.user.campus) campusIds.push(req.user.campus);
+      if (Array.isArray(req.user.managedCampuses)) {
+        req.user.managedCampuses.forEach((campus) => campusIds.push(campus));
+      }
+      if (campusIds.length > 0) {
+        // Get student IDs from these campuses
+        const campusStudents = await User.find({
+          role: 'student',
+          campus: { $in: campusIds }
+        }).select('_id');
+        const studentIds = campusStudents.map(s => s._id);
+        query.student = { $in: studentIds };
+      }
     }
 
     const placements = await PostPlacementTracking.find(query)
