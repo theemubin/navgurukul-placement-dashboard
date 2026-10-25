@@ -265,9 +265,40 @@ function calculateEligibilityMatch(student, job, options = {}) {
     if (acceptedDegrees.includes('Any Graduate') && studentDegrees.length > 0) {
       meets = true;
     } else {
-      meets = acceptedDegrees.some(deg =>
-        studentDegrees.some(sd => sd?.includes(deg.toLowerCase()))
-      );
+      // Common degree abbreviations mapping for flexible matching
+      const degreeAbbreviations = {
+        'bachelor of computer application': 'bca',
+        'bachelor of computer applications': 'bca',
+        'bachelor of commerce': 'bcom',
+        'bachelor of commerce honours': 'bcom hons',
+        'bachelor of science': 'bsc',
+        'bachelor of arts': 'ba',
+        'bachelor of technology': 'btech',
+        'bachelor of engineering': 'be',
+        'master of computer application': 'mca',
+        'master of business administration': 'mba',
+        'master of technology': 'mtech',
+        'master of engineering': 'me'
+      };
+
+      meets = acceptedDegrees.some(deg => {
+        const degLower = deg.toLowerCase();
+        return studentDegrees.some(sd => {
+          if (!sd) return false;
+          // Direct match
+          if (sd === degLower) return true;
+          // Student degree includes job degree (e.g., student has "BCA", job accepts "BCA")
+          if (sd.includes(degLower)) return true;
+          // Job degree includes student degree (e.g., student has "BCA", job accepts "Bachelor of Computer Application")
+          if (degLower.includes(sd)) return true;
+          // Check abbreviations mapping
+          const studentAbbr = degreeAbbreviations[sd] || sd;
+          const jobAbbr = degreeAbbreviations[degLower] || degLower;
+          if (studentAbbr === jobAbbr) return true;
+          if (studentAbbr.includes(jobAbbr) || jobAbbr.includes(studentAbbr)) return true;
+          return false;
+        });
+      });
     }
 
     if (meets) passedCount++;

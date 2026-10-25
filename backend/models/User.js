@@ -918,4 +918,14 @@ userSchema.statics.syncGharData = async function (email, externalData, options =
   return await user.save();
 };
 
+// Indexes for frequently queried fields in dashboard stats
+userSchema.index({ role: 1, campus: 1, isActive: 1 });
+userSchema.index({ role: 1, 'studentProfile.profileStatus': 1, isActive: 1 });
+userSchema.index({ role: 1, 'studentProfile.currentStatus': 1, isActive: 1 });
+userSchema.index({ role: 1, campus: 1, 'studentProfile.currentStatus': 1, isActive: 1 });
+userSchema.index({ campus: 1, isActive: 1 });
+userSchema.index({ 'studentProfile.currentSchool': 1 });
+userSchema.index({ email: 1 });
+userSchema.index({ firstName: 1, lastName: 1 });
+
 module.exports = mongoose.model('User', userSchema);

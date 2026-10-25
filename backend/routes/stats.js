@@ -1364,12 +1364,13 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
       query.placementCycle = cycleId;
     }
 
-    // Get all active/closed jobs that are eligible for this campus
+    // Get all active/closed jobs that are eligible for this campus - use lean()
     const jobs = await Job.find(query)
       .populate('eligibility.campuses', 'name')
       .populate('coordinator', 'firstName lastName')
       .select('title company.name company.logo location roleCategory coordinator jobType applicationDeadline maxPositions eligibility createdAt status')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     // Get approved students count for this campus (matches the detail view criteria)
     const studentCount = await User.countDocuments({
@@ -1381,27 +1382,42 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
     });
 
     // Get application counts for all jobs in one query (including placed/inactive students)
-    const allCampusStudents = await User.find({
+    // Optimize by using countDocuments with aggregation instead of fetching all students
+    const allCampusStudentIds = await User.find({
       role: 'student',
       campus: { $in: campusIds }
-    }).select('_id');
-    const studentIds = allCampusStudents.map(student => student._id);
+    }).select('_id').lean();
+    const studentIds = allCampusStudentIds.map(student => student._id);
     const jobIds = jobs.map(job => job._id);
-    const applications = await Application.find({
-      job: { $in: jobIds },
-      student: { $in: studentIds }
-    }).select('job status').lean();
-    const applicationsByJob = new Map();
+    
+    // Use aggregation to count applications by job and status in one query
+    const applicationStats = await Application.aggregate([
+      { $match: { job: { $in: jobIds }, student: { $in: studentIds } } },
+      {
+        $group: {
+          _id: { job: '$job', status: '$status' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
 
-    applications.forEach((application) => {
-      const jobId = String(application.job);
-      const jobApplications = applicationsByJob.get(jobId) || [];
-      jobApplications.push(application);
-      applicationsByJob.set(jobId, jobApplications);
+    // Build application counts map
+    const applicationsByJob = new Map();
+    applicationStats.forEach(stat => {
+      const jobId = String(stat._id.job);
+      const status = stat._id.status;
+      const count = stat.count;
+      
+      if (!applicationsByJob.has(jobId)) {
+        applicationsByJob.set(jobId, { total: 0, statusCounts: {} });
+      }
+      const jobStats = applicationsByJob.get(jobId);
+      jobStats.total += count;
+      jobStats.statusCounts[status] = count;
     });
 
     const jobsWithStats = jobs.map((job) => {
-      const jobApplications = applicationsByJob.get(String(job._id)) || [];
+      const jobStats = applicationsByJob.get(String(job._id)) || { total: 0, statusCounts: {} };
 
       return {
         _id: job._id,
@@ -1417,13 +1433,13 @@ router.get('/campus-poc/eligible-jobs', auth, authorize('campus_poc'), cacheMidd
         applicationDeadline: job.applicationDeadline,
         maxPositions: job.maxPositions,
         eligibleStudents: studentCount,
-        applicationCount: jobApplications.length,
+        applicationCount: jobStats.total,
         statusCounts: {
-          applied: jobApplications.filter(a => a.status === 'applied').length,
-          shortlisted: jobApplications.filter(a => a.status === 'shortlisted').length,
-          in_progress: jobApplications.filter(a => a.status === 'in_progress').length,
-          selected: jobApplications.filter(a => a.status === 'selected').length,
-          rejected: jobApplications.filter(a => a.status === 'rejected').length
+          applied: jobStats.statusCounts.applied || 0,
+          shortlisted: jobStats.statusCounts.shortlisted || 0,
+          in_progress: jobStats.statusCounts.in_progress || 0,
+          selected: jobStats.statusCounts.selected || 0,
+          rejected: jobStats.statusCounts.rejected || 0
         },
         status: job.status,
         createdAt: job.createdAt
@@ -1470,18 +1486,20 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), cacheM
       studentQuery.placementCycle = cycleId;
     }
 
-    const students = await User.find(studentQuery).select('_id');
+    const students = await User.find(studentQuery).select('_id').lean();
     const studentIds = students.map(s => s._id);
 
     // Get total eligible students for this campus
     const totalEligibleStudents = students.length;
 
-    // Get all applications for these students with job details
+    // Get all applications for these students with job details - use lean()
     const applications = await Application.find({
       student: { $in: studentIds }
     })
+      .select('student job status currentRound roundResults createdAt updatedAt')
       .populate('student', 'firstName lastName email studentProfile.currentSchool')
-      .populate('job', 'title company.name company.logo jobType status interviewRounds eligibility applicationDeadline');
+      .populate('job', 'title company.name company.logo jobType status interviewRounds eligibility applicationDeadline')
+      .lean();
 
     // Group by company
     const companyMap = {};
@@ -1768,18 +1786,23 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), cacheMi
       }
     }
 
+    // Use lean() for better performance and populate only necessary fields
     const students = await User.find(studentQuery)
       .select('firstName lastName email studentProfile.currentSchool studentProfile.currentStatus studentProfile.externalData studentProfile.profileStatus placementCycle')
       .populate('placementCycle', 'name')
-      .populate('campus', 'name');
+      .populate('campus', 'name')
+      .lean();
 
-    // Get applications for all students
+    // Get applications for all students - use lean() and limit fields
     const studentIds = students.map(s => s._id);
     const applications = await Application.find({
       student: { $in: studentIds }
     })
+      .select('student job status currentRound roundResults feedback createdAt updatedAt')
       .populate('job', 'title company.name jobType applicationDeadline')
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean();
+    
     const applicationsByStudentId = new Map();
     applications.forEach((application) => {
       const studentId = String(application.student);

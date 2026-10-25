@@ -122,5 +122,7 @@ const applicationSchema = new mongoose.Schema({
 applicationSchema.index({ student: 1, job: 1 }, { unique: true });
 applicationSchema.index({ job: 1, student: 1, status: 1 });
 applicationSchema.index({ job: 1, status: 1 });
+applicationSchema.index({ student: 1, status: 1 });
+applicationSchema.index({ job: 1, student: 1 }); // For aggregation queries
 
 module.exports = mongoose.model('Application', applicationSchema);

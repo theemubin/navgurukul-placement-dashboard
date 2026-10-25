@@ -3,12 +3,13 @@ import { formatDistanceToNow, isPast, format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { statsAPI, placementCycleAPI, userAPI, campusAPI, gharAPI } from '../../services/api';
 import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
+import SearchInput from '../../components/common/SearchInput';
 import toast from 'react-hot-toast';
 import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
-  MessageSquare, ClipboardList, Search, Bell, UserPlus
+  MessageSquare, ClipboardList, Bell, UserPlus, Search
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -27,6 +28,8 @@ const POCDashboard = () => {
   const [pendingProfilesCount, setPendingProfilesCount] = useState(0);
   const [companyTracking, setCompanyTracking] = useState([]);
   const [schoolTracking, setSchoolTracking] = useState([]);
+  const [companySearchInput, setCompanySearchInput] = useState('');
+  const [companySearch, setCompanySearch] = useState('');
   const [eligibleJobs, setEligibleJobs] = useState([]);
   const [jobTypeFilters, setJobTypeFilters] = useState(user?.pocJobTypeFilters || []);
   const [roleCategoryFilters, setRoleCategoryFilters] = useState(user?.pocRoleCategoryFilters || []);
@@ -35,6 +38,10 @@ const POCDashboard = () => {
   const [jobSearch, setJobSearch] = useState('');
   const [coordinatorSearch, setCoordinatorSearch] = useState('');
   const [showOpportunityFilters, setShowOpportunityFilters] = useState(false);
+
+  useEffect(() => {
+    setCompanySearchInput(companySearch);
+  }, [companySearch]);
 
   useEffect(() => {
     if (user?.pocJobTypeFilters && Array.isArray(user.pocJobTypeFilters)) {
@@ -310,31 +317,34 @@ const POCDashboard = () => {
     setStatsLoading(true);
     setJobsLoading(true);
     
-    statsAPI.getCampusPocStats(selectedStatus === 'all' ? undefined : selectedStatus, { forceRefresh })
-      .then(res => {
-        setStats(res.data);
-        setPendingProfilesCount(res.data.pendingProfileApprovals || 0);
-      })
-      .catch(err => console.error(err))
-      .finally(() => setStatsLoading(false));
+    // Parallelize all API calls for better performance
+    await Promise.all([
+      statsAPI.getCampusPocStats(selectedStatus === 'all' ? undefined : selectedStatus, { forceRefresh })
+        .then(res => {
+          setStats(res.data);
+          setPendingProfilesCount(res.data.pendingProfileApprovals || 0);
+        })
+        .catch(err => console.error(err))
+        .finally(() => setStatsLoading(false)),
 
-    userAPI.getPendingSkills()
-      .then(res => setPendingSkills(res.data.slice(0, 5)))
-      .catch(err => console.error(err));
+      userAPI.getPendingSkills()
+        .then(res => setPendingSkills(res.data.slice(0, 5)))
+        .catch(err => console.error(err)),
 
-    statsAPI.getCycleStats({ forceRefresh })
-      .then(res => setCycles(res.data))
-      .catch(err => console.error(err));
+      statsAPI.getCycleStats({ forceRefresh })
+        .then(res => setCycles(res.data))
+        .catch(err => console.error(err)),
 
-    statsAPI.getEligibleJobs(undefined, { forceRefresh })
-      .then(res => {
-        setEligibleJobs(res.data.jobs || []);
-      })
-      .catch(err => console.error(err))
-      .finally(() => {
-        setJobsLoading(false);
-        setLoading(false);
-      });
+      statsAPI.getEligibleJobs(undefined, { forceRefresh })
+        .then(res => {
+          setEligibleJobs(res.data.jobs || []);
+        })
+        .catch(err => console.error(err))
+        .finally(() => {
+          setJobsLoading(false);
+          setLoading(false);
+        })
+    ]);
   };
 
   const fetchTrackingData = async (pageNum = 1, forceRefresh = false) => {
@@ -390,11 +400,31 @@ const POCDashboard = () => {
       return { ...company, jobs: sortedJobs, companyStatus: status };
     });
 
+    // Filter by search (company name or job title)
+    const filteredCompanies = processedCompanies.filter(company => {
+      if (!companySearch) return true;
+      const searchLower = companySearch.toLowerCase();
+      const matchesCompanyName = company.company?.toLowerCase().includes(searchLower);
+      const matchesAnyJob = company.jobs.some(job => job.title?.toLowerCase().includes(searchLower));
+      return matchesCompanyName || matchesAnyJob;
+    });
+
+    // For filtered companies, only keep matching jobs
+    const companiesWithFilteredJobs = filteredCompanies.map(company => {
+      if (!companySearch) return company;
+      const searchLower = companySearch.toLowerCase();
+      const matchesCompanyName = company.company?.toLowerCase().includes(searchLower);
+      const filteredJobs = matchesCompanyName 
+        ? company.jobs 
+        : company.jobs.filter(job => job.title?.toLowerCase().includes(searchLower));
+      return { ...company, jobs: filteredJobs };
+    });
+
     // Grouping
     const groups = {
-      open: processedCompanies.filter(c => c.companyStatus === 'open'),
-      active: processedCompanies.filter(c => c.companyStatus === 'active'),
-      closed: processedCompanies.filter(c => c.companyStatus === 'closed')
+      open: companiesWithFilteredJobs.filter(c => c.companyStatus === 'open'),
+      active: companiesWithFilteredJobs.filter(c => c.companyStatus === 'active'),
+      closed: companiesWithFilteredJobs.filter(c => c.companyStatus === 'closed')
     };
 
     // Sort companies within each group by their earliest deadline (for open/active)
@@ -414,7 +444,7 @@ const POCDashboard = () => {
     });
 
     return groups;
-  }, [companyTracking]);
+  }, [companyTracking, companySearch]);
 
   const fetchEligibleStudents = async (job) => {
     setEligibleStudentsModal(prev => ({ ...prev, isOpen: true, job, students: [], loading: true }));
@@ -1310,12 +1340,40 @@ const POCDashboard = () => {
 
       {activeTab === 'company' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-gray-900">Company-wise Application Tracking</h3>
-            <div className="flex gap-2 text-xs">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Open</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Active</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-400"></span> Closed</span>
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-semibold text-gray-900">Company-wise Application Tracking</h3>
+              <div className="flex gap-2 text-xs">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Open</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Active</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-400"></span> Closed</span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">This tab tracks student applications and recruitment progress company-wise. Search by company name or job title to filter.</p>
+            <div className="flex gap-2 mt-2">
+              <SearchInput
+                placeholder="Search companies or jobs..."
+                value={companySearchInput}
+                onChange={(e) => setCompanySearchInput(e.target.value)}
+                onEnter={() => setCompanySearch(companySearchInput.trim())}
+              />
+              <button
+                onClick={() => setCompanySearch(companySearchInput.trim())}
+                className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                Search
+              </button>
+              {companySearch && (
+                <button
+                  onClick={() => {
+                    setCompanySearchInput('');
+                    setCompanySearch('');
+                  }}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </div>
 

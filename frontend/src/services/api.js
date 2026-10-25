@@ -447,19 +447,19 @@ export const notificationAPI = {
 };
 
 // Stats APIs
-const cachedDashboardGetter = createCachedGetter((options = {}) => api.get('/stats/dashboard', { params: options.params }), { ttl: 2 * 60 * 1000 });
-const cachedCampusPocStatsGetter = createCachedGetter(({ status, refresh } = {}) => api.get('/stats/campus-poc', { params: { status, refresh } }), { ttl: 2 * 60 * 1000 });
-const cachedEligibleJobsGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/eligible-jobs', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
-const cachedCompanyTrackingGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }), { ttl: 2 * 60 * 1000 });
+const cachedDashboardGetter = createCachedGetter((options = {}) => api.get('/stats/dashboard', { params: options.params }), { ttl: 5 * 60 * 1000 });
+const cachedCampusPocStatsGetter = createCachedGetter(({ status, refresh } = {}) => api.get('/stats/campus-poc', { params: { status, refresh } }), { ttl: 5 * 60 * 1000 });
+const cachedEligibleJobsGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/eligible-jobs', { params: { cycleId } }), { ttl: 5 * 60 * 1000 });
+const cachedCompanyTrackingGetter = createCachedGetter(({ cycleId } = {}) => api.get('/stats/campus-poc/company-tracking', { params: { cycleId } }), { ttl: 3 * 60 * 1000 });
 const cachedSchoolTrackingGetter = createCachedGetter(({ cycleId, summary } = {}) => api.get('/stats/campus-poc/school-tracking', {
   params: {
     cycleId,
     summary,
     version: summary === 'lite' ? 2 : undefined
   }
-}), { ttl: 2 * 60 * 1000 });
-const cachedStudentSummaryGetter = createCachedGetter(({ params } = {}) => api.get('/stats/campus-poc/student-summary', { params }), { ttl: 2 * 60 * 1000 });
-const cachedCycleStatsGetter = createCachedGetter(({ refresh } = {}) => api.get('/stats/campus-poc/cycle-stats', { params: { refresh } }), { ttl: 2 * 60 * 1000 });
+}), { ttl: 3 * 60 * 1000 });
+const cachedStudentSummaryGetter = createCachedGetter(({ params } = {}) => api.get('/stats/campus-poc/student-summary', { params }), { ttl: 3 * 60 * 1000 });
+const cachedCycleStatsGetter = createCachedGetter(({ refresh } = {}) => api.get('/stats/campus-poc/cycle-stats', { params: { refresh } }), { ttl: 5 * 60 * 1000 });
 
 export const statsAPI = {
   getDashboard: (params, options = {}) => cachedDashboardGetter({ params, ...options }),
