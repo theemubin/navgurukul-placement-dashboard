@@ -13,6 +13,12 @@ const statusPillClasses = {
   Rejected: 'bg-red-100 text-red-700'
 };
 
+const formatPlacementDate = (value) => {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Not recorded' : date.toLocaleDateString();
+};
+
 const getSelfReportDocumentRequirements = (data) => {
   const requirements = [{
     key: 'OFFER_LETTER',
@@ -61,6 +67,7 @@ const StudentPostPlacementTracking = () => {
   const [requiredDocuments, setRequiredDocuments] = useState([]);
   const [completion, setCompletion] = useState({ completed: 0, total: 0, percentage: 0 });
   const [creatingPlacement, setCreatingPlacement] = useState(false);
+  const [placementEditing, setPlacementEditing] = useState(false);
   const [selfReportFiles, setSelfReportFiles] = useState({});
   const [selfReportData, setSelfReportData] = useState({
     companyName: '',
@@ -105,6 +112,7 @@ const StudentPostPlacementTracking = () => {
       const response = await postPlacementAPI.getMyPlacement(options);
       const data = response.data || {};
       setPlacement(data.placement || null);
+      setPlacementEditing(false);
       setDocuments(data.documents || []);
       setRequiredDocuments(data.requiredDocuments || []);
       setCompletion(data.completion || { completed: 0, total: 0, percentage: 0 });
@@ -136,6 +144,7 @@ const StudentPostPlacementTracking = () => {
       setSaving(true);
       await postPlacementAPI.updateMyPlacement(formData);
       toast.success('Post-placement details updated');
+      setPlacementEditing(false);
       await fetchTracking({ forceRefresh: true });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to update post-placement details');
@@ -151,6 +160,7 @@ const StudentPostPlacementTracking = () => {
       setSaving(true);
       await postPlacementAPI.resetMyPlacement();
       setPlacement(null);
+      setPlacementEditing(false);
       setDocuments([]);
       setRequiredDocuments([]);
       setCompletion({ completed: 0, total: 0, percentage: 0 });
@@ -541,12 +551,67 @@ const StudentPostPlacementTracking = () => {
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge status={placement.status || 'active'} />
-              <Button variant="danger" size="sm" onClick={handleResetPlacement} disabled={saving}>
-                Reset placement
-              </Button>
+              {!placementEditing && (
+                <Button size="sm" onClick={() => setPlacementEditing(true)}>
+                  Edit
+                </Button>
+              )}
+              {placementEditing && (
+                <Button variant="danger" size="sm" onClick={handleResetPlacement} disabled={saving}>
+                  Reset placement
+                </Button>
+              )}
             </div>
           </div>
 
+          {!placementEditing && (
+            <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400">Company</p>
+                  <p className="mt-1 font-bold text-gray-900">{placement.companyName || 'Not recorded'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400">Role / Designation</p>
+                  <p className="mt-1 font-bold text-gray-900">{placement.designation || 'Not recorded'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400">Employment type</p>
+                  <p className="mt-1 font-bold text-gray-900">{placement.employmentType || 'Not recorded'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400">Joining date</p>
+                  <p className="mt-1 font-bold text-gray-900">{formatPlacementDate(placement.joiningDate)}</p>
+                </div>
+                {isInternship && (
+                  <>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-gray-400">Internship period</p>
+                      <p className="mt-1 font-bold text-gray-900">
+                        {formatPlacementDate(placement.internshipStartDate)} – {formatPlacementDate(placement.internshipEndDate)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-gray-400">Full-time conversion</p>
+                      <p className="mt-1 font-bold text-gray-900">
+                        {placement.hasFullTimeConversion === true ? `Yes${placement.fullTimeConversionDate ? `, ${formatPlacementDate(placement.fullTimeConversionDate)}` : ''}` : placement.hasFullTimeConversion === false ? 'No' : 'Not recorded'}
+                      </p>
+                    </div>
+                  </>
+                )}
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400">CTC</p>
+                  <p className="mt-1 font-bold text-gray-900">{placement.ctc ? `${placement.currency || 'INR'} ${placement.ctc}` : 'Not recorded'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400">Stipend / Salary</p>
+                  <p className="mt-1 font-bold text-gray-900">{placement.stipendOrSalary ? `${placement.currency || 'INR'} ${placement.stipendOrSalary}` : 'Not recorded'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className={placementEditing ? '' : 'hidden'}>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <label className="space-y-1 text-sm font-medium text-gray-700">
               Employment Type
@@ -622,6 +687,7 @@ const StudentPostPlacementTracking = () => {
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save Placement Details'}
             </Button>
+          </div>
           </div>
         </div>
 

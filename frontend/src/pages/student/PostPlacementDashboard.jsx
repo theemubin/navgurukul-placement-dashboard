@@ -27,6 +27,17 @@ const getTodayKey = () => {
   return new Date().toISOString().slice(0, 10);
 };
 
+const getTrackerForm = (entry = null) => ({
+  date: entry?.date ? new Date(entry.date).toISOString().slice(0, 10) : getTodayKey(),
+  projectName: entry?.projectName || '',
+  tasksPerformed: entry?.tasksPerformed || '',
+  challengesFaced: entry?.challengesFaced || '',
+  resolution: entry?.resolution || '',
+  challengeStatus: entry?.challengeStatus || 'No Challenge',
+  supportRequired: entry?.supportRequired || '',
+  additionalNotes: entry?.additionalNotes || ''
+});
+
 const emptyTrackerForm = {
   date: getTodayKey(),
   projectName: '',
@@ -36,17 +47,6 @@ const emptyTrackerForm = {
   challengeStatus: 'No Challenge',
   supportRequired: '',
   additionalNotes: ''
-};
-
-const getConversionLabel = (placement) => {
-  if (placement.employmentType === 'Full-Time Placement') return 'Not applicable';
-  if (placement.hasFullTimeConversion === true) {
-    return placement.fullTimeConversionDate
-      ? `Yes, ${formatDate(placement.fullTimeConversionDate)}`
-      : 'Yes, date pending';
-  }
-  if (placement.hasFullTimeConversion === false) return 'No';
-  return 'Not recorded';
 };
 
 const MetricCard = ({ icon: Icon, label, value, detail, tone = 'blue' }) => {
@@ -88,6 +88,7 @@ const PostPlacementDashboard = () => {
   const [trackerSummary, setTrackerSummary] = useState(null);
   const [trackerForm, setTrackerForm] = useState(emptyTrackerForm);
   const [useLifeline, setUseLifeline] = useState(false);
+  const [trackerEditing, setTrackerEditing] = useState(false);
   const [trackerSaving, setTrackerSaving] = useState(false);
   const [trackerError, setTrackerError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -109,8 +110,9 @@ const PostPlacementDashboard = () => {
           setTodayEntry(nextTodayEntry);
           setRecentEntries(data.entries || []);
           setTrackerSummary(data.summary || null);
-          setTrackerForm({ ...emptyTrackerForm });
+          setTrackerForm(getTrackerForm(nextTodayEntry));
           setUseLifeline(false);
+          setTrackerEditing(false);
           setTrackerError('');
         } catch (trackerRequestError) {
           setTrackerError(trackerRequestError.response?.data?.message || 'Unable to load daily updates');
@@ -138,8 +140,9 @@ const PostPlacementDashboard = () => {
       setTodayEntry(trackerResponse.data?.today || null);
       setRecentEntries(trackerResponse.data?.entries || []);
       setTrackerSummary(trackerResponse.data?.summary || null);
-      setTrackerForm({ ...emptyTrackerForm, date: getTodayKey() });
+      setTrackerForm(getTrackerForm(trackerResponse.data?.today || null));
       setUseLifeline(false);
+      setTrackerEditing(false);
     } catch (requestError) {
       setTrackerError(requestError.response?.data?.message || 'Unable to save today\'s update');
     } finally {
@@ -182,20 +185,19 @@ const PostPlacementDashboard = () => {
     );
   }
 
-  const joiningDate = placement.joiningDate || placement.internshipStartDate;
   const currentStatus = placement.status || placement.student?.studentProfile?.currentStatus || 'active';
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
-      <section className="relative overflow-hidden rounded-[2rem] bg-gray-950 p-7 text-white shadow-xl md:p-9">
+      <section className="relative overflow-hidden rounded-[2rem] bg-gray-950 p-5 text-white shadow-xl sm:p-7 md:p-8">
         <div className="absolute -right-20 -top-28 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200">
               <ClipboardCheck size={13} /> Student support dashboard
             </div>
-            <h1 className="mt-4 text-3xl font-black tracking-tight md:text-4xl">Post-Placement Dashboard</h1>
-            <p className="mt-2 max-w-2xl text-sm font-medium text-gray-300">Stay on top of your work updates, presence, projects, tasks, and challenges after joining.</p>
+            <h1 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl md:text-4xl">Post-Placement Dashboard</h1>
+            <p className="mt-2 max-w-2xl text-sm font-medium text-gray-300">Track your daily work updates and get support when you need it.</p>
           </div>
           <div className="flex items-center gap-3">
             <StatusBadge status={currentStatus} />
@@ -204,24 +206,7 @@ const PostPlacementDashboard = () => {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm md:p-7">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-cyan-600">Placement overview</p>
-            <h2 className="mt-1 text-2xl font-black text-gray-900">{placement.companyName || 'Company not recorded'}</h2>
-          </div>
-          <Briefcase className="text-gray-300" size={25} />
-        </div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div><p className="text-xs font-black uppercase tracking-widest text-gray-400">Role</p><p className="mt-1 font-bold text-gray-900">{placement.designation || 'Not recorded'}</p></div>
-          <div><p className="text-xs font-black uppercase tracking-widest text-gray-400">Employment</p><p className="mt-1 font-bold text-gray-900">{placement.employmentType || 'Not recorded'}</p></div>
-          <div><p className="text-xs font-black uppercase tracking-widest text-gray-400">Joining date</p><p className="mt-1 font-bold text-gray-900">{formatDate(joiningDate)}</p></div>
-          <div><p className="text-xs font-black uppercase tracking-widest text-gray-400">Status</p><p className="mt-1 font-bold capitalize text-gray-900">{currentStatus}</p></div>
-          <div><p className="text-xs font-black uppercase tracking-widest text-gray-400">Conversion</p><p className="mt-1 font-bold text-gray-900">{getConversionLabel(placement)}</p></div>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-cyan-100 bg-cyan-50/60 p-6 shadow-sm md:p-7">
+      <section className="rounded-3xl border border-cyan-100 bg-cyan-50/60 p-5 shadow-sm sm:p-6 md:p-7">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-cyan-700">Daily tracker</p>
@@ -236,7 +221,18 @@ const PostPlacementDashboard = () => {
             <span className="text-xs font-bold text-gray-500">Date: {formatDate(getTodayKey())}</span>
           </div>
         </div>
-        <form onSubmit={handleTrackerSubmit} autoComplete="off" className="mt-6 space-y-4">
+        {todayEntry && !trackerEditing ? (
+          <div className="mt-6 rounded-2xl border border-green-100 bg-white p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-gray-900">Today&apos;s update is recorded</p>
+                <p className="mt-1 text-sm font-medium text-gray-600">{todayEntry.projectName}: {todayEntry.tasksPerformed}</p>
+              </div>
+              <Button variant="secondary" onClick={() => setTrackerEditing(true)}>Edit today&apos;s update</Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleTrackerSubmit} autoComplete="off" className="mt-6 space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1 text-sm font-bold text-gray-700">
               Entry date
@@ -289,7 +285,8 @@ const PostPlacementDashboard = () => {
               <FileText className="mr-2 h-4 w-4" />{trackerSaving ? 'Saving...' : todayEntry ? "Update Today's Update" : "Submit Today's Update"}
             </Button>
           </div>
-        </form>
+          </form>
+        )}
       </section>
 
       <section>

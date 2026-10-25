@@ -85,9 +85,7 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
             { path: '/student/profile', icon: User, label: 'My Profile' },
             { path: '/student/jobs', icon: Briefcase, label: 'Job Listings', badge: eligibleJobsCount },
             { path: '/student/applications', icon: FileText, label: 'My Applications' },
-            { path: '/student/post-placement-dashboard', icon: ClipboardCheck, label: 'Post-Placement Dashboard' },
-            { path: '/student/daily-tracker-history', icon: ClipboardCheck, label: 'Daily Tracker History' },
-            { path: '/student/post-placement', icon: ShieldCheck, label: 'Post-Placement Tracking' },
+            { path: '/student/post-placement-dashboard', icon: ClipboardCheck, label: 'Post-Placement', relatedPaths: ['/student/daily-tracker-history', '/student/post-placement'] },
             { path: '/student/job-readiness', icon: Target, label: 'Job Readiness', badge: pendingReadinessCount },
             { path: '/student/self-applications', icon: ExternalLink, label: 'Self Applications' },
             { path: '/student/ats-checker', icon: Sparkles, label: 'ATS Resume Checker' },
@@ -216,7 +214,7 @@ const Sidebar = ({ isOpen, onClose, onForumCountChange }) => {
           const Icon = item.icon;
           const isActive = item.exact
             ? location.pathname === item.path
-            : location.pathname.startsWith(item.path);
+            : location.pathname.startsWith(item.path) || item.relatedPaths?.some((path) => location.pathname.startsWith(path));
 
           return (
             <NavLink

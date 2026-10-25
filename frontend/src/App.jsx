@@ -38,9 +38,7 @@ import JobDetails from './pages/student/JobDetails';
 import StudentJobReadiness from './pages/student/JobReadiness';
 import StudentSelfApplications from './pages/student/SelfApplications';
 import AtsResumeChecker from './pages/student/AtsResumeChecker';
-import StudentPostPlacementTracking from './pages/student/PostPlacementTracking';
-import PostPlacementDashboard from './pages/student/PostPlacementDashboard';
-import DailyTrackerHistory from './pages/student/DailyTrackerHistory';
+import PostPlacement from './pages/student/PostPlacement';
 import StudentScamDetector from './pages/student/Scamdetector';
 import ScamReportsRepository from './pages/student/ScamReportsRepository';
 import ScamReportDetails from './pages/student/ScamReportDetails';
@@ -209,9 +207,9 @@ function App() {
         <Route path="applications" element={<StudentApplications />} />
         <Route path="job-readiness" element={<StudentJobReadiness />} />
         <Route path="self-applications" element={<StudentSelfApplications />} />
-        <Route path="post-placement-dashboard" element={<PostPlacementDashboard />} />
-        <Route path="daily-tracker-history" element={<DailyTrackerHistory />} />
-        <Route path="post-placement" element={<StudentPostPlacementTracking />} />
+        <Route path="post-placement-dashboard" element={<PostPlacement />} />
+        <Route path="daily-tracker-history" element={<PostPlacement />} />
+        <Route path="post-placement" element={<PostPlacement />} />
         <Route path="ats-checker" element={<AtsResumeChecker />} />
         <Route path="notifications" element={<Notifications />} />
 
