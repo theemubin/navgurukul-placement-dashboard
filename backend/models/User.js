@@ -492,6 +492,19 @@ const userSchema = new mongoose.Schema({
       resumeAccessible: { type: Boolean, default: null },
       resumeAccessibilityRemark: String
     }],
+    coverLetter: String,
+    coverLetterLink: String,
+    coverLetters: [{
+      _id: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
+      title: { type: String, default: 'Cover Letter' },
+      coverLetter: String,
+      coverLetterLink: String,
+      fileName: String,
+      text: String,
+      publicId: String,
+      isPrimary: { type: Boolean, default: false },
+      uploadedAt: { type: Date, default: Date.now }
+    }],
     postPlacementDocuments: [{
       placement: {
         type: mongoose.Schema.Types.ObjectId,

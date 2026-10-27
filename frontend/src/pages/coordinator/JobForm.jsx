@@ -114,6 +114,7 @@ const JobForm = () => {
     responsibilities: [""], // List of strings
     requiredSkills: [], // { skill: ID, proficiencyLevel: 1-5, mandatory: true }
     customRequirements: [], // { requirement: string, isMandatory: boolean }
+    requiresCoverLetter: false,
     eligibility: {
       minCgpa: "",
       tenthGrade: { required: false, minPercentage: "" },
@@ -516,6 +517,7 @@ const JobForm = () => {
 
       setFormData({
         ...job,
+        requiresCoverLetter: Boolean(job.requiresCoverLetter),
         company: {
           name: job.company?.name || "",
           website: job.company?.website || "",
@@ -2102,6 +2104,47 @@ const JobForm = () => {
                 No custom requirements added yet
               </p>
             )}
+          </div>
+        </div>
+
+        {/* Application Documents (Cover Letter Requirement) */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <FileText className="w-5 h-5 text-teal-600" />
+                Application Documents
+              </h2>
+              <p className="text-sm text-gray-500">
+                Specify whether applicants are required to submit a cover letter.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <label className="flex items-start gap-3 p-4 rounded-xl border border-gray-200 hover:border-teal-400 hover:bg-teal-50/20 cursor-pointer transition-all">
+              <input
+                type="checkbox"
+                checked={Boolean(formData.requiresCoverLetter)}
+                onChange={(e) =>
+                  setFormData({ ...formData, requiresCoverLetter: e.target.checked })
+                }
+                className="mt-1 w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-gray-300"
+              />
+              <div className="space-y-0.5">
+                <span className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  Require Cover Letter
+                  {formData.requiresCoverLetter && (
+                    <span className="px-2 py-0.5 bg-teal-100 text-teal-800 text-[10px] font-extrabold uppercase rounded-full">
+                      Enabled
+                    </span>
+                  )}
+                </span>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  If checked, students will see a mandatory Cover Letter section when applying for this job. If unchecked, the cover letter section will not be shown to candidates.
+                </p>
+              </div>
+            </label>
           </div>
         </div>
 

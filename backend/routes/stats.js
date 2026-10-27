@@ -1156,10 +1156,16 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
     const applications = await Application.find({
       job: jobId,
       student: { $in: allCampusStudentIds }
-    }).select('student status');
+    }).select('student status coverLetter coverLetterFile coverLetterSnapshot resume resumeSnapshot');
 
     applications.forEach(app => {
-      applicationMap[app.student.toString()] = app.status;
+      applicationMap[app.student.toString()] = {
+        status: app.status,
+        coverLetter: app.coverLetter || '',
+        coverLetterFile: app.coverLetterFile || '',
+        coverLetterSnapshot: app.coverLetterSnapshot || null,
+        resume: app.resume || app.resumeSnapshot?.url || ''
+      };
     });
 
     // Build student list with match info (only active/eligible students are returned in list)
@@ -1177,6 +1183,7 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
       const matchedSkills = studentSkillIds.filter(id => requiredSkillIds.includes(id)).length;
       const totalRequired = requiredSkillIds.length;
       const skillMatch = totalRequired > 0 ? Math.round((matchedSkills / totalRequired) * 100) : 100;
+      const appInfo = applicationMap[student._id.toString()];
 
       return {
         _id: student._id,
@@ -1188,8 +1195,11 @@ router.get('/campus-poc/job/:jobId/eligible-students', auth, authorize('campus_p
         skillMatch,
         matchedSkills,
         totalRequired,
-        applicationStatus: applicationMap[student._id.toString()] || null,
-        hasApplied: !!applicationMap[student._id.toString()]
+        applicationStatus: appInfo?.status || null,
+        hasApplied: !!appInfo,
+        coverLetter: appInfo?.coverLetter || '',
+        coverLetterFile: appInfo?.coverLetterFile || '',
+        coverLetterSnapshot: appInfo?.coverLetterSnapshot || null
       };
     });
 
@@ -1543,6 +1553,10 @@ router.get('/campus-poc/company-tracking', auth, authorize('campus_poc'), cacheM
         currentRound: app.currentRound,
         totalRounds: app.job?.interviewRounds?.length || 0,
         roundResults: app.roundResults,
+        coverLetter: app.coverLetter || '',
+        coverLetterFile: app.coverLetterFile || '',
+        coverLetterSnapshot: app.coverLetterSnapshot || null,
+        resume: app.resume || app.resumeSnapshot?.url || '',
         appliedAt: app.createdAt,
         lastUpdated: app.updatedAt
       });
@@ -1823,6 +1837,10 @@ router.get('/campus-poc/student-summary', auth, authorize('campus_poc'), cacheMi
           currentRound: a.currentRound,
           roundResults: a.roundResults,
           feedback: a.feedback,
+          coverLetter: a.coverLetter || '',
+          coverLetterFile: a.coverLetterFile || '',
+          coverLetterSnapshot: a.coverLetterSnapshot || null,
+          resume: a.resume || a.resumeSnapshot?.url || '',
           deadline: a.job?.applicationDeadline,
           appliedAt: a.createdAt,
           lastUpdated: a.updatedAt

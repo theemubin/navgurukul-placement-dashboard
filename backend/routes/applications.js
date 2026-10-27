@@ -450,6 +450,11 @@ router.post('/', auth, authorize('student'), [
       }
     }
 
+    // Check if coordinator requires cover letter
+    if (job.requiresCoverLetter && type === 'regular' && (!coverLetter || !String(coverLetter).trim())) {
+      return res.status(400).json({ message: 'A cover letter is required to apply for this job' });
+    }
+
     // Check if already applied
     const existingApplication = await Application.findOne({
       student: req.userId,
@@ -493,12 +498,46 @@ router.post('/', auth, authorize('student'), [
       }
     }
 
+    let coverLetterFile = '';
+    let coverLetterSnapshot = null;
+    let coverLetterValue = job.requiresCoverLetter ? (coverLetter || '') : '';
+
+    if (job.requiresCoverLetter) {
+      const studentCoverLetters = student?.studentProfile?.coverLetters || [];
+      const matchedCl = studentCoverLetters.find(
+        cl => (req.body.selectedCoverLetterId && cl._id.toString() === req.body.selectedCoverLetterId.toString()) ||
+              (coverLetter && (cl.coverLetter === coverLetter || cl.coverLetterLink === coverLetter)) ||
+              cl.isPrimary
+      ) || studentCoverLetters[0];
+
+      if (matchedCl) {
+        coverLetterFile = matchedCl.coverLetterLink || matchedCl.coverLetter || '';
+        coverLetterValue = coverLetterValue || coverLetterFile;
+        coverLetterSnapshot = {
+          title: matchedCl.title || matchedCl.fileName || 'Cover Letter',
+          url: coverLetterFile,
+          fileName: matchedCl.fileName || 'Cover Letter',
+          uploadedAt: matchedCl.uploadedAt || new Date()
+        };
+      } else if (coverLetterValue) {
+        coverLetterFile = coverLetterValue;
+        coverLetterSnapshot = {
+          title: 'Cover Letter Document',
+          url: coverLetterValue,
+          fileName: 'Cover Letter',
+          uploadedAt: new Date()
+        };
+      }
+    }
+
     const application = new Application({
       student: req.userId,
       job: jobId,
       resume: resumeUrl,
       resumeSnapshot,
-      coverLetter,
+      coverLetter: coverLetterValue,
+      coverLetterFile,
+      coverLetterSnapshot,
       customResponses: customResponses || [],
       applicationType: type,
       status: type === 'interest' ? 'interested' : 'applied'

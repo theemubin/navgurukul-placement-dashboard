@@ -8,7 +8,7 @@ import {
   User, Mail, Phone, GraduationCap, Upload, Save,
   Linkedin, Github, Globe, BookOpen, Languages, Brain,
   MapPin, Calendar, Briefcase, CheckCircle, Clock, AlertCircle,
-  Plus, Trash2, Award, Building2, Search, MessageSquare
+  Plus, Trash2, Award, Building2, Search, MessageSquare, FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -131,6 +131,7 @@ const StudentProfile = () => {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingResume, setUploadingResume] = useState(false);
+  const [uploadingCoverLetter, setUploadingCoverLetter] = useState(false);
   const [campuses, setCampuses] = useState([]);
   const [placementCycles, setPlacementCycles] = useState([]);
   const [selectedCampus, setSelectedCampus] = useState('');
@@ -698,6 +699,75 @@ const StudentProfile = () => {
       setAvatarPreview(profile?.avatar || null);
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const handleSetPrimaryCoverLetter = async (coverLetterId) => {
+    setUploadingCoverLetter(true);
+    try {
+      const res = await userAPI.setPrimaryCoverLetter(coverLetterId);
+      toast.success('Primary cover letter updated');
+      if (res.data?.user) {
+        setProfile(res.data.user);
+      } else {
+        await fetchProfile();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to set primary cover letter');
+    } finally {
+      setUploadingCoverLetter(false);
+    }
+  };
+
+  const handleDeleteCoverLetter = async (coverLetterId) => {
+    if (!confirm('Are you sure you want to remove this cover letter?')) return;
+    setUploadingCoverLetter(true);
+    try {
+      const res = await userAPI.deleteCoverLetter(coverLetterId);
+      toast.success('Cover letter deleted');
+      if (res.data?.user) {
+        setProfile(res.data.user);
+      } else {
+        await fetchProfile();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete cover letter');
+    } finally {
+      setUploadingCoverLetter(false);
+    }
+  };
+
+  const handleCoverLetterUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Cover letter size should be less than 10MB');
+      return;
+    }
+
+    const allowedExtensions = ['pdf', 'doc', 'docx', 'txt'];
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    if (!allowedExtensions.includes(fileExtension)) {
+      toast.error('Cover letter must be PDF, DOC, DOCX, or TXT');
+      return;
+    }
+
+    setUploadingCoverLetter(true);
+    try {
+      const response = await userAPI.uploadCoverLetter(file, file.name.replace(/\.[^/.]+$/, ''), true);
+      toast.success('Cover letter uploaded successfully');
+      if (response.data?.user) {
+        setProfile(response.data.user);
+      } else {
+        await fetchProfile();
+      }
+      e.target.value = '';
+    } catch (error) {
+      console.error('Cover letter upload error:', error);
+      toast.error(error.response?.data?.message || 'Failed to upload cover letter');
+    } finally {
+      setUploadingCoverLetter(false);
     }
   };
 
@@ -2764,6 +2834,114 @@ const StudentProfile = () => {
             )}
           </div>
 
+          {/* ── Cover Letter Card (Beside / Below Resumes) ── */}
+          <div className="card" id="cover-letter">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <FileText className="w-5 h-5 text-teal-600" />
+                Cover Letters
+              </h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              Upload your cover letter document (.pdf, .doc, .docx, .txt) for recruiters.
+            </p>
+
+            {/* Existing Cover Letters */}
+            <div className="space-y-3 mb-5">
+              {profile?.studentProfile?.coverLetters?.map((clItem) => (
+                <div
+                  key={clItem._id}
+                  className={`p-4 rounded-xl border flex flex-col gap-2.5 transition-all ${
+                    clItem.isPrimary
+                      ? 'bg-teal-50/60 border-teal-200 shadow-sm shadow-teal-50/20'
+                      : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate" title={clItem.title || clItem.fileName}>
+                        {clItem.title || clItem.fileName || 'Cover Letter'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Uploaded {new Date(clItem.uploadedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {clItem.isPrimary && (
+                      <span className="bg-teal-100 text-teal-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-teal-200">
+                        Primary
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 justify-end flex-wrap border-t border-gray-200/40 pt-2.5 mt-1">
+                    {(clItem.coverLetterLink || clItem.coverLetter) && (
+                      <a
+                        href={resolveResumeUrl(clItem.coverLetterLink || clItem.coverLetter)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-teal-700 hover:underline mr-auto flex items-center gap-1"
+                      >
+                        View File
+                      </a>
+                    )}
+
+                    {!clItem.isPrimary && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetPrimaryCoverLetter(clItem._id)}
+                        disabled={uploadingCoverLetter}
+                        className="btn border border-teal-600 text-teal-700 hover:bg-teal-50 bg-white text-xs py-1 px-2.5 font-semibold"
+                      >
+                        Set Primary
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCoverLetter(clItem._id)}
+                      disabled={uploadingCoverLetter}
+                      className="btn border border-red-200 text-red-600 hover:bg-red-50 bg-white text-xs py-1 px-2.5 font-semibold"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {(!profile?.studentProfile?.coverLetters || profile.studentProfile.coverLetters.length === 0) && (
+                <p className="text-sm text-gray-500 italic text-center py-3 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                  No cover letter uploaded yet. Upload a document below.
+                </p>
+              )}
+            </div>
+
+            {/* Upload Area */}
+            <div className="border-t pt-3">
+              {uploadingCoverLetter ? (
+                <div className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-teal-200 rounded-xl bg-teal-50/50">
+                  <LoadingSpinner size="md" />
+                  <p className="text-sm font-semibold text-teal-700 mt-2 animate-pulse">Uploading cover letter...</p>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center py-6 px-4 border-2 border-dashed border-gray-300 hover:border-teal-500 rounded-xl bg-gray-50/50 hover:bg-teal-50/10 cursor-pointer transition-all group">
+                  <Upload className="w-6 h-6 text-gray-400 group-hover:text-teal-600 transition-colors mb-1" />
+                  <span className="text-sm font-bold text-gray-700 group-hover:text-teal-700 transition-colors">
+                    Upload cover letter file
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-medium mt-1">
+                    PDF, DOC, DOCX, TXT (Max 10MB)
+                  </span>
+                  <input
+                    type="file"
+                    id="cover-letter-upload"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={handleCoverLetterUpload}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">Profile Completion</h2>
             {(() => {
@@ -2778,7 +2956,8 @@ const StudentProfile = () => {
                 { label: 'Office/Professional Skills', done: formData.officeSkills.length > 0 },
                 { label: 'English Level', done: formData.englishProficiency.speaking },
                 { label: 'Open For Roles', done: formData.openForRoles.length > 0 },
-                { label: 'Resume', done: (profile?.studentProfile?.resume && !profile.studentProfile.resume.includes('duxtmfi5t')) || (profile?.studentProfile?.resumeLink && !profile.studentProfile.resumeLink.includes('duxtmfi5t')) }
+                { label: 'Resume', done: (profile?.studentProfile?.resume && !profile.studentProfile.resume.includes('duxtmfi5t')) || (profile?.studentProfile?.resumeLink && !profile.studentProfile.resumeLink.includes('duxtmfi5t')) },
+                { label: 'Cover Letter', done: Boolean(profile?.studentProfile?.coverLetter || (profile?.studentProfile?.coverLetters && profile.studentProfile.coverLetters.length > 0)) }
               ];
               const completedCount = completionItems.filter(item => item.done).length;
               const completionPercent = Math.round((completedCount / completionItems.length) * 100);

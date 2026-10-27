@@ -529,6 +529,29 @@ const POCStudents = () => {
                           <div><span className="text-gray-400 font-semibold">GitHub:</span> <a href={student.studentProfile?.github} target="_blank" rel="noreferrer" className="text-primary-700 break-all">{student.studentProfile?.github || '-'}</a></div>
                           <div><span className="text-gray-400 font-semibold">Portfolio:</span> <a href={student.studentProfile?.portfolio} target="_blank" rel="noreferrer" className="text-primary-700 break-all">{student.studentProfile?.portfolio || '-'}</a></div>
                           <div><span className="text-gray-400 font-semibold">Resume:</span> <a href={resolveResumeUrl(student.studentProfile?.resumeLink)} target="_blank" rel="noreferrer" className="text-primary-700 break-all">{student.studentProfile?.resumeLink || '-'}</a></div>
+                          <div>
+                            <span className="text-gray-400 font-semibold">Cover Letter:</span>{' '}
+                            {(() => {
+                              const clUrl = student.studentProfile?.coverLetters?.find(c => c.isPrimary)?.coverLetterLink ||
+                                student.studentProfile?.coverLetters?.find(c => c.isPrimary)?.coverLetter ||
+                                student.studentProfile?.coverLetters?.[0]?.coverLetterLink ||
+                                student.studentProfile?.coverLetters?.[0]?.coverLetter ||
+                                student.studentProfile?.coverLetterLink ||
+                                student.studentProfile?.coverLetter;
+                              return clUrl ? (
+                                <a
+                                  href={resolveResumeUrl(clUrl)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-primary-700 break-all hover:underline"
+                                >
+                                  View Cover Letter
+                                </a>
+                              ) : (
+                                <span className="text-gray-800">-</span>
+                              );
+                            })()}
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

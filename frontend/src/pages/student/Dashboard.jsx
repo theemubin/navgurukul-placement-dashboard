@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { statsAPI, applicationAPI } from '../../services/api';
+import { statsAPI, applicationAPI, userAPI, resolveResumeUrl, resolveFileUrl } from '../../services/api';
 import { StatsCard, LoadingSpinner, StatusBadge } from '../../components/common/UIComponents';
 import { 
   FileText, Briefcase, CheckCircle, XCircle, Clock, 
   TrendingUp, DollarSign, User, ArrowRight, ArrowUpRight,
-  ShieldCheck, AlertTriangle, Search, Heart, Eye
+  ShieldCheck, AlertTriangle, Search, Heart, Eye,
+  Plus, Upload, X, ExternalLink, Sparkles
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 
 const StudentDashboard = () => {
@@ -14,7 +16,40 @@ const StudentDashboard = () => {
   const [recentApplications, setRecentApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [jobReadiness, setJobReadiness] = useState(null);
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const [showCoverLetterModal, setShowCoverLetterModal] = useState(false);
+  const [clTitle, setClTitle] = useState("");
+  const [clFile, setClFile] = useState(null);
+  const [savingCl, setSavingCl] = useState(false);
+
+  const primaryResume = user?.studentProfile?.resumes?.find(r => r.isPrimary) || (user?.studentProfile?.resumes && user.studentProfile.resumes[0]) || null;
+  const legacyResume = (!primaryResume && (user?.studentProfile?.resumeLink || user?.studentProfile?.resume)) ? (user.studentProfile.resumeLink || user.studentProfile.resume) : null;
+  const primaryCoverLetter = user?.studentProfile?.coverLetters?.find(c => c.isPrimary) || (user?.studentProfile?.coverLetters && user.studentProfile.coverLetters[0]) || null;
+  const legacyCoverLetter = (!primaryCoverLetter && (user?.studentProfile?.coverLetter || user?.studentProfile?.coverLetterText)) ? (user.studentProfile.coverLetter || user.studentProfile.coverLetterText) : null;
+
+  const handleSaveCoverLetter = async (e) => {
+    e.preventDefault();
+    if (!clFile) {
+      toast.error("Please select a cover letter document (.pdf, .doc, .docx, .txt)");
+      return;
+    }
+    setSavingCl(true);
+    try {
+      const res = await userAPI.uploadCoverLetter(clFile, clTitle.trim() || clFile.name.replace(/\.[^/.]+$/, ""), true);
+      toast.success("Cover letter uploaded successfully!");
+      if (res.data?.user && updateUser) {
+        updateUser(res.data.user);
+      }
+      setShowCoverLetterModal(false);
+      setClTitle("");
+      setClFile(null);
+    } catch (error) {
+      console.error("Cover letter upload error:", error);
+      toast.error(error.response?.data?.message || "Failed to upload cover letter");
+    } finally {
+      setSavingCl(false);
+    }
+  };
 
   useEffect(() => {
     fetchDashboardData();
@@ -391,6 +426,156 @@ const StudentDashboard = () => {
 
         {/* ── Secondary Actions Column (Right) ── */}
         <div className="space-y-8">
+           {/* ── Career Documents Card (Resume & Cover Letter) ── */}
+           <div className="bg-white rounded-[2rem] p-6 md:p-8 border border-gray-100 shadow-xl shadow-gray-100/50 space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center">
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-gray-900 tracking-tight leading-tight">Career Documents</h3>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">Resume & Cover Letter</p>
+                  </div>
+                </div>
+                <Link
+                  to="/student/profile"
+                  className="text-xs font-black uppercase tracking-wider text-primary-600 hover:text-primary-700 hover:underline"
+                >
+                  Manage
+                </Link>
+              </div>
+
+              {/* Grid with Resume and Cover Letter beside each other */}
+              <div className="grid grid-cols-1 gap-4">
+                {/* 1. Resume Section */}
+                <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">1. Resume</span>
+                    {primaryResume?.isPrimary && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-green-100 text-green-700">
+                        Primary
+                      </span>
+                    )}
+                  </div>
+                  {primaryResume || legacyResume ? (
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-black text-gray-900 text-sm truncate" title={primaryResume?.fileName || "Resume Document"}>
+                          {primaryResume?.fileName || "Uploaded Resume"}
+                        </p>
+                        {primaryResume?.resumeAts?.overallScore != null && (
+                          <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            ATS: {primaryResume.resumeAts.overallScore}/100
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200/50">
+                        <a
+                          href={resolveResumeUrl(primaryResume?.resumeLink || primaryResume?.resume || legacyResume)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-bold text-primary-600 hover:underline flex items-center gap-1"
+                        >
+                          View Resume <ExternalLink size={12} />
+                        </a>
+                        <Link
+                          to="/student/ats-checker"
+                          className="text-xs font-bold text-gray-500 hover:text-indigo-600 flex items-center gap-1"
+                        >
+                          <Sparkles size={12} /> Check ATS
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-2 text-center">
+                      <p className="text-xs text-gray-400 font-medium">No resume uploaded</p>
+                      <Link
+                        to="/student/profile"
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-black text-primary-600 hover:underline"
+                      >
+                        + Upload Resume
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Cover Letter Section (Beside / Below Resume) */}
+                <div className="p-4 rounded-2xl bg-teal-50/50 border border-teal-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-teal-700">2. Cover Letter</span>
+                    {primaryCoverLetter ? (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-teal-100 text-teal-800">
+                        Primary
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800">
+                        Optional
+                      </span>
+                    )}
+                  </div>
+                  {primaryCoverLetter || legacyCoverLetter ? (
+                    <div>
+                      <p className="font-black text-gray-900 text-sm truncate" title={primaryCoverLetter?.title || primaryCoverLetter?.fileName || "Cover Letter"}>
+                        {primaryCoverLetter?.title || primaryCoverLetter?.fileName || "Active Cover Letter"}
+                      </p>
+                      {primaryCoverLetter?.text ? (
+                        <p className="text-xs text-gray-600 font-medium line-clamp-2 mt-1 italic">
+                          "{primaryCoverLetter.text}"
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500 font-medium mt-1">
+                          Document file attached
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between mt-3 pt-2 border-t border-teal-200/50">
+                        {primaryCoverLetter?.coverLetterLink || primaryCoverLetter?.coverLetter ? (
+                          <a
+                            href={resolveResumeUrl(primaryCoverLetter.coverLetterLink || primaryCoverLetter.coverLetter)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-bold text-teal-700 hover:underline flex items-center gap-1"
+                          >
+                            View File <ExternalLink size={12} />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-teal-700 font-medium">Ready</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClTitle("");
+                            setClFile(null);
+                            setShowCoverLetterModal(true);
+                          }}
+                          className="text-xs font-black text-teal-800 hover:text-teal-900 underline"
+                        >
+                          Upload New / Replace
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-2 text-center space-y-2">
+                      <p className="text-xs text-gray-500 font-medium">Stand out to recruiters with a tailored cover letter.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClTitle("");
+                          setClText("");
+                          setClFile(null);
+                          setClTab("upload");
+                          setShowCoverLetterModal(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-black shadow-md shadow-teal-600/20 hover:bg-teal-700 transition-all"
+                      >
+                        <Plus size={14} /> Add Cover Letter
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+           </div>
+
            {/* Quick Action Profile Card */}
            <Link to="/student/profile" className="block group">
               <div className="bg-gradient-to-br from-green-500 to-emerald-700 rounded-[2rem] p-8 text-white shadow-xl shadow-green-200 hover:-translate-y-1 transition-all duration-300">
@@ -472,6 +657,81 @@ const StudentDashboard = () => {
            </div>
         </div>
       </div>
+
+      {/* ── Add / Edit Cover Letter Modal ── */}
+      {showCoverLetterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-6 relative border border-gray-100">
+            <button
+              onClick={() => setShowCoverLetterModal(false)}
+              className="absolute top-6 right-6 p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              <X size={20} />
+            </button>
+
+            <div>
+              <h3 className="text-2xl font-black text-gray-900 tracking-tight">Upload Cover Letter</h3>
+              <p className="text-sm font-medium text-gray-400 mt-1">
+                Upload your cover letter document (.pdf, .doc, .docx, .txt).
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveCoverLetter} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-gray-500 mb-1.5">
+                  Title / Role Target (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={clTitle}
+                  onChange={(e) => setClTitle(e.target.value)}
+                  placeholder="e.g. Full Stack Developer Cover Letter"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-gray-500 mb-1.5">
+                  Cover Letter Document (.pdf, .doc, .docx, .txt)
+                </label>
+                <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 hover:border-teal-500 rounded-2xl cursor-pointer bg-gray-50/50 hover:bg-teal-50/20 transition-all">
+                  <Upload size={28} className="text-teal-600 mb-2" />
+                  <span className="text-sm font-bold text-gray-700">
+                    {clFile ? clFile.name : "Choose PDF, DOC, DOCX, or TXT"}
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-medium mt-1">Maximum size 10MB</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setClFile(f);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCoverLetterModal(false)}
+                  className="px-5 py-3 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCl || !clFile}
+                  className="px-6 py-3 rounded-xl text-sm font-black text-white bg-teal-600 hover:bg-teal-700 shadow-lg shadow-teal-600/30 transition-all disabled:opacity-50"
+                >
+                  {savingCl ? "Uploading..." : "Upload Cover Letter"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

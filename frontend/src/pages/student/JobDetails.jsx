@@ -85,17 +85,17 @@ const JobDetails = () => {
   const [interestRequest, setInterestRequest] = useState(null);
   const [profileStatus, setProfileStatus] = useState('draft');
   const { user } = useAuth();
-  
+
   // Eligible students modal state (for POC view)
-  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ 
-    open: false, 
-    activeTab: 'eligible', 
-    students: [], 
-    appliedStudents: [], 
-    loading: false, 
-    total: 0, 
-    applied: 0, 
-    notApplied: 0 
+  const [eligibleStudentsModal, setEligibleStudentsModal] = useState({
+    open: false,
+    activeTab: 'eligible',
+    students: [],
+    appliedStudents: [],
+    loading: false,
+    total: 0,
+    applied: 0,
+    notApplied: 0
   });
   const [notifying, setNotifying] = useState(false);
 
@@ -118,6 +118,8 @@ const JobDetails = () => {
   const [askingQuestion, setAskingQuestion] = useState(false);
   const [resumes, setResumes] = useState([]);
   const [selectedResume, setSelectedResume] = useState(null);
+  const [coverLetters, setCoverLetters] = useState([]);
+  const [selectedCoverLetter, setSelectedCoverLetter] = useState(null);
 
   useEffect(() => {
     if (user?.role === 'student') {
@@ -184,6 +186,18 @@ const JobDetails = () => {
         } else {
           setSelectedResume(null);
         }
+      }
+
+      const studentCoverLetters = studentProfile?.coverLetters || [];
+      setCoverLetters(studentCoverLetters);
+      const primaryCl = studentCoverLetters.find(c => c.isPrimary);
+      if (primaryCl) {
+        setSelectedCoverLetter(primaryCl.coverLetterLink || primaryCl.coverLetter);
+      } else if (studentCoverLetters.length > 0) {
+        setSelectedCoverLetter(studentCoverLetters[0].coverLetterLink || studentCoverLetters[0].coverLetter);
+      } else {
+        const legacyCl = studentProfile?.coverLetterLink || (typeof studentProfile?.coverLetter === 'string' && (studentProfile.coverLetter.startsWith('http') || studentProfile.coverLetter.startsWith('/uploads')) ? studentProfile.coverLetter : '');
+        setSelectedCoverLetter(legacyCl || null);
       }
     } catch (error) {
       console.error('Error fetching profile status:', error);
@@ -256,11 +270,17 @@ const JobDetails = () => {
       }
     }
 
+    // Check if coordinator requires cover letter
+    if (job.requiresCoverLetter && !selectedCoverLetter) {
+      toast.error('A cover letter document is required to apply for this position');
+      return;
+    }
+
     setApplying(true);
     try {
       // Include custom responses in the application
       const applicationData = {
-        coverLetter,
+        coverLetter: job.requiresCoverLetter ? selectedCoverLetter : '',
         customResponses: job.customRequirements?.map((req, index) => ({
           requirement: req.requirement,
           response: customResponses[index] || false,
@@ -354,11 +374,11 @@ const JobDetails = () => {
   };
 
   const fetchEligibleStudents = async (initialTab = 'eligible') => {
-    setEligibleStudentsModal(prev => ({ 
-      ...prev, 
-      open: true, 
-      loading: true, 
-      activeTab: initialTab 
+    setEligibleStudentsModal(prev => ({
+      ...prev,
+      open: true,
+      loading: true,
+      activeTab: initialTab
     }));
     try {
       const [eligibleRes, appsRes] = await Promise.all([
@@ -370,15 +390,15 @@ const JobDetails = () => {
           limit: 1000
         })
       ]);
-      setEligibleStudentsModal({ 
-        open: true, 
+      setEligibleStudentsModal({
+        open: true,
         activeTab: initialTab,
-        students: eligibleRes.data.students || [], 
+        students: eligibleRes.data.students || [],
         appliedStudents: appsRes.data.applications || [],
         total: eligibleRes.data.total || 0,
         applied: eligibleRes.data.applied || 0,
         notApplied: eligibleRes.data.notApplied || 0,
-        loading: false 
+        loading: false
       });
     } catch (error) {
       console.error('Error fetching students data:', error);
@@ -451,10 +471,10 @@ const JobDetails = () => {
             <div className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
               {job.company?.logo && !job.company.logo.includes('domain=&') ? (
                 <>
-                  <img 
-                    src={job.company.logo} 
-                    alt={job.company.name} 
-                    className="w-10 h-10 object-contain" 
+                  <img
+                    src={job.company.logo}
+                    alt={job.company.name}
+                    className="w-10 h-10 object-contain"
                     onError={(e) => {
                       e.target.style.display = 'none';
                       if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
@@ -501,6 +521,12 @@ const JobDetails = () => {
             {job.eligibility?.femaleOnly && (
               <span className="bg-pink-100 text-pink-700 px-2 py-1 rounded text-xs font-medium">
                 Female Only
+              </span>
+            )}
+            {job.requiresCoverLetter && (
+              <span className="bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
+                <FileText className="w-3.5 h-3.5" />
+                Cover Letter Required
               </span>
             )}
             {job.eligibility?.houses?.length > 0 && (
@@ -555,23 +581,23 @@ const JobDetails = () => {
                 View Eligible Students
               </button>
               <div className="bg-gray-50 px-4 py-2 rounded-xl border flex gap-4 items-center">
-                 <button 
-                   onClick={() => fetchEligibleStudents('applied')}
-                   className="text-center hover:bg-gray-200/60 active:scale-95 px-2.5 py-1 rounded-xl transition-all cursor-pointer focus:outline-none"
-                   title="View Applied Students"
-                 >
-                    <p className="text-lg font-bold text-blue-600">{job.applicationCount || 0}</p>
-                    <p className="text-[10px] text-gray-400 font-black uppercase">Applied</p>
-                 </button>
-                 <div className="w-px h-8 bg-gray-200" />
-                 <button 
-                   onClick={() => fetchEligibleStudents('selected')}
-                   className="text-center hover:bg-gray-200/60 active:scale-95 px-2.5 py-1 rounded-xl transition-all cursor-pointer focus:outline-none"
-                   title="View Selected Students"
-                 >
-                    <p className="text-lg font-bold text-green-600">{job.selectedCount || 0}</p>
-                    <p className="text-[10px] text-gray-400 font-black uppercase">Selected</p>
-                 </button>
+                <button
+                  onClick={() => fetchEligibleStudents('applied')}
+                  className="text-center hover:bg-gray-200/60 active:scale-95 px-2.5 py-1 rounded-xl transition-all cursor-pointer focus:outline-none"
+                  title="View Applied Students"
+                >
+                  <p className="text-lg font-bold text-blue-600">{job.applicationCount || 0}</p>
+                  <p className="text-[10px] text-gray-400 font-black uppercase">Applied</p>
+                </button>
+                <div className="w-px h-8 bg-gray-200" />
+                <button
+                  onClick={() => fetchEligibleStudents('selected')}
+                  className="text-center hover:bg-gray-200/60 active:scale-95 px-2.5 py-1 rounded-xl transition-all cursor-pointer focus:outline-none"
+                  title="View Selected Students"
+                >
+                  <p className="text-lg font-bold text-green-600">{job.selectedCount || 0}</p>
+                  <p className="text-[10px] text-gray-400 font-black uppercase">Selected</p>
+                </button>
               </div>
             </div>
           ) : (
@@ -1162,9 +1188,8 @@ const JobDetails = () => {
               {job.eligibility?.readinessRequirement && job.eligibility.readinessRequirement !== 'no' && (
                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
                   <span className="text-gray-500">NG Job Readiness</span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                    job.eligibility.readinessRequirement === 'yes' ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800'
-                  }`}>
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${job.eligibility.readinessRequirement === 'yes' ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
                     {job.eligibility.readinessRequirement === 'yes' ? 'Job Ready (100%)' : 'In Progress (30%+)'}
                   </span>
                 </div>
@@ -1275,11 +1300,10 @@ const JobDetails = () => {
                   {resumes.map((r) => (
                     <label
                       key={r._id}
-                      className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                        selectedResume === r.resume
+                      className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${selectedResume === r.resume
                           ? 'border-primary-500 bg-primary-50/50'
                           : 'border-gray-200 bg-white hover:bg-gray-50'
-                      }`}
+                        }`}
                     >
                       <input
                         type="radio"
@@ -1349,17 +1373,99 @@ const JobDetails = () => {
               )}
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cover Letter (Optional)
-              </label>
-              <textarea
-                rows={4}
-                value={coverLetter}
-                onChange={(e) => setCoverLetter(e.target.value)}
-                placeholder="Tell us why you're a good fit for this role..."
-              />
-            </div>
+            {/* Cover Letter Section (ONLY if coordinator enabled requiresCoverLetter) */}
+            {job?.requiresCoverLetter ? (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Cover Letter for this Application <span className="text-red-500 font-bold">*</span>
+                </label>
+                {coverLetters?.length > 0 ? (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {coverLetters.map((cl) => {
+                      const clUrl = cl.coverLetterLink || cl.coverLetter;
+                      const isSelected = selectedCoverLetter === clUrl;
+                      return (
+                        <label
+                          key={cl._id}
+                          className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                            isSelected
+                              ? 'border-teal-500 bg-teal-50/40 ring-1 ring-teal-500'
+                              : 'border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="selectedCoverLetter"
+                            value={clUrl}
+                            checked={isSelected}
+                            onChange={() => setSelectedCoverLetter(clUrl)}
+                            className="mt-1 text-teal-600 focus:ring-teal-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-gray-900 truncate">
+                                {cl.title || cl.fileName || 'Cover Letter'}
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {cl.isPrimary && (
+                                  <span className="text-[10px] bg-teal-100 text-teal-800 font-bold px-1.5 py-0.2 rounded">
+                                    Primary
+                                  </span>
+                                )}
+                                {clUrl && (
+                                  <a
+                                    href={resolveResumeUrl(clUrl)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-xs text-teal-600 hover:underline font-bold"
+                                  >
+                                    View
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-gray-400 font-medium">
+                              Uploaded on {new Date(cl.uploadedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : selectedCoverLetter ? (
+                  <div className="p-3 border border-gray-200 rounded-lg bg-gray-50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-teal-600" />
+                      <div>
+                        <p className="text-xs font-bold text-gray-900">Current Cover Letter</p>
+                        <p className="text-[10px] text-gray-400 font-medium">Profile Cover Letter Document</p>
+                      </div>
+                    </div>
+                    <a
+                      href={resolveResumeUrl(selectedCoverLetter)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-teal-600 hover:underline font-bold"
+                    >
+                      View
+                    </a>
+                  </div>
+                ) : (
+                  <div className="p-3 text-center border border-dashed border-gray-300 rounded-lg bg-gray-50">
+                    <p className="text-xs text-red-500 font-semibold animate-pulse">
+                      No cover letter found in your profile. You must upload a cover letter before applying.
+                    </p>
+                    <Link
+                      to="/student/profile#cover-letter"
+                      className="text-xs text-teal-600 hover:underline font-bold mt-1 inline-block"
+                    >
+                      Go to Profile to upload a cover letter
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ) : null}
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowApplyModal(false)}
@@ -1371,7 +1477,7 @@ const JobDetails = () => {
               <button
                 onClick={handleApply}
                 className="btn btn-primary"
-                disabled={applying || !selectedResume || (job.customRequirements?.some(r => r.isMandatory && !customResponses[job.customRequirements.indexOf(r)]))}
+                disabled={applying || !selectedResume || (job.requiresCoverLetter && !selectedCoverLetter) || (job.customRequirements?.some(r => r.isMandatory && !customResponses[job.customRequirements.indexOf(r)]))}
               >
                 {applying ? 'Submitting...' : 'Submit Application'}
               </button>
@@ -1428,11 +1534,10 @@ const JobDetails = () => {
                   {resumes.map((r) => (
                     <label
                       key={r._id}
-                      className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                        selectedResume === r.resume
+                      className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${selectedResume === r.resume
                           ? 'border-primary-500 bg-primary-50/50'
                           : 'border-gray-200 bg-white hover:bg-gray-50'
-                      }`}
+                        }`}
                     >
                       <input
                         type="radio"
@@ -1573,11 +1678,10 @@ const JobDetails = () => {
             <button
               onClick={handleNotifyEligible}
               disabled={notifying || eligibleStudentsModal.loading || eligibleStudentsModal.notApplied === 0}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
-                notifying 
-                  ? 'bg-gray-100 text-gray-400' 
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${notifying
+                  ? 'bg-gray-100 text-gray-400'
                   : 'bg-primary-600 text-white hover:bg-primary-700 active:scale-95'
-              }`}
+                }`}
             >
               <Bell className={`w-4 h-4 ${notifying ? 'animate-bounce' : ''}`} />
               {notifying ? 'Sending...' : 'Notify All Eligible'}
@@ -1590,46 +1694,40 @@ const JobDetails = () => {
           <div className="flex border-b border-gray-100 mb-6 gap-2">
             <button
               onClick={() => setEligibleStudentsModal(prev => ({ ...prev, activeTab: 'eligible' }))}
-              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${
-                eligibleStudentsModal.activeTab === 'eligible'
+              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${eligibleStudentsModal.activeTab === 'eligible'
                   ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
+                }`}
             >
               <span>Eligible (Not Applied)</span>
-              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${
-                eligibleStudentsModal.activeTab === 'eligible' ? 'bg-primary-100 text-primary-800' : 'bg-gray-100 text-gray-500'
-              }`}>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${eligibleStudentsModal.activeTab === 'eligible' ? 'bg-primary-100 text-primary-800' : 'bg-gray-100 text-gray-500'
+                }`}>
                 {eligibleStudentsModal.students.filter(s => !s.hasApplied).length}
               </span>
             </button>
             <button
               onClick={() => setEligibleStudentsModal(prev => ({ ...prev, activeTab: 'applied' }))}
-              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${
-                eligibleStudentsModal.activeTab === 'applied'
+              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${eligibleStudentsModal.activeTab === 'applied'
                   ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
+                }`}
             >
               <span>Applied</span>
-              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${
-                eligibleStudentsModal.activeTab === 'applied' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'
-              }`}>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${eligibleStudentsModal.activeTab === 'applied' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'
+                }`}>
                 {eligibleStudentsModal.appliedStudents.length}
               </span>
             </button>
             <button
               onClick={() => setEligibleStudentsModal(prev => ({ ...prev, activeTab: 'selected' }))}
-              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${
-                eligibleStudentsModal.activeTab === 'selected'
+              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all relative ${eligibleStudentsModal.activeTab === 'selected'
                   ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
+                }`}
             >
               <span>Selected</span>
-              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${
-                eligibleStudentsModal.activeTab === 'selected' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-              }`}>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${eligibleStudentsModal.activeTab === 'selected' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+                }`}>
                 {eligibleStudentsModal.appliedStudents.filter(app => app.status === 'selected').length}
               </span>
             </button>
@@ -1649,7 +1747,7 @@ const JobDetails = () => {
               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Not Applied</p>
             </div>
           </div>
-          
+
           {eligibleStudentsModal.loading ? (
             <div className="flex justify-center p-8">
               <LoadingSpinner />
@@ -1686,22 +1784,21 @@ const JobDetails = () => {
                               <td className="px-3 py-3 align-top">
                                 <div className="flex flex-wrap gap-1 max-w-full">
                                   {student.studentProfile?.technicalSkills?.slice(0, 2).map((s, i) => (
-                                     <span key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[9px] font-bold text-gray-600 truncate max-w-full">{s.skillName}</span>
+                                    <span key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[9px] font-bold text-gray-600 truncate max-w-full">{s.skillName}</span>
                                   ))}
                                   {student.studentProfile?.technicalSkills?.length > 2 && <span className="text-[10px] text-gray-400">+{student.studentProfile.technicalSkills.length - 2}</span>}
                                 </div>
                               </td>
                               <td className="px-3 py-3 text-center align-top">
-                                <div className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[9px] font-black whitespace-nowrap ${
-                                  student.skillMatch === 100 ? 'bg-green-50 text-green-700' :
-                                  student.skillMatch >= 50 ? 'bg-yellow-50 text-yellow-700' :
-                                  'bg-orange-50 text-orange-700'
-                                }`}>
+                                <div className={`inline-flex items-center px-1.5 py-0.5 rounded-lg text-[9px] font-black whitespace-nowrap ${student.skillMatch === 100 ? 'bg-green-50 text-green-700' :
+                                    student.skillMatch >= 50 ? 'bg-yellow-50 text-yellow-700' :
+                                      'bg-orange-50 text-orange-700'
+                                  }`}>
                                   {student.skillMatch ?? 100}% MATCH
                                 </div>
                               </td>
                               <td className="px-3 py-3 text-right align-top">
-                                <Link 
+                                <Link
                                   to={`/campus-poc/students/${student._id}`}
                                   className="p-1 text-gray-400 hover:text-primary-600 transition-colors inline-block"
                                 >
@@ -1715,9 +1812,9 @@ const JobDetails = () => {
                     </div>
                   ) : (
                     <div className="text-center py-12 text-gray-500">
-                       <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                       <p className="font-bold">No eligible students found on your campus.</p>
-                       <p className="text-sm">Either no students match the criteria or all have already applied.</p>
+                      <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      <p className="font-bold">No eligible students found on your campus.</p>
+                      <p className="text-sm">Either no students match the criteria or all have already applied.</p>
                     </div>
                   )}
                 </>
@@ -1753,34 +1850,34 @@ const JobDetails = () => {
                                     </div>
                                   </div>
                                 </td>
-                                  <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap align-top">
+                                <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap align-top">
                                   {format(new Date(app.createdAt), 'MMM dd, yyyy')}
                                 </td>
-                                  <td className="px-3 py-3 text-center align-top">
+                                <td className="px-3 py-3 text-center align-top">
                                   <StatusBadge status={app.status} />
                                 </td>
-                                  <td className="px-3 py-3 text-right align-top">
+                                <td className="px-3 py-3 text-right align-top">
                                   {app.resume ? (
                                     <a
                                       href={app.resume.startsWith('http') ? app.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.resume}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                        className="p-1 text-primary-600 hover:text-primary-800 transition-colors inline-block"
+                                      className="p-1 text-primary-600 hover:text-primary-800 transition-colors inline-block"
                                       title="View Resume"
                                     >
-                                        <FileText className="w-3.5 h-3.5" />
+                                      <FileText className="w-3.5 h-3.5" />
                                     </a>
                                   ) : (
                                     <span className="text-[10px] text-gray-400 font-bold uppercase">No Resume</span>
                                   )}
                                 </td>
-                                  <td className="px-3 py-3 text-right align-top">
-                                  <Link 
+                                <td className="px-3 py-3 text-right align-top">
+                                  <Link
                                     to={`/campus-poc/students/${student._id}`}
-                                      className="p-1 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                                    className="p-1 text-gray-400 hover:text-primary-600 transition-colors inline-block"
                                     title="View Profile"
                                   >
-                                      <Eye className="w-3.5 h-3.5" />
+                                    <Eye className="w-3.5 h-3.5" />
                                   </Link>
                                 </td>
                               </tr>
@@ -1791,9 +1888,9 @@ const JobDetails = () => {
                     </div>
                   ) : (
                     <div className="text-center py-12 text-gray-500">
-                       <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                       <p className="font-bold">No applications yet.</p>
-                       <p className="text-sm">No students have applied for this job yet.</p>
+                      <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      <p className="font-bold">No applications yet.</p>
+                      <p className="text-sm">No students have applied for this job yet.</p>
                     </div>
                   )}
                 </>
@@ -1829,34 +1926,34 @@ const JobDetails = () => {
                                     </div>
                                   </div>
                                 </td>
-                                  <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap align-top">
+                                <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap align-top">
                                   {format(new Date(app.createdAt), 'MMM dd, yyyy')}
                                 </td>
-                                  <td className="px-3 py-3 text-center align-top">
+                                <td className="px-3 py-3 text-center align-top">
                                   <StatusBadge status={app.status} />
                                 </td>
-                                  <td className="px-3 py-3 text-right align-top">
+                                <td className="px-3 py-3 text-right align-top">
                                   {app.resume ? (
                                     <a
                                       href={app.resume.startsWith('http') ? app.resume : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${app.resume}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                        className="p-1 text-primary-600 hover:text-primary-800 transition-colors inline-block"
+                                      className="p-1 text-primary-600 hover:text-primary-800 transition-colors inline-block"
                                       title="View Resume"
                                     >
-                                        <FileText className="w-3.5 h-3.5" />
+                                      <FileText className="w-3.5 h-3.5" />
                                     </a>
                                   ) : (
                                     <span className="text-[10px] text-gray-400 font-bold uppercase">No Resume</span>
                                   )}
                                 </td>
-                                  <td className="px-3 py-3 text-right align-top">
-                                  <Link 
+                                <td className="px-3 py-3 text-right align-top">
+                                  <Link
                                     to={`/campus-poc/students/${student._id}`}
-                                      className="p-1 text-gray-400 hover:text-primary-600 transition-colors inline-block"
+                                    className="p-1 text-gray-400 hover:text-primary-600 transition-colors inline-block"
                                     title="View Profile"
                                   >
-                                      <Eye className="w-3.5 h-3.5" />
+                                    <Eye className="w-3.5 h-3.5" />
                                   </Link>
                                 </td>
                               </tr>
@@ -1867,9 +1964,9 @@ const JobDetails = () => {
                     </div>
                   ) : (
                     <div className="text-center py-12 text-gray-500">
-                       <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                       <p className="font-bold">No students selected yet.</p>
-                       <p className="text-sm">No student's application has been marked as selected yet.</p>
+                      <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      <p className="font-bold">No students selected yet.</p>
+                      <p className="text-sm">No student's application has been marked as selected yet.</p>
                     </div>
                   )}
                 </>
@@ -1886,9 +1983,9 @@ const JobDetails = () => {
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <header className="bg-white border-b border-gray-100 py-4 px-6 mb-8 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left duration-700">
-            <img 
-              src="/ng-logo-horizontal.avif" 
-              alt="NavGurukul Logo" 
+            <img
+              src="/ng-logo-horizontal.avif"
+              alt="NavGurukul Logo"
               className="h-8 w-auto object-contain"
               onError={(e) => {
                 e.target.style.display = 'none';

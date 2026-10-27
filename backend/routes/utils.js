@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+require('../utils/domPolyfill');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const pdfParseModule = require('pdf-parse');
 const pdfParse = pdfParseModule && (pdfParseModule.default || pdfParseModule);

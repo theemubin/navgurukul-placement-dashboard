@@ -160,150 +160,150 @@ const PublicRoute = ({ children }) => {
 function App() {
   return (
     <SchoolsProvider>
-    <Routes>
-      {/* Universal ScamRadar routes (accessible to all authenticated users) */}
-      <Route path="/scam-reports/:id" element={
-        <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
-          <ScamReportDetails />
-        </ProtectedRoute>
-      } />
-      <Route path="/scam-reports" element={
-        <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
-          <ScamReportsRepository />
-        </ProtectedRoute>
-      } />
-      <Route path="/scam-detector" element={
-        <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
-          <StudentScamDetector />
-        </ProtectedRoute>
-      } />
-      <Route path="/scam-education" element={
-        <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
-          <ScamEducation />
-        </ProtectedRoute>
-      } />
+      <Routes>
+        {/* Universal ScamRadar routes (accessible to all authenticated users) */}
+        <Route path="/scam-reports/:id" element={
+          <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
+            <ScamReportDetails />
+          </ProtectedRoute>
+        } />
+        <Route path="/scam-reports" element={
+          <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
+            <ScamReportsRepository />
+          </ProtectedRoute>
+        } />
+        <Route path="/scam-detector" element={
+          <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
+            <StudentScamDetector />
+          </ProtectedRoute>
+        } />
+        <Route path="/scam-education" element={
+          <ProtectedRoute allowedRoles={['student', 'campus_poc', 'coordinator', 'manager']}>
+            <ScamEducation />
+          </ProtectedRoute>
+        } />
 
-      {/* Public Routes */}
-      <Route path="/" element={<Navigate to="/portfolios" replace />} />
-      <Route path="/portfolios" element={<Portfolios />} />
-      <Route path="/jobs/:id" element={<JobDetails />} />
-      <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-      <Route path="/auth/login" element={<Navigate to="/login" replace />} />
-      <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
-      <Route path="/auth/pending-approval" element={<PendingApproval />} />
-      <Route path="/auth/account-inactive" element={<AccountInactive />} />
-      <Route path="/students" element={<StudentPortfolio />} />
+        {/* Public Routes */}
+        <Route path="/" element={<Navigate to="/portfolios" replace />} />
+        <Route path="/portfolios" element={<Portfolios />} />
+        <Route path="/jobs/:id" element={<JobDetails />} />
+        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/auth/login" element={<Navigate to="/login" replace />} />
+        <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/auth/pending-approval" element={<PendingApproval />} />
+        <Route path="/auth/account-inactive" element={<AccountInactive />} />
+        <Route path="/students" element={<StudentPortfolio />} />
 
-      {/* Student Routes */}
-      <Route path="/student" element={
-        <ProtectedRoute allowedRoles={['student']}>
-          <DashboardLayout />
-        </ProtectedRoute>
-      }>
-        <Route index element={<StudentDashboard />} />
-        <Route path="profile" element={<StudentProfile />} />
-        <Route path="jobs" element={<StudentJobs />} />
-        <Route path="jobs/:id" element={<JobDetails />} />
-        <Route path="applications" element={<StudentApplications />} />
-        <Route path="job-readiness" element={<StudentJobReadiness />} />
-        <Route path="self-applications" element={<StudentSelfApplications />} />
-        <Route path="post-placement-dashboard" element={<PostPlacementDashboard />} />
-        <Route path="daily-tracker-history" element={<DailyTrackerHistory />} />
-        <Route path="post-placement" element={<StudentPostPlacementTracking />} />
-        <Route path="ats-checker" element={<AtsResumeChecker />} />
-        <Route path="notifications" element={<Notifications />} />
+        {/* Student Routes */}
+        <Route path="/student" element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
+          <Route index element={<StudentDashboard />} />
+          <Route path="profile" element={<StudentProfile />} />
+          <Route path="jobs" element={<StudentJobs />} />
+          <Route path="jobs/:id" element={<JobDetails />} />
+          <Route path="applications" element={<StudentApplications />} />
+          <Route path="job-readiness" element={<StudentJobReadiness />} />
+          <Route path="self-applications" element={<StudentSelfApplications />} />
+          <Route path="post-placement-dashboard" element={<PostPlacementDashboard />} />
+          <Route path="daily-tracker-history" element={<DailyTrackerHistory />} />
+          <Route path="post-placement" element={<StudentPostPlacementTracking />} />
+          <Route path="ats-checker" element={<AtsResumeChecker />} />
+          <Route path="notifications" element={<Notifications />} />
 
-      </Route>
-
-      {/* Campus POC Routes */}
-      <Route path="/campus-poc" element={
-        <ProtectedRoute allowedRoles={['campus_poc']}>
-          <DashboardLayout />
-        </ProtectedRoute>
-      }>
-        <Route index element={<POCDashboard />} />
-        <Route path="students" element={<POCStudents />} />
-        <Route path="students/:id" element={<POCStudentDetails />} />
-        <Route path="profile-approvals" element={<POCProfileApprovals />} />
-        <Route path="job-readiness" element={<UnifiedJobReadiness />} />
-        <Route path="self-applications" element={<POCSelfApplicationsReview />} />
-        <Route path="interest-requests" element={<POCInterestRequestsReview />} />
-        <Route path="skills" element={<POCSkills />} />
-        <Route path="profile-options" element={<POCCouncilPosts />} />
-        <Route path="council-posts" element={<POCCouncilPosts />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="jobs/:id" element={<JobDetails />} />
-        <Route path="pipeline" element={<PipelineAnalytics />} />
-        <Route path="stagnation" element={<BottlenecksPage />} />
-        <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
-      </Route>
-
-      {/* Coordinator Routes */}
-      <Route path="/coordinator" element={
-        <ProtectedRoute allowedRoles={['coordinator']}>
-          <DashboardLayout />
-        </ProtectedRoute>
-      }>
-        <Route index element={<CoordinatorDashboard />} />
-        <Route path="jobs" element={<CoordinatorJobs />} />
-        <Route path="jobs/new" element={<JobForm />} />
-        <Route path="jobs/:id/edit" element={<JobForm />} />
-        <Route path="applications" element={<CoordinatorApplications />} />
-        <Route path="student-export" element={<StudentExport />} />
-        {/* Nested Skills routes */}
-        <Route path="skills" element={<SkillsLayout role="coordinator" />}>
-          <Route index element={<CoordinatorSkills />} />
-          <Route path="approvals" element={<POCSkillApprovals />} />
         </Route>
-        <Route path="interest-requests" element={<CoordinatorInterestRequests />} />
-        <Route path="forum" element={<CoordinatorForum />} />
-        <Route path="profile-options" element={<POCCouncilPosts />} />
-        {/* Nested Settings routes */}
-        <Route path="settings" element={<SettingsLayout role="coordinator" />}>
-          <Route index element={<AIKeysSettings />} />
-          <Route path="discord" element={<DiscordSettings />} />
-        </Route>
-        <Route path="job-readiness" element={<UnifiedJobReadiness />} />
-        <Route path="pipeline" element={<PipelineAnalytics />} />
-        <Route path="stagnation" element={<BottlenecksPage />} />
-        <Route path="students/:id" element={<POCStudentDetails />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
-      </Route>
 
-      {/* Manager Routes */}
-      <Route path="/manager" element={
-        <ProtectedRoute allowedRoles={['manager']}>
-          <DashboardLayout />
-        </ProtectedRoute>
-      }>
-        <Route index element={<ManagerDashboard />} />
-        <Route path="reports" element={<ManagerReports />} />
-        <Route path="media" element={<MediaManagement />} />
-        <Route path="carousel" element={<Navigate to="/manager/media" replace />} />
-        <Route path="login-backgrounds" element={<Navigate to="/manager/media" replace />} />
-        <Route path="partners" element={<PartnerManagement />} />
-        <Route path="leads" element={<LeadsManagement />} />
-        <Route path="settings" element={<ManagerSettings />} />
-        <Route path="profile-options" element={<POCCouncilPosts />} />
-        <Route path="job-readiness" element={<UnifiedJobReadiness />} />
-        <Route path="pipeline" element={<PipelineAnalytics />} />
-        <Route path="stagnation" element={<BottlenecksPage />} />
-        <Route path="communication" element={<ManagerCommunication />} />
-        <Route path="post-placement" element={<ManagerPostPlacementTracking />} />
-        <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />
-        <Route path="users" element={<UsersManager />} />
-        <Route path="ghar" element={<GharManagement />} />
-        <Route path="ghar-viewer" element={<Navigate to="/manager/ghar" replace />} />
-      </Route>
+        {/* Campus POC Routes */}
+        <Route path="/campus-poc" element={
+          <ProtectedRoute allowedRoles={['campus_poc']}>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
+          <Route index element={<POCDashboard />} />
+          <Route path="students" element={<POCStudents />} />
+          <Route path="students/:id" element={<POCStudentDetails />} />
+          <Route path="profile-approvals" element={<POCProfileApprovals />} />
+          <Route path="job-readiness" element={<UnifiedJobReadiness />} />
+          <Route path="self-applications" element={<POCSelfApplicationsReview />} />
+          <Route path="interest-requests" element={<POCInterestRequestsReview />} />
+          <Route path="skills" element={<POCSkills />} />
+          <Route path="profile-options" element={<POCCouncilPosts />} />
+          <Route path="council-posts" element={<POCCouncilPosts />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="jobs/:id" element={<JobDetails />} />
+          <Route path="pipeline" element={<PipelineAnalytics />} />
+          <Route path="stagnation" element={<BottlenecksPage />} />
+          <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
+        </Route>
+
+        {/* Coordinator Routes */}
+        <Route path="/coordinator" element={
+          <ProtectedRoute allowedRoles={['coordinator']}>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
+          <Route index element={<CoordinatorDashboard />} />
+          <Route path="jobs" element={<CoordinatorJobs />} />
+          <Route path="jobs/new" element={<JobForm />} />
+          <Route path="jobs/:id/edit" element={<JobForm />} />
+          <Route path="applications" element={<CoordinatorApplications />} />
+          <Route path="student-export" element={<StudentExport />} />
+          {/* Nested Skills routes */}
+          <Route path="skills" element={<SkillsLayout role="coordinator" />}>
+            <Route index element={<CoordinatorSkills />} />
+            <Route path="approvals" element={<POCSkillApprovals />} />
+          </Route>
+          <Route path="interest-requests" element={<CoordinatorInterestRequests />} />
+          <Route path="forum" element={<CoordinatorForum />} />
+          <Route path="profile-options" element={<POCCouncilPosts />} />
+          {/* Nested Settings routes */}
+          <Route path="settings" element={<SettingsLayout role="coordinator" />}>
+            <Route index element={<AIKeysSettings />} />
+            <Route path="discord" element={<DiscordSettings />} />
+          </Route>
+          <Route path="job-readiness" element={<UnifiedJobReadiness />} />
+          <Route path="pipeline" element={<PipelineAnalytics />} />
+          <Route path="stagnation" element={<BottlenecksPage />} />
+          <Route path="students/:id" element={<POCStudentDetails />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
+        </Route>
+
+        {/* Manager Routes */}
+        <Route path="/manager" element={
+          <ProtectedRoute allowedRoles={['manager']}>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
+          <Route index element={<ManagerDashboard />} />
+          <Route path="reports" element={<ManagerReports />} />
+          <Route path="media" element={<MediaManagement />} />
+          <Route path="carousel" element={<Navigate to="/manager/media" replace />} />
+          <Route path="login-backgrounds" element={<Navigate to="/manager/media" replace />} />
+          <Route path="partners" element={<PartnerManagement />} />
+          <Route path="leads" element={<LeadsManagement />} />
+          <Route path="settings" element={<ManagerSettings />} />
+          <Route path="profile-options" element={<POCCouncilPosts />} />
+          <Route path="job-readiness" element={<UnifiedJobReadiness />} />
+          <Route path="pipeline" element={<PipelineAnalytics />} />
+          <Route path="stagnation" element={<BottlenecksPage />} />
+          <Route path="communication" element={<ManagerCommunication />} />
+          <Route path="post-placement" element={<ManagerPostPlacementTracking />} />
+          <Route path="post-placement-monitoring" element={<PostPlacementMonitoring />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="interest-requests" element={<CoordinatorInterestRequestsForManager />} />
+          <Route path="users" element={<UsersManager />} />
+          <Route path="ghar" element={<GharManagement />} />
+          <Route path="ghar-viewer" element={<Navigate to="/manager/ghar" replace />} />
+        </Route>
 
   // Normalize double slashes in URLs
-  <Route path="/*" element={<SlashRedirect />} />
+        <Route path="/*" element={<SlashRedirect />} />
 
-    </Routes>
+      </Routes>
     </SchoolsProvider>
   );
 }

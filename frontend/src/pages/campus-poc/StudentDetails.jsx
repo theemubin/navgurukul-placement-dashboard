@@ -198,6 +198,13 @@ const POCStudentDetails = () => {
     ...(student.resolvedProfile || {}) 
   };
 
+  const primaryCoverLetter = profile.coverLetters?.find(c => c.isPrimary)?.coverLetterLink ||
+    profile.coverLetters?.find(c => c.isPrimary)?.coverLetter ||
+    profile.coverLetters?.[0]?.coverLetterLink ||
+    profile.coverLetters?.[0]?.coverLetter ||
+    profile.coverLetterLink ||
+    profile.coverLetter;
+
   const InfoRow = ({ label, value, icon: Icon }) => (
     <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
       {Icon && <Icon className="w-4 h-4 text-gray-400 mt-1 shrink-0" />}
@@ -294,6 +301,12 @@ const POCStudentDetails = () => {
                   <a href={profile.resumeLink.startsWith('http') ? profile.resumeLink : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${profile.resumeLink}`} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors">
                     <FileText className="w-3.5 h-3.5" /> Resume Link
+                  </a>
+                )}
+                {primaryCoverLetter && (
+                  <a href={primaryCoverLetter.startsWith('http') ? primaryCoverLetter : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${primaryCoverLetter}`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-700 rounded-xl text-xs font-bold hover:bg-teal-100 transition-colors">
+                    <FileText className="w-3.5 h-3.5" /> Cover Letter
                   </a>
                 )}
               </div>

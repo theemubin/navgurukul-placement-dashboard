@@ -1,16 +1,48 @@
 import { useState, useEffect, useMemo } from 'react';
 import { formatDistanceToNow, isPast, format } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { statsAPI, placementCycleAPI, userAPI, campusAPI, gharAPI } from '../../services/api';
+import { statsAPI, placementCycleAPI, userAPI, campusAPI, gharAPI, resolveFileUrl } from '../../services/api';
 import { StatsCard, LoadingSpinner, Badge, Modal } from '../../components/common/UIComponents';
 import toast from 'react-hot-toast';
 import {
   Users, CheckSquare, FileText, TrendingUp, AlertCircle, Building2,
   GraduationCap, Calendar, ChevronDown, ChevronUp, Eye, Clock,
   CheckCircle, XCircle, Briefcase, ArrowRight, Plus, Filter, Settings, RefreshCw,
-  MessageSquare, ClipboardList, Search, Bell, UserPlus
+  MessageSquare, ClipboardList, Search, Bell, UserPlus, ExternalLink, Copy, Check
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+
+export const resolveCoverLetterData = (item) => {
+  if (!item) return null;
+
+  const profile = item.studentProfile || {};
+  const clArray = item.studentCoverLetters || item.coverLetters || profile.coverLetters;
+  const primaryFromList = Array.isArray(clArray)
+    ? (clArray.find(c => c.isPrimary) || clArray[0])
+    : null;
+
+  // 1. Snapshot
+  const snapshot = item.coverLetterSnapshot;
+  const snapshotText = snapshot?.text;
+  const snapshotUrl = snapshot?.url;
+  const snapshotTitle = snapshot?.title || snapshot?.fileName;
+
+  // 2. Direct application cover letter fields or profile fields
+  const rawCoverLetter = item.coverLetter || primaryFromList?.coverLetter || profile.coverLetter || item.studentCoverLetter;
+  const isUrl = typeof rawCoverLetter === 'string' && (rawCoverLetter.startsWith('http://') || rawCoverLetter.startsWith('https://') || rawCoverLetter.startsWith('/uploads'));
+  const textContent = snapshotText || (!isUrl && typeof rawCoverLetter === 'string' && rawCoverLetter.trim() ? rawCoverLetter : (primaryFromList?.text || ''));
+  const fileUrl = item.coverLetterFile || snapshotUrl || (isUrl ? rawCoverLetter : '') || item.coverLetterLink || primaryFromList?.coverLetterLink || (primaryFromList?.coverLetter && typeof primaryFromList.coverLetter === 'string' && (primaryFromList.coverLetter.startsWith('http') || primaryFromList.coverLetter.startsWith('/uploads')) ? primaryFromList.coverLetter : '') || profile.coverLetterLink || item.studentCoverLetterLink;
+
+  if (!textContent && !fileUrl) {
+    return null;
+  }
+
+  return {
+    title: snapshotTitle || primaryFromList?.title || primaryFromList?.fileName || 'Cover Letter',
+    text: textContent,
+    fileUrl: fileUrl
+  };
+};
 
 const JOB_TYPE_OPTIONS = [
   { id: 'full_time', label: 'Full Time' },
@@ -188,6 +220,42 @@ const POCDashboard = () => {
   const [eligibleStudentsModal, setEligibleStudentsModal] = useState({ isOpen: false, job: null, students: [], loading: false, total: 0, applied: 0, notApplied: 0 });
   const [studentFilter, setStudentFilter] = useState('all'); // 'all', 'applied', 'not-applied'
   const [notifying, setNotifying] = useState(false);
+
+  // Cover Letter Modal state
+  const [coverLetterModal, setCoverLetterModal] = useState({
+    isOpen: false,
+    studentName: '',
+    studentEmail: '',
+    jobTitle: '',
+    companyName: '',
+    title: 'Cover Letter',
+    text: '',
+    fileUrl: ''
+  });
+
+  const handleOpenCoverLetter = ({ studentName, studentEmail, jobTitle, companyName, app, student }) => {
+    const dataSource = app || student;
+    const resolved = resolveCoverLetterData(dataSource);
+    if (!resolved) {
+      toast.error('No cover letter available for this application');
+      return;
+    }
+    setCoverLetterModal({
+      isOpen: true,
+      studentName: studentName || app?.studentName || student?.name || (student?.firstName ? `${student.firstName} ${student.lastName}` : ''),
+      studentEmail: studentEmail || app?.studentEmail || student?.email || '',
+      jobTitle: jobTitle || app?.job || app?.jobTitle || '',
+      companyName: companyName || app?.company || app?.companyName || '',
+      title: resolved.title || 'Cover Letter',
+      text: resolved.text,
+      fileUrl: resolved.fileUrl
+    });
+  };
+
+  const closeCoverLetterModal = () => {
+    setCoverLetterModal(prev => ({ ...prev, isOpen: false }));
+  };
+
   const currentCycleStats = useMemo(() => {
     const now = new Date();
     return cycles.find(cycle =>
@@ -276,7 +344,7 @@ const POCDashboard = () => {
       const response = await gharAPI.syncStudent(email);
       const updatedData = response.data.data?.student;
       toast.success('Synced with Ghar successfully', { id: 'ghar-sync' });
-      
+
       // Update local state instead of full dashboard re-fetch
       setStudentSummary(prev => {
         if (!prev) return prev;
@@ -309,7 +377,7 @@ const POCDashboard = () => {
   const fetchDashboardData = async (forceRefresh = false) => {
     setStatsLoading(true);
     setJobsLoading(true);
-    
+
     statsAPI.getCampusPocStats(selectedStatus === 'all' ? undefined : selectedStatus, { forceRefresh })
       .then(res => {
         setStats(res.data);
@@ -343,8 +411,8 @@ const POCDashboard = () => {
       const [companyRes, schoolRes, summaryRes] = await Promise.all([
         statsAPI.getCompanyTracking(selectedCycle, { forceRefresh }),
         statsAPI.getSchoolTracking(selectedCycle, { forceRefresh }),
-        statsAPI.getStudentSummary({ 
-          cycleId: selectedCycle, 
+        statsAPI.getStudentSummary({
+          cycleId: selectedCycle,
           status: selectedStatus === 'all' ? undefined : selectedStatus,
           search: summarySearch.trim() || undefined,
           page: pageNum,
@@ -367,14 +435,14 @@ const POCDashboard = () => {
       const sortedJobs = [...company.jobs].sort((a, b) => {
         const aDeadline = a.applicationDeadline ? new Date(a.applicationDeadline).getTime() : Infinity;
         const bDeadline = b.applicationDeadline ? new Date(b.applicationDeadline).getTime() : Infinity;
-        
+
         // Both past - sort by most recent deadline first
         if (isPast(aDeadline) && isPast(bDeadline)) return bDeadline - aDeadline;
         // A past - put b first
         if (isPast(aDeadline)) return 1;
         // B past - put a first
         if (isPast(bDeadline)) return -1;
-        
+
         // Both future - sort by soonest deadline first
         return aDeadline - bDeadline;
       });
@@ -421,14 +489,14 @@ const POCDashboard = () => {
     try {
       const jobId = job._id || job.jobId;
       const response = await statsAPI.getJobEligibleStudents(jobId);
-      setEligibleStudentsModal({ 
-        isOpen: true, 
-        job, 
-        students: response.data.students, 
+      setEligibleStudentsModal({
+        isOpen: true,
+        job,
+        students: response.data.students,
         total: response.data.total,
         applied: response.data.applied,
         notApplied: response.data.notApplied,
-        loading: false 
+        loading: false
       });
     } catch (error) {
       console.error('Error fetching eligible students:', error);
@@ -533,11 +601,11 @@ const POCDashboard = () => {
 
   const renderPagination = (currentPage, totalItems, onPageChange) => {
     return (
-      <Pagination 
-        currentPage={currentPage} 
-        totalItems={totalItems} 
+      <Pagination
+        currentPage={currentPage}
+        totalItems={totalItems}
         itemsPerPage={itemsPerPage}
-        onPageChange={onPageChange} 
+        onPageChange={onPageChange}
       />
     );
   };
@@ -554,6 +622,12 @@ const POCDashboard = () => {
         filteredStudents={filteredEligibleStudents}
         onNotify={handleNotifyEligible}
         notifying={notifying}
+        onOpenCoverLetter={handleOpenCoverLetter}
+      />
+      <CoverLetterModal
+        isOpen={coverLetterModal.isOpen}
+        onClose={closeCoverLetterModal}
+        data={coverLetterModal}
       />
       {/* Dynamic Header & Toolbar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
@@ -705,8 +779,8 @@ const POCDashboard = () => {
                   className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${campusSettingsErrors.campuses
                     ? 'border-red-400 bg-red-50'
                     : selectedCampuses.includes(campus._id)
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-gray-200 hover:border-gray-300'
                     }`}
                 >
                   <input
@@ -795,11 +869,10 @@ const POCDashboard = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
-                activeTab === tab.id
+              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${activeTab === tab.id
                   ? 'border-primary-600 text-primary-600 bg-primary-50/50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
+                }`}
             >
               <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? 'text-primary-600' : 'text-gray-400'}`} />
               {tab.label}
@@ -848,7 +921,7 @@ const POCDashboard = () => {
                   </div>
                 </div>
               </Link>
-              <Link to="/campus-poc/job-readiness-criteria" className="card hover:shadow-md transition-shadow p-3">
+              <Link to="/campus-poc/job-readiness" className="card hover:shadow-md transition-shadow p-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-green-100 rounded-lg">
                     <CheckSquare className="w-5 h-5 text-green-600" />
@@ -988,122 +1061,118 @@ const POCDashboard = () => {
             {showOpportunityFilters && (
               <div id="opportunity-filters" className="space-y-4 pt-4">
                 <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
-              <div>
-                <label htmlFor="poc-job-search" className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
-                  Search
-                </label>
-                <div className="relative">
-                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    id="poc-job-search"
-                    type="search"
-                    value={jobSearchInput}
-                    onChange={(event) => setJobSearchInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') applyJobSearch();
-                    }}
-                    placeholder="Title, company, location..."
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
-                  />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="poc-coordinator-search" className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
-                  Coordinator Name
-                </label>
-                <select
-                  id="poc-coordinator-search"
-                  value={coordinatorSearchInput}
-                  onChange={(event) => setCoordinatorSearchInput(event.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
-                >
-                  <option value="">All Coordinators</option>
-                  {availableCoordinators.map((coordinator) => (
-                    <option key={coordinator.id} value={coordinator.id}>
-                      {coordinator.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="button"
-                onClick={applyJobSearch}
-                className="self-end inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
-              >
-                <Search className="w-4 h-4" />
-                Search
-              </button>
-                </div>
-
-            {/* Job Types Multi-Select Pills */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Job Type</label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => toggleJobTypeFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    jobTypeFilters.length === 0
-                      ? 'bg-primary-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  All Job Types
-                </button>
-                {JOB_TYPE_OPTIONS.map(opt => {
-                  const isSelected = jobTypeFilters.includes(opt.id);
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => toggleJobTypeFilter(opt.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${
-                        isSelected
-                          ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
-                          : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:bg-gray-50'
-                      }`}
+                  <div>
+                    <label htmlFor="poc-job-search" className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                      Search
+                    </label>
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        id="poc-job-search"
+                        type="search"
+                        value={jobSearchInput}
+                        onChange={(event) => setJobSearchInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') applyJobSearch();
+                        }}
+                        placeholder="Title, company, location..."
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="poc-coordinator-search" className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                      Coordinator Name
+                    </label>
+                    <select
+                      id="poc-coordinator-search"
+                      value={coordinatorSearchInput}
+                      onChange={(event) => setCoordinatorSearchInput(event.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
                     >
-                      <span>{opt.label}</span>
-                      {isSelected && <span className="text-[10px]">✓</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Role Categories Multi-Select Pills */}
-            {availableRoleCategories.length > 0 && (
-              <div className="space-y-1.5 pt-2 border-t border-gray-100">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Role Category</label>
-                <div className="flex flex-wrap gap-2">
+                      <option value="">All Coordinators</option>
+                      {availableCoordinators.map((coordinator) => (
+                        <option key={coordinator.id} value={coordinator.id}>
+                          {coordinator.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <button
-                    onClick={() => toggleRoleCategoryFilter('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      roleCategoryFilters.length === 0
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    type="button"
+                    onClick={applyJobSearch}
+                    className="self-end inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
                   >
-                    All Categories
+                    <Search className="w-4 h-4" />
+                    Search
                   </button>
-                  {availableRoleCategories.map(cat => {
-                    const isSelected = roleCategoryFilters.includes(cat);
-                    return (
-                      <button
-                        key={cat}
-                        onClick={() => toggleRoleCategoryFilter(cat)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${
-                          isSelected
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                            : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        <span>{cat}</span>
-                        {isSelected && <span className="text-[10px]">✓</span>}
-                      </button>
-                    );
-                  })}
                 </div>
-              </div>
-            )}
+
+                {/* Job Types Multi-Select Pills */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Job Type</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => toggleJobTypeFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${jobTypeFilters.length === 0
+                          ? 'bg-primary-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                    >
+                      All Job Types
+                    </button>
+                    {JOB_TYPE_OPTIONS.map(opt => {
+                      const isSelected = jobTypeFilters.includes(opt.id);
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => toggleJobTypeFilter(opt.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${isSelected
+                              ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
+                              : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:bg-gray-50'
+                            }`}
+                        >
+                          <span>{opt.label}</span>
+                          {isSelected && <span className="text-[10px]">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Role Categories Multi-Select Pills */}
+                {availableRoleCategories.length > 0 && (
+                  <div className="space-y-1.5 pt-2 border-t border-gray-100">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Role Category</label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => toggleRoleCategoryFilter('all')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${roleCategoryFilters.length === 0
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                      >
+                        All Categories
+                      </button>
+                      {availableRoleCategories.map(cat => {
+                        const isSelected = roleCategoryFilters.includes(cat);
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => toggleRoleCategoryFilter(cat)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${isSelected
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+                              }`}
+                          >
+                            <span>{cat}</span>
+                            {isSelected && <span className="text-[10px]">✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1118,40 +1187,40 @@ const POCDashboard = () => {
 
               return (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  <StatsCard 
-                    icon={Briefcase} 
-                    label="Active Jobs" 
-                    value={activeJobsCount} 
-                    color="secondary" 
+                  <StatsCard
+                    icon={Briefcase}
+                    label="Active Jobs"
+                    value={activeJobsCount}
+                    color="secondary"
                     onClick={() => setActiveTab('jobs')}
-                    compact 
+                    compact
                   />
-                  <StatsCard 
-                    icon={Users} 
-                    label="Eligible Students" 
-                    value={eligibleStudentsCount} 
-                    color="primary" 
+                  <StatsCard
+                    icon={Users}
+                    label="Eligible Students"
+                    value={eligibleStudentsCount}
+                    color="primary"
                     onClick={fetchAllApprovedStudents}
                     compact
                   />
-                  <StatsCard 
-                    icon={Clock} 
-                    label="Applications" 
-                    value={totalApplications} 
-                    color="accent" 
+                  <StatsCard
+                    icon={Clock}
+                    label="Applications"
+                    value={totalApplications}
+                    color="accent"
                     onClick={() => setActiveTab('summary')}
-                    compact 
+                    compact
                   />
-                  <StatsCard 
-                    icon={CheckCircle} 
-                    label="Selected" 
-                    value={selectedCount} 
-                    color="success" 
+                  <StatsCard
+                    icon={CheckCircle}
+                    label="Selected"
+                    value={selectedCount}
+                    color="success"
                     onClick={() => {
                       setActiveTab('summary');
                       setSelectedStatus('placed');
                     }}
-                    compact 
+                    compact
                   />
                 </div>
               );
@@ -1229,7 +1298,7 @@ const POCDashboard = () => {
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-2">
-                              <Link 
+                              <Link
                                 to={`/campus-poc/jobs/${job._id}`}
                                 className="text-xs bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg border border-primary-100 hover:bg-primary-100 transition-all font-bold flex items-center gap-1.5"
                               >
@@ -1239,7 +1308,7 @@ const POCDashboard = () => {
                               <div className="text-right">
                                 <p className="text-[10px] text-gray-500 uppercase tracking-tighter">Deadline</p>
                                 <p className="text-xs font-bold text-gray-700">
-                                   {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
+                                  {format(new Date(job.applicationDeadline), 'MMM dd, yyyy')}
                                 </p>
                               </div>
                             </div>
@@ -1343,195 +1412,220 @@ const POCDashboard = () => {
             <div className="space-y-8">
               {(() => {
                 const groups = categorizedCompanyTracking;
-              const sections = [
-                { id: 'open', label: 'Open for Application', companies: groups.open, color: 'text-green-700 bg-green-50' },
-                { id: 'active', label: 'Ongoing Process / Active', companies: groups.active, color: 'text-blue-700 bg-blue-50' },
-                { id: 'closed', label: 'Closed / Completed', companies: groups.closed, color: 'text-gray-600 bg-gray-50' }
-              ];
+                const sections = [
+                  { id: 'open', label: 'Open for Application', companies: groups.open, color: 'text-green-700 bg-green-50' },
+                  { id: 'active', label: 'Ongoing Process / Active', companies: groups.active, color: 'text-blue-700 bg-blue-50' },
+                  { id: 'closed', label: 'Closed / Completed', companies: groups.closed, color: 'text-gray-600 bg-gray-50' }
+                ];
 
-              return sections.map(section => (
-                <div key={section.id} className="space-y-3">
-                  <div className={`px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wider flex items-center justify-between ${section.color}`}>
-                    {section.label}
-                    <Badge variant={section.id === 'open' ? 'success' : section.id === 'active' ? 'primary' : 'default'}>
-                      {section.companies.length}
-                    </Badge>
-                  </div>
-                  
-                  {section.companies.length > 0 ? (
-                    <div className="space-y-3 pl-2">
-                      {section.companies.map((company) => (
-                        <div key={company.company} className="card p-0 overflow-hidden border-l-4 border-l-indigo-500">
-                          <button
-                            className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
-                            onClick={() => setExpandedCompany(expandedCompany === company.company ? null : company.company)}
-                          >
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-white rounded-lg border flex items-center justify-center p-1 overflow-hidden">
-                                {company.logo && !company.logo.includes('domain=&') ? (
-                                  <>
-                                    <img 
-                                      src={company.logo} 
-                                      alt={company.company} 
-                                      className="w-full h-full object-contain" 
-                                      onError={(e) => {
-                                        e.target.style.display = 'none';
-                                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
-                                      }}
-                                    />
-                                    <div className="hidden">
-                                      <Building2 className="w-6 h-6 text-gray-300" />
-                                    </div>
-                                  </>
-                                ) : (
-                                  <Building2 className="w-6 h-6 text-gray-300" />
-                                )}
-                              </div>
-                              <div className="text-left">
-                                <h4 className="text-lg font-bold text-gray-900">{company.company}</h4>
-                                <div className="flex items-center gap-3 mt-1">
-                                  {Object.entries(company.statusCounts)
-                                    .filter(([_, count]) => count > 0)
-                                    .map(([status, count]) => (
-                                      <span key={status} className="text-xs text-gray-500 flex items-center gap-1">
-                                        {count} {status}
-                                      </span>
-                                    ))}
+                return sections.map(section => (
+                  <div key={section.id} className="space-y-3">
+                    <div className={`px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wider flex items-center justify-between ${section.color}`}>
+                      {section.label}
+                      <Badge variant={section.id === 'open' ? 'success' : section.id === 'active' ? 'primary' : 'default'}>
+                        {section.companies.length}
+                      </Badge>
+                    </div>
+
+                    {section.companies.length > 0 ? (
+                      <div className="space-y-3 pl-2">
+                        {section.companies.map((company) => (
+                          <div key={company.company} className="card p-0 overflow-hidden border-l-4 border-l-indigo-500">
+                            <button
+                              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                              onClick={() => setExpandedCompany(expandedCompany === company.company ? null : company.company)}
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-white rounded-lg border flex items-center justify-center p-1 overflow-hidden">
+                                  {company.logo && !company.logo.includes('domain=&') ? (
+                                    <>
+                                      <img
+                                        src={company.logo}
+                                        alt={company.company}
+                                        className="w-full h-full object-contain"
+                                        onError={(e) => {
+                                          e.target.style.display = 'none';
+                                          if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                        }}
+                                      />
+                                      <div className="hidden">
+                                        <Building2 className="w-6 h-6 text-gray-300" />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <Building2 className="w-6 h-6 text-gray-300" />
+                                  )}
+                                </div>
+                                <div className="text-left">
+                                  <h4 className="text-lg font-bold text-gray-900">{company.company}</h4>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {Object.entries(company.statusCounts)
+                                      .filter(([_, count]) => count > 0)
+                                      .map(([status, count]) => (
+                                        <span key={status} className="text-xs text-gray-500 flex items-center gap-1">
+                                          {count} {status}
+                                        </span>
+                                      ))}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <div className="text-right hidden sm:block">
-                                <p className="text-sm font-bold text-indigo-600">{company.totalApplications}</p>
-                                <p className="text-[10px] text-gray-500 uppercase">Applications</p>
+                              <div className="flex items-center gap-4">
+                                <div className="text-right hidden sm:block">
+                                  <p className="text-sm font-bold text-indigo-600">{company.totalApplications}</p>
+                                  <p className="text-[10px] text-gray-500 uppercase">Applications</p>
+                                </div>
+                                {expandedCompany === company.company ? (
+                                  <ChevronUp className="w-5 h-5 text-gray-400" />
+                                ) : (
+                                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                                )}
                               </div>
-                              {expandedCompany === company.company ? (
-                                <ChevronUp className="w-5 h-5 text-gray-400" />
-                              ) : (
-                                <ChevronDown className="w-5 h-5 text-gray-400" />
-                              )}
-                            </div>
-                          </button>
+                            </button>
 
-                          {expandedCompany === company.company && (
-                            <div className="px-6 pb-6 bg-white border-t">
-                              <div className="mt-4 space-y-4">
-                                {company.jobs.map((job) => (
-                                  <div key={job.jobId} className="bg-gray-50 rounded-lg p-4 border border-gray-100 hover:border-indigo-100 transition-colors">
-                                    <div className="flex items-start justify-between mb-4">
-                                      <div>
-                                        <h5 className="font-bold text-gray-900 flex items-center gap-2">
-                                          {job.title}
-                                          {!isPast(new Date(job.applicationDeadline)) && (
-                                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                                          )}
-                                        </h5>
-                                        <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                                          <p className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-md font-medium uppercase tracking-tight">
-                                            {job.jobType?.replace('_', ' ')}
-                                          </p>
-                                          <Link 
-                                            to={`/campus-poc/jobs/${job.jobId}`}
-                                            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline"
-                                            target="_blank"
-                                          >
-                                            <Eye className="w-3.5 h-3.5" />
-                                            View Details
-                                          </Link>
-                                           {job.eligibleCount !== undefined && (
-                                            <button
-                                              onClick={() => fetchEligibleStudents({ ...job, _id: job.jobId })}
-                                              className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
-                                              title="Click to view eligible students"
+                            {expandedCompany === company.company && (
+                              <div className="px-6 pb-6 bg-white border-t">
+                                <div className="mt-4 space-y-4">
+                                  {company.jobs.map((job) => (
+                                    <div key={job.jobId} className="bg-gray-50 rounded-lg p-4 border border-gray-100 hover:border-indigo-100 transition-colors">
+                                      <div className="flex items-start justify-between mb-4">
+                                        <div>
+                                          <h5 className="font-bold text-gray-900 flex items-center gap-2">
+                                            {job.title}
+                                            {!isPast(new Date(job.applicationDeadline)) && (
+                                              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                            )}
+                                          </h5>
+                                          <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                                            <p className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-md font-medium uppercase tracking-tight">
+                                              {job.jobType?.replace('_', ' ')}
+                                            </p>
+                                            <Link
+                                              to={`/campus-poc/jobs/${job.jobId}`}
+                                              className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline"
+                                              target="_blank"
                                             >
-                                              <Users className="w-3 h-3" />
-                                              {job.eligibleCount} Eligible
-                                            </button>
-                                          )}
-                                          {job.applicationDeadline && (
-                                            <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border ${isPast(new Date(job.applicationDeadline))
-                                              ? 'bg-red-50 text-red-600 border-red-100'
-                                              : 'bg-orange-50 text-orange-600 border-orange-100 shadow-sm'
-                                              }`}>
-                                              <Clock className="w-3 h-3" />
-                                              {isPast(new Date(job.applicationDeadline)) ? (
-                                                <span>Closed ({format(new Date(job.applicationDeadline), 'MMM dd')})</span>
-                                              ) : (
-                                                <span className="font-bold uppercase tracking-tight">
-                                                  Closing {formatDistanceToNow(new Date(job.applicationDeadline), { addSuffix: true })}
-                                                </span>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="text-right flex flex-col items-end gap-2.5">
-                                        <div className="flex items-center gap-2">
-                                          <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${job.status === 'active' || job.status === 'application_stage' ? 'bg-green-100 text-green-700 border border-green-200' :
-                                            job.status === 'closed' || isPast(new Date(job.applicationDeadline)) ? 'bg-red-100 text-red-700 border border-red-200' :
-                                              'bg-blue-100 text-blue-700 border border-blue-200'
-                                            }`}>
-                                            {isPast(new Date(job.applicationDeadline)) ? 'Deadline Passed' : job.status?.replace('_', ' ')}
-                                          </span>
-                                        </div>
-                                        <div className="bg-white px-3 py-1.5 rounded-lg border shadow-sm">
-                                          <span className="text-sm font-bold text-gray-800">
-                                            {job.applications.length}
-                                          </span>
-                                          <span className="ml-1.5 text-xs text-gray-500 font-medium">Applicants</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    
-                                    {job.applications.length > 0 ? (
-                                      <div className="overflow-x-auto rounded-lg border border-gray-100 shadow-inner">
-                                        <table className="w-full text-left text-sm">
-                                          <thead className="bg-gray-100 text-gray-700 border-b">
-                                            <tr>
-                                              <th className="px-4 py-2 font-semibold">Student Name</th>
-                                              <th className="px-4 py-2 font-semibold">School</th>
-                                              <th className="px-4 py-2 font-semibold text-center">Current Status</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody className="divide-y bg-white">
-                                            {job.applications.map((app) => (
-                                              <tr key={app.applicationId} className="hover:bg-indigo-50/30 transition-colors">
-                                                <td className="px-4 py-2.5 font-medium text-gray-900">{app.studentName}</td>
-                                                <td className="px-4 py-2.5 text-gray-600">{app.school}</td>
-                                                <td className="px-4 py-2.5 text-center">
-                                                  <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${app.status === 'selected' ? 'bg-green-100 text-green-700' :
-                                                    app.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                                      'bg-blue-100 text-blue-700'
-                                                    }`}>
-                                                    {app.status}
+                                              <Eye className="w-3.5 h-3.5" />
+                                              View Details
+                                            </Link>
+                                            {job.eligibleCount !== undefined && (
+                                              <button
+                                                onClick={() => fetchEligibleStudents({ ...job, _id: job.jobId })}
+                                                className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+                                                title="Click to view eligible students"
+                                              >
+                                                <Users className="w-3 h-3" />
+                                                {job.eligibleCount} Eligible
+                                              </button>
+                                            )}
+                                            {job.applicationDeadline && (
+                                              <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border ${isPast(new Date(job.applicationDeadline))
+                                                ? 'bg-red-50 text-red-600 border-red-100'
+                                                : 'bg-orange-50 text-orange-600 border-orange-100 shadow-sm'
+                                                }`}>
+                                                <Clock className="w-3 h-3" />
+                                                {isPast(new Date(job.applicationDeadline)) ? (
+                                                  <span>Closed ({format(new Date(job.applicationDeadline), 'MMM dd')})</span>
+                                                ) : (
+                                                  <span className="font-bold uppercase tracking-tight">
+                                                    Closing {formatDistanceToNow(new Date(job.applicationDeadline), { addSuffix: true })}
                                                   </span>
-                                                </td>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="text-right flex flex-col items-end gap-2.5">
+                                          <div className="flex items-center gap-2">
+                                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${job.status === 'active' || job.status === 'application_stage' ? 'bg-green-100 text-green-700 border border-green-200' :
+                                              job.status === 'closed' || isPast(new Date(job.applicationDeadline)) ? 'bg-red-100 text-red-700 border border-red-200' :
+                                                'bg-blue-100 text-blue-700 border border-blue-200'
+                                              }`}>
+                                              {isPast(new Date(job.applicationDeadline)) ? 'Deadline Passed' : job.status?.replace('_', ' ')}
+                                            </span>
+                                          </div>
+                                          <div className="bg-white px-3 py-1.5 rounded-lg border shadow-sm">
+                                            <span className="text-sm font-bold text-gray-800">
+                                              {job.applications.length}
+                                            </span>
+                                            <span className="ml-1.5 text-xs text-gray-500 font-medium">Applicants</span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {job.applications.length > 0 ? (
+                                        <div className="overflow-x-auto rounded-lg border border-gray-100 shadow-inner">
+                                          <table className="w-full text-left text-sm">
+                                            <thead className="bg-gray-100 text-gray-700 border-b">
+                                              <tr>
+                                                <th className="px-4 py-2 font-semibold">Student Name</th>
+                                                <th className="px-4 py-2 font-semibold">School</th>
+                                                <th className="px-4 py-2 font-semibold text-center">Current Status</th>
+                                                <th className="px-4 py-2 font-semibold text-center">Cover Letter</th>
                                               </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    ) : (
-                                      <div className="text-center py-4 bg-white rounded-lg border border-dashed text-gray-400 text-xs">
-                                        No applications yet for this campus
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
+                                            </thead>
+                                            <tbody className="divide-y bg-white">
+                                              {job.applications.map((app) => {
+                                                const clData = resolveCoverLetterData(app);
+                                                return (
+                                                  <tr key={app.applicationId} className="hover:bg-indigo-50/30 transition-colors">
+                                                    <td className="px-4 py-2.5 font-medium text-gray-900">{app.studentName}</td>
+                                                    <td className="px-4 py-2.5 text-gray-600">{app.school}</td>
+                                                    <td className="px-4 py-2.5 text-center">
+                                                      <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${app.status === 'selected' ? 'bg-green-100 text-green-700' :
+                                                        app.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                                          'bg-blue-100 text-blue-700'
+                                                        }`}>
+                                                        {app.status}
+                                                      </span>
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-center whitespace-nowrap">
+                                                      {clData ? (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleOpenCoverLetter({
+                                                            studentName: app.studentName,
+                                                            studentEmail: app.studentEmail,
+                                                            jobTitle: job.title,
+                                                            companyName: company.company,
+                                                            app
+                                                          })}
+                                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 transition-all shadow-xs cursor-pointer"
+                                                          title="View Cover Letter"
+                                                        >
+                                                          <FileText className="w-3.5 h-3.5 text-teal-600" />
+                                                          <span>View Letter</span>
+                                                        </button>
+                                                      ) : (
+                                                        <span className="text-xs text-gray-400 font-medium">—</span>
+                                                      )}
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      ) : (
+                                        <div className="text-center py-4 bg-white rounded-lg border border-dashed text-gray-400 text-xs">
+                                          No applications yet for this campus
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-gray-400 text-sm italic bg-gray-50/50 rounded-lg">
-                      No companies in this category
-                    </div>
-                  )}
-                </div>
-              ));
-            })()}
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-gray-400 text-sm italic bg-gray-50/50 rounded-lg">
+                        No companies in this category
+                      </div>
+                    )}
+                  </div>
+                ));
+              })()}
             </div>
           )}
         </div>
@@ -1724,161 +1818,223 @@ const POCDashboard = () => {
             <>
               <div className="space-y-3">
                 {studentSummary.students.map((student) => {
-                      const isExpanded = expandedStudent === student.studentId;
-                      return (
-                        <div 
-                          key={student.studentId} 
-                          className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'}`}
-                        >
-                          {/* Accordion Header */}
-                          <div 
-                            className="p-4 cursor-pointer flex items-center justify-between"
-                            onClick={() => setExpandedStudent(isExpanded ? null : student.studentId)}
-                          >
-                            <div className="flex items-center gap-4 flex-1">
-                              <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center text-primary-600 font-bold">
-                                {student.name.charAt(0)}
-                              </div>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 flex-1">
-                                <div>
-                                  <Link 
-                                    to={`/campus-poc/students/${student.studentId}`}
-                                    className="font-bold text-gray-900 hover:text-primary-600 truncate block"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {student.name}
-                                  </Link>
-                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{student.email}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Placement Status</p>
-                                  <div className="mt-0.5">{getStatusBadge(student.placementStatus)}</div>
-                                </div>
-                                <div className="hidden md:block">
-                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Navgurukul School</p>
-                                  <p className="text-xs font-semibold text-gray-700 mt-0.5">{student.school}</p>
-                                </div>
-                                <div className="text-right pr-4">
-                                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Applications</p>
-                                  <p className="text-sm font-bold text-gray-900 mt-0.5">
-                                    {student.totalApplications} <span className="text-xs font-medium text-gray-500">Total</span>
-                                    {student.activeApplications > 0 && <span className="ml-1 text-green-600 text-xs">({student.activeApplications} Active)</span>}
-                                  </p>
-                                </div>
-                              </div>
+                  const isExpanded = expandedStudent === student.studentId;
+                  return (
+                    <div
+                      key={student.studentId}
+                      className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary-500 border-transparent' : 'hover:border-gray-300 border-gray-100'}`}
+                    >
+                      {/* Accordion Header */}
+                      <div
+                        className="p-4 cursor-pointer flex items-center justify-between"
+                        onClick={() => setExpandedStudent(isExpanded ? null : student.studentId)}
+                      >
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center text-primary-600 font-bold">
+                            {student.name.charAt(0)}
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-1 flex-1">
+                            <div>
+                              <Link
+                                to={`/campus-poc/students/${student.studentId}`}
+                                className="font-bold text-gray-900 hover:text-primary-600 truncate block"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {student.name}
+                              </Link>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{student.email}</p>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleGharSync(student.email);
-                                  }}
-                                  className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-primary-600 transition-colors"
-                                  title="Sync status with Ghar"
-                                >
-                                  <RefreshCw className="w-4 h-4" />
-                                </button>
-                              </div>
-                              {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                            <div>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Placement Status</p>
+                              <div className="mt-0.5">{getStatusBadge(student.placementStatus)}</div>
+                            </div>
+                            <div className="hidden md:block">
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Navgurukul School</p>
+                              <p className="text-xs font-semibold text-gray-700 mt-0.5">{student.school}</p>
+                            </div>
+                            <div className="text-right pr-4">
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Applications</p>
+                              <p className="text-sm font-bold text-gray-900 mt-0.5">
+                                {student.totalApplications} <span className="text-xs font-medium text-gray-500">Total</span>
+                                {student.activeApplications > 0 && <span className="ml-1 text-green-600 text-xs">({student.activeApplications} Active)</span>}
+                              </p>
                             </div>
                           </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGharSync(student.email);
+                              }}
+                              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-primary-600 transition-colors"
+                              title="Sync status with Ghar"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                        </div>
+                      </div>
 
-                          {/* Accordion Content */}
-                          {isExpanded && (
-                            <div className="p-4 border-t border-gray-50 bg-gray-50/30 rounded-b-xl animate-fadeIn">
-                              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <ClipboardList className="w-3.5 h-3.5" />
-                                Application History
-                              </h4>
-                              
-                              {student.applications.length === 0 ? (
-                                <div className="text-center py-6 bg-white rounded-lg border border-dashed border-gray-200">
-                                  <p className="text-sm text-gray-500">No applications found for this student.</p>
-                                </div>
-                              ) : (
-                                <div className="space-y-4">
-                                  {student.applications.map((app) => (
-                                    <div key={app.applicationId} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                                        <div className="flex items-start gap-3">
-                                          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
-                                            <Building2 className="w-5 h-5" />
-                                          </div>
-                                          <div>
-                                            <h5 className="font-bold text-gray-900">{app.company}</h5>
-                                            <p className="text-sm text-gray-600">{app.job}</p>
-                                            <p className="text-[10px] text-gray-400 uppercase font-bold mt-1">Applied on {new Date(app.appliedAt).toLocaleDateString()}</p>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                          <div className="text-right">
-                                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Current Status</p>
-                                            {getStatusBadge(app.status)}
-                                          </div>
-                                          <Link 
-                                            to={`/campus-poc/jobs/${app.jobId || ''}`}
-                                            className="p-2 hover:bg-gray-100 rounded-lg text-primary-600 transition-colors"
-                                            title="View Job Details"
-                                          >
-                                            <ArrowRight className="w-4 h-4" />
-                                          </Link>
-                                        </div>
+                      {/* Accordion Content */}
+                      {isExpanded && (
+                        <div className="p-4 border-t border-gray-50 bg-gray-50/30 rounded-b-xl animate-fadeIn">
+                          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <ClipboardList className="w-3.5 h-3.5" />
+                            Application History
+                          </h4>
+
+                          {student.applications.length === 0 ? (
+                            <div className="text-center py-6 bg-white rounded-lg border border-dashed border-gray-200">
+                              <p className="text-sm text-gray-500">No applications found for this student.</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {student.applications.map((app) => (
+                                <div key={app.applicationId} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                                    <div className="flex items-start gap-3">
+                                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
+                                        <Building2 className="w-5 h-5" />
                                       </div>
-
-                                      {/* Progress & Round Results */}
-                                      {app.roundResults && app.roundResults.length > 0 && (
-                                        <div className="mt-4 pt-4 border-t border-gray-50">
-                                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Interview Progress</p>
-                                          <div className="flex flex-wrap gap-2">
-                                            {app.roundResults.map((round, idx) => (
-                                              <div key={idx} className={`px-3 py-2 rounded-lg border text-xs ${
-                                                round.status === 'passed' ? 'bg-green-50 border-green-100 text-green-700' :
-                                                round.status === 'failed' ? 'bg-red-50 border-red-100 text-red-700' :
-                                                'bg-blue-50 border-blue-100 text-blue-700'
-                                              }`}>
-                                                <div className="font-bold flex items-center gap-1">
-                                                  <span>R{round.round}: {round.roundName}</span>
-                                                  {round.status === 'passed' ? <CheckCircle className="w-3 h-3" /> : round.status === 'failed' ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                                </div>
-                                                {round.feedback && <p className="mt-1 text-[10px] opacity-80 italic">"{round.feedback}"</p>}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* Recruiter Comments */}
-                                      {app.feedback && (
-                                        <div className="mt-4 p-3 bg-indigo-50/50 rounded-lg flex items-start gap-3">
-                                          <MessageSquare className="w-4 h-4 text-indigo-500 mt-1" />
-                                          <div>
-                                            <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Overall Recruiter Feedback</p>
-                                            <p className="text-sm text-gray-700 italic">"{app.feedback}"</p>
-                                          </div>
-                                        </div>
-                                      )}
+                                      <div>
+                                        <h5 className="font-bold text-gray-900">{app.company}</h5>
+                                        <p className="text-sm text-gray-600">{app.job}</p>
+                                        <p className="text-[10px] text-gray-400 uppercase font-bold mt-1">Applied on {new Date(app.appliedAt).toLocaleDateString()}</p>
+                                      </div>
                                     </div>
-                                  ))}
+                                    <div className="flex items-center gap-4">
+                                      <div className="text-right">
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Current Status</p>
+                                        {getStatusBadge(app.status)}
+                                      </div>
+                                      <Link
+                                        to={`/campus-poc/jobs/${app.jobId || ''}`}
+                                        className="p-2 hover:bg-gray-100 rounded-lg text-primary-600 transition-colors"
+                                        title="View Job Details"
+                                      >
+                                        <ArrowRight className="w-4 h-4" />
+                                      </Link>
+                                    </div>
+                                  </div>
+
+                                  {/* Progress & Round Results */}
+                                  {app.roundResults && app.roundResults.length > 0 && (
+                                    <div className="mt-4 pt-4 border-t border-gray-50">
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Interview Progress</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {app.roundResults.map((round, idx) => (
+                                          <div key={idx} className={`px-3 py-2 rounded-lg border text-xs ${round.status === 'passed' ? 'bg-green-50 border-green-100 text-green-700' :
+                                              round.status === 'failed' ? 'bg-red-50 border-red-100 text-red-700' :
+                                                'bg-blue-50 border-blue-100 text-blue-700'
+                                            }`}>
+                                            <div className="font-bold flex items-center gap-1">
+                                              <span>R{round.round}: {round.roundName}</span>
+                                              {round.status === 'passed' ? <CheckCircle className="w-3 h-3" /> : round.status === 'failed' ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                            </div>
+                                            {round.feedback && <p className="mt-1 text-[10px] opacity-80 italic">"{round.feedback}"</p>}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Recruiter Comments */}
+                                  {app.feedback && (
+                                    <div className="mt-4 p-3 bg-indigo-50/50 rounded-lg flex items-start gap-3">
+                                      <MessageSquare className="w-4 h-4 text-indigo-500 mt-1" />
+                                      <div>
+                                        <p className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Overall Recruiter Feedback</p>
+                                        <p className="text-sm text-gray-700 italic">"{app.feedback}"</p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Cover Letter Section */}
+                                  {(() => {
+                                    const clData = resolveCoverLetterData({
+                                      ...app,
+                                      studentCoverLetter: student.coverLetter,
+                                      studentCoverLetterLink: student.coverLetterLink,
+                                      studentCoverLetters: student.coverLetters
+                                    });
+                                    if (!clData) return null;
+                                    return (
+                                      <div className="mt-4 p-3.5 bg-teal-50/60 rounded-xl border border-teal-100">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center gap-2">
+                                            <div className="p-1 bg-teal-100 text-teal-700 rounded-md">
+                                              <FileText className="w-3.5 h-3.5" />
+                                            </div>
+                                            <div>
+                                              <p className="text-xs font-bold text-teal-900">Cover Letter</p>
+                                              {clData.title && clData.title !== 'Cover Letter' && (
+                                                <p className="text-[10px] text-teal-600 font-medium">{clData.title}</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenCoverLetter({
+                                                studentName: student.name,
+                                                studentEmail: student.email,
+                                                jobTitle: app.job,
+                                                companyName: app.company,
+                                                app: {
+                                                  ...app,
+                                                  studentCoverLetter: student.coverLetter,
+                                                  studentCoverLetterLink: student.coverLetterLink,
+                                                  studentCoverLetters: student.coverLetters
+                                                }
+                                              })}
+                                              className="text-xs font-bold text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-1 cursor-pointer"
+                                            >
+                                              <Eye className="w-3.5 h-3.5" /> Full View
+                                            </button>
+                                            {clData.fileUrl && (
+                                              <a
+                                                href={resolveFileUrl(clData.fileUrl)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs font-bold text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-1"
+                                              >
+                                                <ExternalLink className="w-3.5 h-3.5" /> Attachment
+                                              </a>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {clData.text && (
+                                          <div className="bg-white/90 p-3 rounded-lg border border-teal-100/70 text-xs text-gray-700 whitespace-pre-wrap max-h-24 overflow-y-auto leading-relaxed shadow-xs">
+                                            {clData.text}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
-                              )}
-                              <div className="mt-4 text-center">
-                                <Link 
-                                  to={`/campus-poc/students/${student.studentId}`}
-                                  className="text-xs font-bold text-primary-600 hover:underline flex items-center justify-center gap-1"
-                                >
-                                  View Full Student Profile <ArrowRight className="w-3 h-3" />
-                                </Link>
-                              </div>
+                              ))}
                             </div>
                           )}
+                          <div className="mt-4 flex items-center justify-center gap-4 flex-wrap">
+                            <Link
+                              to={`/campus-poc/students/${student.studentId}`}
+                              className="text-xs font-bold text-primary-600 hover:underline flex items-center justify-center gap-1"
+                            >
+                              View Full Student Profile <ArrowRight className="w-3 h-3" />
+                            </Link>
+                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                  {renderPagination(summaryPage, studentSummary.pagination ? studentSummary.pagination.totalStudents : studentSummary.students.length, setSummaryPage)}
-                </>
-              )}
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {renderPagination(summaryPage, studentSummary.pagination ? studentSummary.pagination.totalStudents : studentSummary.students.length, setSummaryPage)}
+            </>
+          )}
         </div>
       )}
       {activeTab === 'cycles' && (
@@ -1983,10 +2139,10 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
         if (s.monthsSpent?.toString() !== selectedMonths) return false;
       }
 
-      return `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()) || 
-             (s.email && s.email.toLowerCase().includes(studentSearch.toLowerCase()));
+      return `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()) ||
+        (s.email && s.email.toLowerCase().includes(studentSearch.toLowerCase()));
     });
-    
+
     // Sort by highest months spent
     filtered.sort((a, b) => (b.monthsSpent || 0) - (a.monthsSpent || 0));
     return filtered;
@@ -2231,7 +2387,7 @@ const CycleManagement = ({ cycles, onUpdate, showModal, setShowModal }) => {
                           className="pl-9 input w-full text-sm py-2"
                         />
                       </div>
-                      <select 
+                      <select
                         value={selectedSchool}
                         onChange={(e) => setSelectedSchool(e.target.value)}
                         className="input text-sm py-2"
@@ -2601,21 +2757,184 @@ const NewCycleModal = ({ onClose, onSuccess, unassignedCount = 0 }) => {
   );
 };
 
+// Cover Letter Modal Component for Campus PoC
+const CoverLetterModal = ({ isOpen, onClose, data }) => {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setCopied(false);
+  }, [isOpen, data]);
+
+  if (!isOpen || !data) return null;
+
+  const activeTitle = data.title || 'Cover Letter';
+  const activeText = data.text;
+  const activeFile = data.fileUrl;
+  const isFileUrl = typeof activeFile === 'string' && (activeFile.startsWith('http') || activeFile.startsWith('/uploads'));
+
+  const handleCopy = () => {
+    if (!activeText) return;
+    navigator.clipboard.writeText(activeText);
+    setCopied(true);
+    toast.success('Cover letter text copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-100 animate-fadeIn"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cover-letter-modal-title"
+      >
+        {/* Header */}
+        <div className="px-6 py-5 border-b bg-gradient-to-r from-teal-50 via-indigo-50/50 to-white flex-shrink-0">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 bg-teal-100 text-teal-700 rounded-xl flex items-center justify-center shadow-xs flex-shrink-0">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 id="cover-letter-modal-title" className="text-xl font-bold text-gray-900">
+                    {data.studentName || 'Student'}
+                  </h2>
+                  <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                    Cover Letter
+                  </span>
+                </div>
+                {data.studentEmail && (
+                  <p className="text-xs text-gray-500 mt-0.5">{data.studentEmail}</p>
+                )}
+                {(data.jobTitle || data.companyName) && (
+                  <p className="text-xs font-semibold text-gray-700 mt-1 flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-gray-400" />
+                    <span>Application for: <strong className="text-gray-900">{data.jobTitle}</strong> {data.companyName ? `at ${data.companyName}` : ''}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              aria-label="Close modal"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {/* Attachment Link if available */}
+          {isFileUrl && (
+            <div className="p-4 bg-teal-50/70 rounded-xl border border-teal-200 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 bg-white rounded-lg border border-teal-200 text-teal-700">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Attached Document</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">{activeTitle || 'Cover Letter Document'}</p>
+                </div>
+              </div>
+              <a
+                href={resolveFileUrl(activeFile)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex-shrink-0"
+              >
+                <span>Open File</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          )}
+
+          {/* Text content if available */}
+          {activeText ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                  Cover Letter Content
+                </label>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-green-600" />
+                      <span className="text-green-700 font-bold">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Text</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="bg-gray-50/80 rounded-xl border border-gray-200 p-4 font-sans text-sm text-gray-800 leading-relaxed whitespace-pre-wrap shadow-inner select-text">
+                {activeText}
+              </div>
+            </div>
+          ) : !isFileUrl ? (
+            <div className="text-center py-10 text-gray-400">
+              <FileText className="w-12 h-12 mx-auto mb-2 opacity-40 text-teal-600" />
+              <p className="text-sm font-medium text-gray-600">No cover letter text or document available.</p>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between flex-shrink-0">
+          <p className="text-xs text-gray-400">
+            Navgurukul Placement PoC Portal
+          </p>
+          <div className="flex items-center gap-2">
+            {isFileUrl && (
+              <a
+                href={resolveFileUrl(activeFile)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-teal-50 border border-teal-200 text-teal-700 rounded-xl text-xs font-bold hover:bg-teal-100 transition-colors flex items-center gap-1"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                View Full Attachment
+              </a>
+            )}
+            <button
+              onClick={onClose}
+              className="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all shadow-xs cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Eligible Students Modal Component
-const EligibleStudentsModal = ({ 
-  isOpen, 
-  onClose, 
-  job, 
-  students, 
-  loading, 
-  total, 
-  applied, 
-  notApplied, 
-  studentFilter, 
-  setStudentFilter, 
+const EligibleStudentsModal = ({
+  isOpen,
+  onClose,
+  job,
+  students,
+  loading,
+  total,
+  applied,
+  notApplied,
+  studentFilter,
+  setStudentFilter,
   filteredStudents,
   onNotify,
-  notifying
+  notifying,
+  onOpenCoverLetter
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -2650,11 +2969,10 @@ const EligibleStudentsModal = ({
               <button
                 onClick={onNotify}
                 disabled={notifying || loading || notApplied === 0}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
-                  notifying 
-                    ? 'bg-gray-100 text-gray-400' 
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${notifying
+                    ? 'bg-gray-100 text-gray-400'
                     : 'bg-primary-600 text-white hover:bg-primary-700 active:scale-95'
-                }`}
+                  }`}
               >
                 <Bell className={`w-4 h-4 ${notifying ? 'animate-bounce' : ''}`} />
                 {notifying ? 'Sending...' : 'Notify All Eligible'}
@@ -2736,62 +3054,102 @@ const EligibleStudentsModal = ({
                     <th className="px-3 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Student</th>
                     <th className="px-3 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Skills</th>
                     <th className="px-3 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Eligibility</th>
+                    <th className="px-3 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Cover Letter</th>
                     <th className="px-3 py-4 text-right text-xs font-black text-gray-400 uppercase tracking-widest">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedStudents.map((student) => (
-                    <tr key={student._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center font-bold text-xs">
-                            {student.firstName?.charAt(0)}{student.lastName?.charAt(0)}
+                  {paginatedStudents.map((student) => {
+                    const clData = resolveCoverLetterData(student);
+                    return (
+                      <tr key={student._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center font-bold text-xs">
+                              {student.firstName?.charAt(0)}{student.lastName?.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-gray-900">{student.firstName} {student.lastName}</div>
+                              <div className="text-xs text-gray-500">{student.email}</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-sm font-bold text-gray-900">{student.firstName} {student.lastName}</div>
-                            <div className="text-xs text-gray-500">{student.email}</div>
+                        </td>
+                        <td className="px-3 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            {(student.studentProfile?.skills || []).slice(0, 2).map((s, idx) => (
+                              <span key={idx} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded uppercase font-medium">
+                                {s.skill?.name || s.name}
+                              </span>
+                            ))}
+                            {(student.studentProfile?.skills || []).length > 2 && (
+                              <span className="text-[10px] text-gray-400 font-medium">+{student.studentProfile.skills.length - 2}</span>
+                            )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {(student.studentProfile?.skills || []).slice(0, 2).map((s, idx) => (
-                            <span key={idx} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded uppercase font-medium">
-                              {s.skill?.name || s.name}
-                            </span>
-                          ))}
-                          {(student.studentProfile?.skills || []).length > 2 && (
-                            <span className="text-[10px] text-gray-400 font-medium">+{student.studentProfile.skills.length - 2}</span>
+                        </td>
+                        <td className="px-3 py-4 text-center">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${student.skillMatch >= 80 ? 'bg-green-100 text-green-700' :
+                              student.skillMatch >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
+                            }`}>
+                            {student.skillMatch}% Match
+                          </span>
+                          {student.hasApplied && (
+                            <div className="mt-1 flex items-center justify-center gap-1 text-[9px] text-green-600 font-bold uppercase">
+                              <CheckCircle className="w-2.5 h-2.5" /> Applied
+                            </div>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 text-center">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${
-                          student.skillMatch >= 80 ? 'bg-green-100 text-green-700' :
-                          student.skillMatch >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {student.skillMatch}% Match
-                        </span>
-                        {student.hasApplied && (
-                          <div className="mt-1 flex items-center justify-center gap-1 text-[9px] text-green-600 font-bold uppercase">
-                            <CheckCircle className="w-2.5 h-2.5" /> Applied
+                        </td>
+                        <td className="px-3 py-4 text-center whitespace-nowrap">
+                          {clData ? (
+                            <button
+                              type="button"
+                              onClick={() => onOpenCoverLetter && onOpenCoverLetter({
+                                studentName: `${student.firstName} ${student.lastName}`,
+                                studentEmail: student.email,
+                                jobTitle: job?.title,
+                                companyName: job?.company?.name || job?.company,
+                                student
+                              })}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 transition-colors shadow-xs cursor-pointer"
+                              title="View Cover Letter"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-teal-600" />
+                              <span>View</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400 font-medium">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-4 text-right whitespace-nowrap">
+                          <div className="flex justify-end gap-1.5 items-center">
+                            {clData && (
+                              <button
+                                type="button"
+                                onClick={() => onOpenCoverLetter && onOpenCoverLetter({
+                                  studentName: `${student.firstName} ${student.lastName}`,
+                                  studentEmail: student.email,
+                                  jobTitle: job?.title,
+                                  companyName: job?.company?.name || job?.company,
+                                  student
+                                })}
+                                className="p-1.5 text-teal-600 hover:text-teal-800 hover:bg-teal-50 rounded-lg transition-all cursor-pointer"
+                                title="View Cover Letter"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
+                            )}
+                            <Link
+                              to={`/campus-poc/students/${student._id}`}
+                              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
+                              title="View Profile"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Link>
                           </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Link 
-                            to={`/campus-poc/students/${student._id}`} 
-                            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
-                            title="View Profile"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2800,11 +3158,11 @@ const EligibleStudentsModal = ({
 
         {/* Modal Pagination Component */}
         <div className="px-6 py-2 border-t bg-gray-50 flex-shrink-0">
-          <Pagination 
-            currentPage={currentPage} 
-            totalItems={filteredStudents.length} 
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredStudents.length}
             itemsPerPage={itemsPerPage}
-            onPageChange={setCurrentPage} 
+            onPageChange={setCurrentPage}
           />
         </div>
 

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const InterestRequest = require('../models/InterestRequest');
@@ -767,7 +768,8 @@ router.put('/profile', auth, authorize('student', 'coordinator', 'manager', 'cam
     if (user.role === 'student') {
       const profileUpdates = [
         'linkedIn', 'github', 'portfolio', 'about',
-        'currentSchool', 'currentModule', 'customModuleDescription', 'resumeLink', 'houseName', 'resume'
+        'currentSchool', 'currentModule', 'customModuleDescription', 'resumeLink', 'houseName', 'resume',
+        'coverLetter', 'coverLetterLink'
       ];
 
       // Validate resume link if present before applying
@@ -1276,6 +1278,210 @@ router.delete('/profile/resumes/:resumeId', auth, authorize('student'), async (r
     });
   } catch (error) {
     console.error('Delete resume error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Upload or save cover letter (student)
+router.post('/profile/cover-letters', auth, authorize('student'), upload.single('coverLetter'), async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== 'student') {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    if (!user.studentProfile.coverLetters) {
+      user.studentProfile.coverLetters = [];
+    }
+
+    let fileUrl = '';
+    let fileName = '';
+    let publicId = '';
+    let text = req.body.text ? String(req.body.text).trim() : '';
+    let title = req.body.title ? String(req.body.title).trim() : '';
+
+    if (req.file) {
+      if (req.file.path.startsWith('http')) {
+        fileUrl = req.file.path;
+      } else {
+        fileUrl = `/uploads/cover-letters/${req.file.filename}`;
+      }
+      fileName = req.file.originalname || 'Uploaded Cover Letter';
+      publicId = req.file.filename || req.file.public_id || '';
+      if (!title) {
+        title = fileName.replace(/\.[^/.]+$/, '');
+      }
+    } else if (text) {
+      if (!title) {
+        title = 'Custom Cover Letter';
+      }
+    } else {
+      return res.status(400).json({ message: 'Please provide either a cover letter file or text' });
+    }
+
+    const isFirst = user.studentProfile.coverLetters.length === 0;
+    const makePrimary = req.body.isPrimary === 'true' || req.body.isPrimary === true || isFirst;
+
+    if (makePrimary) {
+      user.studentProfile.coverLetters.forEach(cl => { cl.isPrimary = false; });
+    }
+
+    const newCoverLetter = {
+      _id: new mongoose.Types.ObjectId(),
+      title: title || 'Cover Letter',
+      coverLetter: fileUrl || '',
+      coverLetterLink: fileUrl || '',
+      fileName: fileName || '',
+      text: text || '',
+      publicId,
+      isPrimary: makePrimary,
+      uploadedAt: new Date()
+    };
+
+    user.studentProfile.coverLetters.push(newCoverLetter);
+
+    if (makePrimary) {
+      user.studentProfile.coverLetter = text || fileUrl;
+      user.studentProfile.coverLetterLink = fileUrl;
+    }
+
+    user.markModified('studentProfile.coverLetters');
+    await user.save();
+
+    await cacheService.invalidateProfileCache(req.userId);
+    await invalidateCache('cache:students:*');
+
+    const updatedUser = await User.findById(req.userId)
+      .select('-password')
+      .populate('campus')
+      .populate('studentProfile.skills.skill');
+
+    res.json({
+      success: true,
+      message: 'Cover letter saved successfully',
+      coverLetters: user.studentProfile.coverLetters,
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Save cover letter error:', error);
+    res.status(500).json({ message: 'Server error saving cover letter' });
+  }
+});
+
+// Set cover letter as primary
+router.put('/profile/cover-letters/:coverLetterId/primary', auth, authorize('student'), async (req, res) => {
+  try {
+    const { coverLetterId } = req.params;
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== 'student') {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    if (!user.studentProfile.coverLetters || user.studentProfile.coverLetters.length === 0) {
+      return res.status(400).json({ message: 'No cover letters found' });
+    }
+
+    let found = false;
+    user.studentProfile.coverLetters.forEach(cl => {
+      if (cl._id.toString() === coverLetterId) {
+        cl.isPrimary = true;
+        found = true;
+        user.studentProfile.coverLetter = cl.text || cl.coverLetter || '';
+        user.studentProfile.coverLetterLink = cl.coverLetterLink || cl.coverLetter || '';
+      } else {
+        cl.isPrimary = false;
+      }
+    });
+
+    if (!found) {
+      return res.status(404).json({ message: 'Cover letter not found' });
+    }
+
+    user.markModified('studentProfile.coverLetters');
+    await user.save();
+    await cacheService.invalidateProfileCache(req.userId);
+    await invalidateCache('cache:students:*');
+
+    const updatedUser = await User.findById(req.userId)
+      .select('-password')
+      .populate('campus')
+      .populate('studentProfile.skills.skill');
+
+    res.json({
+      success: true,
+      message: 'Primary cover letter updated successfully',
+      coverLetters: user.studentProfile.coverLetters,
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Set primary cover letter error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete cover letter
+router.delete('/profile/cover-letters/:coverLetterId', auth, authorize('student'), async (req, res) => {
+  try {
+    const { coverLetterId } = req.params;
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== 'student') {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    if (!user.studentProfile.coverLetters || user.studentProfile.coverLetters.length === 0) {
+      return res.status(404).json({ message: 'No cover letters found to delete' });
+    }
+
+    const index = user.studentProfile.coverLetters.findIndex(
+      cl => cl._id.toString() === coverLetterId
+    );
+    if (index === -1) {
+      return res.status(404).json({ message: 'Cover letter not found' });
+    }
+
+    const item = user.studentProfile.coverLetters[index];
+    if (item.publicId && (item.coverLetter?.startsWith('http') || item.coverLetterLink?.startsWith('http'))) {
+      try {
+        const cloudinary = require('cloudinary').v2;
+        cloudinary.config({
+          cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME,
+          api_key: process.env.CLOUDINARY_API_KEY,
+          api_secret: process.env.CLOUDINARY_API_SECRET
+        });
+        await cloudinary.uploader.destroy(item.publicId, { resource_type: 'raw' });
+      } catch (cloudinaryErr) {
+        console.error('Error deleting cover letter from Cloudinary:', cloudinaryErr);
+      }
+    }
+
+    const deletedPrimary = item.isPrimary;
+    user.studentProfile.coverLetters.splice(index, 1);
+
+    if (deletedPrimary && user.studentProfile.coverLetters.length > 0) {
+      user.studentProfile.coverLetters[0].isPrimary = true;
+      const next = user.studentProfile.coverLetters[0];
+      user.studentProfile.coverLetter = next.text || next.coverLetter || '';
+      user.studentProfile.coverLetterLink = next.coverLetterLink || next.coverLetter || '';
+    } else if (user.studentProfile.coverLetters.length === 0) {
+      user.studentProfile.coverLetter = '';
+      user.studentProfile.coverLetterLink = '';
+    }
+
+    user.markModified('studentProfile.coverLetters');
+    await user.save();
+    await cacheService.invalidateProfileCache(req.userId);
+    await invalidateCache('cache:students:*');
+
+    const updatedUser = await User.findById(req.userId)
+      .select('-password')
+      .populate('campus')
+      .populate('studentProfile.skills.skill');
+
+    res.json({
+      success: true,
+      message: 'Cover letter deleted successfully',
+      coverLetters: user.studentProfile.coverLetters,
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Delete cover letter error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -194,6 +194,22 @@ export const userAPI = {
   deleteAIKey: (keyId) => api.delete(`/users/me/ai-keys/${keyId}`),
   setPrimaryResume: (resumeId) => api.put(`/users/profile/resumes/${resumeId}/primary`),
   deleteResume: (resumeId) => api.delete(`/users/profile/resumes/${resumeId}`),
+  uploadCoverLetter: (file, title = "", isPrimary = false) => {
+    const formData = new FormData();
+    if (file) formData.append("coverLetter", file);
+    if (title) formData.append("title", title);
+    if (isPrimary) formData.append("isPrimary", "true");
+    return api.post("/users/profile/cover-letters", formData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+  },
+  saveCoverLetterText: ({ title, text, isPrimary = false }) => {
+    return api.post("/users/profile/cover-letters", { title, text, isPrimary });
+  },
+  setPrimaryCoverLetter: (coverLetterId) =>
+    api.put(`/users/profile/cover-letters/${coverLetterId}/primary`),
+  deleteCoverLetter: (coverLetterId) =>
+    api.delete(`/users/profile/cover-letters/${coverLetterId}`),
   updateStudentStatus: (studentId, status) => api.put(`/users/students/${studentId}/status`, { status })
 };
 
@@ -734,6 +750,7 @@ export const resolveResumeUrl = (url) => {
   const cleanApi = rawApi.replace(/\/+$/, '');
   return `${cleanApi}${url.startsWith('/') ? '' : '/'}${url}`;
 };
+export const resolveFileUrl = resolveResumeUrl;
 
 // Portfolio APIs (public, no auth required)
 export const portfolioAPI = {

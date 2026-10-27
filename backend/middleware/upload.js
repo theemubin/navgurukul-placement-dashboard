@@ -20,6 +20,7 @@ const getRelativeUploadPath = (fieldname) => {
   if (fieldname === 'avatar') return 'avatars';
   if (fieldname === 'heroImage') return 'hero_images';
   if (fieldname === 'resume') return 'resumes';
+  if (fieldname === 'coverLetter' || fieldname === 'cover_letter') return 'cover-letters';
   if (fieldname === 'document' || fieldname === 'placementDocument') return 'post-placement-documents';
   return 'documents';
 };
@@ -71,6 +72,15 @@ if (hasCloudinaryCredentials) {
         };
       }
 
+      if (file.fieldname === 'coverLetter' || file.fieldname === 'cover_letter') {
+        const ext = path.extname(file.originalname) || '.pdf';
+        return {
+          folder: 'placements/cover_letters',
+          resource_type: 'raw',
+          public_id: `coverLetter-${uniqueSuffix}${ext}`
+        };
+      }
+
       if (file.fieldname === 'document' || file.fieldname === 'placementDocument') {
         const ext = path.extname(file.originalname) || '';
         return {
@@ -110,9 +120,11 @@ if (hasCloudinaryCredentials) {
           ? `heroImage-${uniqueSuffix}`
           : file.fieldname === 'resume'
             ? `resume-${uniqueSuffix}`
-            : file.fieldname === 'document' || file.fieldname === 'placementDocument'
-              ? `placement-document-${uniqueSuffix}`
-              : `document-${uniqueSuffix}`;
+            : (file.fieldname === 'coverLetter' || file.fieldname === 'cover_letter')
+              ? `coverLetter-${uniqueSuffix}`
+              : file.fieldname === 'document' || file.fieldname === 'placementDocument'
+                ? `placement-document-${uniqueSuffix}`
+                : `document-${uniqueSuffix}`;
 
       cb(null, `${baseName}${ext}`);
     }
@@ -124,15 +136,16 @@ if (hasCloudinaryCredentials) {
 const fileFilter = (req, file, cb) => {
   console.log(`Processing upload: field=${file.fieldname}, mimetype=${file.mimetype}, name=${file.originalname}`);
 
-  if (file.fieldname === 'resume') {
-    // Allow PDF, DOC, DOCX for resumes
+  if (file.fieldname === 'resume' || file.fieldname === 'coverLetter' || file.fieldname === 'cover_letter') {
+    // Allow PDF, DOC, DOCX, TXT for resumes and cover letters
     if (file.mimetype === 'application/pdf' ||
       file.mimetype === 'application/msword' ||
-      file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      file.mimetype === 'text/plain') {
       cb(null, true);
     } else {
-      console.error('Upload rejected: Invalid resume format', file.mimetype);
-      cb(new Error('Resume must be PDF, DOC, or DOCX'), false);
+      console.error('Upload rejected: Invalid resume/cover letter format', file.mimetype);
+      cb(new Error('File must be PDF, DOC, DOCX, or TXT'), false);
     }
   } else if (file.fieldname === 'document' || file.fieldname === 'placementDocument') {
     if (

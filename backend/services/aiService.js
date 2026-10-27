@@ -1,3 +1,4 @@
+require('../utils/domPolyfill');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const pdfParseModule = require('pdf-parse');
 const pdfParse = pdfParseModule && (pdfParseModule.default || pdfParseModule);

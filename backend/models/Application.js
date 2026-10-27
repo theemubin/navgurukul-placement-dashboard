@@ -62,6 +62,14 @@ const applicationSchema = new mongoose.Schema({
     uploadedAt: Date
   },
   coverLetter: String,
+  coverLetterFile: String,
+  coverLetterSnapshot: {
+    title: String,
+    url: String,
+    fileName: String,
+    text: String,
+    uploadedAt: Date
+  },
   customResponses: [{
     requirement: String,
     response: Boolean,

@@ -78,6 +78,10 @@ const jobSchema = new mongoose.Schema({
       default: true
     }
   }],
+  requiresCoverLetter: {
+    type: Boolean,
+    default: false
+  },
   eligibility: {
     // When all criteria fields are empty/null, the job is open for everyone
     openForAll: { type: Boolean, default: true }, // Explicit flag for open positions

@@ -1045,6 +1045,70 @@ const ProfileApprovals = () => {
                 </div>
               </div>
 
+              {/* Cover Letter */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Cover Letter</h3>
+                <div>
+                  {selectedStudent.studentProfile?.coverLetters && selectedStudent.studentProfile.coverLetters.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedStudent.studentProfile.coverLetters.map((clItem) => (
+                        <div key={clItem._id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-sm text-gray-800 flex items-center gap-1.5">
+                              <FileText className="w-4 h-4 text-teal-600" />
+                              {clItem.title || clItem.fileName || 'Cover Letter'}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {clItem.isPrimary && (
+                                <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                  Primary
+                                </span>
+                              )}
+                              {(clItem.coverLetterLink || clItem.coverLetter?.startsWith('http') || clItem.coverLetter?.startsWith('/uploads')) && (
+                                <a
+                                  href={clItem.coverLetterLink?.startsWith('http') ? clItem.coverLetterLink : clItem.coverLetter?.startsWith('http') ? clItem.coverLetter : `${import.meta.env.VITE_API_URL?.replace('/api', '')}${clItem.coverLetterLink || clItem.coverLetter}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-primary-600 font-medium hover:underline flex items-center gap-1"
+                                >
+                                  View File
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          {clItem.text && (
+                            <div className="bg-white p-3 rounded border text-xs text-gray-700 whitespace-pre-wrap max-h-36 overflow-y-auto font-sans leading-relaxed">
+                              {clItem.text}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (selectedStudent.studentProfile?.coverLetter || selectedStudent.studentProfile?.coverLetterLink) ? (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
+                      {(selectedStudent.studentProfile.coverLetterLink?.startsWith('http') || selectedStudent.studentProfile.coverLetter?.startsWith('http') || selectedStudent.studentProfile.coverLetter?.startsWith('/uploads')) && (
+                        <a
+                          href={selectedStudent.studentProfile.coverLetterLink || selectedStudent.studentProfile.coverLetter}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary-600 flex items-center gap-1.5 font-medium hover:underline text-sm"
+                        >
+                          <FileText className="w-4 h-4 text-teal-600" />
+                          View Cover Letter File / Link
+                        </a>
+                      )}
+                      {selectedStudent.studentProfile.coverLetter && !selectedStudent.studentProfile.coverLetter.startsWith('http') && !selectedStudent.studentProfile.coverLetter.startsWith('/uploads') && (
+                        <div className="bg-white p-3 rounded border text-xs text-gray-700 whitespace-pre-wrap max-h-36 overflow-y-auto font-sans leading-relaxed">
+                          {selectedStudent.studentProfile.coverLetter}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No cover letter uploaded</p>
+                  )}
+                </div>
+              </div>
+
               {/* Previous Approval History */}
               {selectedStudent.approvalHistory?.length > 0 && (
                 <div className="mb-6">
