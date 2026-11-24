@@ -194,11 +194,77 @@ After running the seed script:
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+1. Fork the repository.
+2. Create a focused feature branch.
+3. Commit your changes.
+4. Push the branch.
+5. Open a Pull Request.
+
+### Safely separating ready and future work
+
+Use this workflow when the worktree contains both changes that are ready to
+publish and experimental features that should remain unpublished.
+
+Do not use `git reset --hard`, `git clean`, or `git stash drop` during this
+process. These commands can permanently remove uncommitted work.
+
+1. Back up the current uncommitted and untracked files outside the repository
+   before reorganizing them:
+
+   ```bash
+   git diff --binary > ../placement-dashboard-uncommitted.patch
+   ```
+
+2. Create a dedicated branch for the future feature and commit the complete
+   current work as a recovery checkpoint:
+
+   ```bash
+   git switch -c feature/future-integration
+   git add -A
+   git commit -m "WIP future integration"
+   git switch main
+   ```
+
+   Untracked files are included by `git add -A`. Do not push this branch until
+   the future feature is complete and tested.
+
+3. On `main`, reapply only the changes that are ready to publish. Keep future
+   routes, models, UI pages, dependencies, environment variables, and tests out
+   of `main`. Shared files need manual review because they may contain changes
+   from both groups.
+
+4. Create small commits for the ready changes. Review the exact files with:
+
+   ```bash
+   git status --short --branch
+   git diff --stat origin/main
+   git diff --name-only origin/main
+   ```
+
+5. Validate the relevant code before pushing:
+
+   ```bash
+   cd backend
+   npm test
+   node --check server.js
+
+   cd ../frontend
+   npm run build
+   ```
+
+6. Push ready changes only after they pass:
+
+   ```bash
+   git push origin main
+   ```
+
+For example, certificate request, signatory, Gmail, and Google Drive integration
+code should stay on a dedicated future-feature branch until those integrations
+are tested and production credentials are configured. Never commit `.env`,
+OAuth credentials, refresh tokens, or private keys.
+
+If a commit already pushed to `main` is incorrect, fix it with a normal follow-up
+commit. Avoid force-pushing or rewriting shared branch history.
 
 ## Deployment Guide (Render + MongoDB Atlas)
 
