@@ -103,7 +103,7 @@ const POCStudents = () => {
     }
   };
 
-  const handleGharSync = async (e, email) => {
+  const handleGharSync = async (e, email, studentName = '') => {
     e.preventDefault();
     e.stopPropagation();
     if (!email) {
@@ -114,7 +114,7 @@ const POCStudents = () => {
     try {
       const response = await gharAPI.syncStudent(email);
       const updatedData = response.data.data?.student;
-      toast.success('Synced with Ghar successfully');
+      toast.success(`${studentName ? `${studentName} synced` : 'Student synced'} with Ghar successfully`);
       
       // Update local state instead of full reload (case-insensitive email matching)
       setStudents(prev => prev.map(s => s.email?.toLowerCase() === email?.toLowerCase() ? {
@@ -128,38 +128,79 @@ const POCStudents = () => {
       fetchStudents(true);
     } catch (error) {
       console.error('Error syncing with Ghar:', error);
-      toast.error(error.response?.data?.message || 'Failed to sync with Ghar');
+      toast.error(
+        `${studentName ? `${studentName}: ` : ''}${error.response?.data?.message || 'Failed to sync with Ghar'}`
+      );
     }
   };
 
   const [syncAllLoading, setSyncAllLoading] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
+  const [syncTotal, setSyncTotal] = useState(0);
 
   const handleSyncAll = async () => {
-    if (!students.length) return;
+    if (pagination.total === 0) return;
     setSyncAllLoading(true);
     setSyncProgress(0);
-    
+    setSyncTotal(pagination.total);
+
     let successCount = 0;
     let failCount = 0;
 
     toast.loading('Starting batch sync...', { id: 'batch-sync' });
 
-    for (let i = 0; i < students.length; i++) {
-      const student = students[i];
-      if (student.email) {
-        try {
-          await gharAPI.syncStudent(student.email);
-          successCount++;
-        } catch (err) {
-          failCount++;
-        }
-      }
-      setSyncProgress(i + 1);
-    }
+    try {
+      const response = await gharAPI.syncVisible({
+        search: filters.search,
+        school: filters.school,
+        batch: filters.batch,
+        status: filters.status
+      });
+      const summary = response.data.summary || {};
+      successCount = summary.successful || 0;
+      failCount = summary.failed || 0;
+      setSyncProgress(summary.total || 0);
+      setSyncTotal(summary.total || pagination.total);
 
-    setSyncAllLoading(false);
-    toast.success(`Batch sync completed! ${successCount} successful, ${failCount} failed.`, { id: 'batch-sync' });
+      setSyncAllLoading(false);
+      if (!summary.total) {
+        toast.success('No matching students found to sync.', {
+          id: 'batch-sync',
+          duration: 5000
+        });
+      } else if (failCount > 0) {
+        const failedNames = (summary.failedStudents || [])
+          .map(student => {
+            const name = student.name || student.email;
+            return `${name} — ${student.reason || 'Unknown sync error'}`;
+          })
+          .filter(Boolean);
+        const shownFailures = failedNames.slice(0, 5);
+        const remainingCount = failedNames.length - shownFailures.length;
+        const failureText = failedNames.length > 0
+          ? ` Not synced: ${shownFailures.join('; ')}${remainingCount > 0 ? `; and ${remainingCount} more` : ''}`
+          : '';
+        toast.error(
+          `${successCount} of ${summary.total || 0} students synced successfully.${failureText}`,
+          { id: 'batch-sync', duration: 9000 }
+        );
+      } else {
+        toast.success(
+          `Sync completed successfully: ${successCount} of ${summary.total || 0} students synced.`,
+          { id: 'batch-sync', duration: 5000 }
+        );
+      }
+    } catch (error) {
+      failCount = pagination.total;
+      setSyncAllLoading(false);
+      toast.error(
+        error.response?.data?.message || 'Failed to sync students. No changes were completed.',
+        { id: 'batch-sync', duration: 9000 }
+      );
+      fetchStudents(true);
+      fetchStats(true);
+      return;
+    }
     fetchStudents(true);
     fetchStats(true);
   };
@@ -219,9 +260,9 @@ const POCStudents = () => {
         <div className="flex flex-col md:flex-row gap-3">
           {syncAllLoading && (
             <div className="flex flex-col items-end justify-center">
-              <span className="text-[10px] font-bold text-primary-600 mb-1">SYNCING: {syncProgress}/{students.length}</span>
+              <span className="text-[10px] font-bold text-primary-600 mb-1">SYNCING: {syncProgress}/{syncTotal}</span>
               <div className="w-32">
-                <ProgressBar progress={syncProgress} total={students.length} />
+                <ProgressBar progress={syncProgress} total={syncTotal} />
               </div>
             </div>
           )}
@@ -269,7 +310,8 @@ const POCStudents = () => {
           <StatsCard
             icon={Briefcase}
             label="Intern"
-            value={(stats.statusCounts?.['Internship Paid'] || 0) + (stats.statusCounts?.['Internship UnPaid'] || 0)}
+            value={(stats.statusCounts?.['Internship Paid'] || 0)
+              + (stats.statusCounts?.['Internship Unpaid'] || 0)}
             color="blue"
           />
           <StatsCard
@@ -340,10 +382,14 @@ const POCStudents = () => {
             <option value="never_logged_in">Never Logged In</option>
             <option value="Active">Active</option>
             <option value="Placed">Placed</option>
+            <option value="Placed Without Offer-Letter">Placed Without Offer-Letter</option>
+            <option value="Placed Without Offer-Letter">Placed Without Offer-Letter</option>
+            <option value="Intern (In Campus)">Intern (In Campus)</option>
+            <option value="Intern (Out Campus)">Intern (Out Campus)</option>
             <option value="Dropout">Dropout</option>
             <option value="Internship Paid">Internship Paid</option>
             <option value="Paid Project">Paid Project</option>
-            <option value="Internship UnPaid">Internship UnPaid</option>
+            <option value="Internship Unpaid">Internship Unpaid</option>
           </select>
         </div>
       </div>
@@ -455,11 +501,15 @@ const POCStudents = () => {
                               <option value="InActive">InActive</option>
                               <option value="Completed-Opted out for placement">Opted out</option>
                               <option value="Internship Paid">Paid Intern</option>
-                              <option value="Internship UnPaid">Unpaid Intern</option>
+                              <option value="Internship Unpaid">Unpaid Intern</option>
                               <option value="Paid Project">Paid Proj</option>
                             </select>
                             <button
-                              onClick={(e) => handleGharSync(e, student.email)}
+                              onClick={(e) => handleGharSync(
+                                e,
+                                student.email,
+                                [student.firstName, student.lastName].filter(Boolean).join(' ')
+                              )}
                               className="p-1 hover:bg-primary-50 rounded-md text-gray-400 hover:text-primary-600 transition-colors"
                               title="Sync status with Ghar"
                               disabled={loading}

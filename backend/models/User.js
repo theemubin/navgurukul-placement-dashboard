@@ -1,4 +1,146 @@
 const mongoose = require('mongoose');
+
+const STUDENT_PLACEMENT_STATUSES = [
+  'Active',
+  'In active',
+  'InActive',
+  'Long Leave',
+  'Dropout',
+  'DropOut',
+  'Placed',
+  'Placed Without Offer-Letter',
+  'Intern (In Campus)',
+  'Intern (Out Campus)',
+  'Internship Paid',
+  'Internship Unpaid',
+  'Paid Project',
+  'Completed-Opted out for placement'
+];
+
+const normalizeStudentPlacementStatus = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return '';
+
+  const raw = value.trim();
+  if (raw === 'DropOut') return 'DropOut';
+
+  const compact = value.toLowerCase()
+    .replace(/[_()[\]-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const statusAliases = [
+    ['Active', ['active']],
+    ['Placed Without Offer-Letter', [
+      'placed without offer letter',
+      'placed without offer-letter',
+      'placed without offer'
+    ]],
+    ['Placed', ['placed', 'placement']],
+    ['Intern (In Campus)', [
+      'intern in campus',
+      'intern iin campus',
+      'intern (in campus)',
+      'intern iin campus)'
+    ]],
+    ['Intern (Out Campus)', [
+      'intern out campus',
+      'intern (out campus)'
+    ]],
+    ['Internship Paid', ['internship paid', 'paid intern', 'paid internship']],
+    ['Internship Unpaid', ['internship unpaid', 'internship un paid', 'unpaid intern', 'unpaid internship']],
+    ['Paid Project', ['paid project', 'paid project intern']],
+    ['Dropout', ['dropout', 'drop out', 'dropped']],
+    ['InActive', ['inactive', 'in active']],
+    ['Completed-Opted out for placement', ['completed opted out', 'completed opt out', 'opted out']]
+  ];
+
+  const match = statusAliases.find(([, aliases]) => aliases.includes(compact)
+    || aliases.some(alias => compact.startsWith(`${alias} `) || compact.endsWith(` ${alias}`)));
+
+  return match?.[0] || '';
+};
+
+const getStudentPlacementStatusAliases = (status) => {
+  const normalized = normalizeStudentPlacementStatus(status);
+  const aliasMap = {
+    'Active': ['Active'],
+    'Placed': ['Placed'],
+    'Placed Without Offer-Letter': [
+      'Placed Without Offer-Letter',
+      'Placed Without Offer Letter',
+      'Placed Without Offer'
+    ],
+    'Intern (In Campus)': [
+      'Intern (In Campus)',
+      'Intern Iin campus)',
+      'Intern(In campus)',
+      'Intern in campus'
+    ],
+    'Intern (Out Campus)': [
+      'Intern (Out Campus)',
+      'Intern(Out campus)',
+      'Intern out campus'
+    ],
+    'Internship Paid': ['Internship Paid', 'Paid Intern', 'Paid Internship'],
+    'Internship Unpaid': ['Internship UnPaid', 'Internship Unpaid', 'Unpaid Intern', 'Unpaid Internship'],
+    'Paid Project': ['Paid Project', 'Paid Project Intern'],
+    'Dropout': ['Dropout', 'Drop-out', 'Dropped'],
+    'DropOut': ['DropOut', 'Drop Out'],
+    'InActive': ['InActive', 'Inactive', 'In active'],
+    'Completed-Opted out for placement': [
+      'Completed-Opted out for placement',
+      'Completed Opted Out',
+      'Opted Out'
+    ]
+  };
+  return [...new Set([normalized, ...(aliasMap[normalized] || [])].filter(Boolean))];
+};
+
+const resolveGharStatusValue = (externalData = {}) => {
+  const preferredKeys = [
+    'Placement_Status',
+    'Placement Status',
+    'Student_Status',
+    'Student Status',
+    'Academic_Status',
+    'Academic Status',
+    'Status',
+    'Current_Status',
+    'Current Status'
+  ];
+
+  for (const key of preferredKeys) {
+    const direct = externalData[key];
+    if (typeof direct === 'string' && direct.trim()) {
+      return { key, value: direct.trim() };
+    }
+  }
+
+  const normalizedKey = (key) => String(key)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+
+  for (const [key, value] of Object.entries(externalData)) {
+    const compactKey = normalizedKey(key);
+    if (compactKey.includes('placementstatus')
+      || compactKey.includes('studentstatus')
+      || compactKey.includes('academicstatus')
+      || compactKey === 'status'
+      || compactKey.includes('currentstatus')) {
+      if (typeof value === 'string' && value.trim()) {
+        return { key, value: value.trim() };
+      }
+      if (value && typeof value === 'object') {
+        const nested = value.value || value.label || value.name || value.text;
+        if (typeof nested === 'string' && nested.trim()) {
+          return { key, value: nested.trim() };
+        }
+      }
+    }
+  }
+
+  return { key: null, value: '' };
+};
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
@@ -154,7 +296,13 @@ const userSchema = new mongoose.Schema({
     },
     currentStatus: {
       type: String,
-      enum: ['Active', 'In active', 'InActive', 'Long Leave', 'Dropout', 'DropOut', 'Placed', 'Intern (In Campus)', 'Intern (Out Campus)', 'Completed-Opted out for placement'],
+      enum: [
+        'Active', 'In active', 'InActive', 'Long Leave',
+        'Dropout', 'DropOut', 'Placed', 'Placed Without Offer-Letter',
+        'Intern (In Campus)', 'Intern (Out Campus)',
+        'Internship Paid', 'Internship Unpaid', 'Paid Project',
+        'Completed-Opted out for placement'
+      ],
       default: 'Active'
     },
     isPaidProject: {
@@ -202,8 +350,6 @@ const userSchema = new mongoose.Schema({
     dateOfPlacement: Date, // Track date of placement from Ghar Zoho data
     attendancePercentage: {
       type: Number,
-      min: 0,
-      max: 100,
       default: null
     },
     currentModule: String, // For Programming/Business - selected from predefined list
@@ -628,7 +774,9 @@ userSchema.virtual('resolvedProfile').get(function () {
     joiningDate: ghar.admissionDate?.value || local.joiningDate || null,
     currentModule: ghar.currentModule?.value || local.currentModule || '',
     attendancePercentage: ghar.attendancePercentage?.value || local.attendancePercentage || null,
-    currentStatus: ghar.currentStatus?.value || local.currentStatus || 'Active',
+    currentStatus: normalizeStudentPlacementStatus(ghar.currentStatus?.value)
+      || normalizeStudentPlacementStatus(local.currentStatus)
+      || 'Active',
     gender: (ghar.gender?.value || this.gender || '').toLowerCase(),
     englishSpeaking: normalizeCefrLevel(ghar.englishSpeaking?.value || local.englishProficiency?.speaking || ''),
     englishWriting: normalizeCefrLevel(ghar.englishWriting?.value || local.englishProficiency?.writing || ''),
@@ -731,18 +879,12 @@ userSchema.statics.syncGharData = async function (email, externalData, options =
   if (gharId) gharData.stdId = { value: gharId.toString(), lastUpdated: now };
 
   // 2. Status & Academic
-  const statusValue = externalData.Status || externalData.Academic_Status || externalData.Student_Status;
-  if (statusValue) {
-    const trimmedStatus = statusValue.toString().trim();
+  const resolvedStatus = resolveGharStatusValue(externalData);
+  if (resolvedStatus.value) {
+    const trimmedStatus = resolvedStatus.value.toString().trim();
     gharData.currentStatus = { value: trimmedStatus, lastUpdated: now };
-
-    const knownStatuses = [
-      'Active', 'Placed', 'Intern (In Campus)', 'Intern (Out Campus)',
-      'Dropout', 'DropOut', 'InActive', 'Completed-Opted out for placement'
-    ];
-
-    const matchedStatus = knownStatuses.find(s => s.toLowerCase() === trimmedStatus.toLowerCase()) ||
-      knownStatuses.find(s => trimmedStatus.includes(s));
+    const matchedStatus = normalizeStudentPlacementStatus(trimmedStatus);
+    console.log(`[GharSync] ${normalizedEmail}: status field=${resolvedStatus.key}, raw=${trimmedStatus}, normalized=${matchedStatus || 'UNRECOGNIZED'}`);
 
     if (matchedStatus) {
       user.studentProfile.currentStatus = matchedStatus;
@@ -779,7 +921,9 @@ userSchema.statics.syncGharData = async function (email, externalData, options =
   const attendanceValue = externalData.Attendance_Rate1 || externalData.Attendance_Rate || externalData.Attendance_Percentage;
   if (attendanceValue) {
     const rate = parseFloat(attendanceValue);
-    if (!isNaN(rate)) gharData.attendancePercentage = { value: rate, lastUpdated: now };
+    if (!isNaN(rate)) {
+      gharData.attendancePercentage = { value: rate, lastUpdated: now };
+    }
   }
 
   // 5. General Info
@@ -928,4 +1072,10 @@ userSchema.index({ 'studentProfile.currentSchool': 1 });
 userSchema.index({ email: 1 });
 userSchema.index({ firstName: 1, lastName: 1 });
 
-module.exports = mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema);
+User.STUDENT_PLACEMENT_STATUSES = STUDENT_PLACEMENT_STATUSES;
+User.normalizeStudentPlacementStatus = normalizeStudentPlacementStatus;
+User.getStudentPlacementStatusAliases = getStudentPlacementStatusAliases;
+User.resolveGharStatusValue = resolveGharStatusValue;
+
+module.exports = User;

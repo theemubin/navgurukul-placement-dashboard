@@ -198,21 +198,36 @@ class GharApiService {
         if (!email) return null;
         
         try {
-            // Normalize email: trim and lowercase
-            const normalizedEmail = email.trim().toLowerCase();
+            const originalEmail = email.trim();
+            const normalizedEmail = originalEmail.toLowerCase();
             // Force isDev to true as requested
             const isDev = true; 
 
-            console.log(`[GharAPI] Attempting sync for: "${normalizedEmail}" (isDev: true)`);
+            console.log(`[GharAPI] Attempting sync for: "${originalEmail}" (isDev: true)`);
 
             const tryFetch = async (envMode) => {
-                const res = await this.client.get('/gharZoho/students/By/NgEmail', {
-                    params: {
-                        isDev: envMode,
-                        Student_ng_email: normalizedEmail
+                const firstCharacterCapitalized = normalizedEmail.length > 0
+                    ? normalizedEmail.charAt(0).toUpperCase() + normalizedEmail.slice(1)
+                    : normalizedEmail;
+                const emailVariants = [...new Set([
+                    originalEmail,
+                    normalizedEmail,
+                    firstCharacterCapitalized,
+                    normalizedEmail.toUpperCase()
+                ])];
+                for (const emailVariant of emailVariants) {
+                    const res = await this.client.get('/gharZoho/students/By/NgEmail', {
+                        params: {
+                            isDev: envMode,
+                            Student_ng_email: emailVariant
+                        }
+                    });
+                    if (res.data?.data?.length > 0) {
+                        console.log(`[GharAPI] Found Ghar record using email variant: "${emailVariant}"`);
+                        return res;
                     }
-                });
-                return res;
+                }
+                return { data: { data: [] } };
             };
 
             // Process response (only try with isDev: true as user requested)
@@ -221,21 +236,39 @@ class GharApiService {
             // Process response
             if (response.data && response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
                 const externalData = response.data.data[0];
-                console.log(`[GharAPI] Found data for ${normalizedEmail}. Status: ${externalData.Status}`);
-                
                 const User = require('../models/User');
+                const resolvedStatus = User.resolveGharStatusValue(externalData);
+                console.log(`[GharAPI] Found data for ${normalizedEmail}. statusField=${resolvedStatus.key || 'none'}, status=${resolvedStatus.value || 'none'}, keys=${Object.keys(externalData).join(', ')}`);
+
                 await User.syncGharData(normalizedEmail, externalData);
                 return externalData;
             }
 
             console.warn(`[GharAPI] Student not found in Ghar (isDev: true) for email: ${normalizedEmail}`);
-            return null;
+            const notFoundError = new Error(`Student not found in Ghar for ${normalizedEmail}`);
+            notFoundError.code = 'GHAR_STUDENT_NOT_FOUND';
+            throw notFoundError;
         } catch (error) {
-            console.error(`[GharAPI] Sync failed for ${email}:`, error.message);
-            if (error.response) {
-                console.error(`[GharAPI] Response data:`, error.response.data);
+            if (error.code === 'GHAR_STUDENT_NOT_FOUND') {
+                throw error;
             }
-            return null;
+            if (error.name === 'ValidationError') {
+                const validationError = new Error(`Database validation failed: ${error.message}`);
+                validationError.code = 'GHAR_DATABASE_VALIDATION';
+                throw validationError;
+            }
+            if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+                const timeoutError = new Error(`Ghar API timed out while syncing ${normalizedEmail}`);
+                timeoutError.code = 'GHAR_API_TIMEOUT';
+                throw timeoutError;
+            }
+            if (error.response?.status) {
+                const apiError = new Error(`Ghar API returned HTTP ${error.response.status} while syncing ${normalizedEmail}`);
+                apiError.code = 'GHAR_API_ERROR';
+                throw apiError;
+            }
+            console.error(`[GharAPI] Sync failed for ${email}:`, error.message);
+            throw error;
         }
     }
 
@@ -249,12 +282,40 @@ class GharApiService {
             const promises = emails.map(email => this.syncStudentData(email));
             const results = await Promise.allSettled(promises);
 
-            return results.map((result, index) => ({
-                email: emails[index],
-                success: result.status === 'fulfilled' && result.value !== null,
-                data: result.status === 'fulfilled' ? result.value : null,
-                error: result.status === 'rejected' ? result.reason.message : (result.value === null ? 'No data returned' : null)
-            }));
+            return results.map((result, index) => {
+                if (result.status === 'fulfilled' && result.value !== null) {
+                    return {
+                        email: emails[index],
+                        success: true,
+                        data: result.value,
+                        error: null,
+                        reason: null
+                    };
+                }
+
+                const reason = result.status === 'rejected'
+                    ? result.reason
+                    : new Error('No data returned from Ghar');
+                let userReason = reason.message || 'No data returned from Ghar';
+
+                if (reason.code === 'GHAR_STUDENT_NOT_FOUND') {
+                    userReason = 'Student email not found in Ghar';
+                } else if (reason.code === 'GHAR_DATABASE_VALIDATION') {
+                    userReason = 'Database validation blocked this sync';
+                } else if (reason.code === 'GHAR_API_TIMEOUT') {
+                    userReason = 'Ghar API timed out';
+                } else if (reason.code === 'GHAR_API_ERROR') {
+                    userReason = reason.message;
+                }
+
+                return {
+                    email: emails[index],
+                    success: false,
+                    data: null,
+                    error: reason.message,
+                    reason: userReason
+                };
+            });
         } catch (error) {
             throw new Error(`Batch sync failed: ${error.message}`);
         }

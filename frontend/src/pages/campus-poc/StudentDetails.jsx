@@ -314,6 +314,7 @@ const POCStudentDetails = () => {
                   >
                     <option value="Active">🟢 Active</option>
                     <option value="Placed">🎉 Placed</option>
+                    <option value="Placed Without Offer-Letter">📄 Placed Without Offer-Letter</option>
                     <option value="Intern (In Campus)">🏫 Intern (In Campus)</option>
                     <option value="Intern (Out Campus)">🚀 Intern (Out Campus)</option>
                     <option value="Dropout">🛑 Dropout</option>
@@ -322,7 +323,7 @@ const POCStudentDetails = () => {
                     <option value="Completed-Opted out for placement">📪 Opted out</option>
                     <option value="Internship Paid">💼 Paid Intern</option>
                     <option value="Paid Project">🔨 Paid Project</option>
-                    <option value="Internship UnPaid">📝 Unpaid Intern</option>
+                    <option value="Internship Unpaid">📝 Unpaid Intern</option>
                   </select>
                   <button
                     onClick={handleGharSync}

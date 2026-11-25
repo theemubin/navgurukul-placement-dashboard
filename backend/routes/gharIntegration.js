@@ -104,7 +104,24 @@ router.post('/sync-student', isAuthenticated, async (req, res) => {
         }
 
         // Sync data from Ghar API (this already calls User.syncGharData internally)
-        const externalData = await gharApiService.syncStudentData(student.email);
+        let externalData;
+        try {
+            externalData = await gharApiService.syncStudentData(student.email);
+        } catch (syncError) {
+            if (syncError.code === 'GHAR_STUDENT_NOT_FOUND') {
+                return res.status(404).json({ success: false, message: 'Student email not found in Ghar' });
+            }
+            if (syncError.code === 'GHAR_API_TIMEOUT') {
+                return res.status(504).json({ success: false, message: 'Ghar API timed out; please retry' });
+            }
+            if (syncError.code === 'GHAR_DATABASE_VALIDATION') {
+                return res.status(422).json({ success: false, message: 'Database validation blocked the Ghar sync' });
+            }
+            if (syncError.code === 'GHAR_API_ERROR') {
+                return res.status(502).json({ success: false, message: syncError.message });
+            }
+            return res.status(500).json({ success: false, message: syncError.message || 'Failed to sync student with Ghar' });
+        }
 
         if (externalData) {
             // Re-fetch student to get updated virtuals/resolved data
@@ -134,6 +151,139 @@ router.post('/sync-student', isAuthenticated, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to sync student data',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * Sync every student matched by the POC's current visible-filters scope.
+ * This endpoint is intentionally filter-based and not limited to the 15-row UI page.
+ */
+router.post('/sync-visible', isAuthenticated, authorize('manager', 'campus_poc'), async (req, res) => {
+    try {
+        const { search, school, batch, status } = req.body || {};
+        const query = { role: 'student' };
+
+        if (req.user.role === 'campus_poc') {
+            const allowedCampuses = [];
+            if (req.user.campus) allowedCampuses.push(req.user.campus.toString());
+            if (Array.isArray(req.user.managedCampuses)) {
+                req.user.managedCampuses.forEach(campusId => {
+                    const normalizedId = campusId?.toString();
+                    if (normalizedId && !allowedCampuses.includes(normalizedId)) {
+                        allowedCampuses.push(normalizedId);
+                    }
+                });
+            }
+            if (allowedCampuses.length > 0) {
+                query.campus = { $in: allowedCampuses };
+            } else {
+                query.campus = { $in: [] };
+            }
+        }
+
+        if (school) query['studentProfile.currentSchool'] = school;
+        if (status && status !== 'all') {
+            if (status === 'never_logged_in') {
+                query.lastLogin = null;
+            } else {
+                const normalizedStatus = User.normalizeStudentPlacementStatus(status) || status;
+                const statusAliases = User.getStudentPlacementStatusAliases(normalizedStatus);
+                query.$or = [
+                    { 'studentProfile.currentStatus': { $in: statusAliases } },
+                    { 'studentProfile.externalData.ghar.currentStatus.value': { $in: statusAliases } }
+                ];
+            }
+        }
+        if (search) {
+            query.$and = [
+                ...(query.$and || []),
+                {
+                    $or: [
+                        { firstName: { $regex: search, $options: 'i' } },
+                        { lastName: { $regex: search, $options: 'i' } },
+                        { email: { $regex: search, $options: 'i' } }
+                    ]
+                }
+            ];
+        }
+        if (batch) {
+            const year = parseInt(batch, 10);
+            if (!Number.isNaN(year)) {
+                query.$and = [
+                    ...(query.$and || []),
+                    {
+                        $or: [
+                            {
+                                'studentProfile.joiningDate': {
+                                    $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+                                    $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+                                }
+                            },
+                            { 'studentProfile.batch': batch }
+                        ]
+                    }
+                ];
+            }
+        }
+
+        const students = await User.find(query).select('firstName lastName email');
+        const emails = [...new Set(students.map(student => student.email).filter(Boolean))];
+        const studentDetailsByEmail = new Map(students.map(student => [
+            String(student.email).trim().toLowerCase(),
+            {
+                name: [student.firstName, student.lastName].filter(Boolean).join(' ').trim(),
+                email: student.email
+            }
+        ]));
+        if (emails.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No matching students to sync',
+                summary: { total: 0, successful: 0, failed: 0, successfulStudents: [], failedStudents: [] }
+            });
+        }
+
+        const batchSize = 15;
+        const results = [];
+        for (let i = 0; i < emails.length; i += batchSize) {
+            results.push(...await gharApiService.batchSyncStudents(emails.slice(i, i + batchSize)));
+        }
+
+        const successfulStudents = results.filter(result => result.success).map(result => {
+            const details = studentDetailsByEmail.get(String(result.email).trim().toLowerCase()) || {};
+            return {
+                name: details.name || String(result.email),
+                email: result.email
+            };
+        });
+        const failedStudents = results.filter(result => !result.success).map(result => {
+            const details = studentDetailsByEmail.get(String(result.email).trim().toLowerCase()) || {};
+            return {
+                name: details.name || String(result.email),
+                email: result.email,
+                reason: result.reason || result.error || 'No data returned',
+                error: result.error || null
+            };
+        });
+        const summary = {
+            total: results.length,
+            successful: results.filter(result => result.success).length,
+            failed: failedStudents.length,
+            successfulStudents,
+            failedStudents
+        };
+        res.json({
+            success: true,
+            message: `Sync completed: ${summary.successful}/${summary.total} successful`,
+            summary
+        });
+    } catch (error) {
+        console.error('Error syncing visible students:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to sync visible students',
             error: error.message
         });
     }

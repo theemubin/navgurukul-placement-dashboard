@@ -172,7 +172,15 @@ router.get('/students', auth, authorize('campus_poc', 'coordinator', 'manager'),
       if (statusFilter === 'never_logged_in') {
         query.lastLogin = null;
       } else {
-        query['studentProfile.currentStatus'] = statusFilter;
+        query.$and = query.$and || [];
+        const normalizedStatus = User.normalizeStudentPlacementStatus(statusFilter) || statusFilter;
+        const statusAliases = User.getStudentPlacementStatusAliases(normalizedStatus);
+        query.$and.push({
+          $or: [
+            { 'studentProfile.currentStatus': { $in: statusAliases } },
+            { 'studentProfile.externalData.ghar.currentStatus.value': { $in: statusAliases } }
+          ]
+        });
       }
     } else if (!statusFilter && req.user.role === 'student') {
       // Students see active peers by default
@@ -624,6 +632,9 @@ router.put('/students/:studentId/status', auth, authorize('campus_poc', 'coordin
 
     if (!status) {
       return res.status(400).json({ message: 'Status is required' });
+    }
+    if (!User.STUDENT_PLACEMENT_STATUSES.includes(status)) {
+      return res.status(400).json({ message: 'Invalid student status' });
     }
 
     const student = await User.findById(studentId);

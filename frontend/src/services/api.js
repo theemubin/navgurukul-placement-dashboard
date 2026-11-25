@@ -693,6 +693,7 @@ export const gharAPI = {
   connectionStatus: () => api.get('/ghar/connection-status'),
   studentPreview: (email, isDev) => api.get(`/ghar/student-preview/${email}?isDev=${isDev}`),
   syncStudent: (email) => api.post('/ghar/sync-student', { email }),
+  syncVisible: (params = {}) => api.post('/ghar/sync-visible', params),
   importAll: (params = {}) => {
     const { campus = '', isDev = true, stdIdStart, stdIdEnd } = params;
     let url = `/ghar/import-all-students?isDev=${isDev}`;
