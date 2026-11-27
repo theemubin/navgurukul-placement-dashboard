@@ -20,6 +20,12 @@ const { resolveAIKeysForUser } = require('../utils/aiKeyResolver');
 const TERMINAL_APPLICATION_STATUSES = ['selected', 'rejected', 'withdrawn', 'offered', 'filled'];
 const PLACEMENT_OUTCOME_STATUSES = ['selected', 'offered', 'filled'];
 
+const getCampusPocCampusIds = (user) => {
+  const campusIds = (user.managedCampuses || []).map(campus => campus.toString());
+  if (user.campus) campusIds.push(user.campus.toString());
+  return [...new Set(campusIds)];
+};
+
 /**
  * @swagger
  * tags:
@@ -1261,7 +1267,7 @@ router.get('/analytics/bottlenecks', auth, authorize('coordinator', 'campus_poc'
 
     let studentFilter = {};
     if (req.user.role === 'campus_poc') {
-      studentFilter.campus = req.user.campus;
+      studentFilter.campus = { $in: getCampusPocCampusIds(req.user) };
     } else if (campus) {
       studentFilter.campus = mongoose.Types.ObjectId.isValid(campus) ? new mongoose.Types.ObjectId(campus) : campus;
     }
@@ -1528,7 +1534,7 @@ router.get('/analytics/stagnant-students', auth, authorize('coordinator', 'campu
     if (hasStudentScope) {
       let studentFilter = { role: 'student' };
       if (req.user.role === 'campus_poc') {
-        studentFilter.campus = req.user.campus;
+        studentFilter.campus = { $in: getCampusPocCampusIds(req.user) };
       } else if (campus) {
         studentFilter.campus = mongoose.Types.ObjectId.isValid(campus) ? new mongoose.Types.ObjectId(campus) : campus;
       }
